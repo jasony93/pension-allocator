@@ -43,6 +43,15 @@ test('개정예고 규칙에 bill_stage가 없으면 실패시킨다', () => {
   assert.match(errors[0], /bill_stage/);
 });
 
+test('섞여 들어간 개정예고 규칙의 출처 누락도 함께 보고한다', () => {
+  const doc = load('rules-mixed-status.json');
+  delete doc.rules[1].source;
+  const errors = validateRuleset(doc, 'mixed-no-source');
+  assert.equal(errors.length, 2);
+  assert.ok(errors.some((e) => /source 없음/.test(e)));
+  assert.ok(errors.some((e) => /개정예고 규칙이 섞여 있음/.test(e)));
+});
+
 test('룰셋 디렉터리에 JSON이 없어도 오류가 아니다', () => {
   assert.deepEqual(validateRulesDir(join(ROOT, 'data', 'tax-rules')), []);
 });

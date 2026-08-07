@@ -34,7 +34,18 @@ export function validateRuleset(doc, label) {
       errors.push(`${at}: status가 "${rule.status}" — 허용값은 ${RULE_STATUSES.join(' / ')}`);
     }
 
+    // 출처 검사는 어떤 경우에도 건너뛰지 않는다. 한 규칙에 위반이 여러 개면
+    // 한 번의 실행으로 전부 보고해야 세무 유닛이 왕복을 줄인다.
+    if (!rule?.source) {
+      errors.push(`${at}: source 없음 — 법령 조항 없는 숫자는 근거 없는 숫자다`);
+    } else {
+      for (const field of SOURCE_FIELDS) {
+        if (!rule.source[field]) errors.push(`${at}: source.${field} 없음`);
+      }
+    }
+
     // 확정 파일과 개정예고 파일을 섞지 않는다 (스펙 6.2절).
+    // 이 규칙은 애초에 이 파일에 있으면 안 되므로 bill_stage까지 따지지 않는다.
     if (doc.status === '확정' && rule?.status === '개정예고') {
       errors.push(`${at}: 확정 룰셋에 개정예고 규칙이 섞여 있음`);
       continue;
@@ -42,14 +53,6 @@ export function validateRuleset(doc, label) {
 
     if (rule?.status === '개정예고' && !BILL_STAGES.includes(rule?.bill_stage)) {
       errors.push(`${at}: bill_stage가 "${rule?.bill_stage}" — 허용값은 ${BILL_STAGES.join(' / ')}`);
-    }
-
-    if (!rule?.source) {
-      errors.push(`${at}: source 없음 — 법령 조항 없는 숫자는 근거 없는 숫자다`);
-    } else {
-      for (const field of SOURCE_FIELDS) {
-        if (!rule.source[field]) errors.push(`${at}: source.${field} 없음`);
-      }
     }
   }
 
