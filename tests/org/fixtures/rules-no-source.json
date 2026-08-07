@@ -1,0 +1,15 @@
+{
+  "tax_year": 2026,
+  "status": "확정",
+  "effective_from": "2026-01-01",
+  "rules": [
+    {
+      "id": "sample.rule.one",
+      "title": "출처가 빠진 더미 규칙",
+      "conditions": [],
+      "value": { "kind": "dummy" },
+      "status": "확정",
+      "effective_from": "2026-01-01"
+    }
+  ]
+}

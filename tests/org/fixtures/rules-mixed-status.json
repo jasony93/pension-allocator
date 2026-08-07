@@ -1,0 +1,36 @@
+{
+  "tax_year": 2026,
+  "status": "확정",
+  "effective_from": "2026-01-01",
+  "rules": [
+    {
+      "id": "sample.rule.one",
+      "title": "검증기 테스트용 더미 규칙",
+      "conditions": [],
+      "value": { "kind": "dummy" },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "테스트용 가상 조항",
+        "url": "https://example.invalid/fixture",
+        "verified_on": "2026-08-07",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "sample.rule.two",
+      "title": "확정 파일에 섞여 들어간 개정예고 규칙",
+      "conditions": [],
+      "value": { "kind": "dummy" },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "테스트용 가상 개편안",
+        "url": "https://example.invalid/fixture2",
+        "verified_on": "2026-08-07",
+        "verified_by": "tax-domain"
+      }
+    }
+  ]
+}
