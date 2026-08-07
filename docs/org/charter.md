@@ -16,7 +16,7 @@
 | `calc-engine-dev` | 계산 로직 설계와 구현, 엔진 인터페이스 확정 | `src/engine/`, `docs/stage-2-design/engine-interface.md` |
 | `web-dev` | 입력 폼·결과 화면 구현 | `src/web/` |
 | `qa` | 테스트, 코드 리뷰, 규약 준수 검사 | `docs/stage-4-verification/qa-report.md` |
-| `growth` | 채널 조사, 랜딩 카피, SEO, 계측 설계 | `docs/stage-5-launch/` |
+| `growth` | 채널 조사, 계측 설계, 랜딩 카피, SEO | `docs/stage-2-design/analytics-plan.md`, `docs/stage-5-launch/` |
 | `biz-model` | 수요 검증 계획, 수익 지표, BM 결정 리포트 | `docs/stage-1-discovery/demand-validation-plan.md` |
 
 각 유닛의 도구 권한과 모델은 `scripts/org/units.mjs`가 단일 진실 원천이다. 에이전트 정의 파일이 이를 벗어나면 `node scripts/org/validate.mjs`가 실패한다.
@@ -26,7 +26,7 @@
 | 단계 | 참여 유닛 | 게이트 |
 |---|---|---|
 | 1. 발견 | `product-planner`, `tax-domain`, `growth`, `biz-model` (동시) | **게이트 1** — 요구사항·룰셋·채널 리포트·수요 판정 기준 승인 |
-| 2. 설계 | `designer`, `calc-engine-dev` (동시) | **게이트 2** — 설계 승인. 엔진 인터페이스가 여기서 고정된다. |
+| 2. 설계 | `designer`, `calc-engine-dev`, `growth` (동시) | **게이트 2** — 설계 승인. 엔진 인터페이스와 계측 설계가 여기서 고정된다. |
 | 3. 구현 | `calc-engine-dev`, `web-dev` (동시) | **게이트 3** — 동작하는 프로토타입 승인 |
 | 4. 검증 | `tax-domain` → `qa` (순차) | **게이트 4** — 정확성·품질 승인 |
 | 5. 출시 준비 | `growth`, `biz-model` | **게이트 5** — 출시 승인 |

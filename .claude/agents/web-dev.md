@@ -15,6 +15,7 @@ model: sonnet
 
 - `docs/stage-2-design/design-system.md`, `docs/stage-2-design/screens.md` — 설계.
 - `docs/stage-2-design/engine-interface.md` — 엔진 호출 계약. **이 문서가 유일한 진실이다.**
+- `docs/stage-2-design/analytics-plan.md` — 심어야 할 계측 이벤트.
 - `docs/stage-1-discovery/requirements.md` — 수용 기준.
 
 ## 산출물
@@ -25,6 +26,7 @@ model: sonnet
 - 결과 화면.
 - 엔진 목 구현 — 엔진 완성 전까지 UI를 독립적으로 확인할 수 있게 한다.
 - 설계에 기술된 빈·로딩·오류·입력 부족 상태의 구현.
+- `analytics-plan.md`에 정의된 계측 이벤트의 구현. 화면을 만들면서 함께 심는다 — 나중에 붙이려면 화면을 다시 뜯어야 한다.
 
 ## 금지사항
 
@@ -40,6 +42,7 @@ model: sonnet
 - `screens.md`의 모든 화면이 구현되어 있다.
 - 각 화면의 정상·빈·로딩·오류·입력 부족 상태가 동작한다.
 - 엔진 목이 `engine-interface.md`의 타입을 정확히 따른다.
+- `analytics-plan.md`의 모든 이벤트가 구현되어 있고, 어떤 이벤트도 사용자 입력값을 싣지 않는다.
 - 요구사항의 수용 기준을 하나씩 손으로 확인했고 결과를 보고한다.
 - "투자·세무 자문이 아님" 고지가 결과 화면에 표시된다.
 - 코드에서 세법 수치를 `grep`으로 찾을 수 없다.

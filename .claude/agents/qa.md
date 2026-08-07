@@ -19,7 +19,7 @@ model: sonnet
 - `docs/stage-2-design/screens.md`, `docs/stage-2-design/engine-interface.md` — 설계 계약.
 - `src/engine/`, `src/web/` — 구현 전체.
 - `docs/stage-4-verification/verification-report.md` — 세무 유닛의 교차검증 결과.
-- `docs/stage-5-launch/analytics-plan.md` — 계측 설계 (게이트 4 통과 조건).
+- `docs/stage-2-design/analytics-plan.md` — 2단계에서 확정된 계측 설계. 구현이 이 설계와 맞는지 대조한다.
 
 ## 산출물
 
@@ -38,7 +38,7 @@ model: sonnet
 - 코드에 세법 수치가 하드코딩되어 있지 않은지 — `src/` 전체를 `grep`으로 훑는다.
 - `data/tax-rules/`의 모든 규칙이 `source`를 갖는지.
 - 사용자 입력값이 외부로 전송되지 않는지 — 네트워크 호출 지점을 전수 확인한다.
-- `analytics-plan.md`가 존재하고, 계측 이벤트에 개인 식별 가능 값이 없는지.
+- 계측이 `analytics-plan.md` 설계대로 구현되었고, 어떤 이벤트에도 개인 식별 가능 값이 없는지.
 - "투자·세무 자문이 아님" 고지가 결과 화면에 있는지.
 
 ## 금지사항

@@ -57,6 +57,7 @@ export const UNITS = [
     tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
     writeScope: [
       'docs/stage-1-discovery/channel-research.md',
+      'docs/stage-2-design/analytics-plan.md',
       'docs/stage-5-launch/',
       'docs/stage-6-operations/',
     ],
