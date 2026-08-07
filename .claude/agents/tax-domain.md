@@ -20,7 +20,7 @@ ISA·IRP·연금저축 관련 세법을 조사해 기계가 읽을 수 있는 �
 ## 입력
 
 - `docs/superpowers/specs/2026-08-07-agent-org-design.md` — 특히 6절 세무 정확성 보증.
-- `docs/stage-1-discovery/requirements.md` — 어떤 입력 항목을 다루는지.
+- `docs/stage-1-discovery/requirements.md` — 어떤 입력 항목을 다루는지. **같은 1단계 동료(`product-planner`)의 산출물이라 아직 없을 수 있다.** 없으면 헌장의 "같은 단계 동료의 산출물이 입력일 때" 규약대로 다룰 범위를 명시적 가정으로 세우고 `open_questions`에 올린 뒤 진행한다.
 - 4단계 교차검증 시: `docs/stage-2-design/engine-interface.md` (입출력 형식 확인용).
 
 ## 산출물

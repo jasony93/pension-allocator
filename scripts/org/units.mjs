@@ -26,7 +26,7 @@ export const UNITS = [
   {
     name: 'designer',
     model: 'sonnet',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch'],
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
     writeScope: ['docs/stage-2-design/design-system.md', 'docs/stage-2-design/screens.md'],
   },
   {
@@ -49,8 +49,12 @@ export const UNITS = [
     name: 'qa',
     model: 'sonnet',
     tools: ['Read', 'Glob', 'Grep', 'Bash', 'Write'],
-    writeScope: ['docs/stage-4-verification/qa-report.md'],
+    writeScope: ['docs/stage-4-verification/qa-report.md', 'docs/stage-6-operations/'],
   },
+  // `qa`·`growth`·`biz-model`은 `docs/stage-6-operations/`를 디렉터리 단위로 공유한다.
+  // 검증기는 디렉터리까지만 강제하므로, 한 파일에 한 저자라는 원칙은
+  // 유닛별 파일명 규약(`<YYYY-MM>-qa.md` / `-growth.md` / `-biz.md`)이 지탱한다.
+  // 규약을 바꾸려면 각 유닛 정의 파일의 `## 산출물`과 6단계 README를 함께 고쳐야 한다.
   {
     name: 'growth',
     model: 'sonnet',

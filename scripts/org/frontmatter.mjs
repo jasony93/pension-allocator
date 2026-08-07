@@ -6,7 +6,10 @@ const BLOCK = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
  * 조직 산출물 머리말은 이 범위를 벗어나지 않으므로 의존성을 추가하지 않는다.
  */
 export function parseFrontmatter(text) {
-  const match = BLOCK.exec(text);
+  // 편집기가 붙인 BOM은 머리말을 못 찾게 만들고, 그러면 "frontmatter 없음"이라는
+  // 엉뚱한 곳을 가리키는 메시지가 나간다. 눈에 보이지 않는 문자를 먼저 벗긴다.
+  const source = text.replace(/^\uFEFF/, '');
+  const match = BLOCK.exec(source);
   if (!match) throw new Error('frontmatter 없음');
 
   const data = {};
@@ -39,5 +42,5 @@ export function parseFrontmatter(text) {
     }
   }
 
-  return { data, body: text.slice(match[0].length) };
+  return { data, body: source.slice(match[0].length) };
 }

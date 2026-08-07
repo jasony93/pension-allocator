@@ -108,7 +108,7 @@ ISA·IRP·연금저축 등 절세 계좌에 **얼마를 어떤 비중으로 납�
 출시는 끝이 아니라 루프의 시작이다. 정기 사이클로 기존 유닛을 재소집한다.
 
 - **월간** — 그로스(채널·콘텐츠 성과), 사업(수익·수요 지표 대 목표, 가설 수정)
-- **분기** — QA(회귀 전건 + 이슈 트리아지), 개발 유닛(백로그 처리)
+- **분기** — QA(회귀 전건 + 이슈 트리아지 → `<YYYY-MM>-qa.md`), 개발 유닛(그 리포트가 넘긴 백로그 처리)
 - **세제 개편 사이클** — 개편안 발표(여름) / 국회 통과(연말) / 시행(1월)에 맞춰 세무 도메인 긴급 소집 → 룰셋 갱신 → 골든 케이스 재산출 → 교차검증 → 배포. **시행일 이전 반영이 강제 조건이다.** 시행일 이후에 이전 연도 세법으로 답을 주는 계산기는 틀린 계산기다.
 
 → **게이트 6**: 사이클마다 운영 리포트
@@ -132,8 +132,8 @@ docs/
   stage-4-verification/       golden-cases.md · verification-report.md · qa-report.md
   stage-5-launch/             landing-copy.md · seo-plan.md · promo-playbook.md
   stage-6-operations/         <YYYY-MM>-growth.md · <YYYY-MM>-biz.md ·
-                              bm-decision-report.md
-data/tax-rules/               2026.json … · 2027-proposed.json · sources.md
+                              <YYYY-MM>-qa.md · bm-decision-report.md
+data/tax-rules/               2026.json … · 2027-proposed.json
 src/engine/
 src/web/
 .claude/agents/               product-planner.md · tax-domain.md · designer.md ·
@@ -158,10 +158,16 @@ open_questions:
 
 ### 5.3 규칙
 
-1. **쓰기 범위 제한** — 유닛은 자기 단계의 디렉터리와 자기 소스 경로에만 쓴다. 계산 엔진 유닛은 `src/web/`을 건드리지 않는다.
+1. **쓰기 범위 제한** — 유닛은 자기 단계의 디렉터리와 자기 소스 경로에만 쓴다. 계산 엔진 유닛은 `src/web/`을 건드리지 않는다. 범위는 `scripts/org/units.mjs`의 `writeScope`에 데이터로 적히고, 산출물 머리말 검사가 문서의 `unit`과 실제 경로를 대조해 강제한다.
 2. **읽기는 자유** — 이전 단계 산출물은 모두 읽는다. 단 4단계 교차검증 시 세무 유닛만 `src/engine/` 읽기 금지.
 3. **남의 산출물은 고치지 않는다** — 기획서가 틀렸다고 판단해도 직접 수정하지 않고 `open_questions`에 올린다. 관리자가 게이트에서 판정한다. 유닛이 서로의 문서를 고치기 시작하면 누가 무엇을 결정했는지 추적이 불가능해진다.
 4. **승인은 관리자만** — 게이트 통과 시 관리자가 `status`를 `approved`로 바꾼다. 반려 시 사유를 적은 파일을 만들어 해당 유닛을 재호출한다.
+
+### 5.4 파일 규약의 두 가지 예외 상황
+
+**같은 단계 동료의 산출물이 입력일 때.** 한 단계의 유닛들은 동시에 실행되므로, 입력으로 적힌 파일이 아직 없을 수 있다(1단계의 `requirements.md`, 2단계의 `screens.md`가 그렇다). 유닛은 기다리지도 동료의 파일을 대신 만들지도 않고, 필요한 값을 명시적 가정으로 세워 산출물과 `open_questions`에 적은 뒤 진행한다. 관리자가 게이트에서 대조해 조정한다. 순차 실행으로 바꾸면 병렬의 이점이 사라지고, 가정 없이 비워 두면 게이트에서 무엇이 어긋났는지 추적할 수 없다.
+
+**관리자에게 가는 보고.** 파일 원칙은 유닛과 유닛 사이의 규약이다. 관리자 세션의 컨텍스트는 유지되므로, 관리자에게만 전달하면 되는 확인 결과·권고는 유닛의 최종 메시지로 돌려도 된다(예: 사업 유닛의 5단계 계측 점검, 6단계 개발 유닛의 백로그 처리 결과). 뒤에 오는 유닛이 읽어야 하는 것은 예외 없이 파일로 남긴다.
 
 ## 6. 세무 정확성 보증
 
@@ -286,7 +292,7 @@ model: opus
 |---|---|---|
 | `product-planner` | Read, Write, Edit, Glob, Grep, WebSearch, WebFetch | 조사가 본업, Bash 불필요 |
 | `tax-domain` | Read, Write, Edit, Glob, Grep, WebSearch, WebFetch | 법령 조회 필수. 4단계에서 `src/engine/` 읽기 금지 |
-| `designer` | Read, Write, Edit, Glob, Grep, WebFetch | |
+| `designer` | Read, Write, Edit, Glob, Grep | 입력이 전부 저장소 안 문서라 외부 조회 도구가 필요 없다 |
 | `calc-engine-dev` | Read, Write, Edit, Glob, Grep, Bash | 쓰기 범위 `src/engine/` |
 | `web-dev` | Read, Write, Edit, Glob, Grep, Bash | 쓰기 범위 `src/web/` |
 | `qa` | Read, Glob, Grep, Bash, Write | **쓰기는 리포트 경로만** |

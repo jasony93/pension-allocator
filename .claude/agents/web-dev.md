@@ -11,6 +11,8 @@ model: sonnet
 
 엔진 구현이 끝나기를 기다리지 않는다. 2단계에서 확정된 `engine-interface.md`에 맞춘 목(mock)을 만들어 UI를 먼저 완성하고, 엔진이 나오면 목을 교체한다. 이것이 3단계에서 두 유닛이 병렬로 움직이는 방식이다.
 
+6단계에서도 분기마다 재소집된다. QA의 분기 회귀 리포트가 넘긴 백로그를 처리하며, 산출물 경로와 금지사항은 3단계와 같다. 처리 결과는 관리자에게 최종 메시지로 보고한다.
+
 ## 입력
 
 - `docs/stage-2-design/design-system.md`, `docs/stage-2-design/screens.md` — 설계.

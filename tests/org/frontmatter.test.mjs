@@ -28,3 +28,9 @@ test('값에 콜론이 있어도 첫 콜론에서만 자른다', () => {
 test('frontmatter가 없으면 던진다', () => {
   assert.throws(() => parseFrontmatter('# 제목\n본문\n'), /frontmatter 없음/);
 });
+
+test('선행 BOM이 있어도 머리말을 찾는다', () => {
+  const { data, body } = parseFrontmatter('\uFEFF---\nname: qa\n---\n본문\n');
+  assert.equal(data.name, 'qa');
+  assert.equal(body, '본문\n');
+});

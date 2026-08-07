@@ -36,3 +36,8 @@ test('h3 이하는 상위 섹션 본문에 포함된다', () => {
 test('frontmatter가 없으면 던진다', () => {
   assert.throws(() => parseAgentFile('## 역할\n내용\n'), /frontmatter 없음/);
 });
+
+test('같은 제목이 두 번 나오면 던진다', () => {
+  const text = SAMPLE + '## 역할\n뒤에 또 나온 역할.\n';
+  assert.throws(() => parseAgentFile(text), /"## 역할" 섹션이 중복 정의됨/);
+});

@@ -23,7 +23,24 @@ test('source 없는 규칙을 실패시킨다', () => {
 test('확정 파일에 개정예고 규칙이 섞이면 실패시킨다', () => {
   const errors = validateRuleset(load('rules-mixed-status.json'), 'rules-mixed-status.json');
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /개정예고 규칙이 섞여 있음/);
+  assert.match(errors[0], /파일 status "확정"와 규칙 status "개정예고"가 다름/);
+});
+
+test('개정예고 파일에 확정 규칙이 섞여도 실패시킨다', () => {
+  const doc = load('rules-valid.json');
+  doc.status = '개정예고';
+  const errors = validateRuleset(doc, 'reverse');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /파일 status "개정예고"와 규칙 status "확정"가 다름/);
+});
+
+test('최상위 status가 허용값이 아니면 실패시키고 혼재 검사도 계속 돈다', () => {
+  const doc = load('rules-valid.json');
+  doc.status = '확 정'; // 공백 하나로 예전 검사는 조용히 꺼졌다.
+  const errors = validateRuleset(doc, 'typo');
+  assert.equal(errors.length, 2);
+  assert.ok(errors.some((e) => /최상위 status가 "확 정"/.test(e)));
+  assert.ok(errors.some((e) => /규칙 status "확정"가 다름/.test(e)));
 });
 
 test('id가 중복되면 실패시킨다', () => {
@@ -49,7 +66,7 @@ test('섞여 들어간 개정예고 규칙의 출처 누락도 함께 보고한�
   const errors = validateRuleset(doc, 'mixed-no-source');
   assert.equal(errors.length, 2);
   assert.ok(errors.some((e) => /source 없음/.test(e)));
-  assert.ok(errors.some((e) => /개정예고 규칙이 섞여 있음/.test(e)));
+  assert.ok(errors.some((e) => /규칙 status "개정예고"가 다름/.test(e)));
 });
 
 test('룰셋 디렉터리에 JSON이 없어도 오류가 아니다', () => {

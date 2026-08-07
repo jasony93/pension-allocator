@@ -6,3 +6,6 @@
 
 # node
 node_modules/
+
+# 검증기 테스트가 만드는 임시 픽스처 디렉터리 (정상 종료 시 스스로 지운다)
+tests/org/fixtures/tmp-*/

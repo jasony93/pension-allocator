@@ -15,9 +15,9 @@ model: sonnet
 
 ## 입력
 
-- `docs/stage-1-discovery/requirements.md` — 타깃 사용자.
-- `docs/stage-1-discovery/demand-validation-plan.md` — 사업 유닛이 정한 수요 판정 지표. 계측 설계는 이 지표를 측정할 수 있어야 한다.
-- `docs/stage-2-design/screens.md` — 랜딩·결과 화면 구조.
+- `docs/stage-1-discovery/requirements.md` — 타깃 사용자. **같은 1단계 동료(`product-planner`)의 산출물이라 1단계 작업 중에는 아직 없을 수 있다** — 헌장의 "같은 단계 동료의 산출물이 입력일 때" 규약을 따른다.
+- `docs/stage-1-discovery/demand-validation-plan.md` — 사업 유닛이 정한 수요 판정 지표. 계측 설계는 이 지표를 측정할 수 있어야 한다. (계측 설계는 2단계 작업이므로 이때는 게이트 1을 통과한 확정본이다.)
+- `docs/stage-2-design/screens.md` — 랜딩·결과 화면 구조. **같은 2단계 동료(`designer`)의 산출물이라 계측 설계 시점에 아직 없을 수 있다** — 같은 규약을 따른다.
 
 ## 산출물
 

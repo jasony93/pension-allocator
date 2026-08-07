@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { parseAgentFile } from './parse-agent.mjs';
 import { REQUIRED_SECTIONS, UNITS } from './units.mjs';
 
@@ -14,6 +14,17 @@ function normalizeTools(value) {
 
 export function validateAgents(dir) {
   const errors = [];
+  const known = new Set(UNITS.map((u) => u.name));
+
+  // Claude Code는 이 디렉터리의 모든 .md를 에이전트로 읽는다. 명세표를 유닛별로만
+  // 훑으면 아홉 번째 파일이 임의의 도구 권한을 갖고도 검사를 통과한다.
+  // 명세표에 없는 정의가 존재하는 것 자체가 위반이다.
+  if (existsSync(dir)) {
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.md') || known.has(basename(file, '.md'))) continue;
+      errors.push(`${file}: 명세표에 없는 에이전트 정의 — units.mjs에 없는 유닛은 존재할 수 없다`);
+    }
+  }
 
   for (const unit of UNITS) {
     const path = join(dir, `${unit.name}.md`);

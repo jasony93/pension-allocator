@@ -64,7 +64,9 @@ docs/org/charter.md      조직 헌장
 - Consumes: 없음 (첫 태스크)
 - Produces:
   - `parseFrontmatter(text: string) -> { data: Record<string, string|string[]>, body: string }` — frontmatter가 없으면 `Error('frontmatter 없음')`을 던진다.
-  - `parseAgentFile(text: string) -> { frontmatter: Record<string, string|string[]>, sections: Record<string, string> }` — `sections`의 키는 `##` 제목 텍스트(예: `역할`), 값은 그 아래 본문 문자열.
+  - `parseAgentFile(text: string) -> { frontmatter: Record<string, string|string[]>, sections: Record<string, string> }` — `sections`의 키는 `##` 제목 텍스트(예: `역할`), 값은 그 아래 본문 문자열. 같은 `##` 제목이 두 번 나오면 던진다.
+
+두 가지 실패 방식을 처음부터 막는다. **선행 BOM**은 머리말 정규식을 빗나가게 해 "frontmatter 없음"이라는 엉뚱한 진단을 내므로 파싱 전에 벗긴다. **중복 `##` 제목**은 앞 섹션 본문을 조용히 덮어쓰는데, 권한을 가르는 파일에서 내용이 소리 없이 사라지는 것은 허용할 수 없는 실패 방식이라 던진다.
 
 - [ ] **Step 1: frontmatter 파서의 실패하는 테스트를 작성한다**
 
@@ -101,6 +103,12 @@ test('값에 콜론이 있어도 첫 콜론에서만 자른다', () => {
 test('frontmatter가 없으면 던진다', () => {
   assert.throws(() => parseFrontmatter('# 제목\n본문\n'), /frontmatter 없음/);
 });
+
+test('선행 BOM이 있어도 머리말을 찾는다', () => {
+  const { data, body } = parseFrontmatter('\uFEFF---\nname: qa\n---\n본문\n');
+  assert.equal(data.name, 'qa');
+  assert.equal(body, '본문\n');
+});
 ```
 
 - [ ] **Step 2: 테스트가 실패하는지 확인한다**
@@ -121,7 +129,10 @@ const BLOCK = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
  * 조직 산출물 머리말은 이 범위를 벗어나지 않으므로 의존성을 추가하지 않는다.
  */
 export function parseFrontmatter(text) {
-  const match = BLOCK.exec(text);
+  // 편집기가 붙인 BOM은 머리말을 못 찾게 만들고, 그러면 "frontmatter 없음"이라는
+  // 엉뚱한 곳을 가리키는 메시지가 나간다. 눈에 보이지 않는 문자를 먼저 벗긴다.
+  const source = text.replace(/^\uFEFF/, '');
+  const match = BLOCK.exec(source);
   if (!match) throw new Error('frontmatter 없음');
 
   const data = {};
@@ -154,14 +165,14 @@ export function parseFrontmatter(text) {
     }
   }
 
-  return { data, body: text.slice(match[0].length) };
+  return { data, body: source.slice(match[0].length) };
 }
 ```
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
 Run: `node --test tests/org/frontmatter.test.mjs`
-Expected: PASS — 5개 테스트 모두 통과
+Expected: PASS — 6개 테스트 모두 통과
 
 - [ ] **Step 5: 에이전트 파일 파서의 실패하는 테스트를 작성한다**
 
@@ -206,6 +217,11 @@ test('h3 이하는 상위 섹션 본문에 포함된다', () => {
 test('frontmatter가 없으면 던진다', () => {
   assert.throws(() => parseAgentFile('## 역할\n내용\n'), /frontmatter 없음/);
 });
+
+test('같은 제목이 두 번 나오면 던진다', () => {
+  const text = SAMPLE + '## 역할\n뒤에 또 나온 역할.\n';
+  assert.throws(() => parseAgentFile(text), /"## 역할" 섹션이 중복 정의됨/);
+});
 ```
 
 - [ ] **Step 6: 테스트가 실패하는지 확인한다**
@@ -232,6 +248,11 @@ export function parseAgentFile(text) {
     const heading = H2.exec(line);
     if (heading) {
       current = heading[1];
+      // 같은 제목이 두 번 나오면 앞 섹션의 본문이 조용히 사라진다.
+      // 권한을 가르는 파일에서 내용이 소리 없이 없어지는 것은 최악의 실패 방식이다.
+      if (Object.hasOwn(sections, current)) {
+        throw new Error(`"## ${current}" 섹션이 중복 정의됨`);
+      }
       sections[current] = '';
     } else if (current !== null) {
       sections[current] += line + '\n';
@@ -245,7 +266,7 @@ export function parseAgentFile(text) {
 - [ ] **Step 8: 테스트가 통과하는지 확인한다**
 
 Run: `node --test "tests/org/*.test.mjs"`
-Expected: PASS — 8개 테스트 모두 통과
+Expected: PASS — 10개 테스트 모두 통과
 
 - [ ] **Step 9: 커밋**
 
@@ -273,6 +294,8 @@ git commit -m "feat: add frontmatter and agent-file parsers for org validation"
   - `UNITS: Array<{ name, model, tools: string[], writeScope: string[] }>` — 8개 유닛의 명세표
   - `REQUIRED_SECTIONS: string[]` — `['역할', '입력', '산출물', '금지사항', '완료 기준']`
   - `validateAgents(dir: string) -> string[]` — 오류 메시지 배열. 빈 배열이면 통과.
+
+검증기는 명세표를 훑는 것으로 끝내지 않고 **디렉터리를 열거한다.** Claude Code는 `.claude/agents/`의 모든 `.md`를 에이전트로 읽으므로, 명세표만 확인하면 아홉 번째 파일이 임의의 도구 권한을 갖고도 검사를 통과한다. 명세표에 없는 이름의 `.md`가 존재하는 것 자체를 위반으로 본다.
 
 이 태스크의 테스트는 **픽스처만 사용해 이 태스크 안에서 초록으로 끝난다.** 실제 `.claude/agents/` 디렉터리를 검사하는 테스트는 8개 정의가 모두 존재하게 되는 Task 8에서 추가한다. Task 3~7의 진행 확인은 테스트가 아니라 `node scripts/org/validate.mjs`의 출력으로 한다 — 진행률 표시는 테스트의 일이 아니다.
 
@@ -303,6 +326,7 @@ model: sonnet
 
 ## 산출물
 docs/stage-4-verification/qa-report.md
+docs/stage-6-operations/<YYYY-MM>-qa.md
 
 ## 금지사항
 픽스처.
@@ -324,13 +348,36 @@ tools: Read, Glob, Grep, Bash, Write, Edit
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { validateAgents } from '../../scripts/org/validate-agents.mjs';
 import { UNITS } from '../../scripts/org/units.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const fixture = (name) => join(ROOT, 'tests', 'org', 'fixtures', name);
+const FIXTURES = join(ROOT, 'tests', 'org', 'fixtures');
+const fixture = (name) => join(FIXTURES, name);
+
+const VALID_QA = readFileSync(join(fixture('one-valid-agent'), 'qa.md'), 'utf8');
+
+/**
+ * 임시 디렉터리에 정의 파일을 깔고 검증기를 돌린다.
+ * 검사 하나마다 픽스처 디렉터리를 만들어 두면 저장소에 죽은 파일이 쌓이고,
+ * 어느 픽스처가 어느 검사를 지키는지 알 수 없게 된다.
+ */
+function inAgentDir(files, run) {
+  const dir = mkdtempSync(join(FIXTURES, 'tmp-agents-'));
+  try {
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
+    return run(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** qa 정의 하나만 둔 디렉터리를 검사하고, qa에 대한 오류만 돌려준다. */
+const qaErrors = (text) =>
+  inAgentDir({ 'qa.md': text }, (dir) => validateAgents(dir).filter((e) => e.startsWith('qa:')));
 
 test('명세표에 8개 유닛이 있다', () => {
   assert.equal(UNITS.length, 8);
@@ -344,6 +391,10 @@ test('정의가 없는 디렉터리는 유닛 수만큼 오류가 난다', () =>
   assert.equal(validateAgents(fixture('no-agents')).length, UNITS.length);
 });
 
+test('없는 디렉터리를 넘겨도 던지지 않는다', () => {
+  assert.equal(validateAgents(fixture('존재하지-않는-디렉터리')).length, UNITS.length);
+});
+
 test('명세표를 만족하는 정의는 오류를 내지 않는다', () => {
   const errors = validateAgents(fixture('one-valid-agent'));
   assert.equal(errors.length, UNITS.length - 1);
@@ -354,6 +405,67 @@ test('명세표보다 넓은 도구 권한을 실패시킨다', () => {
   const errors = validateAgents(fixture('bad-tools')).filter((e) => e.startsWith('qa:'));
   assert.equal(errors.length, 1);
   assert.match(errors[0], /tools 불일치/);
+});
+
+test('명세표에 없는 .md 정의를 실패시킨다', () => {
+  const errors = inAgentDir({ 'qa.md': VALID_QA, 'shadow-admin.md': VALID_QA }, (dir) =>
+    validateAgents(dir),
+  );
+  const rogue = errors.filter((e) => /명세표에 없는 에이전트 정의/.test(e));
+  assert.equal(rogue.length, 1);
+  assert.match(rogue[0], /^shadow-admin\.md: /);
+  assert.equal(errors.filter((e) => e.startsWith('qa:')).length, 0);
+});
+
+test('.md가 아닌 파일은 정의로 보지 않는다', () => {
+  const errors = inAgentDir({ 'qa.md': VALID_QA, 'NOTES.txt': '메모' }, (dir) =>
+    validateAgents(dir),
+  );
+  assert.equal(errors.filter((e) => /명세표에 없는 에이전트 정의/.test(e)).length, 0);
+});
+
+test('frontmatter name이 파일명과 다르면 실패시킨다', () => {
+  const errors = qaErrors(VALID_QA.replace('name: qa', 'name: quality'));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /frontmatter name이 "quality" — 파일명과 불일치/);
+});
+
+test('description이 없으면 실패시킨다', () => {
+  const errors = qaErrors(VALID_QA.replace('description: 픽스처용 정의\n', ''));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /description 없음/);
+});
+
+test('model이 명세표와 다르면 실패시킨다', () => {
+  const errors = qaErrors(VALID_QA.replace('model: sonnet', 'model: opus'));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /model이 "opus" — 명세표는 "sonnet"/);
+});
+
+test('필수 섹션이 없으면 실패시킨다', () => {
+  const errors = qaErrors(VALID_QA.replace('## 금지사항\n픽스처.\n', ''));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /"## 금지사항" 섹션 없음/);
+});
+
+test('필수 섹션이 비어 있으면 실패시킨다', () => {
+  const errors = qaErrors(VALID_QA.replace('## 금지사항\n픽스처.\n', '## 금지사항\n\n'));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /"## 금지사항" 섹션이 비어 있음/);
+});
+
+test('산출물 섹션에 쓰기 경로가 빠지면 실패시킨다', () => {
+  const errors = qaErrors(VALID_QA.replace('docs/stage-6-operations/<YYYY-MM>-qa.md\n', ''));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /산출물 섹션에 쓰기 경로 "docs\/stage-6-operations\/" 미기재/);
+});
+
+test('파싱 실패는 유닛 오류로 보고되고 나머지 검사를 막지 않는다', () => {
+  const errors = inAgentDir({ 'qa.md': '머리말이 없는 정의\n' }, (dir) => validateAgents(dir));
+  const qa = errors.filter((e) => e.startsWith('qa:'));
+  assert.equal(qa.length, 1);
+  assert.match(qa[0], /파싱 실패 — frontmatter 없음/);
+  assert.equal(errors.length, UNITS.length);
 });
 ```
 
@@ -395,7 +507,7 @@ export const UNITS = [
   {
     name: 'designer',
     model: 'sonnet',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch'],
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
     writeScope: ['docs/stage-2-design/design-system.md', 'docs/stage-2-design/screens.md'],
   },
   {
@@ -418,8 +530,12 @@ export const UNITS = [
     name: 'qa',
     model: 'sonnet',
     tools: ['Read', 'Glob', 'Grep', 'Bash', 'Write'],
-    writeScope: ['docs/stage-4-verification/qa-report.md'],
+    writeScope: ['docs/stage-4-verification/qa-report.md', 'docs/stage-6-operations/'],
   },
+  // `qa`·`growth`·`biz-model`은 `docs/stage-6-operations/`를 디렉터리 단위로 공유한다.
+  // 검증기는 디렉터리까지만 강제하므로, 한 파일에 한 저자라는 원칙은
+  // 유닛별 파일명 규약(`<YYYY-MM>-qa.md` / `-growth.md` / `-biz.md`)이 지탱한다.
+  // 규약을 바꾸려면 각 유닛 정의 파일의 `## 산출물`과 6단계 README를 함께 고쳐야 한다.
   {
     name: 'growth',
     model: 'sonnet',
@@ -448,8 +564,8 @@ export const UNITS = [
 `scripts/org/validate-agents.mjs`:
 
 ```js
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { parseAgentFile } from './parse-agent.mjs';
 import { REQUIRED_SECTIONS, UNITS } from './units.mjs';
 
@@ -464,6 +580,17 @@ function normalizeTools(value) {
 
 export function validateAgents(dir) {
   const errors = [];
+  const known = new Set(UNITS.map((u) => u.name));
+
+  // Claude Code는 이 디렉터리의 모든 .md를 에이전트로 읽는다. 명세표를 유닛별로만
+  // 훑으면 아홉 번째 파일이 임의의 도구 권한을 갖고도 검사를 통과한다.
+  // 명세표에 없는 정의가 존재하는 것 자체가 위반이다.
+  if (existsSync(dir)) {
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.md') || known.has(basename(file, '.md'))) continue;
+      errors.push(`${file}: 명세표에 없는 에이전트 정의 — units.mjs에 없는 유닛은 존재할 수 없다`);
+    }
+  }
 
   for (const unit of UNITS) {
     const path = join(dir, `${unit.name}.md`);
@@ -550,7 +677,7 @@ console.log('\n모든 조직 규약 검사를 통과했습니다.');
 - [ ] **Step 7: 테스트가 통과하는지 확인한다**
 
 Run: `node --test "tests/org/*.test.mjs"`
-Expected: PASS — Task 1의 8개와 이 태스크의 5개, 총 13개 통과
+Expected: PASS — Task 1의 10개와 이 태스크의 15개, 총 25개 통과
 
 - [ ] **Step 8: CLI가 동작하는지 확인한다**
 
@@ -616,6 +743,7 @@ model: sonnet
 5. **결과 화면이 답해야 할 질문** — 사용자가 결과를 보고 무엇을 알게 되는가.
 6. **수용 기준(AC)** — 각 화면·기능마다 `~하면 ~한다` 형태로 검증 가능하게 쓴다. "사용하기 쉽다" 같은 문장은 수용 기준이 아니다.
 7. **비범위** — 이번에 만들지 않는 것.
+8. **경쟁·유사 서비스 조사** — 조사한 서비스마다 무엇을 해주는지, 무엇을 안 해주는지, 그리고 이 서비스가 무엇을 다르게 하는지를 **한 문장의 차별점**으로 정리한다. 그 한 문장이 "더 정확하다"뿐이라면 조사가 부족한 것이다.
 
 ## 금지사항
 
@@ -629,8 +757,9 @@ model: sonnet
 ## 완료 기준
 
 - `docs/stage-1-discovery/requirements.md`가 존재하고 조직 표준 머리말을 갖췄다.
-- 위 산출물 7개 항목이 모두 채워졌다.
+- 위 산출물 8개 항목이 모두 채워졌다.
 - 모든 수용 기준이 참/거짓으로 판정 가능하다.
+- 경쟁·유사 서비스가 최소 3개 조사되어 있고, 차별점이 한 문장으로 적혀 있으며, 그 문장이 "더 정확하다"가 아니다.
 - `open_questions`에 최소 한 건이 적혀 있다. 이 단계에서 불확실한 것이 하나도 없다면 조사가 부족한 것이다.
 ```
 
@@ -691,7 +820,7 @@ ISA·IRP·연금저축 관련 세법을 조사해 기계가 읽을 수 있는 �
 ## 입력
 
 - `docs/superpowers/specs/2026-08-07-agent-org-design.md` — 특히 6절 세무 정확성 보증.
-- `docs/stage-1-discovery/requirements.md` — 어떤 입력 항목을 다루는지.
+- `docs/stage-1-discovery/requirements.md` — 어떤 입력 항목을 다루는지. **같은 1단계 동료(`product-planner`)의 산출물이라 아직 없을 수 있다.** 없으면 헌장의 "같은 단계 동료의 산출물이 입력일 때" 규약대로 다룰 범위를 명시적 가정으로 세우고 `open_questions`에 올린 뒤 진행한다.
 - 4단계 교차검증 시: `docs/stage-2-design/engine-interface.md` (입출력 형식 확인용).
 
 ## 산출물
@@ -769,6 +898,8 @@ model: opus
 
 2단계에서는 알고리즘 설계와 **인터페이스 확정**이 임무다. 인터페이스가 고정되어야 web-dev가 목을 물려 병렬로 UI를 만들 수 있다. 3단계에서는 TDD로 구현한다.
 
+6단계에서도 분기마다 재소집된다. QA의 분기 회귀 리포트가 넘긴 백로그와 룰셋 개정에 따른 엔진 수정을 처리하며, 산출물 경로와 금지사항은 3단계와 같다. 처리 결과는 관리자에게 최종 메시지로 보고한다.
+
 ## 입력
 
 - `docs/stage-1-discovery/requirements.md` — 입력 항목과 수용 기준.
@@ -837,7 +968,7 @@ Expected: 출력에 `designer: 정의 파일 없음`과 `web-dev: 정의 파일 
 ---
 name: designer
 description: 2단계 설계에서 디자인 시스템, 화면 설계, 결과 시각화 스펙이 필요할 때 호출한다.
-tools: Read, Write, Edit, Glob, Grep, WebFetch
+tools: Read, Write, Edit, Glob, Grep
 model: sonnet
 ---
 
@@ -893,6 +1024,8 @@ model: sonnet
 설계 문서와 확정된 엔진 인터페이스를 받아 웹 UI를 구현한다. 계산 로직은 구현하지 않는다 — 엔진을 호출할 뿐이다.
 
 엔진 구현이 끝나기를 기다리지 않는다. 2단계에서 확정된 `engine-interface.md`에 맞춘 목(mock)을 만들어 UI를 먼저 완성하고, 엔진이 나오면 목을 교체한다. 이것이 3단계에서 두 유닛이 병렬로 움직이는 방식이다.
+
+6단계에서도 분기마다 재소집된다. QA의 분기 회귀 리포트가 넘긴 백로그를 처리하며, 산출물 경로와 금지사항은 3단계와 같다. 처리 결과는 관리자에게 최종 메시지로 보고한다.
 
 ## 입력
 
@@ -954,6 +1087,8 @@ git commit -m "feat: add designer and web-dev unit definitions"
 - Consumes: `UNITS` 명세표의 `qa` 항목 (Task 2)
 - Produces: 없음
 
+`qa`의 `writeScope`는 두 개다. 게이트 4의 `docs/stage-4-verification/qa-report.md`와, 6단계 분기 회귀용 `docs/stage-6-operations/`다. 후자가 없으면 헌장이 시킨 분기 회귀 리포트를 낼 자리가 승인된 게이트 4 산출물을 덮어쓰는 것밖에 없다. 이 디렉터리는 `growth`·`biz-model`과 공유하므로 한 파일에 한 저자라는 원칙은 유닛별 파일명 규약(`<YYYY-MM>-qa.md`)이 지탱한다.
+
 - [ ] **Step 1: 현재 오류를 확인한다**
 
 Run: `node scripts/org/validate.mjs`
@@ -966,7 +1101,7 @@ Expected: 출력에 `qa: 정의 파일 없음` 포함
 ```markdown
 ---
 name: qa
-description: 4단계 검증에서 테스트 전략 수립, E2E·경계값·회귀 테스트, 코드 리뷰가 필요할 때 호출한다. 6단계 분기 사이클에서도 호출한다.
+description: 4단계 검증에서 테스트 전략 수립, E2E·경계값·회귀 테스트, 코드 리뷰가 필요할 때 호출한다. 6단계 분기 회귀 사이클에서도 호출하며, 그때는 `docs/stage-6-operations/<YYYY-MM>-qa.md`를 낸다.
 tools: Read, Glob, Grep, Bash, Write
 model: sonnet
 ---
@@ -975,7 +1110,7 @@ model: sonnet
 
 구현이 명세대로 동작하는지 검증하고, 조직 규약이 실제로 지켜졌는지 기계적으로 확인한다.
 
-**발견만 하고 수정하지 않는다.** 쓰기 권한이 리포트 경로 하나로 제한된 것은 실수가 아니라 설계다. QA가 코드를 고치기 시작하면 "테스트를 통과시키려고 테스트를 고치는" 일이 생긴다.
+**발견만 하고 수정하지 않는다.** 쓰기 권한이 리포트 경로로만 제한된 것은 실수가 아니라 설계다. QA가 코드를 고치기 시작하면 "테스트를 통과시키려고 테스트를 고치는" 일이 생긴다.
 
 세법 계산이 맞는지는 판정하지 않는다 — 그것은 tax-domain의 독립 교차검증이 담당한다. QA는 "명세대로 도는가"를 본다.
 
@@ -989,7 +1124,7 @@ model: sonnet
 
 ## 산출물
 
-`docs/stage-4-verification/qa-report.md` 한 개 파일. 다음을 담는다.
+**4단계:** `docs/stage-4-verification/qa-report.md` 한 개 파일. 다음을 담는다.
 
 1. **수용 기준 대조표** — 요구사항의 AC마다 통과/실패/미검증.
 2. **테스트 실행 결과** — 실제로 실행한 명령과 그 출력. 실행하지 않은 것을 통과로 적지 않는다.
@@ -1007,6 +1142,10 @@ model: sonnet
 - 계측이 `analytics-plan.md` 설계대로 구현되었고, 어떤 이벤트에도 개인 식별 가능 값이 없는지.
 - "투자·세무 자문이 아님" 고지가 결과 화면에 있는지.
 
+**6단계(분기):** `docs/stage-6-operations/<YYYY-MM>-qa.md` — 분기 회귀 리포트. 회귀 전건 실행 결과, 골든 케이스 통과 여부, 새로 발견된 이슈의 분류(차단/개선/관찰)와 담당 유닛 제안, 지난 분기 이슈의 처리 현황을 담는다. 위 규약 준수 검사도 다시 돌린다.
+
+**게이트 4의 `qa-report.md`를 분기 리포트로 덮어쓰지 않는다.** 승인된 산출물은 그 시점의 기록이고, 분기마다 파일을 따로 남겨야 회귀 추이를 볼 수 있다.
+
 ## 금지사항
 
 - **`src/` 하위 어떤 파일도 수정하지 않는다.** 버그를 발견하면 리포트에 적고 해당 개발 유닛이 고치게 한다.
@@ -1017,11 +1156,20 @@ model: sonnet
 
 ## 완료 기준
 
+**4단계:**
+
 - `docs/stage-4-verification/qa-report.md`가 존재하고 조직 표준 머리말을 갖췄다.
 - 요구사항의 모든 AC가 대조표에 통과/실패/미검증 중 하나로 기록되어 있다.
 - 규약 준수 검사 6개 항목이 전부 실행되고 결과가 기록되어 있다.
 - 모든 테스트 실행 결과에 실제 실행 명령이 함께 적혀 있다.
 - 차단 사유 목록이 명시되어 있다(없으면 "없음"이라고 적는다).
+
+**6단계:**
+
+- `docs/stage-6-operations/<YYYY-MM>-qa.md`가 존재하고 조직 표준 머리말(`stage: 6`)을 갖췄다.
+- 회귀 전건과 골든 케이스 실행 결과가 실제 실행 명령과 함께 적혀 있다.
+- 새 이슈가 차단/개선/관찰로 분류되어 있고 각각 담당 유닛 제안이 붙어 있다.
+- 지난 분기 리포트의 이슈가 하나도 빠짐없이 현황과 함께 대조되어 있다.
 ```
 
 - [ ] **Step 3: 검증기를 실행해 오류가 사라졌는지 확인한다**
@@ -1077,9 +1225,9 @@ model: sonnet
 
 ## 입력
 
-- `docs/stage-1-discovery/requirements.md` — 타깃 사용자.
-- `docs/stage-1-discovery/demand-validation-plan.md` — 사업 유닛이 정한 수요 판정 지표. 계측 설계는 이 지표를 측정할 수 있어야 한다.
-- `docs/stage-2-design/screens.md` — 랜딩·결과 화면 구조.
+- `docs/stage-1-discovery/requirements.md` — 타깃 사용자. **같은 1단계 동료(`product-planner`)의 산출물이라 1단계 작업 중에는 아직 없을 수 있다** — 헌장의 "같은 단계 동료의 산출물이 입력일 때" 규약을 따른다.
+- `docs/stage-1-discovery/demand-validation-plan.md` — 사업 유닛이 정한 수요 판정 지표. 계측 설계는 이 지표를 측정할 수 있어야 한다. (계측 설계는 2단계 작업이므로 이때는 게이트 1을 통과한 확정본이다.)
+- `docs/stage-2-design/screens.md` — 랜딩·결과 화면 구조. **같은 2단계 동료(`designer`)의 산출물이라 계측 설계 시점에 아직 없을 수 있다** — 같은 규약을 따른다.
 
 ## 산출물
 
@@ -1133,7 +1281,7 @@ model: sonnet
 ## 입력
 
 - `docs/superpowers/specs/2026-08-07-agent-org-design.md` — 7절 수익화 결정 유예 구조.
-- `docs/stage-1-discovery/requirements.md` — 타깃 사용자와 제품 범위.
+- `docs/stage-1-discovery/requirements.md` — 타깃 사용자와 제품 범위. **같은 1단계 동료(`product-planner`)의 산출물이라 아직 없을 수 있다** — 헌장의 "같은 단계 동료의 산출물이 입력일 때" 규약대로 가정을 명시하고 진행한다.
 - 6단계에서: `docs/stage-6-operations/<YYYY-MM>-growth.md` — 그로스의 채널 성과.
 
 ## 산출물
@@ -1160,7 +1308,7 @@ model: sonnet
 
 **1단계:** `demand-validation-plan.md`에 위 5개 항목이 모두 있다. 판정 지표마다 숫자 목표치가 있다. 판정 규칙이 8주 뒤 재해석 없이 적용 가능하다. 수익 모델 후보가 최소 3개 비교되어 있다.
 
-**5단계:** `analytics-plan.md`의 이벤트만으로 모든 판정 지표를 계산할 수 있는지 확인하고 결과를 보고한다. 측정 불가능한 지표가 있으면 출시 전에 해결해야 하므로 즉시 관리자에게 올린다.
+**5단계:** `analytics-plan.md`의 이벤트만으로 모든 판정 지표를 계산할 수 있는지 확인하고 **관리자에게 최종 메시지로 보고한다.** 이 확인 결과를 읽어야 할 다음 유닛이 없으므로 파일을 만들지 않는다(헌장 "관리자에게 가는 보고는 파일이 아니어도 된다"). 측정 불가능한 지표가 있으면 출시 전에 해결해야 하므로 지표명과 빠진 이벤트를 함께 올린다.
 
 **6단계:** 월간 리포트에 지표별 실측치와 목표 대비 달성률이 있다. 게이트 7 리포트에는 세 선택지 중 하나에 대한 명확한 권고와 그 근거가 있다.
 ```
@@ -1181,7 +1329,7 @@ Run: `node scripts/org/validate.mjs`
 Expected: `OK   에이전트 정의`, 종료 코드 0
 
 Run: `node --test "tests/org/*.test.mjs"`
-Expected: PASS — `실제 유닛 정의가 모두 명세표와 일치한다`를 포함해 총 14개 통과
+Expected: PASS — `실제 유닛 정의가 모두 명세표와 일치한다`를 포함해 총 26개 통과
 
 - [ ] **Step 6: 커밋**
 
@@ -1205,6 +1353,8 @@ git commit -m "feat: add growth and biz-model unit definitions"
 - Produces: `validateCharter(path: string) -> string[]` — 오류 메시지 배열
 
 헌장은 유닛들이 매번 읽는 공용 문서다. 유닛이 추가됐는데 헌장에 빠지면 그 유닛은 조직 규약을 모르는 채로 일하게 되므로, 명세표와의 일치를 기계적으로 강제한다.
+
+핸드오프 규약에는 파일 원칙만으로 답이 나오지 않는 두 상황을 함께 적는다. **같은 단계 동료의 산출물이 입력일 때** — 동시 실행이므로 그 파일이 아직 없을 수 있다. 유닛은 명시적 가정을 세워 `open_questions`에 올리고 진행하며 관리자가 게이트에서 조정한다. **관리자에게만 가는 보고** — 관리자 세션의 컨텍스트는 유지되고 유닛의 컨텍스트는 사라지므로, 뒤에 오는 유닛이 읽을 필요가 없는 확인 결과는 최종 메시지로 돌려도 된다. 이 두 문단을 여덟 개 정의 파일에 흩어 적는 대신 헌장 한 곳에 두고, 각 유닛 파일은 해당 입력 줄에 짧은 표시만 단다.
 
 - [ ] **Step 1: 실패하는 테스트를 작성한다**
 
@@ -1284,7 +1434,7 @@ export function validateCharter(path) {
 | `designer` | 디자인 시스템, 화면 설계, 결과 시각화 | `docs/stage-2-design/screens.md` |
 | `calc-engine-dev` | 계산 로직 설계와 구현, 엔진 인터페이스 확정 | `src/engine/`, `docs/stage-2-design/engine-interface.md` |
 | `web-dev` | 입력 폼·결과 화면 구현 | `src/web/` |
-| `qa` | 테스트, 코드 리뷰, 규약 준수 검사 | `docs/stage-4-verification/qa-report.md` |
+| `qa` | 테스트, 코드 리뷰, 규약 준수 검사 | `docs/stage-4-verification/qa-report.md`, `docs/stage-6-operations/<YYYY-MM>-qa.md` |
 | `growth` | 채널 조사, 계측 설계, 랜딩 카피, SEO | `docs/stage-2-design/analytics-plan.md`, `docs/stage-5-launch/` |
 | `biz-model` | 수요 검증 계획, 수익 지표, BM 결정 리포트 | `docs/stage-1-discovery/demand-validation-plan.md` |
 
@@ -1319,9 +1469,17 @@ open_questions:
 
 `status`는 `draft`로 시작하며, 게이트를 통과할 때 관리자만 `approved`로 바꾼다.
 
+### 같은 단계 동료의 산출물이 입력일 때
+
+한 단계 안의 유닛들은 동시에 실행된다. 그래서 자기 `## 입력`에 적힌 파일이 같은 단계 동료의 산출물이라면 **작업을 시작하는 시점에 아직 없을 수 있다.** 이때 유닛은 기다리지도, 동료의 파일을 대신 만들지도 않는다. 필요한 값을 **명시적인 가정으로 세워** 산출물 본문에 적고, 같은 내용을 머리말 `open_questions`에도 올린 뒤 진행한다. 관리자가 게이트에서 실제 산출물과 대조해 어긋난 부분을 조정하고 필요하면 해당 유닛만 재호출한다. 가정을 적지 않고 빈칸으로 넘기는 것은 규약 위반이다.
+
+### 관리자에게 가는 보고는 파일이 아니어도 된다
+
+파일 원칙은 유닛과 유닛 사이의 규약이다. **관리자에게만 전달하면 되는 확인 결과·권고는 유닛의 최종 메시지로 돌려도 된다.** 관리자 세션의 컨텍스트는 단계 내내 유지되지만 유닛의 컨텍스트는 작업이 끝나면 사라지기 때문이다. 반대로 **뒤에 오는 다른 유닛이 읽어야 하는 것은 예외 없이 파일로 남긴다.** 판단 기준은 "누가 이것을 다시 읽어야 하는가" 하나다.
+
 ### 네 가지 규칙
 
-1. **쓰기 범위 제한** — 유닛은 자기 산출물 경로에만 쓴다. 범위는 각 유닛의 정의 파일 `## 산출물` 섹션에 명시되어 있다.
+1. **쓰기 범위 제한** — 유닛은 자기 산출물 경로에만 쓴다. 범위는 `scripts/org/units.mjs`의 `writeScope`가 단일 진실 원천이고, 각 유닛의 정의 파일 `## 산출물` 섹션이 같은 경로를 사람이 읽을 형태로 되뇐다. 산출물 머리말 검사가 문서의 `unit`과 실제 파일 경로를 대조해 이를 기계적으로 강제한다.
 2. **읽기는 자유** — 이전 단계 산출물은 모두 읽는다. 예외: 4단계 교차검증 중 `tax-domain`은 `src/engine/`을 읽지 않는다.
 3. **남의 산출물은 고치지 않는다** — 다른 유닛의 문서가 틀렸다고 판단해도 직접 수정하지 않고 `open_questions`에 올린다. 관리자가 게이트에서 판정한다. 유닛이 서로의 문서를 고치기 시작하면 누가 무엇을 결정했는지 추적이 불가능해진다.
 4. **승인은 관리자만** — 유닛은 스스로 자기 산출물을 승인하지 않는다.
@@ -1411,7 +1569,7 @@ git commit -m "feat: add org charter and charter validator"
   - `validateRuleset(doc: object, label: string) -> string[]`
   - `validateRulesDir(dir: string) -> string[]` — 디렉터리의 모든 `.json`을 검사
 
-스펙 6.1절의 "`source` 없는 규칙은 QA가 자동으로 실패시킨다"를 실행되는 코드로 구현한다. 픽스처의 규칙 값은 **의도적으로 세법과 무관한 더미**다 — 실제 수치는 `tax-domain`이 출처와 함께 채운다.
+스펙 6.1절의 "`source` 없는 규칙은 QA가 자동으로 실패시킨다"를 실행되는 코드로 구현한다. 확정/개정예고 분리(6.2절)는 **파일 `status`를 허용값과 대조한 뒤, 규칙 `status`와의 불일치를 방향 없이** 검사한다. 파일 `status`를 존재 여부로만 보면 오타 하나(`"확 정"`)로 혼재 검사가 조용히 꺼지고, 한 방향만 보면 개정예고 파일에 섞인 확정 규칙을 놓친다. 픽스처의 규칙 값은 **의도적으로 세법과 무관한 더미**다 — 실제 수치는 `tax-domain`이 출처와 함께 채운다.
 
 - [ ] **Step 1: 픽스처를 만든다**
 
@@ -1512,7 +1670,24 @@ test('source 없는 규칙을 실패시킨다', () => {
 test('확정 파일에 개정예고 규칙이 섞이면 실패시킨다', () => {
   const errors = validateRuleset(load('rules-mixed-status.json'), 'rules-mixed-status.json');
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /개정예고 규칙이 섞여 있음/);
+  assert.match(errors[0], /파일 status "확정"와 규칙 status "개정예고"가 다름/);
+});
+
+test('개정예고 파일에 확정 규칙이 섞여도 실패시킨다', () => {
+  const doc = load('rules-valid.json');
+  doc.status = '개정예고';
+  const errors = validateRuleset(doc, 'reverse');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /파일 status "개정예고"와 규칙 status "확정"가 다름/);
+});
+
+test('최상위 status가 허용값이 아니면 실패시키고 혼재 검사도 계속 돈다', () => {
+  const doc = load('rules-valid.json');
+  doc.status = '확 정'; // 공백 하나로 예전 검사는 조용히 꺼졌다.
+  const errors = validateRuleset(doc, 'typo');
+  assert.equal(errors.length, 2);
+  assert.ok(errors.some((e) => /최상위 status가 "확 정"/.test(e)));
+  assert.ok(errors.some((e) => /규칙 status "확정"가 다름/.test(e)));
 });
 
 test('id가 중복되면 실패시킨다', () => {
@@ -1538,7 +1713,7 @@ test('섞여 들어간 개정예고 규칙의 출처 누락도 함께 보고한�
   const errors = validateRuleset(doc, 'mixed-no-source');
   assert.equal(errors.length, 2);
   assert.ok(errors.some((e) => /source 없음/.test(e)));
-  assert.ok(errors.some((e) => /개정예고 규칙이 섞여 있음/.test(e)));
+  assert.ok(errors.some((e) => /규칙 status "개정예고"가 다름/.test(e)));
 });
 
 test('룰셋 디렉터리에 JSON이 없어도 오류가 아니다', () => {
@@ -1569,6 +1744,15 @@ export function validateRuleset(doc, label) {
   for (const key of ['tax_year', 'status', 'effective_from', 'rules']) {
     if (doc?.[key] === undefined) errors.push(`${label}: 최상위 "${key}" 없음`);
   }
+
+  // 파일 status를 값까지 확인하지 않으면 오타 하나("확 정")로 아래 혼재 검사가
+  // 조용히 꺼진다. 확정/개정예고 분리는 이 값이 정확할 때만 강제된다.
+  if (doc?.status !== undefined && !RULE_STATUSES.includes(doc.status)) {
+    errors.push(
+      `${label}: 최상위 status가 "${doc.status}" — 허용값은 ${RULE_STATUSES.join(' / ')}`,
+    );
+  }
+
   if (!Array.isArray(doc?.rules)) {
     errors.push(`${label}: rules가 배열이 아님`);
     return errors;
@@ -1603,9 +1787,12 @@ export function validateRuleset(doc, label) {
     }
 
     // 확정 파일과 개정예고 파일을 섞지 않는다 (스펙 6.2절).
+    // 방향을 가리지 않는다 — 개정예고 파일에 들어간 확정 규칙도 같은 위반이다.
     // 이 규칙은 애초에 이 파일에 있으면 안 되므로 bill_stage까지 따지지 않는다.
-    if (doc.status === '확정' && rule?.status === '개정예고') {
-      errors.push(`${at}: 확정 룰셋에 개정예고 규칙이 섞여 있음`);
+    if (rule?.status !== undefined && rule.status !== doc?.status) {
+      errors.push(
+        `${at}: 파일 status "${doc?.status}"와 규칙 status "${rule.status}"가 다름 — 확정과 개정예고는 섞지 않는다`,
+      );
       continue;
     }
 
@@ -1647,7 +1834,8 @@ export function validateRulesDir(dir) {
 
 - `<연도>.json` — 시행 중인 확정 규칙.
 - `<연도>-proposed.json` — 개정예고 규칙. 확정 규칙과 절대 섞지 않는다.
-- `sources.md` — 참고한 법령·자료 목록.
+
+참고한 법령·자료 목록은 `docs/stage-1-discovery/tax-rules-report.md`에 있다. 이 디렉터리에 따로 두지 않는다.
 
 모든 규칙은 `source`(`law`, `url`, `verified_on`, `verified_by`)를 가져야 한다.
 `node scripts/org/validate.mjs`가 이를 강제한다.
@@ -1705,6 +1893,8 @@ git commit -m "feat: enforce tax ruleset schema and mandatory legal sources"
 
 `README.md`를 검사 대상에서 제외하는 이유는 그것이 유닛 산출물이 아니라 디렉터리 안내이기 때문이다.
 
+`validateArtifact`는 머리말만 보는 순수 함수로 남기고, **경로를 아는 검사는 `validateArtifactDirs`가 맡는다.** 두 가지를 더 본다. 첫째, 디렉터리 이름에서 단계 번호를 뽑아 머리말 `stage`와 대조한다 — 이것이 없으면 `stage: 99`짜리 문서가 1단계 디렉터리에 앉아 있어도 통과한다. 둘째, 머리말 `unit`의 `writeScope`가 그 파일 경로를 덮는지 확인한다. 헌장 규칙 1 "쓰기 범위 제한"은 `units.mjs`에 이미 데이터로 있으므로, 산문으로 두지 않고 강제한다. 검사 대상 디렉터리 목록도 `docs/`에서 `stage-<숫자>`로 시작하는 항목을 읽어 만든다 — 목록을 코드에 박으면 나중에 생기는 `docs/stage-3-implementation/`이 경고 없이 빠진다.
+
 - [ ] **Step 1: 픽스처를 만든다**
 
 `tests/org/fixtures/artifact-valid.md`:
@@ -1740,7 +1930,7 @@ open_questions:
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { validateArtifact, validateArtifactDirs } from '../../scripts/org/validate-artifact.mjs';
@@ -1750,6 +1940,24 @@ const FIXTURES = join(ROOT, 'tests', 'org', 'fixtures');
 
 const load = (name) => readFileSync(join(FIXTURES, name), 'utf8');
 
+const header = (unit, stage, status = 'draft') =>
+  ['---', `unit: ${unit}`, `stage: ${stage}`, `status: ${status}`, 'inputs: []', 'open_questions: []', '---', '', '# 문서', ''].join('\n');
+
+/** 임시 저장소 루트를 만들어 디렉터리 스캔 전체를 돌린다. */
+function inRoot(files, run) {
+  const root = mkdtempSync(join(FIXTURES, 'tmp-artifact-'));
+  try {
+    for (const [relative, text] of Object.entries(files)) {
+      const path = join(root, ...relative.split('/'));
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, text);
+    }
+    return run(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 test('올바른 머리말은 오류가 없다', () => {
   assert.deepEqual(validateArtifact(load('artifact-valid.md'), 'artifact-valid.md'), []);
 });
@@ -1758,6 +1966,12 @@ test('머리말이 없으면 실패시킨다', () => {
   const errors = validateArtifact(load('artifact-no-header.md'), 'artifact-no-header.md');
   assert.equal(errors.length, 1);
   assert.match(errors[0], /머리말 없음/);
+});
+
+test('머리말이 있으나 형식이 깨졌으면 그 사실을 메시지에 담는다', () => {
+  const errors = validateArtifact('---\nunit qa\n---\n', 'broken.md');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /형식이 잘못된 줄: unit qa/);
 });
 
 test('알 수 없는 unit 이름을 실패시킨다', () => {
@@ -1781,6 +1995,80 @@ test('stage가 숫자가 아니면 실패시킨다', () => {
 test('README.md는 검사 대상에서 제외된다', () => {
   assert.deepEqual(validateArtifactDirs(ROOT), []);
 });
+
+test('제자리에 놓인 문서는 오류가 없다', () => {
+  const errors = inRoot(
+    { 'docs/stage-1-discovery/requirements.md': header('product-planner', 1) },
+    validateArtifactDirs,
+  );
+  assert.deepEqual(errors, []);
+});
+
+test('머리말 stage가 디렉터리 단계와 다르면 실패시킨다', () => {
+  const errors = inRoot(
+    { 'docs/stage-1-discovery/requirements.md': header('product-planner', 99) },
+    validateArtifactDirs,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /stage가 "99" — 이 디렉터리는 1단계다/);
+});
+
+test('머리말 stage가 0이어도 디렉터리와 대조한다', () => {
+  const errors = inRoot(
+    { 'docs/stage-1-discovery/requirements.md': header('product-planner', 0) },
+    validateArtifactDirs,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /이 디렉터리는 1단계다/);
+});
+
+test('쓰기 범위 밖에 놓인 문서를 실패시킨다', () => {
+  const errors = inRoot(
+    { 'docs/stage-1-discovery/qa-notes.md': header('qa', 1) },
+    validateArtifactDirs,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /unit "qa"의 쓰기 범위 밖/);
+});
+
+test('디렉터리 접두사 writeScope는 그 아래 파일을 모두 허용한다', () => {
+  const errors = inRoot(
+    { 'docs/stage-6-operations/2026-09-qa.md': header('qa', 6) },
+    validateArtifactDirs,
+  );
+  assert.deepEqual(errors, []);
+});
+
+test('정확한 경로 writeScope는 같은 디렉터리의 다른 파일을 허용하지 않는다', () => {
+  const errors = inRoot(
+    { 'docs/stage-1-discovery/requirements-v2.md': header('product-planner', 1) },
+    validateArtifactDirs,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /쓰기 범위 밖/);
+});
+
+test('새로 생긴 단계 디렉터리도 목록에 없이 검사된다', () => {
+  const errors = inRoot(
+    { 'docs/stage-3-implementation/notes.md': header('web-dev', 1) },
+    validateArtifactDirs,
+  );
+  assert.ok(errors.some((e) => e.startsWith('docs/stage-3-implementation/notes.md: ')));
+  assert.ok(errors.some((e) => /이 디렉터리는 3단계다/.test(e)));
+});
+
+test('docs 디렉터리가 없어도 던지지 않는다', () => {
+  assert.deepEqual(inRoot({ 'README.md': '루트만 있다' }, validateArtifactDirs), []);
+});
+
+test('머리말이 깨진 문서는 경로 검사까지 가지 않고 한 번만 보고된다', () => {
+  const errors = inRoot(
+    { 'docs/stage-1-discovery/requirements.md': '# 머리말 없음\n' },
+    validateArtifactDirs,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /머리말 없음/);
+});
 ```
 
 - [ ] **Step 3: 테스트가 실패하는지 확인한다**
@@ -1798,23 +2086,38 @@ import { join } from 'node:path';
 import { parseFrontmatter } from './frontmatter.mjs';
 import { UNITS } from './units.mjs';
 
-const STAGE_DIRS = [
-  'docs/stage-1-discovery',
-  'docs/stage-2-design',
-  'docs/stage-4-verification',
-  'docs/stage-5-launch',
-  'docs/stage-6-operations',
-];
+const STAGE_DIR = /^stage-(\d+)/;
 
 const STATUSES = ['draft', 'approved'];
 const UNIT_NAMES = UNITS.map((u) => u.name);
+const UNIT_BY_NAME = new Map(UNITS.map((u) => [u.name, u]));
+
+/**
+ * 검사 대상 단계 디렉터리를 디스크에서 읽는다.
+ * 목록을 코드에 박아 두면 나중에 생기는 `docs/stage-3-implementation/`이
+ * 아무 경고 없이 검사에서 빠진다.
+ */
+function stageDirs(root) {
+  const docs = join(root, 'docs');
+  if (!existsSync(docs)) return [];
+
+  return readdirSync(docs, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && STAGE_DIR.test(entry.name))
+    .map((entry) => ({ relative: `docs/${entry.name}`, stage: STAGE_DIR.exec(entry.name)[1] }))
+    .sort((a, b) => a.relative.localeCompare(b.relative));
+}
+
+/** `writeScope` 항목이 `/`로 끝나면 디렉터리 접두사, 아니면 정확히 그 경로 하나다. */
+function coversPath(scope, path) {
+  return scope.endsWith('/') ? path.startsWith(scope) : path === scope;
+}
 
 export function validateArtifact(text, label) {
   let data;
   try {
     ({ data } = parseFrontmatter(text));
-  } catch {
-    return [`${label}: 머리말 없음 — 조직 표준 머리말이 있어야 한다`];
+  } catch (error) {
+    return [`${label}: 머리말 없음 — 조직 표준 머리말이 있어야 한다 (${error.message})`];
   }
 
   const errors = [];
@@ -1841,14 +2144,36 @@ export function validateArtifact(text, label) {
 export function validateArtifactDirs(root) {
   const errors = [];
 
-  for (const relative of STAGE_DIRS) {
+  for (const { relative, stage } of stageDirs(root)) {
     const dir = join(root, relative);
-    if (!existsSync(dir)) continue;
 
     for (const file of readdirSync(dir)) {
       if (!file.endsWith('.md') || file === 'README.md') continue;
-      const path = join(dir, file);
-      errors.push(...validateArtifact(readFileSync(path, 'utf8'), `${relative}/${file}`));
+
+      const label = `${relative}/${file}`;
+      const text = readFileSync(join(dir, file), 'utf8');
+      errors.push(...validateArtifact(text, label));
+
+      let data;
+      try {
+        ({ data } = parseFrontmatter(text));
+      } catch {
+        continue; // 머리말을 못 읽으면 위에서 이미 보고했다.
+      }
+
+      // 머리말이 자기 위치와 어긋나면 둘 중 하나는 틀린 것이다.
+      // 이 대조가 없으면 `stage: 99`짜리 문서가 1단계 디렉터리에 앉아 있어도 통과한다.
+      if (String(data.stage ?? '') !== stage) {
+        errors.push(`${label}: stage가 "${data.stage}" — 이 디렉터리는 ${stage}단계다`);
+      }
+
+      // 헌장 규칙 1 "쓰기 범위 제한"의 기계적 강제.
+      const unit = UNIT_BY_NAME.get(data.unit);
+      if (unit && !unit.writeScope.some((scope) => coversPath(scope, label))) {
+        errors.push(
+          `${label}: unit "${data.unit}"의 쓰기 범위 밖 — 허용 경로는 ${unit.writeScope.join(', ')}`,
+        );
+      }
     }
   }
 
@@ -1940,13 +2265,14 @@ export function validateArtifactDirs(root) {
 |---|---|---|
 | `<YYYY-MM>-growth.md` | `growth` | 월간 |
 | `<YYYY-MM>-biz.md` | `biz-model` | 월간 |
+| `<YYYY-MM>-qa.md` | `qa` | 분기 |
 | `bm-decision-report.md` | `biz-model` | 게이트 7 (출시 후 8주) |
 
-월간 리포트를 유닛별로 분리한 이유는 한 파일을 두 유닛이 고치면 "남의 산출물은 고치지 않는다" 규칙이 무너지기 때문이다.
+리포트를 유닛별로 분리한 이유는 한 파일을 두 유닛이 고치면 "남의 산출물은 고치지 않는다" 규칙이 무너지기 때문이다. 검증기는 이 디렉터리를 `qa`·`growth`·`biz-model` 셋 모두에게 열어 주므로, 한 파일에 한 저자라는 원칙은 위 파일명 규약이 지탱한다.
 
 세제 개편 사이클(개편안 발표·국회 통과·시행)에는 `tax-domain`을 즉시 소집한다. **시행일 이전 반영이 강제 조건이다.**
 
-분기마다 `qa`가 회귀 전건을 돌리고 이슈를 분류한다.
+분기마다 `qa`가 회귀 전건을 돌리고 이슈를 분류해 `<YYYY-MM>-qa.md`로 남긴다. 게이트 4의 `qa-report.md`는 그 시점의 승인 기록이므로 덮어쓰지 않는다. 같은 분기에 `calc-engine-dev`와 `web-dev`도 재소집되어 그 리포트의 백로그를 처리한다. 두 유닛은 3단계와 같은 소스 경로(`src/engine/`, `src/web/`)에 고치고, 처리 결과는 이 디렉터리에 리포트를 만드는 대신 관리자에게 최종 메시지로 보고한다.
 ```
 
 - [ ] **Step 6: CLI에 산출물 검사를 추가하고 저장소 README를 만든다**
@@ -1990,10 +2316,10 @@ node --test "tests/org/*.test.mjs"   # 검증기 자체의 테스트
 
 | 검사 | 무엇을 막는가 |
 |---|---|
-| 에이전트 정의 | 유닛이 명세표보다 넓은 도구 권한을 갖는 것 |
+| 에이전트 정의 | 유닛이 명세표보다 넓은 도구 권한을 갖는 것, 명세표에 없는 유닛이 몰래 생기는 것 |
 | 조직 헌장 | 유닛이나 게이트가 헌장에서 누락되는 것 |
 | 세법 룰셋 | 법령 출처 없는 숫자, 확정/개정예고 혼재, `id` 중복 |
-| 산출물 머리말 | 작성 주체와 승인 상태를 알 수 없는 문서 |
+| 산출물 머리말 | 작성 주체와 승인 상태를 알 수 없는 문서, 자기 쓰기 범위 밖에 놓인 문서 |
 
 ## 디렉터리
 
@@ -2003,9 +2329,11 @@ node --test "tests/org/*.test.mjs"   # 검증기 자체의 테스트
 | `docs/org/` | 조직 헌장 |
 | `docs/stage-*/` | 단계별 산출물 |
 | `data/tax-rules/` | 연도별 세법 룰셋 (출처 필수) |
-| `src/engine/` | 계산 엔진 |
-| `src/web/` | 웹 UI |
+| `src/engine/` | 계산 엔진 — **3단계 구현에서 생긴다** |
+| `src/web/` | 웹 UI — **3단계 구현에서 생긴다** |
 | `scripts/org/` | 조직 규약 검증기 |
+
+`src/`가 지금 없는 것은 정상이다. 이 저장소의 현재 상태는 조직 부트스트랩까지이고, 코드는 게이트 2를 통과한 뒤 3단계에서 만들어진다.
 
 ## 원칙
 

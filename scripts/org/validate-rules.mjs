@@ -11,6 +11,15 @@ export function validateRuleset(doc, label) {
   for (const key of ['tax_year', 'status', 'effective_from', 'rules']) {
     if (doc?.[key] === undefined) errors.push(`${label}: 최상위 "${key}" 없음`);
   }
+
+  // 파일 status를 값까지 확인하지 않으면 오타 하나("확 정")로 아래 혼재 검사가
+  // 조용히 꺼진다. 확정/개정예고 분리는 이 값이 정확할 때만 강제된다.
+  if (doc?.status !== undefined && !RULE_STATUSES.includes(doc.status)) {
+    errors.push(
+      `${label}: 최상위 status가 "${doc.status}" — 허용값은 ${RULE_STATUSES.join(' / ')}`,
+    );
+  }
+
   if (!Array.isArray(doc?.rules)) {
     errors.push(`${label}: rules가 배열이 아님`);
     return errors;
@@ -45,9 +54,12 @@ export function validateRuleset(doc, label) {
     }
 
     // 확정 파일과 개정예고 파일을 섞지 않는다 (스펙 6.2절).
+    // 방향을 가리지 않는다 — 개정예고 파일에 들어간 확정 규칙도 같은 위반이다.
     // 이 규칙은 애초에 이 파일에 있으면 안 되므로 bill_stage까지 따지지 않는다.
-    if (doc.status === '확정' && rule?.status === '개정예고') {
-      errors.push(`${at}: 확정 룰셋에 개정예고 규칙이 섞여 있음`);
+    if (rule?.status !== undefined && rule.status !== doc?.status) {
+      errors.push(
+        `${at}: 파일 status "${doc?.status}"와 규칙 status "${rule.status}"가 다름 — 확정과 개정예고는 섞지 않는다`,
+      );
       continue;
     }
 
