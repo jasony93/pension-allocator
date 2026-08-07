@@ -16,7 +16,9 @@
 - **세법 수치를 코드에 하드코딩하지 않는다.** 이 계획에서 만드는 어떤 파일에도 구체적인 세법 금액·비율·한도를 적지 않는다. 실제 수치는 1단계에서 `tax-domain` 유닛이 출처와 함께 `data/tax-rules/`에 넣는다.
 - 유닛별 `tools`와 `model` 값은 `scripts/org/units.mjs`의 명세표가 **단일 진실 원천**이다. 에이전트 파일이 이를 벗어나면 검증 실패다.
 - 커밋 메시지는 Conventional Commits 형식(`feat:`, `test:`, `docs:`, `chore:`)을 쓴다.
-- 검증기 실행 명령은 항상 `node --test tests/org/` (테스트) 와 `node scripts/org/validate.mjs` (CLI) 두 가지다.
+- 검증기 실행 명령은 항상 `node --test "tests/org/*.test.mjs"` (테스트) 와 `node scripts/org/validate.mjs` (CLI) 두 가지다.
+
+  **디렉터리 인자를 쓰지 않는다.** 이 저장소 경로에는 공백과 한글이 들어 있고, 그 조합에서 `node --test tests/org/`는 디렉터리 자체를 테스트 파일로 취급해 실패한다(측정 확인됨: 디렉터리 형식 `fail 1`, glob 형식 `pass 16`). glob 형식은 동일한 파일 집합을 돌리면서 이 문제가 없다. 문서·README·태스크 단계에 남기는 명령은 모두 glob 형식이어야 한다.
 
 ---
 
@@ -242,7 +244,7 @@ export function parseAgentFile(text) {
 
 - [ ] **Step 8: 테스트가 통과하는지 확인한다**
 
-Run: `node --test tests/org/`
+Run: `node --test "tests/org/*.test.mjs"`
 Expected: PASS — 8개 테스트 모두 통과
 
 - [ ] **Step 9: 커밋**
@@ -546,7 +548,7 @@ console.log('\n모든 조직 규약 검사를 통과했습니다.');
 
 - [ ] **Step 7: 테스트가 통과하는지 확인한다**
 
-Run: `node --test tests/org/`
+Run: `node --test "tests/org/*.test.mjs"`
 Expected: PASS — Task 1의 8개와 이 태스크의 5개, 총 13개 통과
 
 - [ ] **Step 8: CLI가 동작하는지 확인한다**
@@ -1170,7 +1172,7 @@ test('실제 유닛 정의가 모두 명세표와 일치한다', () => {
 Run: `node scripts/org/validate.mjs`
 Expected: `OK   에이전트 정의`, 종료 코드 0
 
-Run: `node --test tests/org/`
+Run: `node --test "tests/org/*.test.mjs"`
 Expected: PASS — `실제 유닛 정의가 모두 명세표와 일치한다`를 포함해 총 14개 통과
 
 - [ ] **Step 6: 커밋**
@@ -1369,7 +1371,7 @@ const checks = [
 
 - [ ] **Step 6: 테스트와 CLI를 실행한다**
 
-Run: `node --test tests/org/`
+Run: `node --test "tests/org/*.test.mjs"`
 Expected: PASS — 전부 통과
 
 Run: `node scripts/org/validate.mjs`
@@ -1649,7 +1651,7 @@ import { validateRulesDir } from './validate-rules.mjs';
 
 - [ ] **Step 7: 테스트와 CLI를 실행한다**
 
-Run: `node --test tests/org/`
+Run: `node --test "tests/org/*.test.mjs"`
 Expected: PASS — 전부 통과
 
 Run: `node scripts/org/validate.mjs`
@@ -1958,8 +1960,8 @@ ISA·IRP·연금저축에 얼마를 어떤 비중으로 납입해야 세금을 �
 조직 규약은 문서상의 다짐이 아니라 실행되는 검사다.
 
 \`\`\`bash
-node scripts/org/validate.mjs   # 규약 위반 시 exit 1
-node --test tests/org/          # 검증기 자체의 테스트
+node scripts/org/validate.mjs        # 규약 위반 시 exit 1
+node --test "tests/org/*.test.mjs"   # 검증기 자체의 테스트
 \`\`\`
 
 검사 항목:
@@ -1992,7 +1994,7 @@ node --test tests/org/          # 검증기 자체의 테스트
 
 - [ ] **Step 7: 전체 검사를 실행한다**
 
-Run: `node --test tests/org/`
+Run: `node --test "tests/org/*.test.mjs"`
 Expected: PASS — 전체 테스트 통과
 
 Run: `node scripts/org/validate.mjs`
