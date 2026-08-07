@@ -1,0 +1,8 @@
+# git worktrees for isolated feature work
+.worktrees/
+
+# subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
+
+# node
+node_modules/
