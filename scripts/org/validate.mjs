@@ -1,10 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { validateAgents } from './validate-agents.mjs';
+import { validateCharter } from './validate-charter.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const checks = [['에이전트 정의', () => validateAgents(join(ROOT, '.claude', 'agents'))]];
+const checks = [
+  ['에이전트 정의', () => validateAgents(join(ROOT, '.claude', 'agents'))],
+  ['조직 헌장', () => validateCharter(join(ROOT, 'docs', 'org', 'charter.md'))],
+];
 
 let failed = 0;
 for (const [label, run] of checks) {
