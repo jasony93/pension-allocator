@@ -261,6 +261,9 @@ git commit -m "feat: add frontmatter and agent-file parsers for org validation"
 - Create: `scripts/org/validate-agents.mjs`
 - Create: `scripts/org/validate.mjs`
 - Test: `tests/org/agents.test.mjs`
+- Create: `tests/org/fixtures/no-agents/README.txt`
+- Create: `tests/org/fixtures/one-valid-agent/qa.md`
+- Create: `tests/org/fixtures/bad-tools/qa.md`
 
 **Interfaces:**
 - Consumes: `parseAgentFile` (Task 1)
@@ -269,9 +272,50 @@ git commit -m "feat: add frontmatter and agent-file parsers for org validation"
   - `REQUIRED_SECTIONS: string[]` — `['역할', '입력', '산출물', '금지사항', '완료 기준']`
   - `validateAgents(dir: string) -> string[]` — 오류 메시지 배열. 빈 배열이면 통과.
 
-이 태스크의 테스트는 **Task 8까지 계속 실패한다.** 유닛 정의 파일이 하나씩 채워지며 오류가 8개 → 0개로 줄어든다. Task 3~8의 각 태스크는 자기 유닛의 오류가 사라지는 것으로 완료를 확인한다.
+이 태스크의 테스트는 **픽스처만 사용해 이 태스크 안에서 초록으로 끝난다.** 실제 `.claude/agents/` 디렉터리를 검사하는 테스트는 8개 정의가 모두 존재하게 되는 Task 8에서 추가한다. Task 3~7의 진행 확인은 테스트가 아니라 `node scripts/org/validate.mjs`의 출력으로 한다 — 진행률 표시는 테스트의 일이 아니다.
 
-- [ ] **Step 1: 실패하는 테스트를 작성한다**
+- [ ] **Step 1: 픽스처를 만든다**
+
+세 개의 픽스처 디렉터리가 필요하다. git은 빈 디렉터리를 추적하지 않으므로 `no-agents`에는 설명 파일을 하나 둔다 (`.md`가 아니므로 검증기가 무시한다).
+
+```bash
+mkdir -p tests/org/fixtures/no-agents tests/org/fixtures/one-valid-agent tests/org/fixtures/bad-tools
+printf '이 디렉터리는 의도적으로 에이전트 정의가 없는 상태를 재현하는 픽스처다.\n' > tests/org/fixtures/no-agents/README.txt
+```
+
+`tests/org/fixtures/one-valid-agent/qa.md` — 명세표를 정확히 만족하는 정의:
+
+```markdown
+---
+name: qa
+description: 픽스처용 정의
+tools: Read, Glob, Grep, Bash, Write
+model: sonnet
+---
+
+## 역할
+픽스처.
+
+## 입력
+픽스처.
+
+## 산출물
+docs/stage-4-verification/qa-report.md
+
+## 금지사항
+픽스처.
+
+## 완료 기준
+픽스처.
+```
+
+`tests/org/fixtures/bad-tools/qa.md` — 위와 모든 내용이 같되 `tools` 줄만 다음으로 바꾼다. `Edit`이 명세표에 없는 추가 권한이다.
+
+```
+tools: Read, Glob, Grep, Bash, Write, Edit
+```
+
+- [ ] **Step 2: 실패하는 테스트를 작성한다**
 
 `tests/org/agents.test.mjs`:
 
@@ -284,6 +328,7 @@ import { validateAgents } from '../../scripts/org/validate-agents.mjs';
 import { UNITS } from '../../scripts/org/units.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const fixture = (name) => join(ROOT, 'tests', 'org', 'fixtures', name);
 
 test('명세표에 8개 유닛이 있다', () => {
   assert.equal(UNITS.length, 8);
@@ -293,22 +338,29 @@ test('유닛 이름이 중복되지 않는다', () => {
   assert.equal(new Set(UNITS.map((u) => u.name)).size, UNITS.length);
 });
 
-test('없는 디렉터리를 검사하면 유닛 수만큼 오류가 난다', () => {
-  const errors = validateAgents(join(ROOT, 'tests', 'org', 'fixtures', 'no-agents'));
-  assert.equal(errors.length, UNITS.length);
+test('정의가 없는 디렉터리는 유닛 수만큼 오류가 난다', () => {
+  assert.equal(validateAgents(fixture('no-agents')).length, UNITS.length);
 });
 
-test('모든 유닛 정의가 명세표와 일치한다', () => {
-  assert.deepEqual(validateAgents(join(ROOT, '.claude', 'agents')), []);
+test('명세표를 만족하는 정의는 오류를 내지 않는다', () => {
+  const errors = validateAgents(fixture('one-valid-agent'));
+  assert.equal(errors.length, UNITS.length - 1);
+  assert.equal(errors.filter((e) => e.startsWith('qa:')).length, 0);
+});
+
+test('명세표보다 넓은 도구 권한을 실패시킨다', () => {
+  const errors = validateAgents(fixture('bad-tools')).filter((e) => e.startsWith('qa:'));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /tools 불일치/);
 });
 ```
 
-- [ ] **Step 2: 테스트가 실패하는지 확인한다**
+- [ ] **Step 3: 테스트가 실패하는지 확인한다**
 
 Run: `node --test tests/org/agents.test.mjs`
 Expected: FAIL — `Cannot find module .../scripts/org/units.mjs`
 
-- [ ] **Step 3: 유닛 명세표를 작성한다**
+- [ ] **Step 4: 유닛 명세표를 작성한다**
 
 `scripts/org/units.mjs`:
 
@@ -388,7 +440,7 @@ export const UNITS = [
 ];
 ```
 
-- [ ] **Step 4: 에이전트 검증기를 구현한다**
+- [ ] **Step 5: 에이전트 검증기를 구현한다**
 
 `scripts/org/validate-agents.mjs`:
 
@@ -460,7 +512,7 @@ export function validateAgents(dir) {
 }
 ```
 
-- [ ] **Step 5: CLI 진입점을 구현한다**
+- [ ] **Step 6: CLI 진입점을 구현한다**
 
 `scripts/org/validate.mjs`:
 
@@ -492,29 +544,20 @@ if (failed > 0) {
 console.log('\n모든 조직 규약 검사를 통과했습니다.');
 ```
 
-- [ ] **Step 6: 픽스처 디렉터리를 만든다**
-
-`no-agents` 픽스처는 "비어 있는 디렉터리"여야 하는데 git은 빈 디렉터리를 추적하지 않는다. 설명 파일을 하나 둔다 (`.md`가 아니므로 검증기가 무시한다).
-
-```bash
-mkdir -p tests/org/fixtures/no-agents
-printf '이 디렉터리는 의도적으로 에이전트 정의가 없는 상태를 재현하는 픽스처다.\n' > tests/org/fixtures/no-agents/README.txt
-```
-
-- [ ] **Step 7: 테스트를 실행해 상태를 확인한다**
+- [ ] **Step 7: 테스트가 통과하는지 확인한다**
 
 Run: `node --test tests/org/`
-Expected: 앞의 3개 테스트는 PASS, `모든 유닛 정의가 명세표와 일치한다`는 FAIL (정의 파일 8개가 아직 없으므로 오류 8건). **이것이 의도된 상태다.** Task 3~8에서 하나씩 줄어든다.
+Expected: PASS — Task 1의 8개와 이 태스크의 5개, 총 13개 통과
 
 - [ ] **Step 8: CLI가 동작하는지 확인한다**
 
 Run: `node scripts/org/validate.mjs`
-Expected: `FAIL 에이전트 정의 (8건)` 출력, 종료 코드 1
+Expected: `FAIL 에이전트 정의 (8건)` 출력, 종료 코드 1. 실제 `.claude/agents/`가 아직 비어 있으므로 정상이다. 이 CLI 출력이 Task 3~7의 진행 표시기 역할을 하며, Task 8에서 0건이 된다.
 
 - [ ] **Step 9: 커밋**
 
 ```bash
-git add scripts/org/units.mjs scripts/org/validate-agents.mjs scripts/org/validate.mjs tests/org/agents.test.mjs tests/org/fixtures/no-agents/README.txt
+git add scripts/org/units.mjs scripts/org/validate-agents.mjs scripts/org/validate.mjs tests/org/agents.test.mjs tests/org/fixtures/
 git commit -m "feat: add unit spec table and agent definition validator"
 ```
 
@@ -1112,18 +1155,28 @@ model: sonnet
 **6단계:** 월간 리포트에 지표별 실측치와 목표 대비 달성률이 있다. 게이트 7 리포트에는 세 선택지 중 하나에 대한 명확한 권고와 그 근거가 있다.
 ```
 
-- [ ] **Step 4: 검증기와 테스트를 실행한다**
+- [ ] **Step 4: 실제 디렉터리 검사 테스트를 추가한다**
+
+8개 정의가 모두 존재하게 되는 지금이 이 테스트를 넣을 자리다. `tests/org/agents.test.mjs` 끝에 다음을 덧붙인다.
+
+```js
+test('실제 유닛 정의가 모두 명세표와 일치한다', () => {
+  assert.deepEqual(validateAgents(join(ROOT, '.claude', 'agents')), []);
+});
+```
+
+- [ ] **Step 5: 검증기와 테스트를 실행한다**
 
 Run: `node scripts/org/validate.mjs`
 Expected: `OK   에이전트 정의`, 종료 코드 0
 
 Run: `node --test tests/org/`
-Expected: PASS — `모든 유닛 정의가 명세표와 일치한다`를 포함해 전부 통과
+Expected: PASS — `실제 유닛 정의가 모두 명세표와 일치한다`를 포함해 총 14개 통과
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```bash
-git add .claude/agents/growth.md .claude/agents/biz-model.md
+git add .claude/agents/growth.md .claude/agents/biz-model.md tests/org/agents.test.mjs
 git commit -m "feat: add growth and biz-model unit definitions"
 ```
 
