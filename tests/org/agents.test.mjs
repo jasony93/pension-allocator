@@ -31,3 +31,7 @@ test('명세표보다 넓은 도구 권한을 실패시킨다', () => {
   assert.equal(errors.length, 1);
   assert.match(errors[0], /tools 불일치/);
 });
+
+test('실제 유닛 정의가 모두 명세표와 일치한다', () => {
+  assert.deepEqual(validateAgents(join(ROOT, '.claude', 'agents')), []);
+});
