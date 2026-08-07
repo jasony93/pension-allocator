@@ -426,6 +426,7 @@ export const UNITS = [
     tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
     writeScope: [
       'docs/stage-1-discovery/channel-research.md',
+      'docs/stage-2-design/analytics-plan.md',
       'docs/stage-5-launch/',
       'docs/stage-6-operations/',
     ],
@@ -897,6 +898,7 @@ model: sonnet
 
 - `docs/stage-2-design/design-system.md`, `docs/stage-2-design/screens.md` — 설계.
 - `docs/stage-2-design/engine-interface.md` — 엔진 호출 계약. **이 문서가 유일한 진실이다.**
+- `docs/stage-2-design/analytics-plan.md` — 심어야 할 계측 이벤트.
 - `docs/stage-1-discovery/requirements.md` — 수용 기준.
 
 ## 산출물
@@ -907,6 +909,7 @@ model: sonnet
 - 결과 화면.
 - 엔진 목 구현 — 엔진 완성 전까지 UI를 독립적으로 확인할 수 있게 한다.
 - 설계에 기술된 빈·로딩·오류·입력 부족 상태의 구현.
+- `analytics-plan.md`에 정의된 계측 이벤트의 구현. 화면을 만들면서 함께 심는다 — 나중에 붙이려면 화면을 다시 뜯어야 한다.
 
 ## 금지사항
 
@@ -922,6 +925,7 @@ model: sonnet
 - `screens.md`의 모든 화면이 구현되어 있다.
 - 각 화면의 정상·빈·로딩·오류·입력 부족 상태가 동작한다.
 - 엔진 목이 `engine-interface.md`의 타입을 정확히 따른다.
+- `analytics-plan.md`의 모든 이벤트가 구현되어 있고, 어떤 이벤트도 사용자 입력값을 싣지 않는다.
 - 요구사항의 수용 기준을 하나씩 손으로 확인했고 결과를 보고한다.
 - "투자·세무 자문이 아님" 고지가 결과 화면에 표시된다.
 - 코드에서 세법 수치를 `grep`으로 찾을 수 없다.
@@ -981,7 +985,7 @@ model: sonnet
 - `docs/stage-2-design/screens.md`, `docs/stage-2-design/engine-interface.md` — 설계 계약.
 - `src/engine/`, `src/web/` — 구현 전체.
 - `docs/stage-4-verification/verification-report.md` — 세무 유닛의 교차검증 결과.
-- `docs/stage-5-launch/analytics-plan.md` — 계측 설계 (게이트 4 통과 조건).
+- `docs/stage-2-design/analytics-plan.md` — 2단계에서 확정된 계측 설계. 구현이 이 설계와 맞는지 대조한다.
 
 ## 산출물
 
@@ -1000,7 +1004,7 @@ model: sonnet
 - 코드에 세법 수치가 하드코딩되어 있지 않은지 — `src/` 전체를 `grep`으로 훑는다.
 - `data/tax-rules/`의 모든 규칙이 `source`를 갖는지.
 - 사용자 입력값이 외부로 전송되지 않는지 — 네트워크 호출 지점을 전수 확인한다.
-- `analytics-plan.md`가 존재하고, 계측 이벤트에 개인 식별 가능 값이 없는지.
+- 계측이 `analytics-plan.md` 설계대로 구현되었고, 어떤 이벤트에도 개인 식별 가능 값이 없는지.
 - "투자·세무 자문이 아님" 고지가 결과 화면에 있는지.
 
 ## 금지사항
@@ -1058,7 +1062,7 @@ Expected: 출력에 `growth: 정의 파일 없음`과 `biz-model: 정의 파일 
 ```markdown
 ---
 name: growth
-description: 1단계 홍보 채널 조사, 5단계 랜딩 카피·SEO·계측 설계, 6단계 월간 채널 성과 점검이 필요할 때 호출한다.
+description: 1단계 홍보 채널 조사, 2단계 계측 설계, 5단계 랜딩 카피·SEO, 6단계 월간 채널 성과 점검이 필요할 때 호출한다.
 tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
 model: sonnet
 ---
@@ -1067,7 +1071,9 @@ model: sonnet
 
 사용자를 데려오는 일을 조사하고 준비한다. **실제 집행은 하지 않는다** — 광고 계정, 결제수단, SNS 로그인이 필요한 일은 사람만 할 수 있다. 이 유닛은 조사·기획·문안 작성까지 하고, 사람이 그대로 실행할 수 있는 형태로 넘긴다.
 
-1단계에서는 채널을 조사하고, 5단계에서는 출시 자산을 만들고, 6단계에서는 월간 성과를 점검한다.
+1단계에서는 채널을 조사하고, **2단계에서는 계측을 설계하고**, 5단계에서는 출시 자산을 만들고, 6단계에서는 월간 성과를 점검한다.
+
+계측 설계가 2단계에 있는 이유는 무엇을 측정할지가 설계 결정이기 때문이다. 화면이 다 만들어진 뒤에 이벤트를 심으려면 화면을 다시 뜯어야 하고, 그 시점의 압박 아래서 가장 먼저 잘려 나가는 것이 계측이다. 여기서 정하면 `web-dev`가 3단계에서 화면을 만들며 함께 심는다.
 
 ## 입력
 
@@ -1080,7 +1086,7 @@ model: sonnet
 - `docs/stage-1-discovery/channel-research.md` — 채널별로 예상 도달 규모, 진입 난이도, 비용, **규제 제약**(금융 관련 콘텐츠는 채널마다 광고 정책이 다르다), 그리고 이 서비스에 맞는 정도를 평가한다. 추천 우선순위를 근거와 함께 제시한다.
 - `docs/stage-5-launch/landing-copy.md` — 랜딩 문안. 헤드라인, 설명, 행동 유도 문구, 고지 문구.
 - `docs/stage-5-launch/seo-plan.md` — 타깃 검색어, 페이지 제목·설명, 구조화 데이터, 콘텐츠 주제 목록.
-- `docs/stage-5-launch/analytics-plan.md` — 이벤트 이름, 발생 시점, 담는 속성, 그리고 각 이벤트가 어떤 판정 지표로 이어지는지.
+- `docs/stage-2-design/analytics-plan.md` — **2단계 산출물.** 이벤트 이름, 발생 시점, 담는 속성, 그리고 각 이벤트가 어떤 판정 지표로 이어지는지. 무엇을 측정할지는 설계 결정이고, 화면이 다 만들어진 뒤에 이벤트를 심으려면 화면을 다시 뜯어야 한다.
 - `docs/stage-5-launch/promo-playbook.md` — 사람이 그대로 실행할 체크리스트. 채널별로 무엇을 언제 어떤 문안으로 올리는지, 계정 준비물은 무엇인지.
 - `docs/stage-6-operations/<YYYY-MM>-growth.md` — 월간 채널 성과 점검.
 
@@ -1097,7 +1103,9 @@ model: sonnet
 
 **1단계:** `channel-research.md`에 최소 5개 채널이 위 5개 항목으로 평가되어 있고, 우선순위와 근거가 있다.
 
-**5단계:** 4개 산출물이 모두 존재한다. `analytics-plan.md`의 모든 이벤트가 `demand-validation-plan.md`의 판정 지표 중 하나로 연결되며, 어떤 이벤트에도 개인 식별 가능 속성이 없다. `promo-playbook.md`는 사람이 추가 판단 없이 실행할 수 있을 만큼 구체적이다.
+**2단계:** `analytics-plan.md`가 존재하고, 모든 이벤트가 `demand-validation-plan.md`의 판정 지표 중 하나로 연결되며, 어떤 이벤트에도 개인 식별 가능 속성이 없다.
+
+**5단계:** 나머지 3개 산출물이 모두 존재한다. `promo-playbook.md`는 사람이 추가 판단 없이 실행할 수 있을 만큼 구체적이다.
 
 **6단계:** 월간 리포트에 지표 실측치와 전월 대비 변화, 그리고 다음 달 조치가 적혀 있다.
 ```
@@ -1277,7 +1285,7 @@ export function validateCharter(path) {
 | `calc-engine-dev` | 계산 로직 설계와 구현, 엔진 인터페이스 확정 | `src/engine/`, `docs/stage-2-design/engine-interface.md` |
 | `web-dev` | 입력 폼·결과 화면 구현 | `src/web/` |
 | `qa` | 테스트, 코드 리뷰, 규약 준수 검사 | `docs/stage-4-verification/qa-report.md` |
-| `growth` | 채널 조사, 랜딩 카피, SEO, 계측 설계 | `docs/stage-5-launch/` |
+| `growth` | 채널 조사, 계측 설계, 랜딩 카피, SEO | `docs/stage-2-design/analytics-plan.md`, `docs/stage-5-launch/` |
 | `biz-model` | 수요 검증 계획, 수익 지표, BM 결정 리포트 | `docs/stage-1-discovery/demand-validation-plan.md` |
 
 각 유닛의 도구 권한과 모델은 `scripts/org/units.mjs`가 단일 진실 원천이다. 에이전트 정의 파일이 이를 벗어나면 `node scripts/org/validate.mjs`가 실패한다.
@@ -1287,7 +1295,7 @@ export function validateCharter(path) {
 | 단계 | 참여 유닛 | 게이트 |
 |---|---|---|
 | 1. 발견 | `product-planner`, `tax-domain`, `growth`, `biz-model` (동시) | **게이트 1** — 요구사항·룰셋·채널 리포트·수요 판정 기준 승인 |
-| 2. 설계 | `designer`, `calc-engine-dev` (동시) | **게이트 2** — 설계 승인. 엔진 인터페이스가 여기서 고정된다. |
+| 2. 설계 | `designer`, `calc-engine-dev`, `growth` (동시) | **게이트 2** — 설계 승인. 엔진 인터페이스와 계측 설계가 여기서 고정된다. |
 | 3. 구현 | `calc-engine-dev`, `web-dev` (동시) | **게이트 3** — 동작하는 프로토타입 승인 |
 | 4. 검증 | `tax-domain` → `qa` (순차) | **게이트 4** — 정확성·품질 승인 |
 | 5. 출시 준비 | `growth`, `biz-model` | **게이트 5** — 출시 승인 |
@@ -1874,7 +1882,7 @@ export function validateArtifactDirs(root) {
 ```markdown
 # 2단계 — 설계
 
-`designer`와 `calc-engine-dev`가 동시에 작업한다.
+`designer`, `calc-engine-dev`, `growth`가 동시에 작업한다.
 
 | 파일 | 작성 유닛 |
 |---|---|
@@ -1882,6 +1890,9 @@ export function validateArtifactDirs(root) {
 | `screens.md` | `designer` |
 | `engine-design.md` | `calc-engine-dev` |
 | `engine-interface.md` | `calc-engine-dev` |
+| `analytics-plan.md` | `growth` |
+
+계측 설계가 여기 있는 이유는 무엇을 측정할지가 설계 결정이기 때문이다. 화면이 다 만들어진 뒤에 이벤트를 심으려면 화면을 다시 뜯어야 하고, 그 시점의 압박 아래서 가장 먼저 잘려 나가는 것이 계측이다.
 
 게이트 2에서 엔진 인터페이스가 고정된다. 이후 변경은 관리자 승인이 필요하다 — `web-dev`가 그 계약에 맞춰 작업 중이기 때문이다.
 ```
@@ -1913,10 +1924,9 @@ export function validateArtifactDirs(root) {
 |---|---|
 | `landing-copy.md` | `growth` |
 | `seo-plan.md` | `growth` |
-| `analytics-plan.md` | `growth` |
 | `promo-playbook.md` | `growth` |
 
-`analytics-plan.md`는 게이트 4 통과 조건이다. 계측 없이 출시하면 8주 뒤에 판단할 데이터가 없다.
+계측 설계(`analytics-plan.md`)는 이 단계에 없다. 2단계 설계 산출물이고, 3단계에서 `web-dev`가 심고, 게이트 4에서 `qa`가 설계와 구현을 대조한다. 이 단계의 `biz-model`은 그 계측이 실제로 판정 지표를 만들어내는지 확인한다 — 계측 없이 출시하면 8주 뒤에 판단할 데이터가 없다.
 ```
 
 `docs/stage-6-operations/README.md`:

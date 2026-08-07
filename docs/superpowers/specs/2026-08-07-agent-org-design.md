@@ -72,31 +72,34 @@ ISA·IRP·연금저축 등 절세 계좌에 **얼마를 어떤 비중으로 납�
 
 → **게이트 1**: 요구사항 · 룰셋 · 채널 리포트 · **수요 판정 기준** 승인
 
-### 2단계 — 설계 (2개 유닛 동시 실행)
+### 2단계 — 설계 (3개 유닛 동시 실행)
 
 - **디자인**: 디자인 시스템, 화면 설계, 결과 시각화 스펙
 - **계산 엔진**: 최적화 알고리즘 설계 + **엔진 인터페이스(입출력 타입) 확정**
+- **그로스**: 분석 계측 설계 — 어떤 이벤트를 어느 시점에 남길 것인가
+
+계측 설계가 여기 있는 이유는 7.3절에 있다. 무엇을 측정할지는 설계 결정이고, 화면이 다 만들어진 뒤에 이벤트를 심으려면 화면을 다시 뜯어야 한다.
 
 → **게이트 2**: 설계 승인. 인터페이스가 여기서 고정되므로 3단계가 병렬 가능해진다.
 
 ### 3단계 — 구현 (2개 유닛 동시 실행)
 
 - **계산 엔진**: TDD로 로직 구현
-- **웹 개발**: 확정된 인터페이스에 목(mock)을 물려 UI 선구현 → 엔진 완성 시 교체
+- **웹 개발**: 확정된 인터페이스에 목(mock)을 물려 UI 선구현 → 엔진 완성 시 교체. 2단계에서 확정된 계측 이벤트를 화면을 만들면서 함께 심는다.
 
 → **게이트 3**: 동작하는 프로토타입 승인
 
 ### 4단계 — 검증 (순차)
 
 - **세무 도메인**: 골든 케이스로 독립 교차검증. 불일치 시 반려하고 3단계로 되돌림.
-- **QA**: E2E, 경계값·회귀 테스트, 코드 리뷰, 계측 설계 존재 확인
+- **QA**: E2E, 경계값·회귀 테스트, 코드 리뷰, 계측이 설계대로 구현되었고 개인 식별 값을 싣지 않는지 확인
 
 → **게이트 4**: 정확성·품질 승인
 
 ### 5단계 — 출시 준비
 
-- **그로스**: 랜딩 카피, SEO 구조, 분석 계측 구현, 홍보 플레이북(사람이 직접 집행할 체크리스트)
-- **사업**: 수요 검증 지표 계측이 실제로 작동하는지 확인
+- **그로스**: 랜딩 카피, SEO 구조, 홍보 플레이북(사람이 직접 집행할 체크리스트)
+- **사업**: 2단계에서 설계하고 3단계에서 심은 계측이 실제로 판정 지표를 만들어내는지 확인
 
 → **게이트 5**: 출시 승인
 
@@ -124,11 +127,12 @@ docs/
   stage-1-discovery/          requirements.md · tax-rules-report.md ·
                               channel-research.md · demand-validation-plan.md
   stage-2-design/             design-system.md · screens.md ·
-                              engine-design.md · engine-interface.md
+                              engine-design.md · engine-interface.md ·
+                              analytics-plan.md
   stage-4-verification/       golden-cases.md · verification-report.md · qa-report.md
-  stage-5-launch/             landing-copy.md · seo-plan.md ·
-                              analytics-plan.md · promo-playbook.md
-  stage-6-operations/         <YYYY-MM>-ops-report.md · bm-decision-report.md
+  stage-5-launch/             landing-copy.md · seo-plan.md · promo-playbook.md
+  stage-6-operations/         <YYYY-MM>-growth.md · <YYYY-MM>-biz.md ·
+                              bm-decision-report.md
 data/tax-rules/               2026.json … · 2027-proposed.json · sources.md
 src/engine/
 src/web/
@@ -231,9 +235,13 @@ open_questions:
 - 결과를 저장·공유한 비율
 - 지불 의사 신호 (알림 신청 등 명시적 행동)
 
-### 7.3 계측은 출시 전 필수
+### 7.3 계측은 설계 단계에 속한다
 
-그로스의 `analytics-plan.md`가 **게이트 4 통과 조건**에 들어간다. 계측 없이 출시하면 8주 뒤에 데이터가 없다.
+그로스의 `analytics-plan.md`는 **2단계 설계 산출물**이고 게이트 2에서 승인된다. 계측 없이 출시하면 8주 뒤에 데이터가 없다.
+
+계측을 출시 준비 단계에 두지 않는 이유가 있다. 무엇을 측정할지는 설계 결정이다. 화면이 다 만들어진 뒤에 이벤트를 심으려면 화면을 다시 뜯어야 하고, 그 시점의 압박("일단 출시하고 나중에 붙이자") 아래서 가장 먼저 잘려 나가는 것이 계측이다. 2단계에서 정하면 web-dev가 3단계에서 화면을 만들며 함께 심고, QA가 게이트 4에서 설계와 구현을 대조할 수 있다.
+
+QA의 게이트 4 검사 항목에는 계측이 설계대로 구현되었는지, 그리고 어떤 이벤트도 개인 식별 가능 값을 싣지 않는지가 포함된다.
 
 단, **소득·나이 등 입력값은 절대 분석 도구로 나가지 않는다.** 익명 집계 이벤트만 보낸다. 개인정보 미저장 원칙이 계측보다 우선한다.
 
