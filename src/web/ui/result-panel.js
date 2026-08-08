@@ -1,0 +1,451 @@
+/**
+ * 결과 패널 — `screens.md` 4·5·8절. 다섯 상태(입력 부족·빈·로딩·오류·정상)를
+ * 전부 이 모듈이 담당한다. 고지 여섯 요소의 배치는 `screens.md` 4.2절 표를
+ * 그대로 따른다 — 요소 ①②⑤는 접기 불가, ③④는 기본 펼침.
+ */
+
+import { el } from './dom.js';
+import {
+  ACCOUNT_LABEL,
+  PLAN_LABEL,
+  SERVICE_NAME,
+  DISCLOSURE,
+  ENTRY_COPY,
+  EXPECTATION_COPY,
+  noticeMessage,
+  assumptionMessage,
+  warningMessage,
+  comparisonNoteMessage,
+  errorMessage,
+} from '../copy.js';
+import { formatKrw, formatKrwAbbreviated, formatPercent, formatDelta } from '../format.js';
+import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
+import { donutChart, allocationBar, stackBarSegments, CHART_ACCOUNT_ORDER } from './charts.js';
+
+const CORE_FIELD_LABEL = {
+  age: '나이',
+  currentSalary: '총급여액',
+  monthlyCapacity: '월 납입 여력',
+  fundUseHorizon: '자금 사용 시점',
+};
+
+// ---------------------------------------------------------------------------
+// 고지 ①② — 항상 표시, 접기 불가
+// ---------------------------------------------------------------------------
+
+function disclosureBanner() {
+  return el('div', { class: 'disclosure-banner', role: 'note' }, [
+    el('span', { class: 'disclosure-icon', 'aria-hidden': 'true' }, ['ⓘ']),
+    el('div', {}, [el('p', {}, [DISCLOSURE.nature]), el('p', {}, [DISCLOSURE.qualification])]),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// 입력 부족 / 빈 상태 (8.1 / 8.2)
+// ---------------------------------------------------------------------------
+
+function requirementChecklist({ form, validation }) {
+  const items = CORE_REQUIRED_FIELDS.map((key) => {
+    const filled = !validation.errors[key] && form[key] !== '' && form[key] !== null;
+    return el(
+      'button',
+      { type: 'button', class: `req-item${filled ? ' req-item-filled' : ''}`, onclick: () => focusField(key) },
+      [
+        el('span', { class: 'req-dot', 'aria-hidden': 'true' }, [filled ? '●' : '○']),
+        el('span', {}, [CORE_FIELD_LABEL[key]]),
+        el('span', { class: 'req-status' }, [filled ? '입력됨' : '→ 입력하기']),
+      ],
+    );
+  });
+
+  const conditionalPendingRow =
+    form.isaExists && form.isaTransferEnabled && !form.isaTransferAmount
+      ? el('button', { type: 'button', class: 'req-item req-item-conditional', onclick: () => focusField('isaTransferAmount') }, [
+          el('span', {}, ['▸ ISA 만기 전환을 선택하셔서 전환 금액이 추가로 필요합니다']),
+          el('span', { class: 'req-status' }, ['→ 입력하기']),
+        ])
+      : null;
+
+  const total = CORE_REQUIRED_FIELDS.length;
+  const filledCount = validation.requiredFilledCount;
+  const progressLabel = conditionalPendingRow ? `${filledCount} / ${total} · 추가 항목 1개` : `${filledCount} / ${total} 항목`;
+
+  return el('div', { class: 'requirement-checklist' }, [
+    el('div', { class: 'req-progress-row' }, [
+      el('span', { class: 'type-title-m' }, ['계산에 필요한 값이 아직 남았습니다']),
+      el('span', { class: 'req-progress-label' }, [progressLabel]),
+    ]),
+    el('div', { class: 'req-progress-bar' }, [
+      el('div', { class: 'req-progress-fill', style: { width: `${(filledCount / total) * 100}%` } }),
+    ]),
+    el('div', { class: 'req-checklist-box' }, items),
+    el('p', { class: 'field-help' }, ['기납입액은 진행을 막지 않는다 — 0으로 계산하고 그 사실을 아래 가정에 적습니다.']),
+    conditionalPendingRow,
+  ]);
+}
+
+function focusField(key) {
+  const target = document.getElementById(key);
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.focus();
+  }
+}
+
+function inputIncompletePanel(state) {
+  return el('div', { class: 'result-panel-inner' }, [
+    disclosureBanner(),
+    el('div', { class: 'result-body' }, [
+      requirementChecklist(state),
+      el('div', { class: 'result-placeholder', 'aria-hidden': 'true' }, [
+        el('div', { class: 'placeholder-shape' }),
+        el('p', {}, ['값을 모두 넣으면 여기에 계좌별 배분과 계산된 절세액이 표시됩니다']),
+      ]),
+      el('div', { class: 'expectation-block' }, [
+        el('h3', { class: 'type-title-s' }, ['이 계산기가 보여주는 것']),
+        el(
+          'ul',
+          {},
+          EXPECTATION_COPY.map((line) => el('li', {}, [line])),
+        ),
+      ]),
+      el(
+        'div',
+        { class: 'entry-copy' },
+        ENTRY_COPY.map((line) => el('p', {}, [line])),
+      ),
+    ]),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// 로딩 상태 (8.3)
+// ---------------------------------------------------------------------------
+
+function loadingOverlayClass(hasPriorResult) {
+  return hasPriorResult ? 'result-loading-overlay' : 'result-loading-fresh';
+}
+
+// ---------------------------------------------------------------------------
+// 오류 상태 (8.4)
+// ---------------------------------------------------------------------------
+
+function fieldErrorBanner(store) {
+  return el('div', { class: 'inline-alert inline-alert-error', role: 'alert' }, [
+    el('p', { class: 'type-body-strong' }, ['입력값에 확인이 필요한 항목이 있어 아래 결과를 갱신하지 않았습니다.']),
+    el('button', { type: 'button', class: 'btn btn-text', onclick: () => document.querySelector('.field-input-error')?.focus() }, [
+      '→ 항목 보기',
+    ]),
+  ]);
+}
+
+function fatalErrorPanel(fatalError) {
+  const errors = fatalError?.errors ?? [];
+  return el('div', { class: 'result-panel-inner' }, [
+    disclosureBanner(),
+    el('div', { class: 'inline-alert inline-alert-error', role: 'alert' }, [
+      el('p', { class: 'type-body-strong' }, ['계산에 필요한 세법 규칙을 불러오지 못했습니다. 결과를 표시하지 않습니다.']),
+      errors.length ? el('p', { class: 'type-body-s' }, [errors.map(errorMessage).join(' ')]) : null,
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => location.reload() }, ['다시 시도']),
+    ]),
+  ]);
+}
+
+function blockedPanel(fatalError, store) {
+  const notices = fatalError?.reasonNotices ?? [];
+  return el('div', { class: 'result-panel-inner' }, [
+    disclosureBanner(),
+    el('div', { class: 'inline-alert inline-alert-error', role: 'alert' }, [
+      el('p', { class: 'type-body-strong' }, ['입력한 조건에서는 배분을 계산할 수 없습니다']),
+      notices.length
+        ? el(
+            'ul',
+            {},
+            notices.map((n) => el('li', {}, [noticeMessage(n)])),
+          )
+        : el('p', {}, ['입력한 조건에서 세 계좌 모두 배분 대상이 아닙니다.']),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => focusField('age') }, ['나이 입력으로 이동']),
+    ]),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// 정상 상태 (4·5절)
+// ---------------------------------------------------------------------------
+
+function amountCard(plan, scenario) {
+  const total = plan.deterministic_benefit.pension_credit_total_krw;
+  return el('div', { class: 'amount-card' }, [
+    el('p', { class: 'amount-card-label' }, ['이 배분으로 계산된 연간 절세액']),
+    el('p', { class: 'amount-card-value type-display' }, [formatKrwAbbreviated(total)]),
+    el('p', { class: 'amount-card-caption' }, [
+      `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영`,
+    ]),
+  ]);
+}
+
+function allExitPenaltyBanner() {
+  return el('div', { class: 'warning-note warning-note-banner' }, [
+    el('p', {}, [comparisonNoteMessage('all_accounts_have_early_exit_penalty')]),
+  ]);
+}
+
+function chartArea(plan, scenario, months) {
+  const unallocated = plan.unallocated_annual_krw;
+  const donut = donutChart({ allocations: plan.allocations, unallocatedAnnualKrw: unallocated, isProposed: !scenario.is_enacted });
+
+  const barSection = el(
+    'div',
+    { class: 'allocation-bars' },
+    CHART_ACCOUNT_ORDER.map((account) => {
+      const alloc = plan.allocations.find((a) => a.account === account);
+      const limit = scenario.limits.by_account.find((l) => l.account === account);
+      const remaining = limit ? limit.contribution_limit_remaining_krw : 0;
+      const percentOfLimit = remaining > 0 ? alloc.annual_krw / remaining : alloc.annual_krw > 0 ? 1 : 0;
+      const warning = plan.warnings.find((w) => w.account === account);
+      return el('div', { class: 'allocation-bar-row' }, [
+        el('div', { class: 'allocation-bar-labels' }, [
+          el('span', { class: 'type-body-strong' }, [ACCOUNT_LABEL[account]]),
+          el('span', { class: 'type-num' }, [`${formatKrw(alloc.monthly_krw)} / 월`]),
+        ]),
+        allocationBar({ account, monthlyKrw: alloc.monthly_krw, remainingLimitKrw: remaining, percentOfLimit }),
+        el('p', { class: 'field-help' }, [`잔여 한도의 ${formatPercent(Math.min(1, percentOfLimit))}`]),
+        warning ? el('div', { class: `warning-note warning-note-${warning.severity}` }, [el('p', {}, [warningMessage(warning, scenario.fund_use_horizon_boundaries)])]) : null,
+      ]);
+    }),
+  );
+
+  return el('div', { class: 'chart-area' }, [
+    el('div', { class: 'donut-wrap' }, [donut]),
+    el('p', { class: 'field-help chart-note' }, ['같은 값을 잔여 한도와 함께 —']),
+    barSection,
+  ]);
+}
+
+function stackBarComparison(scenario, activePlanId, onSelect) {
+  const budget = scenario.plans[0]?.total_allocated_annual_krw + scenario.plans[0]?.unallocated_annual_krw || 1;
+  if (scenario.plans.length < 2) {
+    return el('p', { class: 'field-help' }, ['입력한 조건에서는 비교할 다른 배분이 나오지 않았습니다.']);
+  }
+  const rows = scenario.plans.map((plan) => {
+    const selected = plan.plan_id === activePlanId;
+    return el(
+      'button',
+      {
+        type: 'button',
+        class: `stackbar-row${selected ? ' stackbar-row-selected' : ''}`,
+        onclick: () => onSelect(plan.plan_id),
+      },
+      [
+        el('span', { class: 'stackbar-row-marker' }, [selected ? '▸' : '']),
+        el('span', { class: 'stackbar-row-label' }, [plan.is_baseline ? `${PLAN_LABEL[plan.plan_id]} (기본)` : PLAN_LABEL[plan.plan_id]]),
+        stackBarSegments({ allocations: plan.allocations, unallocatedAnnualKrw: plan.unallocated_annual_krw, totalBudgetKrw: budget }),
+        el('span', { class: 'type-num stackbar-row-amount' }, [formatDelta(plan.delta_vs_baseline_krw)]),
+      ],
+    );
+  });
+  return el('div', { class: 'stackbar' }, [
+    el('h3', { class: 'type-title-m' }, ['다른 배분과 나란히 보기']),
+    ...rows,
+    el('p', { class: 'field-help' }, ['▸ 표시가 지금 위에 그려진 배분입니다. 행을 누르면 도넛과 막대가 그 배분으로 바뀝니다.']),
+  ]);
+}
+
+function accountTable(plan, scenario) {
+  const rows = plan.allocations.map((a) => {
+    const limit = scenario.limits.by_account.find((l) => l.account === a.account);
+    const pct = limit && limit.contribution_limit_remaining_krw > 0 ? a.annual_krw / limit.contribution_limit_remaining_krw : 0;
+    const lawIds = a.basis_rule_ids;
+    const lawEntry = scenario.legal_basis.find((l) => lawIds.includes(l.rule_id));
+    return el('tr', {}, [
+      el('td', {}, [ACCOUNT_LABEL[a.account]]),
+      el('td', { class: 'type-num' }, [formatKrw(a.monthly_krw)]),
+      el('td', { class: 'type-num' }, [formatKrw(a.annual_krw)]),
+      el('td', {}, [formatPercent(Math.min(1, pct))]),
+      el('td', {}, [lawEntry ? el('span', { class: 'law-chip' }, [lawEntry.law]) : '']),
+    ]);
+  });
+  if (plan.unallocated_annual_krw > 0) {
+    rows.push(
+      el('tr', { class: 'table-row-warning' }, [
+        el('td', {}, ['미배분']),
+        el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_monthly_krw)]),
+        el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_annual_krw)]),
+        el('td', {}, ['—']),
+        el('td', {}, ['세 계좌의 잔여 한도를 모두 채우고 남은 금액입니다.']),
+      ]),
+    );
+  }
+  const transferLimit = scenario.isa_transfer_extra_limit;
+  if (transferLimit) {
+    rows.push(
+      el('tr', {}, [
+        el('td', { colspan: 5 }, [
+          `ISA 전환에 따른 추가 공제 한도 ${formatKrw(transferLimit.extra_credit_limit_krw)} — 위 연금저축·IRP 배분에 반영됨`,
+        ]),
+      ]),
+    );
+  }
+  return el('table', { class: 'account-table' }, [
+    el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '잔여 한도 대비', '적용 조항'].map((h) => el('th', {}, [h])))]),
+    el('tbody', {}, rows),
+  ]);
+}
+
+function assumptionBlock(response, scenario) {
+  const items = [];
+  for (const a of response.assumptions) items.push(assumptionMessage(a.code, a.params));
+  for (const n of scenario.notices.filter((n) => n.severity === 'info' || n.severity === 'warning')) {
+    if (n.code === 'proposed_not_enacted') continue; // 고지 ⑥에서 별도 표시
+    items.push(noticeMessage(n));
+  }
+  return el('details', { class: 'assumption-block', open: true }, [
+    el('summary', { class: 'type-title-m' }, ['이 결과가 선 조건']),
+    el(
+      'ul',
+      {},
+      items.map((text) => el('li', { class: 'type-body-s' }, [text])),
+    ),
+  ]);
+}
+
+function basisBlock(scenario) {
+  return el('details', { class: 'basis-block', open: true }, [
+    el('summary', { class: 'type-title-m' }, [`적용한 법령 조항 ${scenario.legal_basis.length}건 · ${scenario.ruleset.tax_year} 과세연도 기준`]),
+    el(
+      'ul',
+      {},
+      scenario.legal_basis.map((entry) =>
+        el('li', {}, [
+          el('span', { class: 'law-chip' }, [entry.law]),
+          ` ${entry.title} · ${entry.effective_from} 시행`,
+          entry.bill_stage ? el('span', { class: 'proposed-badge' }, [`정부안 · 국회 통과 전`]) : null,
+          el(
+            'a',
+            { href: entry.url, target: '_blank', rel: 'noopener', class: 'law-link' },
+            ['원문'],
+          ),
+        ]),
+      ),
+    ),
+  ]);
+}
+
+function limitNote() {
+  return el(
+    'div',
+    { class: 'limit-note' },
+    DISCLOSURE.limit.map((line) => el('p', {}, [line])),
+  );
+}
+
+function saveShareBlock(store) {
+  return el('div', { class: 'save-share' }, [
+    el(
+      'button',
+      {
+        type: 'button',
+        class: 'btn btn-secondary',
+        onclick: () => {
+          store.reportSaveShare('screenshot');
+          alert(`${SERVICE_NAME} — 저장·공유 미리보기 (개인 식별 가능 입력값은 포함되지 않습니다)`);
+        },
+      },
+      ['공유용 이미지 만들기'],
+    ),
+  ]);
+}
+
+function resultPanelForScenario(response, scenario, activePlanId, store, onSelectPlan) {
+  const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
+  const showAllExitBanner = scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty');
+  const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
+
+  return el('div', { class: 'result-body' }, [
+    amountCard(plan, scenario),
+    showAllExitBanner ? allExitPenaltyBanner() : null,
+    chartArea(plan, scenario, response.echo.months_remaining_in_tax_year),
+    reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
+    stackBarComparison(scenario, plan.plan_id, onSelectPlan),
+    accountTable(plan, scenario),
+    assumptionBlock(response, scenario),
+    basisBlock(scenario),
+    limitNote(),
+    saveShareBlock(store),
+  ]);
+}
+
+function scenarioTabs(response, activeScenarioId, onSelect) {
+  if (response.scenarios.length < 2) return null;
+  return el(
+    'div',
+    { class: 'scenario-tabs', role: 'tablist' },
+    response.scenarios.map((s) =>
+      el(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          class: `scenario-tab${s.scenario_id === activeScenarioId ? ' scenario-tab-selected' : ''}`,
+          'aria-selected': s.scenario_id === activeScenarioId,
+          onclick: () => onSelect(s.scenario_id),
+        },
+        [s.scenario_id === 'current' ? '확정 세법 기준' : el('span', {}, ['개정안(정부안) 반영', el('span', { class: 'proposed-badge' }, ['정부안 · 국회 통과 전'])])],
+      ),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 상태 오케스트레이션 — 다섯 상태를 여기서 갈라 렌더한다.
+// ---------------------------------------------------------------------------
+
+let uiSelection = { scenarioId: 'current', planId: null };
+
+export function renderResultPanel({ state, store }) {
+  const { status, result, fatalError } = state;
+
+  if (status === 'fatal_error') return fatalErrorPanel(fatalError);
+  if (status === 'blocked') return blockedPanel(fatalError, store);
+  if (status === 'blank' || status === 'input_incomplete') return inputIncompletePanel(state);
+
+  // loading / field_error / result — 직전 결과를 유지한다는 규약(design-system 6.1)
+  if (!result) {
+    // 첫 계산이 아직 끝나지 않은 로딩 상태
+    return el('div', { class: `result-panel-inner ${loadingOverlayClass(false)}` }, [
+      disclosureBanner(),
+      el('div', { class: 'result-body' }, [el('p', { class: 'type-body-s' }, ['계산 중입니다…'])]),
+    ]);
+  }
+
+  const scenarioId = result.scenarios.some((s) => s.scenario_id === uiSelection.scenarioId) ? uiSelection.scenarioId : 'current';
+  const scenario = result.scenarios.find((s) => s.scenario_id === scenarioId);
+  const planId = scenario.plans.some((p) => p.plan_id === uiSelection.planId) ? uiSelection.planId : scenario.plans[0].plan_id;
+
+  const onSelectScenario = (id) => {
+    uiSelection = { scenarioId: id, planId: null };
+    rerenderHook();
+  };
+  const onSelectPlan = (id) => {
+    if (id !== scenario.plans[0].plan_id) store.reportAlternativeClick();
+    uiSelection = { scenarioId, planId: id };
+    rerenderHook();
+  };
+
+  const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan);
+
+  const wrapperClass =
+    status === 'loading' ? 'result-panel-inner result-loading-overlay' : status === 'field_error' ? 'result-panel-inner' : 'result-panel-inner';
+
+  return el('div', { class: wrapperClass }, [
+    disclosureBanner(),
+    status === 'field_error' ? fieldErrorBanner(store) : null,
+    scenarioTabs(result, scenarioId, onSelectScenario),
+    body,
+  ]);
+}
+
+let rerenderHook = () => {};
+export function setRerenderHook(fn) {
+  rerenderHook = fn;
+}
