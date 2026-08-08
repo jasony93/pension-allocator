@@ -8,7 +8,6 @@ import { el } from './dom.js';
 import {
   ACCOUNT_LABEL,
   PLAN_LABEL,
-  SERVICE_NAME,
   DISCLOSURE,
   ENTRY_COPY,
   EXPECTATION_COPY,
@@ -21,6 +20,7 @@ import {
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatDelta } from '../format.js';
 import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
 import { donutChart, allocationBar, stackBarSegments, CHART_ACCOUNT_ORDER } from './charts.js';
+import { openShareModal } from './share.js';
 
 const CORE_FIELD_LABEL = {
   age: '나이',
@@ -339,20 +339,32 @@ function limitNote() {
   );
 }
 
-function saveShareBlock(store) {
+function saveShareBlock(store, plan, scenario) {
   return el('div', { class: 'save-share' }, [
     el(
       'button',
       {
         type: 'button',
         class: 'btn btn-secondary',
-        onclick: () => {
-          store.reportSaveShare('screenshot');
-          alert(`${SERVICE_NAME} — 저장·공유 미리보기 (개인 식별 가능 입력값은 포함되지 않습니다)`);
-        },
+        onclick: () =>
+          openShareModal({
+            plan,
+            scenario,
+            onExport: () => store.reportSaveShare('screenshot'),
+          }),
       },
       ['공유용 이미지 만들기'],
     ),
+  ]);
+}
+
+function proposedScenarioCaption(scenario) {
+  // 고지 ⑥ — 배지 하나로 끝내지 않는다(design-system 4.2절 "세 가지 구조적
+  // 방어" 3). 차트 아래에 문장으로도 한 번 더 알린다.
+  if (scenario.is_enacted) return null;
+  return el('p', { class: 'field-help chart-note' }, [
+    el('span', { class: 'proposed-badge' }, ['정부안 · 국회 통과 전']),
+    ' 이 시나리오는 아직 국회를 통과하지 않은 개정안을 반영한 계산입니다.',
   ]);
 }
 
@@ -364,6 +376,7 @@ function resultPanelForScenario(response, scenario, activePlanId, store, onSelec
   return el('div', { class: 'result-body' }, [
     amountCard(plan, scenario),
     showAllExitBanner ? allExitPenaltyBanner() : null,
+    proposedScenarioCaption(scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year),
     reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
@@ -371,7 +384,7 @@ function resultPanelForScenario(response, scenario, activePlanId, store, onSelec
     assumptionBlock(response, scenario),
     basisBlock(scenario),
     limitNote(),
-    saveShareBlock(store),
+    saveShareBlock(store, plan, scenario),
   ]);
 }
 

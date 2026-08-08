@@ -11,6 +11,7 @@
  */
 
 import { validateForm } from './validation.js';
+import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 const DEBOUNCE_MS = 400;
 
@@ -46,7 +47,7 @@ function toIntOrZero(v) {
 
 export function buildEngineRequest(form, scenarios) {
   return {
-    schema_version: '2.1.0',
+    schema_version: SCHEMA_VERSION,
     tax_year: 2026,
     scenarios,
     profile: {
@@ -169,7 +170,7 @@ export function createStore({ engineClient, analytics, onChange }) {
     if (age == null) return;
     try {
       const res = await engineClient.computeFundUseHorizonBoundaries({
-        schema_version: '2.1.0',
+        schema_version: SCHEMA_VERSION,
         tax_year: 2026,
         age_years: age,
         isa_exists: form.isaExists,

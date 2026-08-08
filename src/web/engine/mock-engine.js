@@ -322,14 +322,17 @@ function computeScenario(scenario, request, rulesets) {
   // -- 연금계좌 세액공제율 구간 --------------------------------------------
   const creditRateRule = use('pension.credit.rate', 'echo.credit_rate_bracket');
   const surtaxRule = use('tax.local.personal_income_surtax', 'echo.credit_rate_bracket');
-  let incomeTaxRate = 0.12;
+  // 기본값 0 — creditRateRule이 없으면(=rule_missing) 아래에서 이미 missingRules에
+  // 실려 compute()가 ok:false로 조기 반환하므로, 이 0은 응답에 실릴 일이 없는
+  // 방어적 자리표시자일 뿐 세법 수치를 대신하지 않는다.
+  let incomeTaxRate = 0;
   if (creditRateRule) {
     const bracket = creditRateRule.value.brackets.find(
       (b) => b.total_salary_only_max_krw == null || profile.current_year_total_salary_krw <= b.total_salary_only_max_krw,
     );
     incomeTaxRate = bracket ? bracket.rate : creditRateRule.value.brackets[creditRateRule.value.brackets.length - 1].rate;
   }
-  const localRateOfIncomeTax = surtaxRule ? surtaxRule.value.rate_of_income_tax : 0.1;
+  const localRateOfIncomeTax = surtaxRule ? surtaxRule.value.rate_of_income_tax : 0;
   const localTaxRate = incomeTaxRate * localRateOfIncomeTax;
   const effectiveRate = incomeTaxRate + localTaxRate;
 
@@ -353,8 +356,12 @@ function computeScenario(scenario, request, rulesets) {
         : use('pension.credit.isa_transfer.extra_limit', 'scenarios[].isa_transfer_extra_limit');
     transferDestination = isaTransfer.destination ?? 'retirement_pension';
     if (transferRule) {
-      const rate = transferRule.value.rate ?? 0.1;
-      const cap = transferRule.value.cap_krw ?? 3000000;
+      // ?? 0 — 아래 fallback도 마찬가지로 규칙 필드가 실제로 비어 있을 때만
+      // 닿는 방어적 값이다. 두 규칙(pension.credit.isa_transfer.extra_limit /
+      // proposed.productive_isa.pension_transfer.credit_extra_limit) 모두
+      // rate·cap_krw를 항상 채워 두므로 정상 경로에서는 쓰이지 않는다.
+      const rate = transferRule.value.rate ?? 0;
+      const cap = transferRule.value.cap_krw ?? 0;
       let priorApplied;
       if (scenario === 'proposed') {
         if (isaTransfer.prior_multi_year_applied_extra_credit_krw != null) {
@@ -480,7 +487,8 @@ function computeScenario(scenario, request, rulesets) {
 
   // -- ISA 연간 납입 가능액 -----------------------------------------------
   const isaRequirementsRule = use('isa.account.requirements', 'scenarios[].limits.by_account[isa]');
-  const totalLimit = isaRequirementsRule ? isaRequirementsRule.value.total_contribution_limit_krw : 100000000;
+  // 0 — isaRequirementsRule이 없으면 missingRules로 잡혀 ok:false로 조기 반환된다.
+  const totalLimit = isaRequirementsRule ? isaRequirementsRule.value.total_contribution_limit_krw : 0;
   const otherSavings = accounts.isa.other_savings_contract_krw ?? 0;
   // other_savings_contract_krw == null인 경우는 notice가 아니라 top-level
   // compute()의 assumptions에 other_savings_zero_assumed로 실린다(8.3절).
@@ -490,11 +498,11 @@ function computeScenario(scenario, request, rulesets) {
   if (accounts.isa.exists) {
     if (scenario === 'proposed') {
       const proposedAnnualRule = use('proposed.isa.annual_contribution_limit', 'scenarios[].limits.by_account[isa]');
-      const flatAnnual = proposedAnnualRule ? proposedAnnualRule.value.amount_krw : 20000000;
+      const flatAnnual = proposedAnnualRule ? proposedAnnualRule.value.amount_krw : 0;
       isaAnnualRoom = Math.max(0, Math.min(flatAnnual, effectiveTotalLimit - accounts.isa.cumulative_contribution_krw));
     } else {
       const annualRule = use('isa.contribution.annual_limit', 'scenarios[].limits.by_account[isa]');
-      const base = annualRule ? annualRule.value.base_amount_krw : 20000000;
+      const base = annualRule ? annualRule.value.base_amount_krw : 0;
       const yearsSinceOpening = accounts.isa.years_since_opening;
       if (yearsSinceOpening == null) {
         notices.push({ code: 'isa_tenure_missing', severity: 'warning', field: 'accounts.isa.years_since_opening', params: {}, basis_rule_ids: annualRule ? [annualRule.id] : [] });
@@ -733,12 +741,17 @@ function computeScenario(scenario, request, rulesets) {
   }
 
   const baseline = collapsed[baselineIndex];
+  // 반드시 forEach 루프 전에 값을 붙잡아 둔다 — baseline도 orderedPlans의 한
+  // 원소(i===0)라서 루프 중에 baseline._totalCredit 자체가 delete되고, 그 뒤로
+  // 처리되는 다른 안들이 이미 지워진 값을 참조해 NaN을 내는 버그가 있었다
+  // (브라우저로 직접 확인해서 잡았다).
+  const baselineCreditKrw = baseline._totalCredit;
   const rest = collapsed.filter((_, i) => i !== baselineIndex);
   rest.sort((a, b) => PLAN_ORDER.indexOf(a.plan_id) - PLAN_ORDER.indexOf(b.plan_id));
   const orderedPlans = [baseline, ...rest];
   orderedPlans.forEach((p, i) => {
     p.is_baseline = i === 0;
-    p.delta_vs_baseline_krw = i === 0 ? 0 : Math.min(0, p._totalCredit - baseline._totalCredit);
+    p.delta_vs_baseline_krw = i === 0 ? 0 : Math.min(0, p._totalCredit - baselineCreditKrw);
     delete p._allocationVector;
     delete p._totalCredit;
   });

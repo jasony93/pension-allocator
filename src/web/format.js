@@ -31,8 +31,20 @@ export function formatYears(n) {
   return `${n}년`;
 }
 
-/** 기본안 대비 차액 표기. 0 이하 값만 온다는 계약 전제를 그대로 반영한다. */
+/**
+ * 기본안 대비 차액 표기.
+ *
+ * `engine-interface.md` 3.0.0(0.1절)부터 `delta_vs_baseline_krw`는 더 이상
+ * "0 이하"가 보장이 아니다 — `fund_use_horizon`이 기본안을 `max_tax_credit`이
+ * 아닌 안으로 옮기면(`comparison_note_codes`의
+ * `baseline_reordered_by_fund_use_horizon`) 이 값이 양수가 될 수 있다. 그 경위:
+ * 원래는 기본안이 항상 세액공제 최댓값이라 다른 안이 그보다 클 수 없다는
+ * 정리(theorem)였는데, 게이트 2 D10이 기본안을 자금 사용 시점의 함수로 바꾸며
+ * 그 정리가 깨졌다. 부호를 "포기한 금액"으로 미리 가정해 마이너스만 그리면
+ * 이득을 손실로 표시하는 오류가 난다 — 그래서 부호를 명시적으로 붙인다.
+ */
 export function formatDelta(amount) {
   if (amount === 0) return '기본';
-  return `${formatKrw(amount)}`;
+  const sign = amount > 0 ? '+' : '';
+  return `${sign}${formatKrw(amount)}`;
 }

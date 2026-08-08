@@ -10,10 +10,17 @@ import { FUND_USE_HORIZON_LABEL, FUND_USE_HORIZON_DESCRIPTION, HORIZON_EFFECT_CA
 import { formatYears } from '../format.js';
 
 function fieldError(errors, key) {
-  return errors[key]?.message ?? null;
+  const e = errors[key];
+  if (!e) return null;
+  // 'missing'(단순히 비어 있음)은 여기서 빨간 오류로 보여주지 않는다 — 그건
+  // RequirementChecklist의 역할이다. 여기서 보여주는 건 실제로 잘못된 값
+  // (정수가 아님, 음수, 누적액 초과 등)뿐이다. 그렇지 않으면 첫 진입부터
+  // 아직 손대지 않은 빈 필드가 전부 빨갛게 보인다.
+  if (e.code === 'missing') return null;
+  return e.message;
 }
 
-function numberField({ id, label, value, help, error, onInput, onBlur, suffix = '원', required = false }) {
+function numberField({ id, label, value, help, error, onInput, onBlur, renderGuard, suffix = '원', required = false }) {
   const inputEl = el('input', {
     id,
     class: `field-input${error ? ' field-input-error' : ''}`,
@@ -23,7 +30,16 @@ function numberField({ id, label, value, help, error, onInput, onBlur, suffix = 
     'aria-invalid': Boolean(error),
     'aria-describedby': error ? `${id}-error` : help ? `${id}-help` : null,
     oninput: (e) => onInput(e.target.value),
-    onblur: onBlur,
+    // 재렌더가 이 필드를 통째로 갈아치우는 순간에도 브라우저가 blur를 발생시킨다
+    // (포커스가 있던 노드가 DOM에서 떨어져 나가므로). 그 합성 blur까지 실제
+    // blur로 취급해 재계산을 걸면 "렌더 → 포커스 노드 제거 → blur → 재계산 →
+    // 재렌더 → …" 무한 루프가 된다(브라우저에서 실제로 재현해 크래시까지
+    // 확인한 버그). `renderGuard`로 "우리가 지금 막 이 노드를 지운 것"과
+    // "사용자가 실제로 포커스를 옮긴 것"을 구분한다 — app.js가 mount() 호출을
+    // 감싸는 동안만 true다.
+    onblur: (e) => {
+      if (!renderGuard?.active) onBlur(e);
+    },
   });
   return el('div', { class: 'field' }, [
     el('label', { for: id, class: 'field-label' }, [label + (required ? '' : '')]),
@@ -64,7 +80,7 @@ function conditionalGroup(visible, children) {
   return visible ? el('div', { class: 'conditional-group' }, children) : null;
 }
 
-export function renderInputPanel({ state, store, boundariesInfo }) {
+export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) {
   const { form, validation } = state;
   const errors = validation.errors;
 
@@ -75,6 +91,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'age'),
     onInput: (v) => store.setField('age', v),
     onBlur: () => store.flush(),
+    renderGuard,
     suffix: '세',
   });
 
@@ -86,6 +103,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'currentSalary'),
     onInput: (v) => store.setField('currentSalary', v),
     onBlur: () => store.flush(),
+    renderGuard,
   });
 
   const priorSalaryCheckbox = el('label', { class: 'checkbox-row' }, [
@@ -107,6 +125,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
       error: fieldError(errors, 'priorSalary'),
       onInput: (v) => store.setField('priorSalary', v),
       onBlur: () => store.flush(),
+      renderGuard,
     }),
   ]);
 
@@ -128,6 +147,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'monthlyCapacity'),
     onInput: (v) => store.setField('monthlyCapacity', v),
     onBlur: () => store.flush(),
+    renderGuard,
   });
 
   const horizonOptions = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
@@ -166,8 +186,8 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
           );
         }),
       ),
-      errors.fundUseHorizon
-        ? el('p', { class: 'field-error-msg', role: 'alert' }, [errors.fundUseHorizon.message])
+      fieldError(errors, 'fundUseHorizon')
+        ? el('p', { class: 'field-error-msg', role: 'alert' }, [fieldError(errors, 'fundUseHorizon')])
         : el('p', { class: 'field-help' }, [HORIZON_EFFECT_CAPTION]),
     ],
   );
@@ -186,6 +206,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'annuitySavingsYtd'),
     onInput: (v) => store.setField('annuitySavingsYtd', v),
     onBlur: () => store.flush(),
+    renderGuard,
   });
   const retirementField = numberField({
     id: 'retirementPensionYtd',
@@ -194,6 +215,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'retirementPensionYtd'),
     onInput: (v) => store.setField('retirementPensionYtd', v),
     onBlur: () => store.flush(),
+    renderGuard,
   });
 
   const isaExistsToggle = segmentToggle({
@@ -214,6 +236,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'isaCumulative'),
     onInput: (v) => store.setField('isaCumulative', v),
     onBlur: () => store.flush(),
+    renderGuard,
   });
   const isaYtdField = numberField({
     id: 'isaYtd',
@@ -222,6 +245,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
     error: fieldError(errors, 'isaYtd'),
     onInput: (v) => store.setField('isaYtd', v),
     onBlur: () => store.flush(),
+    renderGuard,
   });
   const isaTypeToggle = segmentToggle({
     id: 'isaAccountType',
@@ -266,6 +290,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
       error: fieldError(errors, 'isaTransferAmount'),
       onInput: (v) => store.setField('isaTransferAmount', v),
       onBlur: () => store.flush(),
+      renderGuard,
     });
     const destinationToggle = segmentToggle({
       id: 'isaTransferDestination',
@@ -285,6 +310,7 @@ export function renderInputPanel({ state, store, boundariesInfo }) {
       error: fieldError(errors, 'isaTransferPriorApplied'),
       onInput: (v) => store.setField('isaTransferPriorApplied', v),
       onBlur: () => store.flush(),
+      renderGuard,
     });
 
     const transferInner = conditionalGroup(form.isaTransferEnabled, [

@@ -281,6 +281,48 @@ test('plans collapse to one when allocation vectors are identical', () => {
   assert.ok(res.scenarios[0].comparison_note_codes.includes('plans_collapsed_single'));
 });
 
+test('ISA age eligibility reads its threshold from the injected ruleset, not a hardcoded literal', () => {
+  const req = baseRequest();
+  req.accounts.isa.exists = true;
+  req.accounts.isa.cumulative_contribution_krw = 1000000;
+  req.profile.age_years = 19; // isa.eligibility의 age19 요건과 정확히 일치하는 경계값
+  const res19 = compute(req, rulesets);
+  assert.equal(res19.scenarios[0].account_eligibility.find((a) => a.account === 'isa').eligible, true);
+
+  req.profile.age_years = 18; // age19 미달, age15_employed는 미확인 입력이라 보수적으로 배제
+  const res18 = compute(req, rulesets);
+  const isa18 = res18.scenarios[0].account_eligibility.find((a) => a.account === 'isa');
+  assert.equal(isa18.eligible, false);
+  assert.ok(isa18.reason_codes.includes('isa_excluded_age'));
+
+  // 룰셋의 age19 min_age를 다른 값으로 바꿔도 목이 그 값을 그대로 따라가는지 —
+  // 코드에 19가 하드코딩되어 있지 않다는 것을 이 방식으로 확인한다.
+  const mutated = JSON.parse(JSON.stringify(rulesets));
+  mutated['2026.json'].rules.find((r) => r.id === 'isa.eligibility').value.any_of.find((a) => a.id === 'age19').min_age = 21;
+  req.profile.age_years = 20;
+  const resMutated = compute(req, mutated);
+  assert.equal(resMutated.scenarios[0].account_eligibility.find((a) => a.account === 'isa').eligible, false);
+});
+
+test('delta_vs_baseline_krw is never NaN across every non-baseline plan, even after multiple plans collapse', () => {
+  // 회귀 테스트 — baseline의 임시 _totalCredit 필드가 자기 자신을 먼저 지운 뒤
+  // 다른 안이 그 지워진 값을 참조해 NaN을 내던 버그를 브라우저에서 실제로
+  // 잡았다(연금저축을 먼저 채우는 배분 행이 "NaN원"으로 표시됨).
+  const req = baseRequest();
+  req.profile.current_year_total_salary_krw = 62000000; // 12% 구간
+  req.profile.monthly_capacity_krw = 800000;
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, true);
+  for (const scenario of res.scenarios) {
+    for (const plan of scenario.plans) {
+      assert.ok(Number.isFinite(plan.delta_vs_baseline_krw), `${plan.plan_id}.delta_vs_baseline_krw was ${plan.delta_vs_baseline_krw}`);
+      assert.ok(plan.delta_vs_baseline_krw <= 0);
+    }
+  }
+  // 이 입력에서는 실제로 2개 이상의 서로 다른 배분안이 나와야 회귀를 검증한다.
+  assert.ok(res.scenarios[0].plans.length >= 2);
+});
+
 test('no plan ever contains a negative allocation or a negative credit amount', () => {
   const req = baseRequest();
   req.accounts.annuity_savings.ytd_contribution_krw = 999999999; // 이미 한도 초과
