@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { compute } from './index.mjs';
+import { compute, SCHEMA_VERSION } from './index.mjs';
 import {
   loadRulesets,
   baseRequest,
@@ -26,10 +26,18 @@ test('예외를 던지지 않는다 — 무엇을 넣어도 반환값으로 표�
 });
 
 test('major가 다른 schema_version은 거부한다. minor 차이는 받는다', () => {
-  assert.ok(errorCodes(compute(baseRequest({ schema_version: '1.0.0' }), rulesets)).includes('schema_version_mismatch'));
-  assert.ok(errorCodes(compute(baseRequest({ schema_version: '3.0.0' }), rulesets)).includes('schema_version_mismatch'));
-  assert.equal(compute(baseRequest({ schema_version: '2.0.0' }), rulesets).ok, true);
-  assert.equal(compute(baseRequest({ schema_version: '2.1.0' }), rulesets).ok, true);
+  const major = Number.parseInt(SCHEMA_VERSION.split('.')[0], 10);
+
+  for (const rejected of [`${major - 1}.0.0`, `${major + 1}.0.0`]) {
+    assert.ok(
+      errorCodes(compute(baseRequest({ schema_version: rejected }), rulesets)).includes(
+        'schema_version_mismatch',
+      ),
+      `${rejected}이 거부되지 않았다`,
+    );
+  }
+  assert.equal(compute(baseRequest({ schema_version: `${major}.0.0` }), rulesets).ok, true);
+  assert.equal(compute(baseRequest({ schema_version: `${major}.9.9` }), rulesets).ok, true);
 });
 
 test('오류는 첫 번째에서 멈추지 않고 전부 담는다', () => {
@@ -187,6 +195,45 @@ test('ISA는 세액공제 대상이 아니고 연금계좌는 비과세 한도�
     } else {
       assert.equal(limit.tax_free_limit_krw, null);
       assert.ok(limit.credit_eligible_limit_remaining_krw !== null);
+    }
+  }
+});
+
+test('공유 한도를 계약이 스스로 드러낸다 — 더하면 이중계상이다', () => {
+  const scenario = scenarioOf(compute(baseRequest(), rulesets));
+  const byAccount = Object.fromEntries(scenario.limits.by_account.map((l) => [l.account, l]));
+
+  // 연금 두 계좌는 납입 한도도 세액공제 한도도 같은 풀을 본다.
+  assert.deepStrictEqual(byAccount.retirement_pension.contribution_limit_shared_with, ['annuity_savings']);
+  assert.deepStrictEqual(byAccount.annuity_savings.contribution_limit_shared_with, ['retirement_pension']);
+  assert.deepStrictEqual(byAccount.retirement_pension.credit_limit_shared_with, ['annuity_savings']);
+  assert.deepStrictEqual(byAccount.annuity_savings.credit_limit_shared_with, ['retirement_pension']);
+
+  // ISA 한도는 전용이다. 빈 배열이 그 사실을 말한다.
+  assert.deepStrictEqual(byAccount.isa.contribution_limit_shared_with, []);
+  assert.deepStrictEqual(byAccount.isa.credit_limit_shared_with, []);
+
+  // 공유 표시가 가리키는 대로, 두 계좌의 값은 같은 풀이므로 서로 같고
+  // 합계는 LimitBreakdown 쪽에 이미 있다.
+  assert.equal(
+    byAccount.retirement_pension.contribution_limit_remaining_krw,
+    byAccount.annuity_savings.contribution_limit_remaining_krw,
+  );
+  assert.equal(
+    scenario.limits.pension_contribution_limit_remaining_krw,
+    byAccount.retirement_pension.contribution_limit_remaining_krw,
+  );
+  assert.equal(
+    scenario.limits.pension_combined_credit_remaining_krw,
+    byAccount.retirement_pension.credit_eligible_limit_remaining_krw,
+  );
+
+  // 공유 표시는 실재하는 계좌만 가리켜야 한다.
+  const known = new Set(scenario.limits.by_account.map((l) => l.account));
+  for (const limit of scenario.limits.by_account) {
+    for (const account of [...limit.contribution_limit_shared_with, ...limit.credit_limit_shared_with]) {
+      assert.ok(known.has(account));
+      assert.notEqual(account, limit.account, '자기 자신을 공유 대상으로 적지 않는다');
     }
   }
 });

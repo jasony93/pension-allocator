@@ -87,9 +87,13 @@ function allocate(planId, { state, budget, months, eligible }) {
 function benefitOf({ annuityCounted, pensionCounted }, { state, rates }) {
   const eligibleTotal = Math.min(annuityCounted + pensionCounted, state.combinedLimit);
 
-  // 합산 한도가 걸릴 때 어느 쪽 납입분이 잘리는지는 조문이 정하지 않는다.
-  // 퇴직연금분을 먼저 인정하고 남는 만큼을 연금저축분으로 본다 — 결정적이고,
-  // 두 공제율이 같은 현행 기준에서는 총액에 영향이 없다.
+  // ⚠ 조문이 정하지 않아 엔진이 정한 지점. engine-design.md 6.4절에 전말이 있고
+  //   tax-domain의 확인을 기다리는 중이다.
+  //   합산 한도가 걸릴 때 어느 쪽 납입분이 잘리는지를 조문이 말하지 않는다.
+  //   퇴직연금분을 먼저 인정하고 남는 만큼을 연금저축분으로 본다.
+  //   **답이 달라지면 고칠 곳은 아래 두 줄뿐이다.** 다른 파일은 손대지 않는다.
+  //   두 공제율이 같은 현행 기준에서는 총액에 영향이 없다 — 갈리는 것은 개정안의
+  //   청년 우대(퇴직연금분만 다른 공제율)가 적용될 때뿐이다.
   const pensionEligible = Math.min(pensionCounted, state.combinedLimit);
   const annuityEligible = clampToZero(eligibleTotal - pensionEligible);
 

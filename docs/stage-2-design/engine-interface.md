@@ -26,17 +26,34 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `2.1.0`.**
+**현재 계약 버전: `3.0.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
 | `1.0.0` | 최초 계약 (게이트 2 제출본) |
 | `2.0.0` | **게이트 2 D10.** 입력 `profile.risk_profile`을 제거하고 `profile.fund_use_horizon`으로 대체. `Plan.warnings`, `ScenarioResult.fund_use_horizon_boundaries` 추가. `echo.risk_profile*`을 `echo.fund_use_horizon*`으로 교체 |
 | `2.1.0` | **게이트 2 마감 판단.** 경계값 전용 진입점 `computeFundUseHorizonBoundaries` 추가(9절). 기존 진입점과 타입은 그대로이므로 minor다 — `2.0.0`에 맞춘 목은 계속 동작한다 |
+| `3.0.0` | **3단계 구현 중 발견된 계약 오류의 정정.** `Plan.delta_vs_baseline_krw`의 "0 이하" 제약을 제거했다(0.1절). `AccountLimit`에 `contribution_limit_shared_with`·`credit_limit_shared_with`를 추가해 계좌 간 공유 한도를 구조로 드러냈다(5.3절) |
+
+### 0.1 `delta_vs_baseline_krw` 제약을 제거한 경위
+
+**원래 제약이 왜 있었나.** `1.0.0`에서 기본안은 언제나 `max_tax_credit`이었다. 목적함수가 세액공제액 최대화이므로 다른 어떤 안도 그보다 클 수 없고, 따라서 "기본안 대비 차이는 0 이하"가 **정리(theorem)로 성립했다.** 그 값은 "이 대안은 얼마를 포기하는가"를 뜻했다.
+
+**무엇이 그것을 깼나.** 게이트 2 D10이 기본안을 `fund_use_horizon`의 함수로 만들었다. `before_pension_age`면 기본안이 `isa_first`가 되는데, 그 안은 세액공제를 최대화하지 않는다. 그러면 `max_tax_credit`의 차이가 **양수**가 된다. D10을 반영하면서 이 파급을 아무도 잡지 못했다 — 관리자 포함이다. 3단계 구현에서 실제 값으로 드러났다.
+
+**어떻게 고쳤나.** 필드의 주된 정의("기본안 대비 세액공제액 차이")를 그대로 두고 부호 제약만 없앴다. 기본안이 `max_tax_credit`일 때는 여전히 전부 0 이하이므로, 원래의 성질은 조건부 사실로 남는다.
+
+**왜 major인가.** 요청 형태는 한 글자도 바뀌지 않았고 응답 필드의 값 범위만 넓어졌다. 그래도 major로 올린 이유는 셋이다.
+
+1. **깨지는 소비자가 실재한다.** 부호를 가정해 `−` 기호를 붙이거나 "포기하는 금액"으로 이름 붙인 화면은 이득을 손실로 표시한다. 값이 유효 범위 안이므로 어떤 검증에도 걸리지 않고 조용히 틀린다.
+2. **조용한 실패는 시끄러운 실패보다 비싸다.** major로 올리면 `web-dev`의 목이 `schema_version_mismatch`로 즉시 멈춘다. 마이그레이션 비용은 버전 문자열 한 줄이고, 그 대가로 소비자가 이 필드를 반드시 다시 읽는다.
+3. 아래 규약이 "기존 필드의 의미 변경"을 major로 정하고 있다. 계약이 보장하던 성질을 거두는 것은 그 범주다.
+
+**채택하지 않은 대안:** patch로 처리하기(엔진이 그 제약을 지킨 적이 없으므로 문서 정정일 뿐이라는 읽기). 기각 근거는 소비자가 가진 것이 문서뿐이라는 점이다. 문서가 보장한 것을 거두면 그것은 계약 변경이다.
 
 **버전 규약 (이 문서가 확정한다).**
 
-- **major** — 필드 제거, 필드 이름 변경, 자료형 변경, 기존 필드의 의미 변경, 열거형에서 값 제거. `web-dev`의 목이 깨진다.
+- **major** — 필드 제거, 필드 이름 변경, 자료형 변경, 기존 필드의 의미 변경, 열거형에서 값 제거. **요청뿐 아니라 응답 쪽 보장을 거두는 것도 포함한다** — 요청 형태가 그대로여도 소비자가 믿던 성질이 사라지면 major다(0.1절이 그 사례다).
 - **minor** — 선택 필드 추가, 열거형에 값 추가, 코드 목록에 코드 추가. 기존 목이 계속 동작한다.
 - **patch** — 문서 표현만 바뀌고 계약은 그대로.
 
@@ -301,10 +318,16 @@ accounts.isa               : IsaAccountState
 |---|---|---|---|
 | `account` | 계좌 id | — | |
 | `contribution_limit_remaining_krw` | integer | 원/연 | 납입 자체의 잔여 한도. 0 이상 |
+| `contribution_limit_shared_with` | 계좌 id[] | — | 이 한도를 **함께 쓰는 다른 계좌** 목록. 비어 있으면 이 계좌 전용이다. 아래 경고 참조 |
 | `credit_eligible_limit_remaining_krw` | integer \| null | 원/연 | 세액공제 대상 잔여 한도. **ISA는 항상 `null`**(세액공제 대상이 아니다) |
+| `credit_limit_shared_with` | 계좌 id[] | — | 세액공제 대상 한도를 함께 쓰는 다른 계좌 목록 |
 | `tax_free_limit_krw` | integer \| null | 원 | ISA 비과세 한도. **ISA 외의 계좌는 `null`.** `account_type`이 null이면 ISA도 `null` |
 | `clamped_to_zero` | boolean | — | 기납입액이 한도를 넘어 0으로 클램프됐는가 |
 | `basis_rule_ids` | string[] | — | |
+
+**⚠ 계좌별 한도를 더하면 안 된다.** 연금저축과 퇴직연금은 **같은 풀**을 본다 — 납입 한도는 `pension.contribution.annual_limit`이 계좌 합산으로 정하고, 세액공제 한도는 `pension.credit.limit.combined`가 합산으로 정한다. 두 계좌의 값을 더하면 이중계상이고 실제보다 큰 한도가 화면에 뜬다.
+
+`*_shared_with`가 이 사실을 **구조로** 드러낸다. 값이 비어 있지 않은 필드는 다른 계좌와 같은 풀을 가리키므로 합산 대상이 아니다. 합계가 필요하면 이미 계산된 `LimitBreakdown.pension_contribution_limit_remaining_krw`와 `pension_combined_credit_remaining_krw`를 쓴다. 규약으로 막지 않고 데이터가 스스로 말하게 한 것이다.
 
 ### 5.4 `IsaTransferExtraLimit`
 
@@ -332,7 +355,7 @@ accounts.isa               : IsaAccountState
 | `unallocated_annual_krw` | integer | 원/연 | |
 | `monthly_rounding_residual_krw` | integer | 원/연 | 연간 금액을 개월수로 나눌 때 버려진 잔차의 합계. 삼키지 않고 내보낸다 |
 | `deterministic_benefit` | DeterministicBenefit | — | 5.6절 |
-| `delta_vs_baseline_krw` | integer | 원/연 | 기본안 대비 세액공제액 차이. **0 이하.** 기본안은 0 |
+| `delta_vs_baseline_krw` | integer | 원/연 | 기본안(`plans[0]`) 대비 세액공제액 차이. **기본안은 언제나 0. 다른 안은 음수·0·양수 모두 가능하다.** 기본안이 `max_tax_credit`일 때만 나머지가 전부 0 이하다 — 그때만 기본안이 세액공제액을 최대화하기 때문이다. `fund_use_horizon`이 기본안을 다른 안으로 옮기면(`comparison_note_codes`에 `baseline_reordered_by_fund_use_horizon`) 양수가 나온다. **부호를 "포기한 금액"으로 읽지 마라** — 경위는 0.1절 |
 | `non_quantified_effects` | NonQuantifiedEffect[] | — | 금액으로 낼 수 없는 효과. 5.6절 |
 
 **`Allocation`**
@@ -623,3 +646,5 @@ accounts.isa               : IsaAccountState
 - 경고 문구에 넣을 연수는 `fund_use_horizon_boundaries`에서 가져온다. 화면에 숫자를 적지 않는다.
 - 선택지 캡션처럼 **경계 연수만 필요할 때는 `computeFundUseHorizonBoundaries`를 쓴다**(9절). `compute`에 `fund_use_horizon: "unknown"`을 넣어 부산물을 꺼내 쓰지 않는다.
 - `DeterministicBenefit`의 금액과 `NonQuantifiedEffect`의 `headroom_krw`를 **더하지 않는다.** 다른 축의 값이다.
+- **`limits.by_account`의 한도를 계좌별로 더하지 않는다.** `*_shared_with`가 비어 있지 않으면 그 값은 다른 계좌와 같은 풀이다(5.3절). 합계는 `LimitBreakdown`의 `pension_*` 필드에 이미 있다.
+- **`delta_vs_baseline_krw`의 부호를 가정하지 않는다.** 기본안이 재정렬되면 양수가 나온다(0.1절). "포기한 금액"으로 라벨을 붙이면 이득을 손실로 표시하게 된다.

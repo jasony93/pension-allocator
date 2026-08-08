@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '2.1.0';
-export const SUPPORTED_MAJOR = 2;
+export const SCHEMA_VERSION = '3.0.0';
+export const SUPPORTED_MAJOR = 3;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',

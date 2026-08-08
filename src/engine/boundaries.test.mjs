@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { compute, computeFundUseHorizonBoundaries } from './index.mjs';
+import { compute, computeFundUseHorizonBoundaries, SCHEMA_VERSION } from './index.mjs';
 import { boundariesSource } from './boundaries.mjs';
 import { loadRulesets, baseRequest, scenarioOf } from './test-helpers.mjs';
 
@@ -82,7 +82,7 @@ test('경계값은 룰셋에서 온다 — 값을 바꾸면 결과가 따라 바
 
 test('경계값 조회는 소득·납입액·예산을 받지 않아도 동작한다', () => {
   const response = computeFundUseHorizonBoundaries(
-    { schema_version: '2.1.0', tax_year: 2026, age_years: 30, isa_exists: false },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, age_years: 30, isa_exists: false },
     rulesets,
   );
 
@@ -94,7 +94,7 @@ test('경계값 조회는 소득·납입액·예산을 받지 않아도 동작�
 
 test('경계값 조회도 잘못된 입력을 반환값으로 표현한다', () => {
   const response = computeFundUseHorizonBoundaries(
-    { schema_version: '2.1.0', tax_year: 2026, age_years: 30.5, isa_exists: false },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, age_years: 30.5, isa_exists: false },
     rulesets,
   );
 

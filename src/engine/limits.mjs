@@ -261,12 +261,16 @@ export function resolveLimits(access, { request, scenarioId, transfer, isaEligib
   const taxFree = resolveIsaTaxFreeLimit(access, { accounts, profile });
   notices.push(...taxFree.notices);
 
+  // 연금저축과 퇴직연금은 납입 한도도 세액공제 한도도 **같은 풀**을 본다.
+  // 두 값을 더하면 이중계상이므로, 그 사실을 문서가 아니라 데이터로 드러낸다.
   const limits = {
     by_account: [
       {
         account: ACCOUNT.PENSION,
         contribution_limit_remaining_krw: pensionContributionRemaining,
+        contribution_limit_shared_with: [ACCOUNT.ANNUITY],
         credit_eligible_limit_remaining_krw: combinedRemaining,
+        credit_limit_shared_with: [ACCOUNT.ANNUITY],
         tax_free_limit_krw: null,
         clamped_to_zero: pensionContributionRemainingRaw < 0 || combinedRemainingRaw < 0,
         basis_rule_ids: [RULE.CREDIT_LIMIT_COMBINED, RULE.PENSION_CONTRIBUTION_LIMIT].sort(),
@@ -274,7 +278,9 @@ export function resolveLimits(access, { request, scenarioId, transfer, isaEligib
       {
         account: ACCOUNT.ANNUITY,
         contribution_limit_remaining_krw: pensionContributionRemaining,
+        contribution_limit_shared_with: [ACCOUNT.PENSION],
         credit_eligible_limit_remaining_krw: annuityCreditRemaining,
+        credit_limit_shared_with: [ACCOUNT.PENSION],
         tax_free_limit_krw: null,
         clamped_to_zero: pensionContributionRemainingRaw < 0 || annuityTotal > annuityLimit,
         basis_rule_ids: [
@@ -286,7 +292,10 @@ export function resolveLimits(access, { request, scenarioId, transfer, isaEligib
       {
         account: ACCOUNT.ISA,
         contribution_limit_remaining_krw: isaEligible ? isa.remaining : 0,
+        // ISA 한도는 이 계좌 전용이다. 빈 배열이 그 사실을 말한다.
+        contribution_limit_shared_with: [],
         credit_eligible_limit_remaining_krw: null,
+        credit_limit_shared_with: [],
         tax_free_limit_krw: taxFree.limit,
         clamped_to_zero: isa.clamped,
         basis_rule_ids: isa.basisRuleIds,

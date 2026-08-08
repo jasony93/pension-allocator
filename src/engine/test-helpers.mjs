@@ -4,6 +4,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { SCHEMA_VERSION } from './index.mjs';
+
 const RULES_DIR = join(process.cwd(), 'data', 'tax-rules');
 
 export const CONFIRMED_FILE = '2026.json';
@@ -35,7 +37,7 @@ export function findRule(bundle, file, ruleId) {
  */
 export function baseRequest(overrides = {}) {
   const request = {
-    schema_version: '2.1.0',
+    schema_version: SCHEMA_VERSION,
     tax_year: 2026,
     scenarios: ['current'],
     profile: {
