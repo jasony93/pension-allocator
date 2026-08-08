@@ -1,7 +1,7 @@
 ---
 unit: calc-engine-dev
 stage: 2
-status: draft
+status: approved
 inputs:
   - docs/org/charter.md
   - docs/org/gate-decisions.md
@@ -13,9 +13,9 @@ inputs:
 open_questions:
   - "requirements.md 2절의 입력 항목에 없는 필드를 넷 추가했다 — months_remaining_in_tax_year(2.3절), accounts.isa.years_since_opening(ISA 연간 한도 산식에 필요), accounts.isa.other_savings_contract_krw(총 납입한도 차감에 필요), isa_transfer.destination(연금저축 단독 한도 판정에 필요). 넷 다 룰셋의 규칙을 계산하려면 없으면 안 되는 값이다. requirements.md 개정이 필요한지 관리자 판정이 필요하다."
   - "개정안 시나리오는 전환 추가한도 상한에서 차감할 과거 적용액의 대상 기간이 넓어진다(proposed.productive_isa.pension_transfer.credit_extra_limit). 그 기간에 대응하는 입력 isa_transfer.prior_multi_year_applied_extra_credit_krw를 선택 필드로 두었으나, 사용자가 이 값을 알기 어렵다. null일 때 직전 1개 과세기간 값으로 대신하면 추가한도가 과대 산출될 수 있어 notice를 내도록 했다. 입력 화면에서 어떻게 물을지 product-planner·designer와 조율이 필요하다."
-  - "risk_profile을 계산에 쓰지 않고 그대로 되돌리는 통과 필드로 정의했다(3.4절, engine-design.md 4.2절). requirements.md 2절의 가정과 어긋나므로 관리자 판정이 필요하다. 판정에 따라 이 필드를 입력에서 제거할 수도 있다."
-  - "오류·경고·안내의 사용자 표시 문구를 엔진이 만들지 않고 코드와 파라미터만 낸다(7절). 코드에 대응하는 문구 사전을 designer가 만들어야 하는데 screens.md가 아직 없다. 코드 목록이 화면 설계와 맞는지 게이트 2에서 대조가 필요하다."
-  - "schema_version을 1.0.0으로 두고 요청·응답 양쪽에 실었다. 게이트 2 이후 이 계약을 바꾸려면 관리자 승인이 필요하므로, 어떤 변경을 하위호환으로 볼지(필드 추가는 minor, 필드 제거·의미 변경은 major) 규약이 필요하다. 관리자 확인 사항이다."
+  - "오류·경고·안내의 사용자 표시 문구를 엔진이 만들지 않고 코드와 파라미터만 낸다(7절). 코드에 대응하는 문구 사전을 designer가 만들어야 한다. 게이트 2 D10으로 경고 코드 두 건이 새로 생겼고(8.4절) screens.md는 아직 그 반영 전이므로, 후속 2차 작업에서 대조가 필요하다."
+  - "fund_use_horizon 선택지 캡션의 연수는 사용자의 나이와 ISA 가입경과연수에 따라 달라지므로, 그 둘이 아직 비어 있는 동안에는 캡션을 띄울 수 없다. 경계값 전용 진입점(9절)을 넣어 조회 자체는 가볍게 만들었으나, 캡션이 없는 상태에서 선택지를 어떻게 보일지는 화면의 문제로 남는다. designer와 조율이 필요하다."
+  - "연금계좌 가입 경과연수 입력이 없어 pension.withdrawal.eligibility의 보유기간 요건을 반영하지 못한다. 경고가 실제보다 약하게 나갈 수 있고, 입력 항목을 늘릴지는 product-planner·관리자 판정이다. 현재는 assumptions에 담아 드러내는 것으로 처리했다."
 ---
 
 # 2단계 설계 — 엔진 인터페이스 (web-dev와의 계약)
@@ -24,13 +24,36 @@ open_questions:
 
 알고리즘과 판단 근거는 `engine-design.md`에 있다. 이 문서는 **무엇이 오가는가**만 정한다.
 
+## 0. 버전
+
+**현재 계약 버전: `2.1.0`.**
+
+| 버전 | 무엇이 바뀌었나 |
+|---|---|
+| `1.0.0` | 최초 계약 (게이트 2 제출본) |
+| `2.0.0` | **게이트 2 D10.** 입력 `profile.risk_profile`을 제거하고 `profile.fund_use_horizon`으로 대체. `Plan.warnings`, `ScenarioResult.fund_use_horizon_boundaries` 추가. `echo.risk_profile*`을 `echo.fund_use_horizon*`으로 교체 |
+| `2.1.0` | **게이트 2 마감 판단.** 경계값 전용 진입점 `computeFundUseHorizonBoundaries` 추가(9절). 기존 진입점과 타입은 그대로이므로 minor다 — `2.0.0`에 맞춘 목은 계속 동작한다 |
+
+**버전 규약 (이 문서가 확정한다).**
+
+- **major** — 필드 제거, 필드 이름 변경, 자료형 변경, 기존 필드의 의미 변경, 열거형에서 값 제거. `web-dev`의 목이 깨진다.
+- **minor** — 선택 필드 추가, 열거형에 값 추가, 코드 목록에 코드 추가. 기존 목이 계속 동작한다.
+- **patch** — 문서 표현만 바뀌고 계약은 그대로.
+
+엔진은 요청의 `schema_version`이 자신이 아는 major와 다르면 `schema_version_mismatch` 오류를 낸다. minor·patch 차이는 허용한다. 어느 경우든 **게이트 2 승인 이후의 변경에는 관리자 승인이 필요하다.**
+
 ---
 
 ## 1. 형태
 
+진입점은 둘이다.
+
 ```
 compute(request: EngineRequest, rulesets: RulesetBundle): EngineResponse
+computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBundle): BoundariesResponse
 ```
+
+두 번째는 **읽기 전용 조회**다. 배분을 계산하지 않고 `fund_use_horizon` 선택지의 경계 연수만 낸다(9절). 3~8절은 전부 `compute`에 관한 것이다.
 
 - **순수 함수.** 네트워크·파일 I/O·현재 시각을 읽지 않는다. 룰셋은 인자로 주입된다. 같은 인자면 항상 같은 결과다.
 - **예외를 던지지 않는다.** 도메인 오류는 물론 입력 형식 오류도 반환값으로 표현한다. `web-dev`는 `try/catch`가 아니라 `response.ok`로 분기한다.
@@ -82,7 +105,7 @@ compute(request: EngineRequest, rulesets: RulesetBundle): EngineResponse
 
 | 필드 | 자료형 | 단위 | 필수 | 설명 / null일 때 |
 |---|---|---|---|---|
-| `schema_version` | string | — | 필수 | `"1.0.0"`. 다르면 `schema_version_mismatch` 오류 |
+| `schema_version` | string | — | 필수 | `"2.1.0"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
 | `tax_year` | integer | 년 | 필수 | 기준 과세연도. 확정 시나리오가 읽을 룰셋을 고른다 |
 | `scenarios` | string[] | — | 필수 | 비어 있지 않은 배열. 값은 `"current"` / `"proposed"`. 중복은 제거된다. 순서는 응답 순서를 정하지 않는다(6.1절) |
 | `profile` | Profile | — | 필수 | 3.1절 |
@@ -99,11 +122,24 @@ compute(request: EngineRequest, rulesets: RulesetBundle): EngineResponse
 | `prior_year_total_salary_krw` | integer \| null | 원/연 | 선택 | **직전** 과세기간 총급여액. `isa.tax_free_limit` 구간의 교차확인에만 쓴다. **null이면 교차확인을 건너뛰고 `prior_year_income_missing` notice를 낸다. 해당 연도 값으로 대체하지 않는다** |
 | `financial_income_taxpayer_last_3_years` | boolean \| null | — | 선택 | 직전 3개 과세기간 중 1회 이상 금융소득종합과세 대상이었는가(`isa.exclusion.financial_income_taxpayer`). `true`면 ISA를 배분 대상에서 제외한다. **null이면 배제를 적용하지 않고 `financial_income_status_unknown` notice를 낸다** |
 | `declared_youth` | boolean \| null | — | 선택 | 청년 우대 규칙 대상인지에 대한 **사용자 자기신고**. 엔진은 나이로 판정하지 않는다 — 연령 범위가 시행령 위임이고 미공개다. 개정안 시나리오에서만 쓴다. **null이면 우대를 적용하지 않고 `youth_status_not_declared` notice를 낸다** |
-| `risk_profile` | `"conservative"` \| `"neutral"` \| `"aggressive"` \| null | — | 선택 | **계산에 쓰지 않는다.** 응답의 `echo.risk_profile`로 그대로 되돌아간다. 3.4절 아래 설명 참조 |
+| `fund_use_horizon` | `"within_isa_lock_in"` \| `"before_pension_age"` \| `"at_or_after_pension_age"` \| `"unknown"` | — | **필수** | 이 자금을 언제 쓸 계획인가. **배분 금액과 세액공제액을 바꾸지 않는다.** 배분안의 순서와 경고만 바꾼다(3.1절 아래 설명). 값을 모르면 `"unknown"`을 보낸다 — **엔진이 기본값을 만들지 않는다.** 목록 밖 값이면 `invalid_enum` 오류 |
 | `monthly_capacity_krw` | integer | 원/월 | 필수 | 월 납입 여력. 0 이상. **0은 유효한 입력이다**(오류가 아니다) |
 | `months_remaining_in_tax_year` | integer \| null | 월 | 선택 | 해당 과세연도에 남은 납입 개월수. 1 이상 12 이하. **null이면 12로 본다**(과세연도 전체를 납입한다는 가정). 이 기본값 적용 사실은 `assumptions`에 실린다 |
 
 연간 예산 = `monthly_capacity_krw × months_remaining_in_tax_year`.
+
+**`fund_use_horizon`의 네 값** — 구간의 칸막이는 룰셋의 두 중도해지 규칙이 걸리기 시작하는 지점이다. 값 이름에 연수를 넣지 않은 이유와 `unknown`을 둔 이유는 `engine-design.md` 4.2절 (4)에 있다.
+
+| 값 | 의미 | 걸리는 중도 불이익 |
+|---|---|---|
+| `within_isa_lock_in` | ISA 의무가입기간 안에 쓸 가능성이 있다 | 세 계좌 전부 |
+| `before_pension_age` | 그보다는 뒤지만 연금 수령 개시 연령 전에 쓸 계획이다 | 연금저축·IRP |
+| `at_or_after_pension_age` | 연금 수령 개시 연령까지 둘 수 있다 | 없음 |
+| `unknown` | 모르겠다 | 판정하지 않음 |
+
+화면에 보일 실제 연수(의무가입기간, 연금 수령 개시 연령까지 남은 해)는 **엔진이 룰셋에서 읽어 `fund_use_horizon_boundaries`로 내보낸다**(5.9절). 화면도 이 숫자를 코드에 박지 않는다.
+
+**이 입력이 금액을 바꾸지 않는다는 보장.** `allocations`의 모든 금액과 `deterministic_benefit`의 모든 금액은 `fund_use_horizon`의 네 값 어디에서나 동일하다. 달라지는 것은 `plans` 배열의 순서, 각 안의 `is_baseline`, 각 안의 `warnings`, 그리고 `comparison_note_codes`뿐이다. 응답의 `echo.fund_use_horizon_affects`가 이 사실을 기계가 읽을 수 있는 형태로 싣는다(4.2절).
 
 ### 3.2 `Accounts`
 
@@ -150,7 +186,7 @@ accounts.isa               : IsaAccountState
 | `plan_variants` | string[] \| null | 선택 | 받고 싶은 배분안 id 목록. null이면 엔진 기본 집합(5.2절 셋 전부). 알 수 없는 id는 `unknown_plan_variant` 오류 |
 | `include_legal_basis` | boolean \| null | 선택 | null이면 `true`. **`false`로 두어도 화면에서 근거 표시를 뺄 수는 없다** — 헌장 고지 요소 3은 필수다. 이 옵션은 테스트·스냅샷 용도다 |
 
-**`risk_profile`에 대한 명시.** 이 값은 배분 금액에도 배분안 순서에도 영향을 주지 않는다. 근거는 `engine-design.md` 4.2절에 있다. 응답의 `echo.risk_profile_used_in_calculation`은 **항상 `false`**다. `web-dev`는 이 필드를 바꿔 가며 호출해도 배분이 달라지지 않는다는 것을 전제로 목을 만들면 된다.
+**제거된 필드.** `1.0.0`의 `profile.risk_profile`은 `2.0.0`에서 제거됐다. 게이트 2 D10 결정이며, 위험 성향이 아니라 자금 사용 시점이 룰셋에 근거를 갖는 변수라는 것이 이유다. 판단 이력은 `engine-design.md` 4.2절에 남아 있다. **`risk_profile`을 보내면 무시된다** — 오류로 만들지는 않되 응답 어디에도 실리지 않는다.
 
 ---
 
@@ -185,9 +221,20 @@ accounts.isa               : IsaAccountState
 | `monthly_capacity_krw` | integer | 원/월 | 요청값 |
 | `months_remaining_in_tax_year` | integer | 월 | 실제 적용된 값(기본값 적용 후) |
 | `annual_budget_krw` | integer | 원/연 | 위 둘의 곱 |
-| `risk_profile` | string \| null | — | 요청값 그대로 |
-| `risk_profile_used_in_calculation` | `false` | — | 항상 `false` |
+| `fund_use_horizon` | string | — | 요청값 그대로 |
+| `fund_use_horizon_affects` | FundUseHorizonEffect | — | 이 입력이 무엇을 바꾸고 무엇을 바꾸지 않는지. 아래 |
 | `credit_rate_bracket` | CreditRateBracket | — | 어떤 공제율 구간으로 판정됐는지. `{ income_tax_rate, local_tax_rate, effective_rate, basis_rule_ids }`. 세 비율은 룰셋에서 산출된 값이며 숫자는 런타임에 정해진다 |
+
+**`FundUseHorizonEffect`** — 값이 고정이다. 계약이 스스로 "이 입력은 금액을 바꾸지 않는다"를 선언하고, `qa`가 게이트 4에서 이 선언과 실제 동작을 대조할 수 있다.
+
+| 필드 | 자료형 | 값 |
+|---|---|---|
+| `allocation_amounts` | boolean | 항상 `false` |
+| `tax_credit_amounts` | boolean | 항상 `false` |
+| `limits` | boolean | 항상 `false` |
+| `plan_ordering` | boolean | 항상 `true` |
+| `baseline_selection` | boolean | 항상 `true` |
+| `warnings` | boolean | 항상 `true` |
 
 ### 4.3 `Assumption`
 
@@ -211,8 +258,9 @@ accounts.isa               : IsaAccountState
 | `account_eligibility` | AccountEligibility[] | 항상 | 세 계좌 각각 |
 | `limits` | LimitBreakdown | 항상 | 5.3절 |
 | `isa_transfer_extra_limit` | IsaTransferExtraLimit \| null | 항상 | 요청에 `isa_transfer`가 없으면 `null` |
-| `plans` | Plan[] | 항상 | 1개 이상 3개 이하. 5.5절 |
-| `comparison_note_codes` | string[] | 항상 | 배분안 비교에 대한 안내 코드(예: 배분안이 하나로 합쳐진 이유) |
+| `fund_use_horizon_boundaries` | FundUseHorizonBoundaries | 항상 | 5.9절. 화면이 선택지 라벨과 경고 문구에 넣을 실제 연수. **룰셋에서 읽은 값이다** |
+| `plans` | Plan[] | 항상 | 1개 이상 3개 이하. 첫 번째가 기본안이다. 5.5절 |
+| `comparison_note_codes` | string[] | 항상 | 배분안 비교에 대한 안내 코드. 8.5절 |
 | `legal_basis` | LegalBasisEntry[] | 항상 | **헌장 고지 요소 3.** 5.7절 |
 | `unapplied_proposed_rules` | UnappliedRule[] | 항상 | 개정안 시나리오에서 반영하지 **않은** 개정예고 규칙과 사유. 확정 시나리오에서는 빈 배열 |
 | `notices` | Notice[] | 항상 | 8.2절 |
@@ -274,7 +322,8 @@ accounts.isa               : IsaAccountState
 | 필드 | 자료형 | 단위 | 설명 |
 |---|---|---|---|
 | `plan_id` | string | — | `"max_tax_credit"` / `"annuity_savings_first"` / `"isa_first"` |
-| `is_baseline` | boolean | — | `"max_tax_credit"`만 `true`. 배분안이 하나로 합쳐지면 남은 하나가 `true` |
+| `is_baseline` | boolean | — | 정확히 하나가 `true`이고 그것이 `plans[0]`이다. 어느 안이 되는지는 `fund_use_horizon`이 정한다(`engine-design.md` 3.1절). 배분안이 하나로 합쳐지면 남은 하나가 `true` |
+| `warnings` | PlanWarning[] | — | 이 배분안에서 걸리는 중도 불이익. 5.6절. 빈 배열일 수 있다 |
 | `priority_basis` | PriorityBasis | — | **무엇을 우선한 안인가.** 5.6절 |
 | `allocations` | Allocation[] | — | **항상 세 계좌 전부.** 배분액이 0인 계좌도 생략하지 않는다 |
 | `total_allocated_monthly_krw` | integer | 원/월 | |
@@ -328,6 +377,19 @@ accounts.isa               : IsaAccountState
 | `reason_code` | string | — | 왜 금액을 못 내는가. 예: `"depends_on_investment_return_not_in_ruleset"` |
 | `basis_rule_ids` | string[] | — | |
 
+**`PlanWarning`** — 자금 사용 시점에 따라 걸리는 중도 불이익. 게이트 2 D10으로 추가됐다.
+
+| 필드 | 자료형 | 설명 |
+|---|---|---|
+| `code` | string | 8.4절의 두 코드 중 하나 |
+| `account` | 계좌 id | 어느 계좌의 배분에 걸리는가. **배분액이 0인 계좌에는 경고가 붙지 않는다** |
+| `severity` | `"warning"` \| `"info"` | 사용자가 사용 시점을 밝혔으면 `warning`, `unknown`이면 `info` |
+| `trigger` | `"declared_horizon"` \| `"horizon_unknown"` | 어떤 근거로 낸 경고인가. `horizon_unknown`은 구성요건을 판정하지 않고 사실을 알린 것이다 |
+| `basis_rule_ids` | string[] | 근거 규칙 id. 화면은 이 경고 옆에도 법령 조항을 붙일 수 있다 |
+| `params` | object | 문구 조립용. `fund_use_horizon_boundaries`의 값이 들어간다 |
+
+**경고에 금액은 없다.** 중도 인출 시 얼마를 물게 되는지는 인출 시점의 운용수익과 세액공제 수령분에 달려 있고, 인출 단계는 v2로 연기됐다(게이트 1 D3). 엔진은 "이 규칙이 걸린다"는 사실과 근거만 낸다.
+
 ### 5.7 `LegalBasisEntry` — 헌장 고지 요소 3
 
 **실제로 읽은 규칙만 담는다.** 읽지 않은 규칙을 근거로 싣지 않는다.
@@ -357,6 +419,19 @@ accounts.isa               : IsaAccountState
 | `title` | string | |
 | `reason_code` | string | `"out_of_product_scope"` / `"affects_multi_year_only"` / `"requires_rule_not_in_ruleset"` / `"requires_input_not_collected"` |
 
+### 5.9 `FundUseHorizonBoundaries`
+
+`fund_use_horizon` 선택지의 칸막이가 실제로 몇 년인지를 룰셋에서 읽어 내보낸다. **화면이 선택지 라벨과 경고 문구에 넣을 숫자의 출처다.** 이 값이 없으면 화면이 연수를 직접 적게 되고, 그 순간 세법 수치가 화면 코드에 박힌다.
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `isa_lock_in_years` | integer \| null | 년 | ISA 의무가입기간. 룰셋에서 읽는다 |
+| `isa_lock_in_years_remaining` | integer \| null | 년 | 위에서 `accounts.isa.years_since_opening`을 뺀 잔여. 0 미만이면 0. 가입경과연수가 null이면 보수적으로 전체 기간 |
+| `pension_min_age_years` | integer | 년 | 연금 수령 개시 연령. 룰셋에서 읽는다 |
+| `pension_years_remaining` | integer | 년 | 위에서 `profile.age_years`를 뺀 잔여. 0 미만이면 0 |
+| `pension_holding_period_evaluated` | `false` | — | 항상 `false`. 연금계좌 가입 경과연수 입력이 없어 보유기간 요건은 판정하지 않았다는 표시 |
+| `basis_rule_ids` | string[] | — | `isa.account.requirements`, `isa.early_termination.clawback`, `pension.withdrawal.eligibility` 등 실제로 읽은 규칙 |
+
 ---
 
 ## 6. 순서와 결정성
@@ -368,7 +443,8 @@ accounts.isa               : IsaAccountState
 | 배열 | 순서 |
 |---|---|
 | `scenarios` | `current` → `proposed` |
-| `plans` | `max_tax_credit` → `annuity_savings_first` → `isa_first` |
+| `plans` | **기본안이 첫 번째.** 나머지는 `max_tax_credit` → `annuity_savings_first` → `isa_first`에서 기본안을 뺀 순서. 기본안은 `fund_use_horizon`이 정한다(`engine-design.md` 3.1절) |
+| `plans[].warnings` | `allocations`와 같은 계좌 순서, 같은 계좌 안에서는 코드 사전순 |
 | `allocations` | `retirement_pension` → `annuity_savings` → `isa` |
 | `account_eligibility`, `limits.by_account` | `allocations`와 같은 순서 |
 | `legal_basis` | 확정 → 개정예고, 그 안에서는 `rule_id` 사전순 |
@@ -453,7 +529,8 @@ accounts.isa               : IsaAccountState
 | `proposed_transfer_cap_period_input_missing` | warning | 개정안의 넓어진 차감 기간에 대응하는 입력이 없어 직전 1개 과세기간 값으로 대신함 |
 | `proposed_not_enacted` | warning | 개정안 시나리오. `bill_stages`와 함께 나간다 |
 | `plans_collapsed_single` | info | 배분안이 하나로 합쳐짐 |
-| `risk_profile_not_used` | info | `risk_profile`이 입력됐으나 계산에 쓰이지 않음 |
+| `fund_use_horizon_not_declared` | info | `fund_use_horizon`이 `"unknown"`. 기본안을 바꾸지 않고 중도 불이익 경고를 `info`로 냄 |
+| `pension_holding_period_not_evaluated` | info | 연금계좌 가입 경과연수 입력이 없어 `pension.withdrawal.eligibility`의 보유기간 요건을 판정하지 않음 |
 
 ### 8.3 가정 코드
 
@@ -468,11 +545,72 @@ accounts.isa               : IsaAccountState
 | `other_deductions_excluded` | 연말정산의 다른 공제·감면은 반영하지 않음 |
 | `rounding_floor_to_won` | 원 미만 버림. 룰셋 근거가 아닌 표시 규칙 |
 | `isa_benefit_not_quantified` | ISA의 절세 효과는 운용수익의 함수라 금액으로 내지 않음 |
-| `risk_profile_excluded_from_calculation` | 투자 성향을 계산 변수로 쓰지 않음 |
+| `fund_use_horizon_excluded_from_amounts` | 자금 사용 시점은 배분 금액·세액공제액에 반영하지 않음. 순서와 경고에만 쓰임 |
+| `early_exit_penalty_not_quantified` | 중도 인출·해지 시의 세부담은 금액으로 내지 않음. 인출 단계가 v2로 연기됐고 필요한 수치가 룰셋에 없음 |
+| `pension_holding_period_not_evaluated` | 연금계좌 보유기간 요건은 입력 부재로 판정하지 않음 |
+
+### 8.4 경고 코드 (`Plan.warnings`)
+
+| 코드 | 계좌 | 조건 | 근거 규칙 |
+|---|---|---|---|
+| `early_withdrawal_penalty_pension` | `annuity_savings`, `retirement_pension` | 배분액 > 0 이고 `fund_use_horizon`이 `within_isa_lock_in` 또는 `before_pension_age` | `pension.withdrawal.eligibility`, `pension.early_withdrawal.other_income_rate` |
+| `early_termination_clawback_isa` | `isa` | 배분액 > 0 이고 `fund_use_horizon`이 `within_isa_lock_in` | `isa.early_termination.clawback`, `isa.account.requirements` |
+
+`fund_use_horizon`이 `"unknown"`이면 위 둘을 배분액 > 0인 계좌 전부에 대해 `severity: "info"` · `trigger: "horizon_unknown"`으로 낸다. `"at_or_after_pension_age"`면 경고를 내지 않는다.
+
+### 8.5 배분안 비교 안내 코드 (`comparison_note_codes`)
+
+| 코드 | 언제 |
+|---|---|
+| `plans_collapsed_single` | 배분 벡터가 같아 배분안이 하나로 합쳐짐 |
+| `all_accounts_have_early_exit_penalty` | `fund_use_horizon`이 `within_isa_lock_in`. 세 계좌 전부에 중도 불이익이 걸려 **어느 배분안도 이를 피하지 못한다**. 화면은 배분 비교보다 이 사실을 앞세워야 한다 |
+| `baseline_reordered_by_fund_use_horizon` | 기본안이 `max_tax_credit`이 아닌 다른 안으로 바뀜 |
+| `alternatives_have_equal_tax_credit` | 둘 이상의 안이 같은 세액공제액을 냄(`delta_vs_baseline_krw`가 0) |
 
 ---
 
-## 9. `web-dev`가 목을 만들 때
+## 9. 경계값 전용 진입점 — `computeFundUseHorizonBoundaries`
+
+`designer`가 지적한 문제에 대한 답이다. `fund_use_horizon`의 선택지 캡션에 실제 연수를 넣으려면 `fund_use_horizon_boundaries`가 필요한데, **그 값이 필요한 시점은 사용자가 아직 `fund_use_horizon`에 답하기 전이다.** `compute`는 이 필드를 필수로 요구하므로, 라벨을 얻으려면 `"unknown"`을 임시로 넣어 전체 계산을 돌리고 결과를 버려야 한다.
+
+**도입 근거는 성능이 아니다.** 이 엔진의 계산량은 세 계좌에 대한 정수 순차 충당 세 번 × 시나리오 수이고, 룰셋 파싱은 진입점 밖에서 한 번 끝난다. 실시간 미리보기가 입력마다 호출해도 브라우저에서 문제가 되는 규모가 아니다. 성능만 근거였다면 넣지 않았다.
+
+넣는 이유는 **계약의 정직성**이다. 필수 필드에 자리표시자를 넣어 부산물을 꺼내 쓰는 호출은 계약이 의도하지 않은 사용법이고, 세 가지 실제 문제를 낳는다. (a) 버려야 할 완전한 결과가 생겨 화면이 그것을 실수로 렌더링할 여지가 남는다. (b) `notices`에 `fund_use_horizon_not_declared`가 붙어 나오는데 그것은 사용자가 답을 미룬 상태가 아니라 화면이 아직 묻지 않은 상태다 — 같은 코드가 두 가지를 뜻하게 된다. (c) 3단계에서 `compute`의 성능이나 부작용을 손보면 라벨 표시가 함께 깨진다.
+
+**계약 표면이 넓어지는 비용은 작다.** 새 타입은 요청 하나뿐이고 응답은 이미 정의된 타입을 재사용한다. `web-dev`가 관리하는 것은 "두 경로"가 아니라 계산 하나와 조회 하나다.
+
+**드리프트 방지 규약(3단계 구현 조건).** `computeFundUseHorizonBoundaries`가 내는 `boundaries`는 같은 입력에 대해 `compute`가 내는 `scenarios[].fund_use_horizon_boundaries`와 **바이트 단위로 같아야 한다.** 두 진입점이 같은 내부 함수를 호출하는 것으로 구현하고, 그 동일성을 단위 테스트로 고정한다. 이 규약이 없으면 진입점을 늘린 값보다 어긋날 위험이 커진다.
+
+### 9.1 `BoundariesRequest`
+
+| 필드 | 자료형 | 단위 | 필수 | 설명 / null일 때 |
+|---|---|---|---|---|
+| `schema_version` | string | — | 필수 | major가 다르면 `schema_version_mismatch` 오류 |
+| `tax_year` | integer | 년 | 필수 | 읽을 룰셋을 고른다 |
+| `age_years` | integer | 년(만 나이) | 필수 | 연금 수령 개시 연령까지 남은 해를 낸다 |
+| `isa_exists` | boolean | — | 필수 | `false`면 신규 가입 전제로 의무가입기간 잔여를 산출한다 |
+| `isa_years_since_opening` | integer \| null | 년 | 선택 | null이면 보수적으로 0으로 본다. `compute`와 같은 취급이다 |
+| `scenario` | `"current"` \| `"proposed"` \| null | — | 선택 | null이면 `"current"`. 경계값을 정하는 두 규칙은 개정예고 대상이 아니므로 대개 같은 값이 나오지만, 룰셋이 바뀌면 따라가도록 인자로 둔다 |
+
+`compute`가 받는 소득·납입액·예산은 **받지 않는다.** 경계값 산출에 쓰이지 않고, 받으면 이 진입점이 두 번째 계산기처럼 보인다.
+
+### 9.2 `BoundariesResponse`
+
+```
+{ ok: true,  schema_version, boundaries, legal_basis, notices }
+{ ok: false, schema_version, errors }
+```
+
+| 필드 | 자료형 | 설명 |
+|---|---|---|
+| `boundaries` | FundUseHorizonBoundaries | 5.9절과 같은 타입 |
+| `legal_basis` | LegalBasisEntry[] | 5.7절과 같은 타입. **캡션이 세법 수치를 보이므로 근거 조항이 함께 나가야 한다**(헌장 고지 요소 3) |
+| `notices` | Notice[] | `pension_holding_period_not_evaluated`, `isa_tenure_missing` 등이 실릴 수 있다. `fund_use_horizon_not_declared`는 **실리지 않는다** — 이 진입점은 그 질문을 하지 않는다 |
+| `errors` | EngineError[] | 8.1절과 같은 코드 체계 |
+
+---
+
+## 10. `web-dev`가 목을 만들 때
 
 - `response.ok`로만 분기한다. 예외는 오지 않는다.
 - `plans`의 길이는 **1 이상 3 이하**다. 3을 전제로 레이아웃을 짜되 1일 때를 처리해야 한다.
@@ -480,5 +618,8 @@ accounts.isa               : IsaAccountState
 - 시나리오를 하나만 요청해도 `scenarios`는 배열이다.
 - `bill_stages`와 `legal_basis[].law`는 **룰셋에서 온 문자열이다.** 목에 넣을 값은 실제 룰셋 파일에서 복사한다. 임의로 지어내면 게이트 4에서 고지 요소 3·6 검사에 걸린다.
 - 금액은 전부 정수 원이다. 표시 단위(만원 등) 변환은 화면의 몫이다.
-- `risk_profile`을 바꿔도 배분은 달라지지 않는다.
+- **`fund_use_horizon`을 바꿔도 배분 금액과 세액공제액은 달라지지 않는다.** 달라지는 것은 `plans` 순서, `is_baseline`, `warnings`, `comparison_note_codes`뿐이다. 목을 만들 때 금액은 한 벌만 두고 이 넷만 값에 따라 갈라 두면 된다.
+- **기본안은 `plans[0]`이다.** `plan_id`가 `max_tax_credit`인 것을 첫 번째로 가정하지 마라.
+- 경고 문구에 넣을 연수는 `fund_use_horizon_boundaries`에서 가져온다. 화면에 숫자를 적지 않는다.
+- 선택지 캡션처럼 **경계 연수만 필요할 때는 `computeFundUseHorizonBoundaries`를 쓴다**(9절). `compute`에 `fund_use_horizon: "unknown"`을 넣어 부산물을 꺼내 쓰지 않는다.
 - `DeterministicBenefit`의 금액과 `NonQuantifiedEffect`의 `headroom_krw`를 **더하지 않는다.** 다른 축의 값이다.
