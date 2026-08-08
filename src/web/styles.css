@@ -179,6 +179,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   position: sticky; top: 0; z-index: 2;
 }
 .disclosure-banner p { margin: 0 0 var(--space-1); }
+.disclosure-icon { font-size: 16px; line-height: 1.4; flex-shrink: 0; }
 
 .requirement-checklist { display: flex; flex-direction: column; gap: var(--space-3); }
 .req-progress-row { display: flex; justify-content: space-between; align-items: baseline; }
@@ -229,6 +230,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .chart-note { text-align: center; }
 
 .allocation-bars { display: flex; flex-direction: column; gap: var(--space-4); }
+.allocation-bar-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .allocation-bar-labels { display: flex; justify-content: space-between; margin-bottom: var(--space-1); }
 .alloc-bar-track { height: 20px; border-radius: var(--radius-full); background: var(--data-track); overflow: hidden; cursor: default; }
 .alloc-bar-fill { height: 100%; border-radius: var(--radius-full); transition: width 240ms ease-out; }

@@ -7,7 +7,7 @@
  * 여기 상수로 둔다 — 제품 원칙 1이 금지하는 "세법 수치 하드코딩"과는 다른 것이다.
  */
 
-import { svgEl } from './dom.js';
+import { el, svgEl } from './dom.js';
 import { ACCOUNT_LABEL } from '../copy.js';
 import { formatKrw, formatPercent } from '../format.js';
 
@@ -133,16 +133,29 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
   );
 }
 
-/** C-2 한도 트랙 막대 하나. `AllocationBar`(design-system 5.7절)의 최소 구현. */
+/**
+ * C-2 한도 트랙 막대 하나. `AllocationBar`(design-system 5.7절)의 최소 구현.
+ *
+ * **`svgEl`이 아니라 `el`을 쓴다.** 이 함수가 만드는 것은 SVG 도형이 아니라
+ * 일반 HTML `<div>` 두 겹(트랙+채움)이다. `svgEl`로 만들면
+ * `document.createElementNS(SVG_NS, 'div')`가 되어 **SVG 네임스페이스의
+ * div**가 생기고, 브라우저 기본 스타일시트에는 그런 원소에 대한
+ * `display: block` 규칙이 없어 `display: inline`으로 계산된다 — 인라인
+ * 요소는 `width`/`height`를 무시하므로 CSS에 `height: 20px`가 있어도 렌더
+ * 크기가 0×0이 된다. 관리자가 브라우저 실측(`getBoundingClientRect`)으로
+ * 잡은 버그이고, `stackBarSegments`의 래퍼도 같은 실수였다.
+ */
 export function allocationBar({ account, monthlyKrw, remainingLimitKrw, percentOfLimit, unavailable = false }) {
-  const track = svgEl('div', { class: 'alloc-bar-track' }, [
-    svgEl('div', {
-      class: 'alloc-bar-fill',
-      style: { width: `${Math.min(100, percentOfLimit * 100)}%`, background: unavailable ? UNALLOCATED_COLOR : ACCOUNT_COLOR[account] },
-    }),
-  ]);
-  track.setAttribute('role', 'img');
-  track.setAttribute('tabindex', '0');
+  const track = el(
+    'div',
+    { class: 'alloc-bar-track', role: 'img', tabindex: '0' },
+    [
+      el('div', {
+        class: 'alloc-bar-fill',
+        style: { width: `${Math.min(100, percentOfLimit * 100)}%`, background: unavailable ? UNALLOCATED_COLOR : ACCOUNT_COLOR[account] },
+      }),
+    ],
+  );
   track.setAttribute(
     'aria-label',
     `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 잔여 한도의 ${formatPercent(percentOfLimit)}`,
@@ -154,21 +167,21 @@ export function allocationBar({ account, monthlyKrw, remainingLimitKrw, percentO
 export function stackBarSegments({ allocations, unallocatedAnnualKrw, totalBudgetKrw }) {
   const byAccount = Object.fromEntries(allocations.map((a) => [a.account, a.annual_krw]));
   const denom = totalBudgetKrw > 0 ? totalBudgetKrw : 1;
-  const wrapper = svgEl('div', { class: 'stackbar-row-fill' });
+  const wrapper = el('div', { class: 'stackbar-row-fill' });
   for (const account of CHART_ACCOUNT_ORDER) {
     const amount = byAccount[account] || 0;
     if (amount <= 0) continue;
-    const seg = document.createElement('div');
-    seg.className = 'stackbar-seg';
-    seg.style.width = `${(amount / denom) * 100}%`;
-    seg.style.background = `var(--data-${account === 'annuity_savings' ? 'pension' : account === 'retirement_pension' ? 'irp' : 'isa'})`;
+    const seg = el('div', {
+      class: 'stackbar-seg',
+      style: {
+        width: `${(amount / denom) * 100}%`,
+        background: `var(--data-${account === 'annuity_savings' ? 'pension' : account === 'retirement_pension' ? 'irp' : 'isa'})`,
+      },
+    });
     wrapper.append(seg);
   }
   if (unallocatedAnnualKrw > 0) {
-    const seg = document.createElement('div');
-    seg.className = 'stackbar-seg';
-    seg.style.width = `${(unallocatedAnnualKrw / denom) * 100}%`;
-    seg.style.background = UNALLOCATED_COLOR;
+    const seg = el('div', { class: 'stackbar-seg', style: { width: `${(unallocatedAnnualKrw / denom) * 100}%`, background: UNALLOCATED_COLOR } });
     wrapper.append(seg);
   }
   return wrapper;

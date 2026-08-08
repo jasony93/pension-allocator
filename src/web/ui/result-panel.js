@@ -17,7 +17,7 @@ import {
   comparisonNoteMessage,
   errorMessage,
 } from '../copy.js';
-import { formatKrw, formatKrwAbbreviated, formatPercent, formatDelta } from '../format.js';
+import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
 import { donutChart, allocationBar, stackBarSegments, CHART_ACCOUNT_ORDER } from './charts.js';
 import { openShareModal } from './share.js';
@@ -240,7 +240,7 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
         el('span', { class: 'stackbar-row-marker' }, [selected ? '▸' : '']),
         el('span', { class: 'stackbar-row-label' }, [plan.is_baseline ? `${PLAN_LABEL[plan.plan_id]} (기본)` : PLAN_LABEL[plan.plan_id]]),
         stackBarSegments({ allocations: plan.allocations, unallocatedAnnualKrw: plan.unallocated_annual_krw, totalBudgetKrw: budget }),
-        el('span', { class: 'type-num stackbar-row-amount' }, [formatDelta(plan.delta_vs_baseline_krw)]),
+        el('span', { class: 'type-num stackbar-row-amount' }, [formatPlanRowAmount(plan)]),
       ],
     );
   });
