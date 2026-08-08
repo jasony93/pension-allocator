@@ -4,13 +4,18 @@
   "effective_from": "2027-01-01",
   "notes": {
     "what_this_is": "재정경제부가 2026-08-03 발표한 「2026년 세제개편안」 중 ISA·연금계좌 관련 항목이다. 아직 정부안 단계이며 국회를 통과하지 않았다. 이 파일의 어떤 규칙도 현재 시행 중이 아니다.",
-    "legislative_timeline": "발표 2026-08-03 → 입법예고 → 2026-09-03 이전 정기국회 제출 예정 → 국회 심의(연말) → 공포 → 시행. 국회 심의 과정에서 내용이 바뀌거나 반영되지 않을 수 있다. 실제로 2024년 정부안의 '국내투자형 ISA'는 국회에서 반영되지 않았다.",
-    "source_limitation": "정부 보도자료 첨부 PDF(개조식·상세본·문답자료)가 텍스트 추출이 되지 않아, 정부 문서에서 직접 확인한 문장만 규칙으로 옮겼다. 언론 보도로만 알려진 수치는 규칙에 넣지 않고 unverified_items에 모아 두었다.",
+    "legislative_timeline": "발표 2026-08-03 → 입법예고 2026-08-04~08-20 → 차관회의 2026-08-27 → 국무회의 2026-09-01 → 2026-09-03 이전 정기국회 제출 예정 → 국회 심의(연말) → 공포 → 2027-01-01 시행 예정. 국회 심의 과정에서 내용이 바뀌거나 반영되지 않을 수 있다. 실제로 2024년 정부안의 '국내투자형 ISA'는 국회에서 반영되지 않았다.",
+    "source_upgrade_2026_08_08": "지난 조사에서는 보도자료 첨부 PDF의 텍스트 추출이 되지 않아 정부 문서에서 직접 확인한 문장만 옮겼다. 이번에 (1) 세제개편안 상세본·문답자료 PDF의 텍스트를 추출했고, (2) 2026-08-04자 입법예고 첨부 개정법률(안) 원문(신구조문대비표 포함)을 확보했다. 따라서 이 파일의 규칙은 대부분 개정안 조문 자체를 근거로 한다. 각 규칙의 source.law에 안 조문 번호를 적었다.",
+    "bill_documents": [
+      "「조세특례제한법」 일부개정법률(안) — 재정경제부 공고 제2026-211호(2026-08-04). 제91조의18 개정, 제91조의29 신설, 제129조의2 개정, 부칙 제1조·제27조·제28조.",
+      "「소득세법」 일부개정법률(안) — 재정경제부 공고 제2026-213호(2026-08-04). 제59조의3 제1항·제3항·제4항 개정.",
+      "「농어촌특별세법」 일부개정법률(안) — 같은 날 입법예고."
+    ],
     "unverified_items": [
-      "일반 ISA 제도 정비(상세본 목차 3.(1)⑤ 'ISA 제도 정비(조특법)'로 항목 존재만 확인). 계약기간을 최초 3년·최대 5년으로 제한하고 연간 납입한도 미납입분 이월을 폐지하며 2027-01-01 이후 납입분부터 기존 가입자에게도 적용한다는 보도가 다수 있으나, 정부 문서 원문으로 확인하지 못해 규칙으로 넣지 않았다.",
-      "생산적금융 ISA 청년 소득공제의 대상 연령(15~34세, 군복무 고려 시 최대 40세), 소득요건(총급여 7,500만원 이하 / 종합소득금액 6,300만원 이하), 공제한도(연 85만원)는 언론 보도에만 있고 정부 문서로 확인하지 못했다.",
-      "생산적금융 ISA의 의무가입기간 3년·최대 운용기간 10년, 가입 마감 2029-12-31, 1인 1계좌, 금융소득종합과세 대상자 배제 요건도 같은 이유로 규칙에 넣지 않았다.",
-      "생산적금융 ISA와 일반 ISA를 동시에 보유할 수 있는지(현행 조특법 제91조의18 제3항의 '1명당 1개' 요건과의 관계)는 어느 출처에서도 확인하지 못했다. 제품 설계에 직접 영향을 주는 쟁점이다."
+      "생산적금융 ISA 청년 소득공제의 '청년' 연령 범위는 안 제91조의29 제2항이 '대통령령으로 정하는 청년'으로 위임했고 시행령 개정안이 아직 공개되지 않아 확정하지 못했다. 상세본은 15~34세, 문답자료는 '15세~34세 + 군복무기간(최대 6년)'으로 적었으나 이는 정부의 설명 자료이지 조문이 아니다.",
+      "연금계좌 세액공제율 15% 우대 대상인 '대통령령으로 정하는 청년'(소득세법 안 제59조의3 제1항)의 연령 범위도 같은 이유로 미확정이다.",
+      "생산적금융 ISA와 일반 ISA의 병행 보유 가능 여부는 개정안 조문에 금지 규정이 없다는 사실까지 확인했다(proposed.productive_isa.account_requirements의 concurrent_holding 참조). 다만 안 제91조의29 제14항이 가입·연장절차를 대통령령에 위임했으므로 시행령에서 제약이 붙을 여지가 남아 있다.",
+      "농어촌특별세 비과세는 별도 법률(농어촌특별세법) 개정안이며 그 조문을 직접 읽지 않았다."
     ]
   },
   "rules": [
@@ -24,16 +29,91 @@
         "type": "exemption",
         "scope": "계좌에서 발생한 이자소득 및 배당소득",
         "limit_krw": null,
-        "rule": "국내 상장주식·국내 주식형 펀드·국민성장펀드 등에 투자하는 생산적금융 ISA를 신설해 이자·배당소득을 비과세한다. 일반 ISA와 달리 비과세 한도금액(200만원/400만원)이 없다.",
-        "contrast_with_current": "현행 일반 ISA는 비과세 한도 200만원(서민형 400만원), 초과분 9% 분리과세다(isa.tax_free_limit, isa.excess.separate_tax_rate)."
+        "limit_confirmed": true,
+        "statutory_text": "…제4항 각 호의 요건을 모두 갖춘 계좌에 2029년 12월 31일까지 가입하거나 계약기간을 연장하는 경우 해당 계좌에서 발생하는 이자소득 및 배당소득에 대해서는 소득세를 부과하지 아니한다.",
+        "rule": "안 제91조의29 제1항은 비과세 한도금액을 두지 않고 '소득세를 부과하지 아니한다'고만 정한다. 일반 ISA의 200만원/400만원 한도 및 초과분 9% 분리과세 구조가 없다.",
+        "contrast_with_current": "현행 일반 ISA는 비과세 한도 200만원(서민형 400만원), 초과분 9% 분리과세다(isa.tax_free_limit, isa.excess.separate_tax_rate).",
+        "sunset": "2029-12-31까지 가입 또는 연장하는 분에 한정한다."
       },
       "status": "개정예고",
       "bill_stage": "정부안",
       "effective_from": "2027-01-01",
       "source": {
-        "law": "조세특례제한법 개정안 — 「2026년 세제개편안」 3.생산적금융 및 자본시장 지원 (1)① 생산적금융 ISA 신설(조특법)",
-        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
-        "corroborating_url": "https://nsp.nanet.go.kr/plan/subject/detail.do?nationalPlanControlNo=PLAN0000065941",
+        "law": "조세특례제한법 일부개정법률(안) 제91조의29 제1항 신설 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.eligibility",
+      "title": "생산적금융 ISA 가입 대상",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "eligibility",
+        "any_of": [
+          { "id": "age19", "rule": "가입일 또는 연장일 기준 19세 이상인 자", "min_age": 19 },
+          {
+            "id": "age15_employed",
+            "rule": "가입일 또는 연장일 기준 15세 이상인 자로서 가입일 또는 연장일이 속하는 과세기간의 직전 과세기간에 근로소득이 있는 자 (비과세소득만 있는 자는 제외)",
+            "min_age": 15,
+            "requires": "직전 과세기간 근로소득 보유"
+          }
+        ],
+        "exclusion": "금융소득종합과세 대상자는 배제된다. 안 제129조의2 제1항의 적용 대상 목록에 제91조의29가 추가되므로, 확정 규칙 isa.exclusion.financial_income_taxpayer와 같은 기준(가입일·연장일이 속한 과세기간의 직전 3개 과세기간 중 1회 이상)이 그대로 적용된다.",
+        "residency": "거주자일 것.",
+        "note": "요건 문언이 현행 일반 ISA(isa.eligibility)와 사실상 같다. 다만 안 제91조의29 제1항은 '가입일 또는 연장일 기준'이라는 판정 시점을 조문에 명시해 두었다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 일부개정법률(안) 제91조의29 제1항 각 호 신설 및 제129조의2 제1항 개정 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.account_requirements",
+      "title": "생산적금융 ISA 계좌 요건 (계좌 수 · 계약기간 · 납입한도의 합산 방식)",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "requirements",
+        "accounts_per_person": null,
+        "multiple_accounts_allowed": true,
+        "limit_aggregation": "1명당 납입한도는 「금융실명거래 및 비밀보장에 관한 법률」 제2조 제1호 각 목에 따른 모든 금융회사등에 가입한 생산적금융 ISA의 납입한도 합계액으로 판정한다.",
+        "initial_contract_years": 3,
+        "max_total_contract_years": 10,
+        "extension_rule": "계약기간 만료일 전 3개월이 되는 날부터 3년까지 연장할 수 있고, 이 경우 기존 계약기간 만료일에 연장한 것으로 본다(안 제91조의29 제5항).",
+        "transfer_in": "다음 계좌의 계약기간이 만료된 경우 그 잔액의 전부 또는 일부를 해지일이 속하는 달의 다음 달 말일까지 연간 납입한도와 무관하게 생산적금융 ISA에 납입할 수 있다(안 제91조의29 제13항): (1) 제91조의18에 따른 개인종합자산관리계좌(일반 ISA), (2) 청년도약계좌, (3) 청년미래적금, (4) 생산적금융 ISA(총 계약기간이 10년인 경우에 한정).",
+        "concurrent_holding": {
+          "question": "일반 ISA와 생산적금융 ISA를 동시에 보유할 수 있는가 (게이트 1 D4 쟁점 1)",
+          "finding": "개정안 조문에 병행 보유를 금지하는 규정이 없다.",
+          "evidence": [
+            "안 제91조의29 제4항의 계좌 요건 4개 중 현행 제91조의18 제3항 제1호('1명당 1개의 계좌만 보유할 것')에 대응하는 요건이 없다. 대신 제4호가 '1명당 납입한도(모든 금융회사등에 가입한 생산적금융 ISA 납입한도의 합계액)'로 규정해 복수 계좌를 전제한다. 세제개편안 상세본도 '(운용방식) 복수계좌 허용(일임형, 신탁형, 중개형)'으로 적었다.",
+            "안 제91조의29 어디에도 일반 ISA 보유자를 배제하는 규정이 없다. 반면 같은 조 제3항 제4호는 청년 소득공제의 배제사유로 '해당 과세기간 종료일 현재 청년도약계좌 또는 청년미래적금 계좌를 보유하고 있는 경우'를 명시했다. 개정안은 다른 계좌 보유를 배제사유로 삼을 때 그 계좌를 명시하는 방식을 취했고, 그 목록에 일반 ISA는 없다.",
+            "현행 제91조의18 제3항 제1호의 '1명당 1개의 계좌' 요건은 문언상 그 조의 개인종합자산관리계좌에 걸리는 요건이고, 개정안은 이 호를 개정하지 않는다.",
+            "안 제91조의29 제13항 제1호가 일반 ISA 만기자금의 생산적금융 ISA 납입 경로를 따로 두었으나, 이는 연간 납입한도의 예외를 정한 것이지 병행 보유를 금지하는 규정이 아니다."
+          ],
+          "residual_uncertainty": "정부안이며 국회 심의에서 바뀔 수 있다. 또 안 제91조의29 제14항이 '가입·연장절차, 납입한도의 계산방법 및 그 밖에 필요한 사항'을 대통령령에 위임했으므로 시행령에서 절차상 제약이 붙을 여지가 있다. 시행령 개정안은 아직 공개되지 않았다.",
+          "engine_note": "이 규칙은 2027-01-01 시행 예정이므로 2026 과세연도 계산에는 영향이 없다. 개정안 반영 시나리오를 계산할 때만 병행 보유를 전제한다."
+        }
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 일부개정법률(안) 제91조의29 제3항·제4항·제5항·제13항·제14항 신설 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
         "announced_on": "2026-08-03",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
@@ -49,18 +129,20 @@
         "type": "contribution_limit",
         "annual_limit_krw": 20000000,
         "total_limit_krw": 200000000,
-        "carry_forward": null,
-        "rule": "연간 2,000만원·총 2억원까지 납입할 수 있도록 한다.",
-        "contrast_with_current": "현행 일반 ISA는 연 2,000만원·총 1억원이다(isa.contribution.annual_limit, isa.account.requirements).",
-        "unverified": "연간 미납입분 이월 가능 여부는 정부 문서로 확인하지 못해 null로 둔다. 언론은 이월 불가로 보도했다."
+        "carry_forward": false,
+        "statutory_text": "4. 1명당 납입한도(「금융실명거래 및 비밀보장에 관한 법률」 제2조제1호 각 목에 따른 모든 금융회사등에 가입한 생산적금융개인종합자산관리계좌의 납입한도의 합계액을 말한다)가 다음 각 목의 금액 이하일 것 — 가. 총납입한도: 2억원, 나. 연간 납입한도: 2천만원",
+        "rule": "연간 2,000만원·총 2억원. 조문이 연간 한도를 금액으로 직접 정하고 현행 일반 ISA와 같은 이월 계산식을 두지 않으므로 미납입분 이월이 없다.",
+        "carry_forward_note": "이월 불가는 (1) 안 조문에 이월 계산식이 없다는 점과 (2) 세제개편안 문답자료가 '연간 납입한도 2천만원 (연간 한도 이월 불가)'로 명시한 점으로 확인했다.",
+        "exception": "안 제91조의29 제13항의 만기자금 일시납은 이 연간 한도와 별개다(proposed.productive_isa.account_requirements의 transfer_in 참조).",
+        "contrast_with_current": "현행 일반 ISA는 연간 한도에 이월 계산식이 있고 총 1억원이다(isa.contribution.annual_limit, isa.account.requirements). 개정안은 일반 ISA의 이월도 폐지하므로 2027년 이후에는 두 계좌 모두 이월이 없다(proposed.isa.annual_contribution_limit)."
       },
       "status": "개정예고",
       "bill_stage": "정부안",
       "effective_from": "2027-01-01",
       "source": {
-        "law": "조세특례제한법 개정안 — 「2026년 세제개편안」 3.(1)① 생산적금융 ISA 신설(조특법)",
-        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
-        "corroborating_url": "https://nsp.nanet.go.kr/plan/subject/detail.do?nationalPlanControlNo=PLAN0000065941",
+        "law": "조세특례제한법 일부개정법률(안) 제91조의29 제4항 제4호 신설 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
         "announced_on": "2026-08-03",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
@@ -77,19 +159,45 @@
       "value": {
         "type": "income_deduction",
         "rate": 0.1,
-        "annual_limit_krw": null,
+        "annual_limit_krw": 2000000,
+        "basis": "계약기간 동안 각 과세기간에 납입한 금액의 100분의 10을 해당 과세기간의 종합소득금액에서 공제한다.",
         "age_range": null,
-        "income_requirement": null,
-        "rule": "일정 소득 이하 청년 가입자는 납입금의 10%를 소득공제받는다.",
-        "unverified": "정부 문서에서 확인한 것은 '일정 소득 이하 청년 가입자 · 납입금의 10% 소득공제'라는 문장뿐이다. 대상 연령·소득요건·공제한도는 확인하지 못해 null로 둔다. 이 값들이 확정되기 전에는 계산 엔진이 이 규칙으로 금액을 산출해서는 안 된다."
+        "age_note": "'대통령령으로 정하는 청년'으로 위임되어 있고 시행령 개정안이 아직 공개되지 않아 연령 범위를 확정하지 못했다. 세제개편안 상세본은 15~34세, 문답자료는 '15세~34세 + 군복무기간(최대 6년)'으로 설명했으나 이는 조문이 아니다.",
+        "income_requirement": {
+          "match": "any_of",
+          "options": [
+            {
+              "id": "salary",
+              "rule": "직전 과세기간의 총급여액이 7,500만원 이하일 것 (직전 과세기간에 근로소득만 있거나 근로소득 및 종합소득과세표준에 합산되지 아니하는 종합소득이 있는 경우로 한정하고, 비과세소득만 있는 경우는 제외)",
+              "prev_total_salary_max_krw": 75000000
+            },
+            {
+              "id": "global_income",
+              "rule": "직전 과세기간의 종합소득과세표준에 합산되는 종합소득금액이 6,300만원 이하일 것 (직전 과세기간의 총급여액이 7,500만원을 초과하는 근로소득이 있거나 비과세소득만 있는 경우는 제외)",
+              "prev_global_income_max_krw": 63000000
+            }
+          ]
+        },
+        "annual_disqualification": {
+          "rule": "청년가입자라도 해당 과세기간에 다음 중 하나에 해당하면 그 과세기간에는 소득공제를 하지 않는다(안 제91조의29 제3항).",
+          "cases": [
+            "해당 과세기간에 근로소득만 있거나 종합소득과세표준에 합산되지 아니하는 종합소득만 있는 경우로서 총급여액이 8,500만원을 초과하는 경우",
+            "해당 과세기간의 종합소득과세표준에 합산되는 종합소득금액이 7,000만원을 초과하는 경우",
+            "해당 과세기간에 근로소득 및 종합소득과세표준에 합산되는 종합소득금액이 없는 경우",
+            "해당 과세기간 종료일 현재 청년도약계좌(제91조의22) 또는 청년미래적금(제91조의25) 계좌를 보유하고 있는 경우"
+          ]
+        },
+        "clawback": "소득공제를 받은 청년가입자가 계약기간 만료 전 납입금을 인출하거나 중도해지하면 그 금액에 1천분의 24를 곱한 금액을 추징한다(안 제91조의29 제8항). 다만 사망 등 대통령령으로 정하는 부득이한 사유는 제외하고, 실제 감면세액이 추징세액에 미달함을 증명하면 감면세액 상당액만 추징한다.",
+        "engine_note": "연령 요건이 미확정이므로 엔진이 '이 사용자가 청년가입자인가'를 스스로 판정해서는 안 된다. 사용자가 청년가입자에 해당한다고 입력한 경우에 한해 금액을 산출하고, 연령 기준이 시행령으로 정해질 예정임을 화면에 표시한다.",
+        "correction_note": "지난 조사에서 '언론 보도상 공제한도 연 85만원'으로 적었던 것은 개정안 조문(연 200만원 한도)과 다르다. 언론 수치를 채택하지 않은 판단이 맞았다."
       },
       "status": "개정예고",
       "bill_stage": "정부안",
       "effective_from": "2027-01-01",
       "source": {
-        "law": "조세특례제한법 개정안 — 「2026년 세제개편안」 3.(1)① 생산적금융 ISA 신설(조특법)",
-        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
-        "corroborating_url": "https://nsp.nanet.go.kr/plan/subject/detail.do?nationalPlanControlNo=PLAN0000065941",
+        "law": "조세특례제한법 일부개정법률(안) 제91조의29 제2항·제3항·제8항 신설 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
         "announced_on": "2026-08-03",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
@@ -105,15 +213,18 @@
       "value": {
         "type": "limit_extension",
         "rule": "생산적금융 ISA 만기 자금을 연금계좌로 이전하면 연금계좌 연간 납입한도(1,800만원)와 별개로 추가 납입할 수 있게 한다. 현행 일반 ISA 전환금과 같은 취급이다.",
-        "amended_statute": "소득세법 시행령"
+        "amended_statute": "소득세법 시행령 제40조의2 제2항",
+        "related_bill_provision": "소득세법 일부개정법률(안) 제59조의3 제3항이 '「조세특례제한법」 제91조의18에 따른 개인종합자산관리계좌'를 '제91조의18에 따른 개인종합자산관리계좌 또는 같은 법 제91조의29에 따른 생산적금융개인종합자산관리계좌'로 확대한다. 시행령 제40조의2 제2항의 추가납입 대상 확대는 그에 맞춘 것으로 세제개편안 상세본 3.(1)③에 항목으로 실려 있다.",
+        "unverified": "소득세법 시행령 개정안은 아직 입법예고되지 않아 조문을 확인하지 못했다. 법률안 쪽(제59조의3 제3항)만 조문으로 확인했다.",
+        "related_bill_effect": "안 제91조의29 제12항은 생산적금융 ISA 가입 후 3년이 지나 계좌 잔액을 연금계좌로 납입하면 그 계좌의 계약기간이 만료된 것으로 본다고 정한다."
       },
       "status": "개정예고",
       "bill_stage": "정부안",
       "effective_from": "2027-01-01",
       "source": {
-        "law": "소득세법 시행령 개정안 — 「2026년 세제개편안」 3.(1)③ 연금계좌 추가납입 대상에 생산적금융 ISA 전환금 추가(소득령)",
-        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
-        "corroborating_url": "https://www.taxtimes.co.kr/news/article.html?no=276259",
+        "law": "소득세법 일부개정법률(안) 제59조의3 제3항 및 소득세법 시행령 개정 예정분 — 재정경제부 공고 제2026-213호(2026-08-04 입법예고), 「2026년 세제개편안」 3.(1)③",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078822&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
         "announced_on": "2026-08-03",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
@@ -128,18 +239,53 @@
       ],
       "value": {
         "type": "limit_extension",
-        "rule": "생산적금융 ISA 만기 전환금액도 일반 ISA 전환금과 마찬가지로 연금계좌 세액공제 추가한도(전환금액의 10%, 최대 300만원) 대상에 포함한다.",
-        "amended_statute": "소득세법 및 같은 법 시행령",
+        "rule": "생산적금융 ISA 만기 전환금액도 일반 ISA 전환금과 마찬가지로 연금계좌 세액공제 추가한도(전환금액의 10%, 최대 300만원) 대상에 포함한다. 안 제59조의3 제3항의 '전환금액' 정의에 생산적금융 ISA 전환금이 들어가면서 제4항의 추가한도 계산이 그대로 적용된다.",
+        "rate": 0.1,
+        "cap_krw": 3000000,
+        "amended_statute": "소득세법 제59조의3 제3항·제4항",
         "related_confirmed_rule": "pension.credit.isa_transfer.extra_limit",
-        "unverified": "추가한도의 비율(10%)과 상한(300만원)이 생산적금융 ISA에도 그대로 적용되는지는 정부 문서에서 '일반 ISA와 동일하게'라는 취지로만 확인했다. 구체 수치는 개정 조문 공개 후 재확인이 필요하다."
+        "changed_cap_period": {
+          "current": "300만원에서 '직전 과세기간에 적용된 금액'을 차감한다(현행 제59조의3 제4항). 즉 2개 과세기간만 본다.",
+          "proposed": "300만원에서 '해당 과세기간을 포함한 직전 3개 과세기간 동안 제1호의 금액을 초과하여 연금계좌 납입액에 포함된 금액'의 합계액을 차감한다(안 제59조의3 제4항 제2호 나목 단서). 차감 대상 기간이 3개 과세기간으로 넓어진다.",
+          "impact": "ISA 만기자금을 여러 해에 나누어 연금계좌로 옮기는 경우 추가한도 잔액 계산이 달라진다. pension.credit.isa_transfer.extra_limit의 period 필드와 대조가 필요하다."
+        },
+        "restructured_formula": "안 제59조의3 제4항은 추가한도를 '다음 각 호의 금액을 합산한 금액'으로 재구성한다. 제1호: 제1항 각 호 외의 부분 단서에 따라 연금계좌에 납입한 것으로 하는 금액(=600/900만원 기본한도). 제2호: 전환금액의 10%와 300만원(위 단서로 차감) 중 적은 금액."
       },
       "status": "개정예고",
       "bill_stage": "정부안",
       "effective_from": "2027-01-01",
       "source": {
-        "law": "소득세법·같은 법 시행령 개정안 — 「2026년 세제개편안」 3.(1)④ 연금계좌 세액공제 추가한도 대상에 생산적금융 ISA 전환금 추가(소득법·령)",
-        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
-        "corroborating_url": "https://www.taxtimes.co.kr/news/article.html?no=276259",
+        "law": "소득세법 일부개정법률(안) 제59조의3 제3항·제4항 개정 — 재정경제부 공고 제2026-213호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078822&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.pension.credit.youth_irp_rate",
+      "title": "청년의 퇴직연금계좌 납입액에 대한 세액공제율 우대 (소득수준 무관 15%)",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "퇴직연금계좌" },
+        { "field": "taxpayer.is_youth", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "rate",
+        "rate": 0.15,
+        "rule": "연금계좌 세액공제를 적용할 때, '대통령령으로 정하는 청년'의 연금계좌 납입액 중 퇴직연금계좌에 납입한 금액에 대해서는 소득수준과 무관하게 15%의 공제율을 적용한다.",
+        "contrast_with_current": "현행은 종합소득금액 4,500만원 이하(근로소득만 있으면 총급여 5,500만원 이하)에만 15%를 적용하고 그 밖에는 12%다(pension.credit.rate). 개정안은 청년의 퇴직연금(IRP·DC 가입자부담금) 납입분에 한해 이 소득 경계를 없앤다.",
+        "allocation_impact": "이 규칙이 통과되면 소득이 경계 위인 청년 근로소득자에게 연금저축보다 IRP 납입을 우선하는 것이 유리해진다. 즉 이 제품의 핵심 배분 로직이 청년 여부에 따라 갈린다.",
+        "age_range": null,
+        "unverified": "'대통령령으로 정하는 청년'의 연령 범위가 시행령 위임이고 시행령 개정안이 공개되지 않아 확정하지 못했다. 엔진은 이 값이 정해지기 전까지 청년 여부를 스스로 판정해서는 안 된다.",
+        "scope_note": "게이트 1 D4가 지시한 두 쟁점의 조사 범위 밖이지만, 같은 입법예고 문서에서 확인됐고 납입 배분 계산에 직접 걸리므로 넣었다. 관리자가 범위 밖이라 판단하면 제거하면 된다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "소득세법 일부개정법률(안) 제59조의3 제1항 개정 — 재정경제부 공고 제2026-213호(2026-08-04 입법예고). 부칙 '연금계좌세액공제에 관한 적용례': 2027년 1월 1일 이후 납입하는 분부터 적용",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078822&menuNo=7050300",
         "announced_on": "2026-08-03",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
@@ -162,9 +308,102 @@
       "bill_stage": "정부안",
       "effective_from": "2027-01-01",
       "source": {
-        "law": "농어촌특별세법 개정안 — 「2026년 세제개편안」 3.(1)② 생산적금융 ISA에 대한 농어촌특별세 비과세(농특법)",
-        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
-        "corroborating_url": "https://www.taxtimes.co.kr/news/article.html?no=276259",
+        "law": "농어촌특별세법 일부개정법률(안) 제4조 — 「2026년 세제개편안」 3.(1)② 생산적금융 ISA에 대한 농어촌특별세 비과세(농특법). 2026-08-04 입법예고",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078803&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.isa.contract_period",
+      "title": "일반 ISA 계약기간 정비 — 최초 3년, 총 5년 상한 신설",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "requirements",
+        "initial_contract_years": 3,
+        "max_total_contract_years": 5,
+        "statutory_text": "4. 최초 계약기간이 3년이고, 계약을 연장하는 경우 최초로 계약을 체결한 날부터 기산한 총 계약기간이 5년 이하일 것",
+        "current_text": "4. 계약기간이 3년 이상일 것",
+        "extension_window": "연장 가능 시점이 '계약기간 만료일 전'에서 '계약기간 만료일 전 3개월부터'로 좁혀지고, 그 경우 기존 계약기간 만료일에 연장한 것으로 본다(안 제91조의18 제4항).",
+        "applies_from": "이 법 시행(2027-01-01) 이후 개인종합자산관리계좌에 가입하거나 기존 계약을 연장하는 경우부터 적용한다(부칙 제27조 제1항).",
+        "applies_to_existing_contracts": false,
+        "worked_example": "정부 문답자료의 예시 — 기존 계약기간이 3년인 경우 최대 2년까지 연장 가능하다(총 5년).",
+        "rationale_quoted": "정부 설명: ISA의 가입요건(가입·연장 시 소득기준으로 일반형·서민형을 구분하고 금융소득종합과세 대상자 여부를 심사하는 것)과 계좌 내 과세방식(계약기간 만료 시점에 정산해 비과세 한도 초과분에 9% 분리과세)을 고려해 계약기간을 조정한다.",
+        "product_impact": "만기가 강제로 돌아오므로 '만기 → 연금계좌 전환 시 세액공제 추가한도'(pension.credit.isa_transfer.extra_limit) 이벤트가 최장 5년마다 반드시 발생한다. ISA→IRP 전환 권고의 시점 설계에 직접 영향을 준다.",
+        "extension_caveat": "연장은 새로 가입요건을 심사받는 절차이므로, 연장 시점의 직전 과세기간 소득에 따라 서민형/일반형 판정(isa.tax_free_limit)이 바뀌거나 금융소득종합과세 대상자로 배제될 수 있다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 일부개정법률(안) 제91조의18 제3항 제4호·제4항 개정, 부칙 제1조·제27조 제1항 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.isa.annual_contribution_limit",
+      "title": "일반 ISA 연간 납입한도 정비 — 미납입분 이월 폐지",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "annual_limit",
+        "amount_krw": 20000000,
+        "carry_forward": false,
+        "statutory_text": "5. 총납입한도가 1억원(제91조의14에 따른 재형저축 또는 제91조의16에 따른 장기집합투자증권저축에 가입한 거주자는 재형저축 및 장기집합투자증권저축의 계약금액 총액을 뺀 금액으로 한다) 이하이고, 연간 납입한도가 2천만원 이하일 것",
+        "current_text": "…연간 납입한도가 다음의 계산식에 따른 금액일 것 — 2천만원 × [1 + 가입 후 경과한 연수(경과한 연수가 4년 이상인 경우에는 4년으로 한다)] - 누적 납입금액",
+        "change": "현행 제5호의 계산식을 삭제하고 연간 한도를 2,000만원 정액으로 고정한다. 그 결과 미납입분 이월이 없어진다.",
+        "total_limit_krw": 100000000,
+        "total_limit_unchanged": true,
+        "applies_from": "이 법 시행(2027-01-01) 이후 납입하는 분부터 적용한다.",
+        "applies_to_existing_contracts": true,
+        "retroactivity_note": "부칙 제27조 제2항 — '제91조의18제3항제5호, 제4항의 개정규정은 이 법 시행 전에 개인종합자산관리계좌에 가입한 분에 대해서도 적용한다.' 즉 2027-01-01 전에 가입한 기존 가입자도 그날 이후에는 이월분을 쓸 수 없다. 정부 문답자료도 '※ 기존 ISA 가입분까지 일괄 적용'으로 명시했다.",
+        "rationale_quoted": "정부 설명: 장기·적립식 투자 유도 목적과 생산적금융 ISA와의 형평성 등을 고려해 연간 납입한도 이월을 폐지한다.",
+        "product_impact": "'ISA 한도를 못 채워도 나중에 몰아 넣으면 된다'는 권고가 2027-01-01부터 성립하지 않는다. 현행 기준으로 그런 권고를 하는 화면은 개정 시점에 틀린 권고가 되므로, 이월분이 남아 있는 사용자에게는 2026년 안에 쓰라는 안내가 맞다. 다만 이 규칙은 정부안이므로 국회 통과 전임을 반드시 함께 표시해야 한다(bill_stage).",
+        "engine_note": "확정 규칙 isa.contribution.annual_limit(이월 있는 산식)과 이 규칙(이월 없음)은 과세연도가 다르다. 같은 화면에서 두 시나리오를 비교할 때 어느 쪽 규칙을 썼는지 드러나야 한다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 일부개정법률(안) 제91조의18 제3항 제5호 개정, 부칙 제1조·제27조 제2항 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.isa.sunset",
+      "title": "일반 ISA 과세특례 적용기한(일몰) 신설 — 2029-12-31",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "threshold",
+        "sunset_date": "2029-12-31",
+        "rule": "제91조의18 제1항 각 호 외의 부분에 '2029년 12월 31일까지'를 넣어, 그날까지 가입하거나 계약기간을 연장하는 경우에만 과세특례를 적용한다.",
+        "current_state": "현행 제91조의18 제1항에는 가입 기한이 없다. 지난 조사에서 '현행법에 일몰이 있는지 자체가 불명확'으로 남겨 두었던 항목인데, 개정안이 일몰을 '신설'하는 것으로 되어 있어 현행에는 없다는 점이 확인됐다.",
+        "rationale_quoted": "정부 설명: 생산적금융 ISA와 동일한 일몰기한을 설정하고 ISA 관련 종합적 성과평가를 추진한다.",
+        "same_sunset_for": "생산적금융 ISA(안 제91조의29 제1항)도 2029-12-31까지 가입·연장분에 한정된다.",
+        "applies_from": "이 법 시행일(2027-01-01)."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 일부개정법률(안) 제91조의18 제1항 개정 — 재정경제부 공고 제2026-211호(2026-08-04 입법예고)",
+        "url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
+        "corroborating_url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
         "announced_on": "2026-08-03",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"

@@ -323,7 +323,7 @@
             "requires": "직전 과세기간 근로소득 보유"
           }
         ],
-        "unverified": "금융소득종합과세 대상자 배제 요건은 조문 제1항에서 1차 출처로 확인하지 못했다. open_questions 참조."
+        "additional_exclusion": "제1항의 요건을 갖추어도 금융소득종합과세 대상자는 조세특례제한법 제129조의2 제1항에 따라 과세특례가 배제된다. isa.exclusion.financial_income_taxpayer 규칙을 함께 적용해야 한다. 배제 규정이 제91조의18이 아니라 별도의 조에 있어 지난 조사에서 찾지 못했던 부분이다."
       },
       "status": "확정",
       "effective_from": "2026-01-01",
@@ -360,7 +360,7 @@
           }
         ],
         "boundary_rule": "법문이 '이하'이므로 총급여 50,000,000원 정확히, 종합소득금액 38,000,000원 정확히는 400만원 구간이다.",
-        "unverified": "농어민에 대한 400만원 한도 적용 여부는 조문에서 직접 확인하지 못했다. open_questions 참조."
+        "unverified": "농어민에 대한 400만원 한도 적용 여부는 조문에서 직접 확인하지 못했다. 다만 재정경제부 「2026년 세제개편안」 상세본(p.22)이 현행 제도를 '(일반형) 200만원 (서민·농어민형) 400만원'으로 기술해, 농어민형이 별도로 존재한다는 점은 정부 문서로 교차확인됐다. 근거 호를 특정하지 못해 이 규칙의 brackets에는 반영하지 않았다. open_questions 참조."
       },
       "status": "확정",
       "effective_from": "2026-01-01",
@@ -405,15 +405,20 @@
         "type": "requirements",
         "accounts_per_person": 1,
         "min_contract_years": 3,
+        "max_contract_years": null,
         "total_contribution_limit_krw": 100000000,
-        "rule": "1명당 1개의 계좌만 보유할 것, 계약기간이 3년 이상일 것, 총납입한도가 1억원 이하일 것."
+        "rule": "1명당 1개의 계좌만 보유할 것(제3항 제1호), 계약기간이 3년 이상일 것(제3항 제4호), 총납입한도가 1억원 이하일 것(제3항 제5호).",
+        "contract_period_note": "현행 제4호는 '계약기간이 3년 이상일 것'이므로 하한만 있고 상한이 없다. 계약기간 만료일 전에 연장할 수 있으며(제4항) 연장 횟수·총 계약기간의 제한이 없다. 2027-01-01 시행 예정인 개정안은 여기에 총 5년 상한을 새로 두므로 proposed.isa.contract_period와 대조할 것.",
+        "total_limit_reduction": "총납입한도 1억원은 무조건 1억원이 아니다. 조특법 제91조의14의 재형저축 또는 제91조의16의 장기집합투자증권저축에 가입한 거주자는 그 두 저축의 계약금액 총액을 1억원에서 뺀 금액이 총납입한도가 된다. 해당 저축을 보유한 사용자에게는 배분 계산의 상한이 낮아진다.",
+        "verification_note": "제3항 제5호의 문언은 재정경제부 공고 제2026-211호 「조세특례제한법」 일부개정법률(안) 입법예고(2026-08-04) 첨부 신구조문대비표의 '현행'란에서 전문을 확인했다."
       },
       "status": "확정",
       "effective_from": "2026-01-01",
       "source": {
-        "law": "조세특례제한법 제91조의18 제3항",
+        "law": "조세특례제한법 제91조의18 제3항 제1호·제4호·제5호",
         "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
         "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "corroborating_url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
       }
@@ -426,19 +431,23 @@
       ],
       "value": {
         "type": "annual_limit",
-        "amount_krw": 20000000,
+        "base_amount_krw": 20000000,
+        "formula": "20000000 × [1 + min(가입 후 경과한 연수, 4)] − 누적 납입금액",
+        "statutory_text": "총납입한도가 1억원(제91조의14에 따른 재형저축 또는 제91조의16에 따른 장기집합투자증권저축에 가입한 거주자는 재형저축 및 장기집합투자증권저축의 계약금액 총액을 뺀 금액으로 한다) 이하이고, 연간 납입한도가 다음의 계산식에 따른 금액일 것 — 2천만원 × [1 + 가입 후 경과한 연수(경과한 연수가 4년 이상인 경우에는 4년으로 한다)] - 누적 납입금액",
         "carry_forward": true,
-        "carry_forward_rule": "해당 연도에 채우지 못한 연간 한도는 이후 과세기간으로 이월된다. 누적 납입액은 총 납입한도 1억원을 넘을 수 없다.",
-        "confidence": "corroborated",
-        "verification_note": "조세특례제한법 제91조의18 제3항 제5호는 '연간 납입한도가 다음의 계산식에 따른 금액일 것'이라고만 정하고 계산식이 조문에 이미지로 실려 있어, 원문 산식을 1차 출처로 직접 읽지 못했다. 금액(연 2,000만원)과 이월 가능 여부는 (1) 금융투자협회 「투자중개형 개인종합자산관리계좌 실무지침」, (2) 재정경제부 「2026년 세제개편안」이 현행 제도를 '연간 납입한도 미납입분 이월 가능'으로 기술하고 이를 폐지 대상으로 삼은 점, 두 가지로 교차확인했다. 게이트 1 전에 시행령 원문 확인이 필요하다 — open_questions 참조."
+        "carry_forward_rule": "조문은 '한도를 이월한다'고 쓰지 않는다. 가입 후 경과연수에 따라 커지는 누적 한도에서 이미 납입한 누적액을 뺀 잔여를 그 해에 납입할 수 있게 하는 구조이고, 그 결과로 미납입분이 이월되는 것과 같은 효과가 난다.",
+        "cap_behavior": "경과연수가 4년에서 고정되므로 누적 한도는 2,000만원 × 5 = 1억원에서 멈춘다. 총 납입한도 1억원(isa.account.requirements)과 정확히 맞물린다.",
+        "engine_note": "연 2,000만원을 고정 상수로 쓰면 안 된다. 가입 2년차 이후 사용자의 그 해 납입 가능액은 2,000만원을 넘을 수 있다(최대 1억원 − 누적 납입액). '한도를 못 채워도 나중에 몰아 넣을 수 있다'는 권고가 2026년 기준으로는 성립하는 근거가 이 산식이다. 2027-01-01 시행 예정인 개정안이 이 산식을 폐지하므로 proposed.isa.annual_contribution_limit와 대조할 것.",
+        "confidence": "verified",
+        "verification_note": "지난 조사에서는 이 계산식이 국가법령정보센터 조문에 이미지로 실려 있어 읽지 못하고 confidence를 corroborated로 낮췄다. 이번에 재정경제부 공고 제2026-211호 「조세특례제한법」 일부개정법률(안) 입법예고(2026-08-04) 첨부 신구조문대비표의 '현행'란이 같은 호의 전문을 텍스트로 싣고 있어 산식을 확인했다. 정부가 공문서에 현행 조문으로 옮겨 적은 것이므로 조문 원문의 재현으로 본다."
       },
       "status": "확정",
       "effective_from": "2026-01-01",
       "source": {
-        "law": "조세특례제한법 제91조의18 제3항 제5호 및 같은 법 시행령의 계산식",
+        "law": "조세특례제한법 제91조의18 제3항 제5호",
         "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
         "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
-        "corroborating_url": "https://law.kofia.or.kr/service/law/lawFullScreenContent.do?seq=343&historySeq=1617",
+        "corroborating_url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
       }
@@ -483,6 +492,33 @@
         "law": "조세특례제한법 제91조의18 제7항",
         "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
         "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.exclusion.financial_income_taxpayer",
+      "title": "금융소득종합과세 대상자에 대한 ISA 과세특례 배제",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" },
+        { "field": "taxpayer.is_financial_income_aggregate_taxpayer", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "eligibility",
+        "excluded": true,
+        "rule": "가입일 또는 연장일이 속한 과세기간의 직전 3개 과세기간 중 1회 이상, 소득세법 제14조 제3항 제6호에 따른 소득(이자소득등)의 합계액이 같은 호의 종합과세기준금액을 초과한 자('금융소득종합과세 대상자')에게는 조세특례제한법 제91조의18의 과세특례를 적용하지 아니한다.",
+        "test_basis": "직전 3개 과세기간 중 1회 이상. 직전 1개 과세기간만 보는 것이 아니다.",
+        "reference_date": "가입일 또는 계약기간 연장일",
+        "scope_note": "이 배제는 제91조의18(ISA)만이 아니라 제87조 제3항, 제87조의2, 제87조의7, 제88조의2, 제88조의4 제9항·제10항, 제88조의5, 제89조의3, 제91조의18부터 제91조의22까지, 제91조의25, 제91조의28에 따른 과세특례에 공통으로 걸린다. 이 룰셋의 범위에서 실제로 걸리는 것은 ISA다.",
+        "verification_note": "지난 조사에서 제91조의18 제1항 본문에서 이 요건을 찾지 못해 규칙으로 넣지 않았다. 배제 규정이 제91조의18이 아니라 별도의 조(제129조의2)에 있는 것이 원인이었다. 재정경제부 공고 제2026-211호 입법예고안 신구조문대비표의 '현행'란에서 제129조의2 제1항 전문을 확인했다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제129조의2 제1항 (저축지원을 위한 조세특례의 제한)",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제129조의2",
+        "corroborating_url": "https://mofe.go.kr/lw/lap/detailTbPrvntcView.do?searchBbsId1=MOSFBBS_000000000055&searchNttId1=MOSF_000000000078800&menuNo=7050300",
         "verified_on": "2026-08-08",
         "verified_by": "tax-domain"
       }

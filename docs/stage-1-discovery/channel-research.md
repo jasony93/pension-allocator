@@ -1,7 +1,7 @@
 ---
 unit: growth
 stage: 1
-status: draft
+status: approved
 inputs:
   - docs/org/charter.md
 open_questions:
