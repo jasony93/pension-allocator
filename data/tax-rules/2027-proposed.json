@@ -1,0 +1,174 @@
+{
+  "tax_year": 2027,
+  "status": "개정예고",
+  "effective_from": "2027-01-01",
+  "notes": {
+    "what_this_is": "재정경제부가 2026-08-03 발표한 「2026년 세제개편안」 중 ISA·연금계좌 관련 항목이다. 아직 정부안 단계이며 국회를 통과하지 않았다. 이 파일의 어떤 규칙도 현재 시행 중이 아니다.",
+    "legislative_timeline": "발표 2026-08-03 → 입법예고 → 2026-09-03 이전 정기국회 제출 예정 → 국회 심의(연말) → 공포 → 시행. 국회 심의 과정에서 내용이 바뀌거나 반영되지 않을 수 있다. 실제로 2024년 정부안의 '국내투자형 ISA'는 국회에서 반영되지 않았다.",
+    "source_limitation": "정부 보도자료 첨부 PDF(개조식·상세본·문답자료)가 텍스트 추출이 되지 않아, 정부 문서에서 직접 확인한 문장만 규칙으로 옮겼다. 언론 보도로만 알려진 수치는 규칙에 넣지 않고 unverified_items에 모아 두었다.",
+    "unverified_items": [
+      "일반 ISA 제도 정비(상세본 목차 3.(1)⑤ 'ISA 제도 정비(조특법)'로 항목 존재만 확인). 계약기간을 최초 3년·최대 5년으로 제한하고 연간 납입한도 미납입분 이월을 폐지하며 2027-01-01 이후 납입분부터 기존 가입자에게도 적용한다는 보도가 다수 있으나, 정부 문서 원문으로 확인하지 못해 규칙으로 넣지 않았다.",
+      "생산적금융 ISA 청년 소득공제의 대상 연령(15~34세, 군복무 고려 시 최대 40세), 소득요건(총급여 7,500만원 이하 / 종합소득금액 6,300만원 이하), 공제한도(연 85만원)는 언론 보도에만 있고 정부 문서로 확인하지 못했다.",
+      "생산적금융 ISA의 의무가입기간 3년·최대 운용기간 10년, 가입 마감 2029-12-31, 1인 1계좌, 금융소득종합과세 대상자 배제 요건도 같은 이유로 규칙에 넣지 않았다.",
+      "생산적금융 ISA와 일반 ISA를 동시에 보유할 수 있는지(현행 조특법 제91조의18 제3항의 '1명당 1개' 요건과의 관계)는 어느 출처에서도 확인하지 못했다. 제품 설계에 직접 영향을 주는 쟁점이다."
+    ]
+  },
+  "rules": [
+    {
+      "id": "proposed.productive_isa.introduction",
+      "title": "생산적금융 ISA 신설 — 이자·배당소득 비과세",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "exemption",
+        "scope": "계좌에서 발생한 이자소득 및 배당소득",
+        "limit_krw": null,
+        "rule": "국내 상장주식·국내 주식형 펀드·국민성장펀드 등에 투자하는 생산적금융 ISA를 신설해 이자·배당소득을 비과세한다. 일반 ISA와 달리 비과세 한도금액(200만원/400만원)이 없다.",
+        "contrast_with_current": "현행 일반 ISA는 비과세 한도 200만원(서민형 400만원), 초과분 9% 분리과세다(isa.tax_free_limit, isa.excess.separate_tax_rate)."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 개정안 — 「2026년 세제개편안」 3.생산적금융 및 자본시장 지원 (1)① 생산적금융 ISA 신설(조특법)",
+        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "corroborating_url": "https://nsp.nanet.go.kr/plan/subject/detail.do?nationalPlanControlNo=PLAN0000065941",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.contribution_limit",
+      "title": "생산적금융 ISA 납입한도",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "contribution_limit",
+        "annual_limit_krw": 20000000,
+        "total_limit_krw": 200000000,
+        "carry_forward": null,
+        "rule": "연간 2,000만원·총 2억원까지 납입할 수 있도록 한다.",
+        "contrast_with_current": "현행 일반 ISA는 연 2,000만원·총 1억원이다(isa.contribution.annual_limit, isa.account.requirements).",
+        "unverified": "연간 미납입분 이월 가능 여부는 정부 문서로 확인하지 못해 null로 둔다. 언론은 이월 불가로 보도했다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 개정안 — 「2026년 세제개편안」 3.(1)① 생산적금융 ISA 신설(조특법)",
+        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "corroborating_url": "https://nsp.nanet.go.kr/plan/subject/detail.do?nationalPlanControlNo=PLAN0000065941",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.youth_income_deduction",
+      "title": "생산적금융 ISA 청년 가입자 소득공제",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" },
+        { "field": "taxpayer.is_youth", "op": "eq", "value": true },
+        { "field": "taxpayer.income_below_threshold", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "income_deduction",
+        "rate": 0.1,
+        "annual_limit_krw": null,
+        "age_range": null,
+        "income_requirement": null,
+        "rule": "일정 소득 이하 청년 가입자는 납입금의 10%를 소득공제받는다.",
+        "unverified": "정부 문서에서 확인한 것은 '일정 소득 이하 청년 가입자 · 납입금의 10% 소득공제'라는 문장뿐이다. 대상 연령·소득요건·공제한도는 확인하지 못해 null로 둔다. 이 값들이 확정되기 전에는 계산 엔진이 이 규칙으로 금액을 산출해서는 안 된다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "조세특례제한법 개정안 — 「2026년 세제개편안」 3.(1)① 생산적금융 ISA 신설(조특법)",
+        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "corroborating_url": "https://nsp.nanet.go.kr/plan/subject/detail.do?nationalPlanControlNo=PLAN0000065941",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.pension_transfer.additional_contribution",
+      "title": "연금계좌 추가납입 대상에 생산적금융 ISA 전환금 추가",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" },
+        { "field": "isa.transferred_to_pension_account", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "limit_extension",
+        "rule": "생산적금융 ISA 만기 자금을 연금계좌로 이전하면 연금계좌 연간 납입한도(1,800만원)와 별개로 추가 납입할 수 있게 한다. 현행 일반 ISA 전환금과 같은 취급이다.",
+        "amended_statute": "소득세법 시행령"
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "소득세법 시행령 개정안 — 「2026년 세제개편안」 3.(1)③ 연금계좌 추가납입 대상에 생산적금융 ISA 전환금 추가(소득령)",
+        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "corroborating_url": "https://www.taxtimes.co.kr/news/article.html?no=276259",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.pension_transfer.credit_extra_limit",
+      "title": "연금계좌 세액공제 추가한도 대상에 생산적금융 ISA 전환금 추가",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" },
+        { "field": "isa.transferred_to_pension_account", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "limit_extension",
+        "rule": "생산적금융 ISA 만기 전환금액도 일반 ISA 전환금과 마찬가지로 연금계좌 세액공제 추가한도(전환금액의 10%, 최대 300만원) 대상에 포함한다.",
+        "amended_statute": "소득세법 및 같은 법 시행령",
+        "related_confirmed_rule": "pension.credit.isa_transfer.extra_limit",
+        "unverified": "추가한도의 비율(10%)과 상한(300만원)이 생산적금융 ISA에도 그대로 적용되는지는 정부 문서에서 '일반 ISA와 동일하게'라는 취지로만 확인했다. 구체 수치는 개정 조문 공개 후 재확인이 필요하다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "소득세법·같은 법 시행령 개정안 — 「2026년 세제개편안」 3.(1)④ 연금계좌 세액공제 추가한도 대상에 생산적금융 ISA 전환금 추가(소득법·령)",
+        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "corroborating_url": "https://www.taxtimes.co.kr/news/article.html?no=276259",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "proposed.productive_isa.rural_special_tax_exemption",
+      "title": "생산적금융 ISA에 대한 농어촌특별세 비과세",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "생산적금융 개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "exemption",
+        "scope": "농어촌특별세",
+        "rule": "생산적금융 ISA의 조세특례에 대해 농어촌특별세를 비과세한다.",
+        "amended_statute": "농어촌특별세법",
+        "impact_note": "감면세액에 농특세(통상 감면세액의 20%)가 붙지 않는다는 뜻이다. 계산 엔진이 농특세를 다루지 않기로 하면 이 규칙은 표시용으로만 쓴다."
+      },
+      "status": "개정예고",
+      "bill_stage": "정부안",
+      "effective_from": "2027-01-01",
+      "source": {
+        "law": "농어촌특별세법 개정안 — 「2026년 세제개편안」 3.(1)② 생산적금융 ISA에 대한 농어촌특별세 비과세(농특법)",
+        "url": "https://mofe.go.kr/nw/nes/detailNesDtaView.do?searchBbsId1=MOSFBBS_000000000028&searchNttId1=MOSF_000000000078809&menuNo=4010100",
+        "corroborating_url": "https://www.taxtimes.co.kr/news/article.html?no=276259",
+        "announced_on": "2026-08-03",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    }
+  ]
+}

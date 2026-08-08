@@ -1,0 +1,522 @@
+{
+  "tax_year": 2026,
+  "status": "확정",
+  "effective_from": "2026-01-01",
+  "notes": {
+    "effective_from_semantics": "각 규칙의 effective_from은 '이 값이 2026 과세기간에 적용된다'는 뜻이다. 해당 규칙이 최초로 시행된 날짜와 다를 수 있다. 최초 시행일까지 확인한 규칙은 source.law_version에 그 근거를 적었다.",
+    "local_income_tax": "이 파일의 세율은 모두 소득세(국세) 기준이다. 흔히 인용되는 16.5% / 13.2% / 9.9% / 5.5% 같은 숫자는 여기에 개인지방소득세(tax.local.personal_income_surtax)를 더한 실효율이다. 실효율을 상수로 박지 말고 두 규칙을 곱해 산출한다.",
+    "scope_assumption": "1단계 동료 product-planner의 requirements.md가 아직 없어, 다룰 입력 항목을 tax-rules-report.md 2절에 가정으로 세우고 그 범위만 담았다. 국민연금·퇴직소득세·금융투자소득세·주택청약저축은 이번 룰셋 범위 밖이다."
+  },
+  "rules": [
+    {
+      "id": "pension.credit.rate",
+      "title": "연금계좌 세액공제율 (소득세 기준)",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true },
+        { "field": "taxpayer.has_global_income", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "bracket",
+        "basis": "해당 과세기간의 종합소득금액. 근로소득만 있는 경우에는 총급여액으로 판정한다.",
+        "brackets": [
+          {
+            "global_income_max_krw": 45000000,
+            "total_salary_only_max_krw": 55000000,
+            "rate": 0.15
+          },
+          {
+            "global_income_max_krw": null,
+            "total_salary_only_max_krw": null,
+            "rate": 0.12
+          }
+        ],
+        "boundary_rule": "경계값 포함 여부는 법문이 '이하'이므로 종합소득금액 45,000,000원 정확히 / 총급여액 55,000,000원 정확히는 15% 구간에 속한다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조의3 제1항",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정). 600만원·900만원 한도와 12%/15% 공제율은 법률 제19196호(2022.12.31. 개정, 2023.1.1. 시행)로 도입된 이후 값이 유지되고 있다.",
+        "url": "https://www.law.go.kr/법령/소득세법/제59조의3",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=7875&mi=6439",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.credit.limit.annuity_savings",
+      "title": "연금저축계좌 세액공제 대상 납입한도",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "연금저축계좌" }
+      ],
+      "value": {
+        "type": "annual_limit",
+        "amount_krw": 6000000,
+        "rule": "연금저축계좌에 납입한 금액이 연 600만원을 초과하는 경우 그 초과분은 세액공제 대상 납입액에서 제외한다(없는 것으로 본다)."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조의3 제1항 단서",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정)",
+        "url": "https://www.law.go.kr/법령/소득세법/제59조의3",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.credit.limit.combined",
+      "title": "연금계좌 세액공제 대상 납입한도 (연금저축 + 퇴직연금 합산)",
+      "conditions": [
+        { "field": "account.type", "op": "in", "value": ["연금저축계좌", "퇴직연금계좌"] }
+      ],
+      "value": {
+        "type": "annual_limit",
+        "amount_krw": 9000000,
+        "rule": "연금저축계좌 납입액 중 600만원 이내의 금액과 퇴직연금계좌(IRP·DC 가입자부담금) 납입액을 합한 금액이 연 900만원을 초과하는 경우 그 초과분은 세액공제 대상 납입액에서 제외한다.",
+        "ordering": "연금저축 한도(600만원)를 먼저 적용한 뒤 합산 한도(900만원)를 적용한다. 따라서 퇴직연금계좌만 있는 경우 900만원 전액이 대상이 되고, 연금저축만 있는 경우 최대 600만원이다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조의3 제1항 단서",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정)",
+        "url": "https://www.law.go.kr/법령/소득세법/제59조의3",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=7875&mi=6439",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.credit.isa_transfer.extra_limit",
+      "title": "ISA 만기 전환금액에 대한 연금계좌 세액공제 추가한도",
+      "conditions": [
+        { "field": "isa.contract_expired", "op": "eq", "value": true },
+        { "field": "isa.transferred_to_pension_account", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "additional_limit",
+        "formula": "min(전환금액 × 0.10, 3000000 − 직전 과세기간에 이미 적용된 금액)",
+        "rate": 0.1,
+        "cap_krw": 3000000,
+        "rule": "ISA 계약기간 만료 후 계좌 잔액의 전부 또는 일부를 연금계좌로 납입하면 그 전환금액이 납입한 날이 속하는 과세기간의 연금계좌 납입액에 포함되고, 제1항 단서의 600만원·900만원 한도와 별도로 위 금액만큼 한도가 늘어난다.",
+        "period": "전환금액을 납입한 과세기간에만 적용된다. 직전 과세기간과 해당 과세기간에 걸쳐 납입한 경우 300만원에서 직전 과세기간에 적용된 금액을 차감한다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조의3 제3항 및 제4항",
+        "law_version": "법률 제19196호(2022.12.31. 개정, 2023.1.1. 시행)로 신설된 후 유지",
+        "url": "https://www.law.go.kr/법령/소득세법/제59조의3",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=7875&mi=6439",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.contribution.annual_limit",
+      "title": "연금계좌 연간 납입한도 (세액공제 한도와 별개인 납입 자체의 한도)",
+      "conditions": [
+        { "field": "account.type", "op": "in", "value": ["연금저축계좌", "퇴직연금계좌"] }
+      ],
+      "value": {
+        "type": "annual_limit",
+        "amount_krw": 18000000,
+        "aggregation": "연금계좌가 2개 이상인 경우 각 계좌에 납입한 금액을 합산해 판정한다.",
+        "excluded_from_limit": "개인종합자산관리계좌(ISA) 전환금액 등 시행령이 별도로 정한 금액은 이 한도와 별개로 납입할 수 있다.",
+        "rule": "이 한도는 '납입할 수 있는 금액'의 한도이고, 그중 세액공제를 받는 금액의 한도는 pension.credit.limit.* 규칙이 따로 정한다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 시행령 제40조의2 제2항 제1호 가목",
+        "law_version": "대통령령 제36343호(2026.5.22. 일부개정, 2026.7.1. 시행)",
+        "url": "https://www.law.go.kr/법령/소득세법시행령/제40조의2",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.withdrawal.eligibility",
+      "title": "연금수령 요건 (이 요건을 못 갖추면 연금외수령으로 과세된다)",
+      "conditions": [
+        { "field": "account.type", "op": "in", "value": ["연금저축계좌", "퇴직연금계좌"] }
+      ],
+      "value": {
+        "type": "eligibility",
+        "requirements": [
+          {
+            "id": "age",
+            "rule": "가입자가 55세 이후 연금계좌취급자에게 연금수령 개시를 신청한 후 인출할 것",
+            "min_age": 55
+          },
+          {
+            "id": "holding_period",
+            "rule": "연금계좌의 가입일부터 5년이 경과된 후에 인출할 것",
+            "min_years": 5,
+            "exception": "연금계좌에 이연퇴직소득이 있는 경우(퇴직소득이 연금계좌에서 바로 인출되는 경우 포함)에는 이 5년 요건을 적용하지 않는다."
+          },
+          {
+            "id": "annual_cap",
+            "rule": "과세기간 개시일(연금수령 개시를 신청한 날이 속하는 과세기간에는 신청일) 현재 시행령이 정한 연금수령한도 이내에서 인출할 것",
+            "formula": "미확인 — open_questions 참조. 시행령 제40조의2 제3항 제3호의 계산식이 원문에 이미지로 실려 있어 1차 출처로 확인하지 못했다."
+          }
+        ]
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 시행령 제40조의2 제3항",
+        "law_version": "대통령령 제36343호(2026.5.22. 일부개정, 2026.7.1. 시행)",
+        "url": "https://www.law.go.kr/법령/소득세법시행령/제40조의2",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.income.withholding_rate.by_age",
+      "title": "사적연금 연금소득 원천징수세율 (연령별, 소득세 기준)",
+      "conditions": [
+        { "field": "withdrawal.kind", "op": "eq", "value": "연금수령" },
+        { "field": "income.source", "op": "eq", "value": "연금계좌 납입액 및 운용실적에 따라 증가된 금액" }
+      ],
+      "value": {
+        "type": "bracket",
+        "basis": "연금수령 당시 연금소득자의 나이",
+        "brackets": [
+          { "age_min": null, "age_max_exclusive": 70, "rate": 0.05 },
+          { "age_min": 70, "age_max_exclusive": 80, "rate": 0.04 },
+          { "age_min": 80, "age_max_exclusive": null, "rate": 0.03 }
+        ],
+        "selection_rule": "이 연령별 세율과 종신계약 세율(pension.income.withholding_rate.lifetime_annuity)이 함께 적용될 수 있는 경우에는 낮은 세율을 적용한다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제129조 제1항 제5호의2 가목",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/소득세법/제129조",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6608&cntntsId=7888",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.income.withholding_rate.lifetime_annuity",
+      "title": "종신계약 연금소득 원천징수세율 (소득세 기준)",
+      "conditions": [
+        { "field": "withdrawal.kind", "op": "eq", "value": "연금수령" },
+        { "field": "contract.is_lifetime_annuity", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "rate",
+        "rate": 0.03,
+        "rule": "사망할 때까지 연금수령하는 시행령이 정한 종신계약에 따라 받는 연금소득에 적용한다. 나이와 무관하게 단일 세율이다.",
+        "change_note": "2026.1.1.부터 종전 4%에서 3%로 인하되었다. 2025년 이전 과세기간을 계산할 때 이 값을 쓰면 안 된다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제129조 제1항 제5호의2 다목",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/소득세법/제129조",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6608&cntntsId=7888",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.income.separate_taxation.threshold",
+      "title": "사적연금소득 분리과세 기준금액",
+      "conditions": [
+        { "field": "income.type", "op": "eq", "value": "사적연금소득(소득세법 제20조의3 제1항 제2호·제3호)" }
+      ],
+      "value": {
+        "type": "threshold",
+        "amount_krw": 15000000,
+        "rule": "무조건 분리과세되는 연금소득(이연퇴직소득 연금수령분, 부득이한 사유 인출분 등)을 제외한 사적연금소득의 합계액이 연 1,500만원 이하인 경우 종합소득 과세표준에 합산하지 않고 분리과세를 선택할 수 있다.",
+        "boundary_rule": "법문이 '이하'이므로 정확히 15,000,000원은 분리과세 선택 범위에 포함된다.",
+        "applied_rate": "이 범위에서 분리과세를 택하면 pension.income.withholding_rate.* 의 원천징수세율(3~5%)로 과세가 종결된다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제14조 제3항 제9호",
+        "law_version": "1,200만원 → 1,500만원 상향분이 반영된 현행 조문 (확인한 조문 버전 시행일 2025.1.1.)",
+        "url": "https://www.law.go.kr/법령/소득세법/제14조",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.income.separate_taxation.elective_rate",
+      "title": "기준금액 초과 사적연금소득의 세액계산 특례 (종합과세 vs 15% 분리과세 선택)",
+      "conditions": [
+        { "field": "income.type", "op": "eq", "value": "사적연금소득(소득세법 제20조의3 제1항 제2호·제3호)" },
+        { "field": "income.amount_krw", "op": "gt", "value": 15000000 }
+      ],
+      "value": {
+        "type": "elective",
+        "options": [
+          { "id": "comprehensive", "rule": "종합소득 결정세액" },
+          {
+            "id": "separate",
+            "rate": 0.15,
+            "rule": "해당 연금소득에 15%를 곱한 금액 + 그 연금소득을 제외한 종합소득 결정세액"
+          }
+        ],
+        "selection_rule": "거주자가 둘 중 하나를 선택한다. 계산 엔진은 두 값을 모두 산출해 낮은 쪽을 제시하되, 선택권이 납세자에게 있음을 표시해야 한다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제64조의4",
+        "law_version": "법률 제19196호(2022.12.31. 개정, 2023.1.1. 시행)로 신설된 후 유지",
+        "url": "https://www.law.go.kr/법령/소득세법/제64조의4",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.early_withdrawal.other_income_rate",
+      "title": "연금계좌 연금외수령분에 대한 기타소득 원천징수세율 (소득세 기준)",
+      "conditions": [
+        { "field": "withdrawal.kind", "op": "eq", "value": "연금외수령" },
+        {
+          "field": "withdrawal.amount_basis",
+          "op": "eq",
+          "value": "세액공제받은 납입액 및 운용수익 (이연퇴직소득분 제외)"
+        }
+      ],
+      "value": {
+        "type": "rate",
+        "rate": 0.15,
+        "rule": "연금계좌에서 연금외수령한 금액 중 세액공제받은 납입액과 운용수익은 기타소득으로 보아 15%로 원천징수하고 분리과세로 종결한다.",
+        "exception": "시행령이 정한 부득이한 사유(사망, 해외이주, 3개월 이상 요양, 파산 등)로 인출하는 경우에는 연금소득으로 보아 연금소득 원천징수세율을 적용한다.",
+        "excluded": "이연퇴직소득분의 연금외수령에는 이 세율이 아니라 퇴직소득세가 적용된다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제129조 제1항 제6호 나목 (제21조 제1항 제21호 기타소득)",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/소득세법/제129조",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6608&cntntsId=7888",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.eligibility",
+      "title": "ISA 가입 대상",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "eligibility",
+        "any_of": [
+          { "id": "age19", "rule": "19세 이상인 거주자", "min_age": 19 },
+          {
+            "id": "age15_employed",
+            "rule": "15세 이상인 거주자로서 직전 과세기간에 근로소득이 있는 자 (비과세소득만 있는 자는 제외)",
+            "min_age": 15,
+            "requires": "직전 과세기간 근로소득 보유"
+          }
+        ],
+        "unverified": "금융소득종합과세 대상자 배제 요건은 조문 제1항에서 1차 출처로 확인하지 못했다. open_questions 참조."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제1항 제1호·제2호",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.tax_free_limit",
+      "title": "ISA 이자·배당소득 비과세 한도금액",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "bracket",
+        "basis": "직전 과세기간의 총급여액 또는 종합소득과세표준에 합산되는 종합소득금액",
+        "brackets": [
+          {
+            "id": "서민형",
+            "prev_total_salary_max_krw": 50000000,
+            "prev_global_income_max_krw": 38000000,
+            "match": "any_of",
+            "limit_krw": 4000000
+          },
+          {
+            "id": "일반형",
+            "prev_total_salary_max_krw": null,
+            "prev_global_income_max_krw": null,
+            "limit_krw": 2000000
+          }
+        ],
+        "boundary_rule": "법문이 '이하'이므로 총급여 50,000,000원 정확히, 종합소득금액 38,000,000원 정확히는 400만원 구간이다.",
+        "unverified": "농어민에 대한 400만원 한도 적용 여부는 조문에서 직접 확인하지 못했다. open_questions 참조."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제2항",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.excess.separate_tax_rate",
+      "title": "ISA 비과세 한도 초과분 분리과세 세율 (소득세 기준)",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" },
+        { "field": "isa.net_income_krw", "op": "gt", "value": "isa.tax_free_limit" }
+      ],
+      "value": {
+        "type": "rate",
+        "rate": 0.09,
+        "rule": "비과세 한도금액을 초과하는 금액에 대해서는 9%의 세율을 적용하고, 종합소득과세표준에 합산하지 않는다(분리과세).",
+        "comparison_baseline": "일반 이자·배당소득의 원천징수세율은 14%(지방소득세 포함 15.4%)이므로 ISA 초과분은 그보다 낮게 종결된다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제1항",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.account.requirements",
+      "title": "ISA 계좌 요건 (계좌 수 · 계약기간 · 총 납입한도)",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "requirements",
+        "accounts_per_person": 1,
+        "min_contract_years": 3,
+        "total_contribution_limit_krw": 100000000,
+        "rule": "1명당 1개의 계좌만 보유할 것, 계약기간이 3년 이상일 것, 총납입한도가 1억원 이하일 것."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제3항",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.contribution.annual_limit",
+      "title": "ISA 연간 납입한도와 미납입분 이월",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "annual_limit",
+        "amount_krw": 20000000,
+        "carry_forward": true,
+        "carry_forward_rule": "해당 연도에 채우지 못한 연간 한도는 이후 과세기간으로 이월된다. 누적 납입액은 총 납입한도 1억원을 넘을 수 없다.",
+        "confidence": "corroborated",
+        "verification_note": "조세특례제한법 제91조의18 제3항 제5호는 '연간 납입한도가 다음의 계산식에 따른 금액일 것'이라고만 정하고 계산식이 조문에 이미지로 실려 있어, 원문 산식을 1차 출처로 직접 읽지 못했다. 금액(연 2,000만원)과 이월 가능 여부는 (1) 금융투자협회 「투자중개형 개인종합자산관리계좌 실무지침」, (2) 재정경제부 「2026년 세제개편안」이 현행 제도를 '연간 납입한도 미납입분 이월 가능'으로 기술하고 이를 폐지 대상으로 삼은 점, 두 가지로 교차확인했다. 게이트 1 전에 시행령 원문 확인이 필요하다 — open_questions 참조."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제3항 제5호 및 같은 법 시행령의 계산식",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "corroborating_url": "https://law.kofia.or.kr/service/law/lawFullScreenContent.do?seq=343&historySeq=1617",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.net_income.loss_offset",
+      "title": "ISA 계좌 내 손익통산",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" }
+      ],
+      "value": {
+        "type": "computation",
+        "rule": "과세 대상이 되는 이자소득등의 합계액은 계좌에 편입한 금융상품에서 발생한 이익에서 손실을 시행령이 정한 방법에 따라 차감해 계산한다. 즉 계좌 단위 순소득이 과세 기준이다.",
+        "impact": "일반 위탁계좌는 상품별로 이익에만 과세되므로, 손실 상품이 섞여 있을수록 ISA의 상대 이점이 커진다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제5항",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.early_termination.clawback",
+      "title": "ISA 의무가입기간(3년) 경과 전 해지 시 감면세액 추징",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" },
+        { "field": "isa.terminated_before_3y", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "clawback",
+        "rule": "계약기간이 3년이 되는 날 전에 계약을 해지하는 경우 과세특례를 적용받은 소득세에 상당하는 세액을 추징한다.",
+        "exception": "계좌보유자의 사망·해외이주 등 시행령이 정한 부득이한 사유로 해지하는 경우는 추징하지 않는다.",
+        "unverified": "부득이한 사유의 구체적 목록은 시행령에서 1차 출처로 확인하지 못했다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제7항",
+        "law_version": "법률 제21223호(2025.12.23. 일부개정, 2026.1.1. 시행)",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "tax.local.personal_income_surtax",
+      "title": "개인지방소득세 (소득세에 부가되는 지방세)",
+      "conditions": [
+        { "field": "tax.kind", "op": "eq", "value": "소득세" }
+      ],
+      "value": {
+        "type": "surtax",
+        "rate_of_income_tax": 0.1,
+        "rule": "원천징수의무자가 거주자로부터 소득세를 원천징수하는 경우 그 소득세의 10%를 개인지방소득세로 특별징수한다.",
+        "derived_effective_rates": {
+          "연금계좌 세액공제 15% → 실효": 0.165,
+          "연금계좌 세액공제 12% → 실효": 0.132,
+          "ISA 초과분 9% → 실효": 0.099,
+          "연금소득 5% → 실효": 0.055,
+          "연금소득 4% → 실효": 0.044,
+          "연금소득 3% → 실효": 0.033,
+          "연금외수령 기타소득 15% → 실효": 0.165
+        },
+        "engine_note": "derived_effective_rates는 참고용이다. 엔진은 이 표를 상수로 읽지 말고 각 소득세율 × 1.1로 산출해야 세율이 하나만 바뀌어도 전부 따라 움직인다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "지방세법 제103조의13 (특별징수의무)",
+        "law_version": "확인 시점의 현행 조문",
+        "url": "https://www.law.go.kr/법령/지방세법/제103조의13",
+        "verified_on": "2026-08-08",
+        "verified_by": "tax-domain"
+      }
+    }
+  ]
+}
