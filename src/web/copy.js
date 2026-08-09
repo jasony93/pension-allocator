@@ -76,6 +76,9 @@ const ERROR_MESSAGE = {
   negative_value: () => '0 이상의 값이 필요합니다.',
   out_of_range: () => '허용 범위를 벗어난 값입니다.',
   invalid_enum: () => '유효하지 않은 선택지입니다.',
+  // 오류 params에 입력값을 되풀이하지 않는다(D21이 유지한 여섯 못 중 하나) —
+  // 계약도 `invalid_date`의 params에 입력값을 싣지 않는다(8.1절).
+  invalid_date: () => '달력에 없는 날짜입니다. 월과 일을 확인해 주세요.',
   isa_transfer_exceeds_cumulative: () => 'ISA 만기 전환 금액이 ISA 누적 납입액을 초과합니다.',
   isa_ytd_exceeds_cumulative: () => 'ISA 당해연도 납입액이 누적 납입액을 초과합니다.',
   empty_scenarios: () => '계산할 시나리오가 없습니다.',
@@ -104,6 +107,11 @@ const NOTICE_MESSAGE = {
   isa_type_conflicts_with_prior_income: () => '입력한 ISA 계좌 유형이 직전 과세기간 소득 기준 판정과 다릅니다. 계산은 입력한 유형을 그대로 따랐습니다.',
   isa_type_not_declared: () => 'ISA 계좌 유형을 입력하지 않아 비과세 한도 표시를 생략했습니다.',
   isa_tenure_missing: () => 'ISA 가입 시기를 받지 않아 남은 의무가입기간을 가장 길게 잡았습니다.',
+  // 계약 3.1.0에서 들어온 코드인데 사전에 빠져 있었다 — 그대로 두면 화면에
+  // 코드 문자열이 그대로 뜬다. **경고가 아니라 사실 통지다**(계약 0.2절):
+  // 법적 불이익이 아니라 입력과 현실이 어긋난다는 정보다.
+  isa_lock_in_already_elapsed: () =>
+    'ISA 의무가입기간이 이미 지난 것으로 계산됐습니다. 그 기간 안에 쓸 수 있다고 고르셨지만 중도해지 추징 규칙은 걸리지 않습니다.',
   financial_income_status_unknown: () => '금융소득종합과세 대상 여부를 받지 않아 ISA 배제 규칙을 적용하지 않았습니다.',
   isa_excluded_financial_income_taxpayer: () => '금융소득종합과세 대상자에 해당해 ISA를 배분 대상에서 제외했습니다.',
   isa_excluded_age: () => 'ISA 가입에 필요한 연령 요건에 해당하지 않아 ISA를 배분 대상에서 제외했습니다.',
@@ -115,6 +123,25 @@ const NOTICE_MESSAGE = {
   plans_collapsed_single: () => '입력한 조건에서는 비교할 다른 배분이 나오지 않았습니다.',
   fund_use_horizon_not_declared: () => '자금 사용 시점을 밝히지 않아 중도 인출 관련 규칙이 걸리는지 판정하지 않았습니다.',
   pension_holding_period_not_evaluated: () => '연금계좌 가입 경과연수를 받지 않아 보유기간 요건은 판정하지 않았습니다.',
+
+  // -- 계약 4.0.0으로 들어온 안내 코드 ---------------------------------------
+  // 문구에 세법 수치가 없다. 금액이 필요한 자리는 전부 엔진이 준 `params`나
+  // 응답 필드에서 채우고, 이 사전은 문장만 갖는다.
+  tax_liability_cap_unknown: () =>
+    '직전 과세연도 결정세액을 받지 않아 연금계좌 세액공제가 낼 세금에 걸리는지 확인하지 못했습니다. 위 금액은 상한이며 실제 금액은 이보다 작을 수 있습니다.',
+  // **오류가 아니라 결과다** — 이 사용자에게는 0이 정확한 답이므로 오류·경고
+  // 색을 쓰지 않는다(계약 8.2절).
+  tax_liability_cap_zero: () =>
+    '입력한 직전 과세연도 결정세액이 0원이어서, 연금계좌 세액공제로 계산되는 금액이 이번 과세연도에 없습니다.',
+  tax_liability_cap_applied: () =>
+    '계산된 세액공제액의 일부가 이번 과세연도의 낼 세금을 넘어 이 결과에 들어 있지 않습니다.',
+  pension_contribution_blocked_annuity_started: () =>
+    '연금 수령을 이미 개시한 계좌에는 납입액이 연금보험료로 인정되지 않아, 그 계좌를 배분 대상에서 제외했습니다.',
+  pension_annuity_start_unknown: () => '연금 수령 개시 여부를 받지 않아 그 계좌의 배분을 보류했습니다.',
+  pension_start_date_not_computable: () =>
+    '연금계좌 가입일을 받지 않아 연금으로 받을 수 있는 가장 이른 시점을 계산하지 않고 연령 요건만 확인했습니다.',
+  retirement_transfer_excluded_from_credit: () =>
+    '퇴직급여 입금액·계약이전액은 세액공제 대상 납입액에서 제외하고 계산했습니다.',
 };
 
 export function noticeMessage(notice) {
@@ -140,6 +167,23 @@ const ASSUMPTION_MESSAGE = {
   fund_use_horizon_excluded_from_amounts: () => '자금 사용 시점은 배분 금액과 세액공제액에 반영하지 않았습니다. 배분안의 순서와 안내에만 쓰였습니다.',
   early_exit_penalty_not_quantified: () => '중도 인출·해지 시의 세부담은 금액으로 계산하지 않았습니다.',
   pension_holding_period_not_evaluated: () => '연금계좌 가입 경과연수를 받지 않아 보유기간 요건은 판정하지 않았습니다.',
+
+  // -- 계약 4.0.0으로 들어온 가정 코드 ---------------------------------------
+  // **값이 아니라 처리 방식을 말한다**(점검표 11.6). 만 나이 자체를 여기 적으면
+  // 이 항목이 공유 이미지에 실릴 때 나이가 함께 나간다 — designer가 박은 못이다.
+  age_reference_date_not_in_ruleset: (params) =>
+    `만 나이의 판정 기준일을 정하는 규칙이 세법 룰셋에 없어, 과세기간 종료일${
+      params.reference_date ? `(${params.reference_date})` : ''
+    }을 기준으로 환산해 계산했습니다. 기준일이 다르면 결과가 달라질 수 있습니다.`,
+  prior_pension_credit_zero_assumed: () =>
+    '직전 과세연도에 이미 받은 연금계좌 세액공제액을 받지 않아 0으로 보고 계산했습니다. 실제로 받은 금액이 있으면 낼 세금의 한도가 결과보다 커집니다.',
+  retirement_transfer_counted_in_contribution_limit: () =>
+    '퇴직급여 입금액·계약이전액이 연간 납입한도를 쓰는지 세법 룰셋이 정하지 않아, 쓰는 쪽으로 보고 계산했습니다. 실제로 쓰지 않는다면 배분할 수 있는 금액이 결과보다 큽니다.',
+  deferred_retirement_income_absent_assumed: () =>
+    '이연퇴직소득 유무를 받지 않아 없는 것으로 보고 계산했습니다. 실제로 있으면 연금으로 받을 수 있는 시점이 결과보다 이릅니다.',
+  local_tax_follows_income_tax_cap: () =>
+    '개인지방소득세에도 같은 낼 세금 한도가 걸리는지 세법 룰셋이 확인하지 않아, 한도 안에서 인정된 소득세분에만 부가율을 적용해 계산했습니다.',
+
   // 화면이 직접 만드는 조건부 항목(엔진 notice가 아니라 입력 상태에서 파생) —
   // screens.md 4.5절 표의 나머지 행.
   isa_account_type_defaulted: () => 'ISA 계좌 유형을 일반형으로 두고 계산했습니다. 서민형이면 비과세 한도가 달라집니다.',
@@ -192,6 +236,12 @@ const EXCLUSION_REASON_MESSAGE = {
   isa_excluded_age: () => 'ISA 가입에 필요한 연령 요건에 해당하지 않아 이번 계산의 배분 대상이 아닙니다.',
   isa_excluded_financial_income_taxpayer: () =>
     '직전 3개 과세기간 중 금융소득종합과세 대상이었던 경우 ISA 과세특례가 적용되지 않습니다. 그래서 이번 계산의 배분 대상이 아닙니다.',
+  // 계약 4.0.0 — 연금 수령을 개시한 계좌는 납입액이 연금보험료로 인정되지 않는다.
+  // 주어가 법령 요건이고 조치를 지시하지 않는다(screens.md 5.9절 규약).
+  pension_contribution_blocked_annuity_started: () =>
+    '연금 수령을 개시한 계좌에는 납입액이 연금보험료로 인정되지 않아 이번 계산의 배분 대상이 아닙니다.',
+  pension_annuity_start_unknown: () =>
+    '연금 수령 개시 여부를 받지 않아 이 계좌의 배분을 보류했습니다. 값을 고르면 이 계좌가 계산에 들어갑니다.',
 };
 
 export function exclusionReasonMessage(code) {
@@ -354,6 +404,11 @@ const COMPARISON_NOTE_MESSAGE = {
   baseline_reordered_by_fund_use_horizon: () =>
     '세액공제액이 가장 큰 배분이 기본안이 아닙니다. 자금 사용 시점 선택에 따라 순서가 바뀌었습니다.',
   alternatives_have_equal_tax_credit: () => '둘 이상의 배분안이 같은 세액공제액을 냅니다.',
+  // 계약 8.5절 — `alternatives_have_equal_tax_credit`와 달리 **그 동률이 앞으로
+  // 어떤 배분에서도 깨지지 않는다**는 사실까지 말한다(5.12절). 그래서 문장이
+  // "지금 같다"가 아니라 "이 축으로는 갈리지 않는다"이다.
+  tax_credit_axis_not_discriminating: () =>
+    '입력한 직전 과세연도 결정세액이 0원이어서 세액공제액으로는 배분안이 갈리지 않습니다. 아래는 계좌 구성의 차이입니다.',
 };
 
 export function comparisonNoteMessage(code) {
@@ -387,3 +442,151 @@ export const EXPECTATION_COPY = [
 ];
 
 export const HORIZON_EFFECT_CAPTION = '이 선택은 계산되는 금액을 바꾸지 않습니다. 어떤 배분안을 먼저 보여줄지와 중도 인출 관련 안내만 달라집니다.';
+
+// ---------------------------------------------------------------------------
+// 생년월일 (screens.md 3.7절 · design-system 5.25절)
+//
+// **만 나이를 필드 옆에 되비추지 않는다.** 확인 텍스트가 화면에 상주하면
+// 스크린샷·화면 녹화·공유 이미지에 함께 실린다. 되비추기의 이득(오타 확인)은
+// 오류 메시지가 이미 담당한다.
+// ---------------------------------------------------------------------------
+
+export const BIRTH_DATE_LABEL = '생년월일';
+export const BIRTH_DATE_PLACEHOLDER = 'YYYY-MM-DD';
+export const BIRTH_DATE_HELP = '만 나이를 계산에 씁니다. 이 값은 브라우저 밖으로 나가지 않습니다.';
+
+// ---------------------------------------------------------------------------
+// 직전 과세연도 결정세액 (screens.md 3.8절 · design-system 5.26절)
+//
+// **항목명은 세법 서식이 쓰는 이름을 그대로 쓴다**(design-system 7.1절). `낼 세금`
+// 같은 구어를 라벨로 쓰지 않는다 — 사용자가 서류에서 찾아야 하는 값이므로
+// 서류에 적힌 이름과 같아야 한다. 계약 3.5절이 이 항목을 근로소득 원천징수영수증
+// **Ⅲ 세액명세**의 「결정세액」 칸으로 지목한다.
+// ---------------------------------------------------------------------------
+
+export const PRIOR_TAX_LABEL = '직전 과세연도 결정세액';
+export const PRIOR_TAX_UNKNOWN_LABEL = '모르겠습니다';
+/** 효과 고지 캡션 — **비울 수 없는 슬롯**(R1). */
+export const PRIOR_TAX_EFFECT_CAPTION = '이 값이 0이면 연금계좌 세액공제로 계산되는 금액이 없습니다.';
+export const PRIOR_TAX_CHECKLIST_HINT = '모르면 "모르겠습니다"를 고르면 됩니다. 결과는 나옵니다.';
+
+/**
+ * `SourceGuide` — "이 값을 어디서 찾나요"(3.8.4절).
+ *
+ * **화면이 항목명·경로를 지어내지 않는다.** 종이 서식의 위치는 계약 3.5절이
+ * 지목한 그대로다. 홈택스 메뉴 경로는 아직 확정된 출처가 없으므로 **자리표시자를
+ * 남기고, 남아 있다는 사실을 개발 빌드가 드러낸다**(D19 — 미설정 상태는 조용하면
+ * 안 된다).
+ */
+export const SOURCE_GUIDE_TRIGGER = '이 값을 어디서 찾나요';
+export const SOURCE_GUIDE_ITEMS = [
+  {
+    heading: '① 종이·PDF로 갖고 있다면',
+    body: '근로소득 원천징수영수증 「Ⅲ 세액명세」의 「결정세액」 칸',
+    placeholder: false,
+  },
+  {
+    heading: '② 온라인으로 확인한다면',
+    body: '{홈택스 메뉴 경로}',
+    placeholder: true,
+  },
+  {
+    heading: '③ 지금 확인할 수 없다면',
+    body: '위의 "모르겠습니다"를 고르면 계산은 그대로 나옵니다. 다만 결과가 어느 방향으로 틀릴 수 있는지 함께 표시됩니다.',
+    placeholder: false,
+  },
+];
+export const SOURCE_GUIDE_PLACEHOLDER_NOTICE = '[개발 빌드] 이 줄의 경로가 아직 확정되지 않았습니다.';
+
+// ---------------------------------------------------------------------------
+// 현재 연금 수령 여부 (screens.md 3.10.1절)
+// ---------------------------------------------------------------------------
+
+export const ANNUITY_START_LABEL = '지금 연금을 받고 계신가요?';
+export const ANNUITY_START_EFFECT_CAPTION =
+  '연금 수령을 개시한 계좌에는 납입액이 연금보험료로 인정되지 않아, 그 계좌가 배분 대상에서 빠집니다.';
+/** `예`일 때 선택지 그룹 위에 두는 사실 통지. **조치를 지시하지 않는다**(5.9절 규약). */
+export const ANNUITY_STARTED_HORIZON_NOTE =
+  '연금을 이미 받고 계신 경우, 아래 선택지의 "연금 수령 나이"를 기준으로 한 구분은 이미 지난 시점을 가리킵니다.';
+
+// ---------------------------------------------------------------------------
+// 금융소득종합과세 대상 여부 (screens.md 3.6절 — ISA 조건부 블록 안)
+// ---------------------------------------------------------------------------
+
+export const FINANCIAL_INCOME_LABEL = '직전 3개 과세기간 중 금융소득종합과세 대상이었던 적이 있나요?';
+export const FINANCIAL_INCOME_EFFECT_CAPTION =
+  '해당하면 ISA 과세특례가 적용되지 않아 ISA가 배분 대상에서 빠집니다. 모르겠으면 이 규칙을 적용하지 않고 계산합니다.';
+
+// ---------------------------------------------------------------------------
+// 청년 자기신고 (screens.md 3.9절 · design-system 5.28절)
+//
+// **연령 범위 숫자를 화면이 쓰지 않는다.** 청년 우대 규칙의 연령 범위는 시행령
+// 위임이고 시행령 개정안이 아직 공개되지 않아 룰셋에 값이 없다. 화면이 정부
+// 발표의 숫자를 적으면 **출처 없는 숫자를 말하는 것**이 된다(제품 원칙 1·2).
+// 아래 문장 어디에도 연령 숫자가 없고, 룰셋에 값이 실릴 때만 켜지는 줄은
+// `YOUTH_DECLARED_RANGE_NOTE` 하나뿐이며 그것도 숫자를 인쇄하지 않는다.
+// ---------------------------------------------------------------------------
+
+export const YOUTH_BLOCK_TITLE = '청년 우대 (개정안)';
+export const YOUTH_DECLARE_LABEL = '개정안의 청년 우대 대상이라고 보고 계산에 반영합니다';
+export const YOUTH_AGE_UNDETERMINED_LINE = '대상 연령은 아직 시행령으로 정해지지 않았습니다.';
+export const YOUTH_SCENARIO_SCOPE_CAPTION =
+  '개정안 시나리오에만 적용됩니다. 확정 세법 기준 시나리오의 결과는 달라지지 않습니다.';
+/**
+ * 룰셋에 연령 범위가 실려 있고 엔진이 낸 만 나이가 그 안에 들어올 때만 나타나는
+ * 줄. **주어는 발표·법령이지 사용자가 아니다**(design-system 5.28절) —
+ * `고객님은 청년에 해당합니다` 형태를 쓰지 않는다. 숫자는 여기에도 없다.
+ */
+export const YOUTH_DECLARED_RANGE_NOTE =
+  '정부가 발표한 개정안 기준으로는 청년 우대 대상 연령에 들어갑니다. 다만 대상 연령은 아직 시행령으로 정해지지 않았습니다.';
+
+// ---------------------------------------------------------------------------
+// 출처가 같은 입력을 인접시킨다 (screens.md 3.11.4절 (c))
+// ---------------------------------------------------------------------------
+
+export const WITHHOLDING_RECEIPT_DIVIDER = '원천징수영수증에서 오는 값';
+
+// ---------------------------------------------------------------------------
+// 낼 세금이 결과를 바꾸는 세 상태 (screens.md 4.8절 · design-system 5.6절)
+//
+// **화면이 뺄셈을 하지 않는다.** 자르기 전 금액과 잘린 금액을 엔진이 둘 다 내고
+// (계약 5.6절), 임계값도 엔진이 낸다(E4). 아래 함수들은 받은 금액을 문장에
+// 끼우기만 한다 — 어떤 산술도 하지 않는다.
+// ---------------------------------------------------------------------------
+
+export const AMOUNT_CARD_LABEL = '이 배분으로 계산된 연간 절세액';
+/** 한도가 0으로 확정된 상태의 라벨. 주어가 세액공제액이다(P3). */
+export const AMOUNT_CARD_LABEL_ZERO = '이 배분에서 계산되는 세액공제액';
+/** 상한 접두 — `최대`는 상한 변형에서만 쓴다(design-system 7.1절). */
+export const BOUNDED_AMOUNT_PREFIX = '최대';
+
+/** 슬롯4 — **임계값과 틀릴 방향을 한 문장에** 담는다. 비울 수 없다. */
+export function boundedDirectionNote(thresholdIncomeTaxKrw) {
+  return `이 배분의 세액공제액은 ${formatKrw(thresholdIncomeTaxKrw)}입니다. 직전 과세연도 결정세액이 그보다 적으면 절세액은 그만큼 줄어듭니다. 늘지는 않습니다.`;
+}
+
+/** 되돌아갈 경로 — **버튼이 아니라 텍스트 링크**다(design-system 5.6절). */
+export const BOUNDED_BACK_LINK = `▸ ${PRIOR_TAX_LABEL} 넣기`;
+
+/** 잘림 상태의 한 줄. **이후 처리를 단정하지 않는다**(4.8절 (2)). */
+export function capReducedNote(beforeCapKrw, reducedKrw) {
+  return `계산된 세액공제액 ${formatKrw(beforeCapKrw)} 중 ${formatKrw(
+    reducedKrw,
+  )}은 이번 과세연도의 낼 세금을 넘어 이 결과에 들어 있지 않습니다.`;
+}
+
+/**
+ * **"넣은 돈이 사라진다"고 쓰지 않는다**(계약 10절). 소멸하는 것은 그해의
+ * 세액공제액이고 납입액은 **신청을 통해** 이후 과세기간으로 넘길 수 있다.
+ */
+export const CAP_CARRYOVER_NOTE =
+  '이 결과에 들어 있지 않은 금액에 해당하는 납입액은 신청을 통해 이후 과세기간으로 넘길 수 있습니다.';
+
+export const AMOUNT_CARD_CAPTION_BOUNDED_CLAUSE = `${PRIOR_TAX_LABEL}을 받지 않아 전액 적용된다고 보고 계산`;
+export const AMOUNT_CARD_CAPTION_REDUCED_CLAUSE = `입력한 ${PRIOR_TAX_LABEL}까지만 반영`;
+export const AMOUNT_CARD_CAPTION_ZERO_CLAUSE = `입력한 ${PRIOR_TAX_LABEL}이 0원 · 연금계좌 세액공제는 낼 세금의 범위에서 적용됩니다`;
+
+/** C-3 위 한 줄 — 잘림이 배분안마다 다를 수 있다(4.8절 (2) 마지막 항목). */
+export const STACKBAR_CAP_APPLIED_NOTE = '아래 금액은 낼 세금까지만 반영한 값입니다.';
+/** C-3 위 한 줄 — 한 화면에서 같은 성격의 금액이 한쪽만 상한 표기이면 안 된다(4.8절 (1) 규칙). */
+export const STACKBAR_BOUNDED_NOTE = `${PRIOR_TAX_LABEL}을 받지 않아 아래 금액도 상한으로 계산된 값입니다.`;

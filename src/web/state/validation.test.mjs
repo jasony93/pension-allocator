@@ -1,106 +1,190 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateForm, formDerivedAssumptionCodes } from './validation.js';
+import { validateForm, validateBirthDate, formDerivedAssumptionCodes, CORE_REQUIREMENTS } from './validation.js';
 import { assumptionMessage } from '../copy.js';
+import { initialForm } from './store.js';
+
+/** 오늘을 고정한다 — 미래 날짜 판정이 달력 날짜에 흔들리면 안 된다. */
+const TODAY = new Date(2026, 7, 9);
 
 function baseForm(overrides = {}) {
   return {
-    age: '38',
+    ...initialForm(),
+    birthDate: '1988-03-15',
     currentSalary: '62000000',
-    priorSalaryEnabled: false,
-    priorSalary: '',
+    priorTaxState: 'amount',
+    priorTaxAmount: '3000000',
+    annuityStarted: false,
     fundUseHorizon: 'unknown',
     monthlyCapacity: '800000',
     annuitySavingsYtd: '0',
     retirementPensionYtd: '0',
-    isaExists: false,
-    isaAccountType: 'general',
     isaCumulative: '0',
     isaYtd: '0',
-    isaTransferEnabled: false,
-    isaTransferAmount: '',
-    isaTransferDestination: 'retirement_pension',
     isaTransferPriorApplied: '0',
     ...overrides,
   };
 }
 
+const validate = (form) => validateForm(form, { today: TODAY });
+
 test('a fully valid core form is ready to compute', () => {
-  const result = validateForm(baseForm());
+  const result = validate(baseForm());
   assert.equal(result.readyToCompute, true);
   assert.equal(result.hasErrors, false);
-  assert.equal(result.requiredFilledCount, 4);
+  // 분모는 4에서 6이 됐다 — 생년월일 · 총급여액 · 결정세액 · 월 납입 여력 ·
+  // 연금 수령 여부 · 자금 사용 시점(screens.md 3.6절).
+  assert.equal(result.requiredFilledCount, 6);
+  assert.equal(result.requiredTotal, 6);
 });
 
-test('missing any of the four core fields blocks computation without erroring the others', () => {
-  const result = validateForm(baseForm({ monthlyCapacity: '' }));
+test('missing any of the core fields blocks computation without erroring the others', () => {
+  const result = validate(baseForm({ monthlyCapacity: '' }));
   assert.equal(result.readyToCompute, false);
   assert.equal(result.coreComplete, false);
-  assert.ok(!result.errors.age);
+  assert.ok(!result.errors.birthDate);
 });
 
-test('non-integer age is rejected', () => {
-  const result = validateForm(baseForm({ age: '38.5' }));
-  assert.equal(result.errors.age.code, 'not_integer');
+// --- 생년월일 (screens.md 3.7절 · D21) --------------------------------------
+
+test('the birth date field takes a whole date, not an age — and the form has no age field at all', () => {
+  assert.ok(!('age' in initialForm()), '나이는 생년월일로 대체됐다(계약 4.0.0에서 age_years가 사라졌다)');
+  assert.ok(CORE_REQUIREMENTS.some((r) => r.key === 'birthDate'));
+  assert.ok(!CORE_REQUIREMENTS.some((r) => r.key === 'age'));
 });
 
-test('non-numeric age is rejected', () => {
-  const result = validateForm(baseForm({ age: 'abc' }));
-  assert.equal(result.errors.age.code, 'not_integer');
+test('an incomplete birth date asks for eight digits and does not guess', () => {
+  assert.equal(validateBirthDate('1988-03', TODAY).code, 'incomplete');
+  assert.equal(validateBirthDate('19880315', TODAY).code, 'incomplete');
+});
+
+test('a date that is not on the calendar is rejected rather than rolled over', () => {
+  // `2월 30일`을 Date에 넘기면 조용히 3월로 넘어간다 — 넘어간 값으로 계산하면
+  // 사용자가 넣지 않은 날짜로 결과가 나온다.
+  assert.equal(validateBirthDate('2026-02-30', TODAY).code, 'not_a_date');
+  assert.equal(validateBirthDate('1988-13-01', TODAY).code, 'not_a_date');
+  assert.equal(validateBirthDate('2024-02-29', TODAY), undefined, '윤년 2월 29일은 달력에 있는 날짜다');
+});
+
+test('a future birth date is rejected', () => {
+  assert.equal(validateBirthDate('2026-08-10', TODAY).code, 'future');
+  assert.equal(validateBirthDate('2026-08-09', TODAY), undefined, '오늘은 미래가 아니다');
+});
+
+test('no birth date error message repeats what the user typed', () => {
+  // D21이 유지한 여섯 못 중 하나. 값을 되풀이하면 DOM에 한 번 더 복제되고
+  // `aria-live`로 읽혀 나가며 스크린샷에도 남는다.
+  for (const value of ['1988-13-45', '2026-02-30', '2099-01-01', '1988-0', '0500-01-01']) {
+    const err = validateBirthDate(value, TODAY);
+    if (!err) continue;
+    assert.ok(!err.message.includes(value), `오류 문구가 입력값을 되풀이한다: ${err.message}`);
+    for (const fragment of value.split('-')) {
+      assert.ok(!err.message.includes(fragment), `오류 문구가 입력값 조각을 되풀이한다: ${err.message}`);
+    }
+  }
+});
+
+test('validation never derives an age — the reference date is a tax judgement (D21)', () => {
+  const result = validate(baseForm({ birthDate: '1988-03-15' }));
+  assert.equal(result.readyToCompute, true);
+  for (const key of Object.keys(result)) {
+    assert.ok(!/age/i.test(key), `검증 결과에 나이 파생값이 있다: ${key}`);
+  }
+});
+
+// --- 직전 과세연도 결정세액 (screens.md 3.8절) -------------------------------
+
+test('blank and unknown are different states — blank blocks, unknown computes', () => {
+  const blank = validate(baseForm({ priorTaxState: null, priorTaxAmount: '' }));
+  assert.equal(blank.readyToCompute, false, '비어 있는 것을 모름으로 간주하면 침묵에서 답을 추론하는 것이다(D14)');
+  assert.ok(!blank.errors.priorTaxAmount, '빈 상태는 오류가 아니다 — 체크리스트가 말한다');
+
+  const unknown = validate(baseForm({ priorTaxState: 'unknown', priorTaxAmount: '' }));
+  assert.equal(unknown.readyToCompute, true, '모름은 결과를 막지 않는다');
+});
+
+test('zero is a valid answer and is not the same as unknown', () => {
+  const zero = validate(baseForm({ priorTaxState: 'amount', priorTaxAmount: '0' }));
+  assert.equal(zero.readyToCompute, true);
+  assert.equal(zero.hasErrors, false);
+});
+
+test('a negative or non-integer determined tax is an error', () => {
+  assert.equal(validate(baseForm({ priorTaxAmount: '-1' })).errors.priorTaxAmount.code, 'negative');
+  assert.equal(validate(baseForm({ priorTaxAmount: '3.5' })).errors.priorTaxAmount.code, 'not_integer');
+});
+
+test('a determined tax above the salary is a confirmation request, not a block', () => {
+  // 차단이 아니라 확인 요청이다(3.8.3절) — 이론적으로 불가능하다고 단정할 근거를
+  // 화면이 갖고 있지 않으므로 계산은 진행한다.
+  const result = validate(baseForm({ currentSalary: '10000000', priorTaxAmount: '20000000' }));
+  assert.equal(result.readyToCompute, true);
+  assert.ok(!result.errors.priorTaxAmount);
+  assert.equal(result.warnings.priorTaxAmount.code, 'exceeds_salary');
+});
+
+// --- 현재 연금 수령 여부 (screens.md 3.10.1절) -------------------------------
+
+test('the annuity-start question has no preselected answer and blocks until answered', () => {
+  assert.equal(initialForm().annuityStarted, null, '`아니오`를 미리 채우면 미접촉과 구분되지 않는다(D14)');
+  const untouched = validate(baseForm({ annuityStarted: null }));
+  assert.equal(untouched.readyToCompute, false);
+  assert.equal(untouched.errors.annuityStarted.code, 'missing');
+  assert.equal(validate(baseForm({ annuityStarted: true })).readyToCompute, true);
 });
 
 test('negative salary, capacity, and ytd contributions are all rejected', () => {
-  const result = validateForm(baseForm({ currentSalary: '-1', monthlyCapacity: '-1', annuitySavingsYtd: '-1' }));
+  const result = validate(baseForm({ currentSalary: '-1', monthlyCapacity: '-1', annuitySavingsYtd: '-1' }));
   assert.equal(result.errors.currentSalary.code, 'negative');
   assert.equal(result.errors.monthlyCapacity.code, 'negative');
   assert.equal(result.errors.annuitySavingsYtd.code, 'negative');
 });
 
 test('ytd contributions default to 0 and do not block computation when left blank', () => {
-  const result = validateForm(baseForm({ annuitySavingsYtd: '', retirementPensionYtd: '' }));
+  const result = validate(baseForm({ annuitySavingsYtd: '', retirementPensionYtd: '' }));
   assert.equal(result.readyToCompute, true);
   assert.equal(result.hasErrors, false);
 });
 
 test('fund_use_horizon has no default — leaving it unselected blocks computation', () => {
-  const result = validateForm(baseForm({ fundUseHorizon: null }));
+  const result = validate(baseForm({ fundUseHorizon: null }));
   assert.equal(result.readyToCompute, false);
   assert.equal(result.errors.fundUseHorizon.code, 'missing');
 });
 
 test('ISA fields are not evaluated at all when ISA is not held', () => {
-  const result = validateForm(baseForm({ isaExists: false, isaCumulative: '-999' }));
+  const result = validate(baseForm({ isaExists: false, isaCumulative: '-999' }));
   assert.equal(result.hasErrors, false, 'isaCumulative should be ignored while isaExists is false');
 });
 
 test('enabling ISA transfer without an amount blocks computation even though core fields are valid', () => {
-  const result = validateForm(baseForm({ isaExists: true, isaCumulative: '5000000', isaTransferEnabled: true, isaTransferAmount: '' }));
+  const result = validate(baseForm({ isaExists: true, isaCumulative: '5000000', isaTransferEnabled: true, isaTransferAmount: '' }));
   assert.equal(result.coreComplete, true);
   assert.equal(result.conditionalPending, true);
   assert.equal(result.readyToCompute, false);
 });
 
 test('ISA transfer amount exceeding cumulative contribution is rejected', () => {
-  const result = validateForm(
+  const result = validate(
     baseForm({ isaExists: true, isaCumulative: '1000000', isaTransferEnabled: true, isaTransferAmount: '2000000' }),
   );
   assert.equal(result.errors.isaTransferAmount.code, 'exceeds_cumulative');
 });
 
 test('ISA transfer amount of exactly the cumulative contribution is valid (boundary)', () => {
-  const result = validateForm(
+  const result = validate(
     baseForm({ isaExists: true, isaCumulative: '1000000', isaTransferEnabled: true, isaTransferAmount: '1000000' }),
   );
   assert.equal(result.readyToCompute, true);
 });
 
 test('ISA ytd contribution exceeding cumulative contribution is rejected', () => {
-  const result = validateForm(baseForm({ isaExists: true, isaCumulative: '1000000', isaYtd: '2000000' }));
+  const result = validate(baseForm({ isaExists: true, isaCumulative: '1000000', isaYtd: '2000000' }));
   assert.equal(result.errors.isaYtd.code, 'exceeds_cumulative');
 });
 
 test('turning ISA transfer off does not require an amount even if ISA is held', () => {
-  const result = validateForm(baseForm({ isaExists: true, isaTransferEnabled: false }));
+  const result = validate(baseForm({ isaExists: true, isaTransferEnabled: false }));
   assert.equal(result.readyToCompute, true);
 });
 
@@ -111,7 +195,7 @@ test('turning ISA transfer off does not require an amount even if ISA is held', 
 // `input-panel`의 `showMissing`과 결과 패널의 `conditionalPending` 배너가 맡는다.
 
 test('a blank conditional-required field is flagged as missing and blocks computing', () => {
-  const result = validateForm(baseForm({ isaExists: true, isaTransferEnabled: true, isaTransferAmount: '' }));
+  const result = validate(baseForm({ isaExists: true, isaTransferEnabled: true, isaTransferAmount: '' }));
   assert.equal(result.errors.isaTransferAmount.code, 'missing');
   assert.equal(result.conditionalPending, true);
   assert.equal(result.readyToCompute, false);
@@ -119,7 +203,7 @@ test('a blank conditional-required field is flagged as missing and blocks comput
 });
 
 test('conditionalPending clears as soon as the amount is filled', () => {
-  const result = validateForm(baseForm({ isaExists: true, isaTransferEnabled: true, isaTransferAmount: '10000000', isaCumulative: '20000000' }));
+  const result = validate(baseForm({ isaExists: true, isaTransferEnabled: true, isaTransferAmount: '10000000', isaCumulative: '20000000' }));
   assert.equal(result.conditionalPending, false);
   assert.equal(result.readyToCompute, true);
 });

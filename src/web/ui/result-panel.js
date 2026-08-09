@@ -35,9 +35,22 @@ import {
   FILL_ORDER_TAG_PRODUCT,
   fillOrderFactMessage,
   fillOrderDecisionMessage,
+  AMOUNT_CARD_LABEL,
+  AMOUNT_CARD_LABEL_ZERO,
+  BOUNDED_AMOUNT_PREFIX,
+  BOUNDED_BACK_LINK,
+  boundedDirectionNote,
+  capReducedNote,
+  CAP_CARRYOVER_NOTE,
+  AMOUNT_CARD_CAPTION_BOUNDED_CLAUSE,
+  AMOUNT_CARD_CAPTION_REDUCED_CLAUSE,
+  AMOUNT_CARD_CAPTION_ZERO_CLAUSE,
+  STACKBAR_CAP_APPLIED_NOTE,
+  STACKBAR_BOUNDED_NOTE,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
-import { CORE_REQUIRED_FIELDS, formDerivedAssumptionCodes } from '../state/validation.js';
+import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
+import { taxCreditHeadlineView, isBoundedHeadline, anyPlanCapApplied, HEADLINE_MODE } from '../tax-credit-view.js';
 import { donutChart, donutLegend, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
 import {
   accountLimitView,
@@ -51,12 +64,8 @@ import {
 } from './eligibility.js';
 import { openShareModal } from './share.js';
 
-const CORE_FIELD_LABEL = {
-  age: '나이',
-  currentSalary: '총급여액',
-  monthlyCapacity: '월 납입 여력',
-  fundUseHorizon: '자금 사용 시점',
-};
+// 필수 항목의 라벨·초점 대상·충족 판정은 `validation.js`의 `CORE_REQUIREMENTS`
+// 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
 
 // ---------------------------------------------------------------------------
 // 고지 ①② — 항상 표시, 접기 불가
@@ -74,14 +83,20 @@ function disclosureBanner() {
 // ---------------------------------------------------------------------------
 
 function requirementChecklist({ form, validation }) {
-  const items = CORE_REQUIRED_FIELDS.map((key) => {
-    const filled = !validation.errors[key] && form[key] !== '' && form[key] !== null;
+  const errorKeyFor = { priorTax: 'priorTaxAmount' };
+  const items = CORE_REQUIREMENTS.map((req) => {
+    const filled = !validation.errors[errorKeyFor[req.key] ?? req.key] && req.isFilled(form);
     return el(
       'button',
-      { type: 'button', class: `req-item${filled ? ' req-item-filled' : ''}`, onclick: () => focusField(key) },
+      { type: 'button', class: `req-item${filled ? ' req-item-filled' : ''}`, onclick: () => focusField(req.fieldId) },
       [
         el('span', { class: 'req-dot', 'aria-hidden': 'true' }, [filled ? '●' : '○']),
-        el('span', {}, [CORE_FIELD_LABEL[key]]),
+        el('span', {}, [
+          req.label,
+          // "모르면 모르겠습니다를 고르면 됩니다" — 막는 항목이 아니라는 사실을
+          // 체크리스트 행에서 바로 말한다(screens.md 3.8.3절 빈 상태).
+          req.hint && !filled ? el('span', { class: 'req-hint' }, [req.hint]) : null,
+        ]),
         el('span', { class: 'req-status' }, [filled ? '입력됨' : '→ 입력하기']),
       ],
     );
@@ -95,7 +110,7 @@ function requirementChecklist({ form, validation }) {
         ])
       : null;
 
-  const total = CORE_REQUIRED_FIELDS.length;
+  const total = validation.requiredTotal;
   const filledCount = validation.requiredFilledCount;
   const progressLabel = conditionalPendingRow ? `${filledCount} / ${total} · 추가 항목 1개` : `${filledCount} / ${total} 항목`;
 
@@ -193,7 +208,7 @@ function blockedPanel(fatalError, store) {
             notices.map((n) => el('li', {}, [noticeMessage(n)])),
           )
         : el('p', {}, ['입력한 조건에서 세 계좌 모두 배분 대상이 아닙니다.']),
-      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => focusField('age') }, ['나이 입력으로 이동']),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => focusField('birthDate') }, ['입력으로 이동']),
     ]),
   ]);
 }
@@ -202,14 +217,73 @@ function blockedPanel(fatalError, store) {
 // 정상 상태 (4·5절)
 // ---------------------------------------------------------------------------
 
+/**
+ * `AmountCard` — 금액 표시의 유일한 통로(design-system 5.6절). 슬롯 셋이 필수이고
+ * 상한 변형에서는 넷이 된다.
+ *
+ * **`screens.md` 4.8절의 세 상태가 여기서 갈린다.** 어느 상태인지는
+ * `tax-credit-view.js`가 엔진 응답에서 **고르기만** 하고, 이 함수는 그 결과를
+ * 그린다 — 화면이 뺄셈을 시작하면 그 순간 세법 판단이 화면 코드로 들어온다.
+ *
+ * **셋 다 오류가 아니다.** `state-error`·`state-warning` 색을 쓰지 않는다.
+ * 사용자가 무언가를 잘못해서 생긴 상태가 아니다.
+ */
 function amountCard(plan, scenario) {
-  const total = plan.deterministic_benefit.pension_credit_total_krw;
+  const view = taxCreditHeadlineView(plan);
+  const laws = lawEntriesFor(scenario, view.basisRuleIds);
+  const baseCaption = `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영`;
+
+  if (view.mode === HEADLINE_MODE.ZERO) {
+    // `—`나 빈칸을 넣지 않는다 — `AmountCard`의 오류 상태가 `—`이므로 그것을
+    // 쓰면 계산 실패로 읽힌다. **이것은 오류가 아니라 결과다**(4.8절 (3)).
+    return el('div', { class: 'amount-card' }, [
+      el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL_ZERO]),
+      el('p', { class: 'amount-card-value type-display' }, [formatKrw(view.totalKrw)]),
+      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_ZERO_CLAUSE}`]),
+      lawChipRow(laws, 'note-laws'),
+    ]);
+  }
+
+  if (view.mode === HEADLINE_MODE.BOUNDED) {
+    return el('div', { class: 'amount-card' }, [
+      el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL]),
+      // 상한 접두는 금액과 **한 덩어리**다. 줄바꿈으로 분리되지 않는다.
+      el('p', { class: 'amount-card-value type-display' }, [`${BOUNDED_AMOUNT_PREFIX} ${formatKrwAbbreviated(view.totalKrw)}`]),
+      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_BOUNDED_CLAUSE}`]),
+      // 슬롯4 — **금액 아래 24px 이내, 같은 카드 안**(D11). 다른 카드로 밀거나
+      // 접으면 위반이다. 임계값은 엔진이 낸 값이고 화면이 만들지 않는다(E4).
+      el('div', { class: 'amount-card-direction' }, [
+        el('p', { class: 'type-body-s' }, [
+          view.thresholdIncomeTaxKrw != null ? boundedDirectionNote(view.thresholdIncomeTaxKrw) : '',
+        ]),
+        // 버튼이 아니라 텍스트 링크다 — 누르지 않아도 결과는 완결되어 있고,
+        // 버튼으로 만들면 재촉으로 읽힌다.
+        el('button', { type: 'button', class: 'btn btn-text', onclick: () => focusField('priorTaxAmount') }, [
+          BOUNDED_BACK_LINK,
+        ]),
+      ]),
+    ]);
+  }
+
+  if (view.mode === HEADLINE_MODE.REDUCED) {
+    return el('div', { class: 'amount-card' }, [
+      el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL]),
+      el('p', { class: 'amount-card-value type-display' }, [formatKrwAbbreviated(view.totalKrw)]),
+      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_REDUCED_CLAUSE}`]),
+      el('div', { class: 'amount-card-direction' }, [
+        // 자르기 전 금액을 함께 보인다 — 잘린 뒤 금액만 보이면 사용자는 배분이
+        // 잘못됐다고 읽는다. 실제로는 배분이 아니라 **세액이 한도였다**.
+        el('p', { class: 'type-body-s' }, [capReducedNote(view.beforeCapKrw, view.reducedTotalKrw)]),
+        view.contributionCarryoverAvailable ? el('p', { class: 'type-body-s' }, [CAP_CARRYOVER_NOTE]) : null,
+        lawChipRow(laws, 'note-laws'),
+      ]),
+    ]);
+  }
+
   return el('div', { class: 'amount-card' }, [
-    el('p', { class: 'amount-card-label' }, ['이 배분으로 계산된 연간 절세액']),
-    el('p', { class: 'amount-card-value type-display' }, [formatKrwAbbreviated(total)]),
-    el('p', { class: 'amount-card-caption' }, [
-      `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영`,
-    ]),
+    el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL]),
+    el('p', { class: 'amount-card-value type-display' }, [formatKrwAbbreviated(view.totalKrw)]),
+    el('p', { class: 'amount-card-caption' }, [baseCaption]),
   ]);
 }
 
@@ -474,9 +548,22 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
       ],
     );
   });
+  // 금액 열 위의 한 줄들 — 4.8절이 요구하는 세 가지 사실.
+  //  (1) 한도가 0으로 확정되면 **세액공제액으로는 배분안이 갈리지 않는다**.
+  //      순위를 절세액 순으로 설명하면 없는 근거를 말하게 된다(계약 10절).
+  //  (2) 잘림은 배분안마다 다를 수 있으므로 비교가 잘린 뒤 값으로 이뤄진다는
+  //      사실을 적는다 — 없으면 "왜 공제 한도를 더 채운 안이 더 낫지 않지"에서 막힌다.
+  //  (3) 한 화면에서 같은 성격의 금액이 한쪽만 상한 표기이면 두 값이 다른 것으로 읽힌다.
+  const axisFlat = scenario.comparison_note_codes.includes('tax_credit_axis_not_discriminating');
+  const capApplied = anyPlanCapApplied(scenario);
+  const bounded = scenario.plans.some((p) => isBoundedHeadline(p));
+
   return el('div', { class: 'stackbar' }, [
     el('h3', { class: 'type-title-m' }, ['다른 배분과 나란히 보기']),
     excludedLine,
+    axisFlat ? el('p', { class: 'field-help' }, [comparisonNoteMessage('tax_credit_axis_not_discriminating')]) : null,
+    !axisFlat && capApplied ? el('p', { class: 'field-help' }, [STACKBAR_CAP_APPLIED_NOTE]) : null,
+    bounded ? el('p', { class: 'field-help' }, [STACKBAR_BOUNDED_NOTE]) : null,
     ...rows,
     el('p', { class: 'field-help' }, ['▸ 표시가 지금 위에 그려진 배분입니다. 행을 누르면 도넛과 막대가 그 배분으로 바뀝니다.']),
   ]);

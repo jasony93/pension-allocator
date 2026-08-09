@@ -152,3 +152,93 @@ test('the sent data is exactly the payload track() produced — the transport ad
   assert.equal(body.payload.website, 'site-1');
   assert.equal(body.payload.name, 'result_shown');
 });
+
+// ---------------------------------------------------------------------------
+// 늘어난 입력이 전송 계층까지 새지 않는가 (계약 4.0.0으로 입력이 넷 늘었다)
+//
+// **화이트리스트를 믿지 않고 바이트를 본다.** `growth`가 지난 회차에 전송
+// payload를 가로채 화이트리스트가 실제로 버리는지 확인한 전례가 있다. 같은
+// 방식으로, 이번에 늘어난 입력(생년월일·직전 과세연도 결정세액·연금 수령 여부·
+// 청년 자기신고)을 폼에 넣고 **실제로 나가는 문자열**을 검사한다.
+// ---------------------------------------------------------------------------
+
+import { createAnalytics } from './analytics.js';
+import { createStore } from './state/store.js';
+import { SCHEMA_VERSION } from './engine/engine-client.js';
+
+function memoryStorage() {
+  const map = new Map();
+  return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)) };
+}
+
+const SECRETS = {
+  생년월일: '1988-03-15',
+  생년: '1988',
+  월일: '03-15',
+  총급여액: '62000000',
+  직전과세연도결정세액: '3141592',
+  월납입여력: '812345',
+  자금사용시점: 'within_isa_lock_in',
+  ISA누적납입액: '17654321',
+  청년자기신고: 'declaredYouth',
+  연금수령여부: 'annuityStarted',
+};
+
+test('nothing the user typed reaches the wire — every new 4.0.0 input included', async () => {
+  const wire = [];
+  const analytics = createAnalytics({
+    sessionStorageImpl: memoryStorage(),
+    localStorageImpl: memoryStorage(),
+    transport: (eventName, payload) => wire.push(JSON.stringify({ eventName, payload })),
+  });
+
+  const engineClient = {
+    compute: async () => ({
+      ok: true,
+      schema_version: SCHEMA_VERSION,
+      echo: {},
+      scenarios: [
+        {
+          scenario_id: 'current',
+          account_eligibility: [{ account: 'isa', eligible: true, reason_codes: [], basis_rule_ids: [] }],
+          notices: [],
+          plans: [{ plan_id: 'max_tax_credit', is_baseline: true }],
+        },
+      ],
+      assumptions: [],
+    }),
+    computeFundUseHorizonBoundaries: async () => ({ ok: true, schema_version: SCHEMA_VERSION, boundaries: {}, legal_basis: [], notices: [] }),
+    loadProvisionalYouthRule: async () => null,
+  };
+
+  const store = createStore({ engineClient, analytics, onChange: () => {} });
+  store.setField('birthDate', SECRETS.생년월일);
+  store.setField('currentSalary', SECRETS.총급여액);
+  store.setField('priorTax', { state: 'amount', amount: SECRETS.직전과세연도결정세액 });
+  store.setField('monthlyCapacity', SECRETS.월납입여력);
+  store.setField('annuityStarted', true);
+  store.setField('declaredYouth', true);
+  store.setField('isaExists', true);
+  store.setField('isaCumulative', SECRETS.ISA누적납입액);
+  store.setField('isaFinancialIncomeTaxpayer', 'yes');
+  store.setField('fundUseHorizon', SECRETS.자금사용시점, { immediate: true });
+  await new Promise((r) => setTimeout(r, 10));
+  store.reportSaveShare('screenshot');
+  store.reportAlternativeClick();
+
+  assert.ok(wire.length > 0, '아무 이벤트도 나가지 않으면 이 검사가 아무것도 증명하지 않는다');
+  const sent = wire.join('\n');
+  for (const [label, secret] of Object.entries(SECRETS)) {
+    assert.ok(!sent.includes(secret), `${label}이 전송 payload에 실렸다: ${secret}\n${sent}`);
+  }
+  // 남는 것은 익명 식별자·시각·필드 이름·불리언 하나뿐이다.
+  for (const line of wire) {
+    const { payload } = JSON.parse(line);
+    for (const key of Object.keys(payload)) {
+      assert.ok(
+        ['session_id', 'anon_id', 'ts', 'field_name', 'has_alternatives', 'method', 'utm_source', 'utm_medium', 'device_type'].includes(key),
+        `허용 목록 밖 속성이 나갔다: ${key}`,
+      );
+    }
+  }
+});

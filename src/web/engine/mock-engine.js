@@ -1,6 +1,16 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 2.1.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 4.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
+ *
+ * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
+ * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
+ * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `4.0.0`으로 맞췄다.
+ *
+ * **4.0.0에서 따라온 것.** 요청에 `profile.birth_date`·`profile.prior_year_tax`·
+ * `accounts.*.annuity_start_status`가 필수로 들어오고 `profile.age_years`가
+ * 사라졌다. 응답에 `pension_credit_tax_liability_cap`·`pension_withdrawal_start`·
+ * `DeterministicBenefit`의 자르기 전 금액이 들어왔다.
  *
  * 이 파일은 `calc-engine-dev`의 실제 엔진(`src/engine/`)이 나오기 전까지 UI를
  * 독립적으로 확인하기 위한 대체물이다. 세법 수치는 전부 인자로 주입되는
@@ -19,7 +29,52 @@
 const ACCOUNTS = ['retirement_pension', 'annuity_savings', 'isa'];
 const SCENARIO_ORDER = ['current', 'proposed'];
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first'];
-const KNOWN_SCHEMA_MAJOR = '2';
+const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
+const KNOWN_SCHEMA_MAJOR = '4';
+export const MOCK_SCHEMA_VERSION = '4.0.0';
+const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
+const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
+
+// ---------------------------------------------------------------------------
+// 날짜 — 순수 함수다. 현재 시각을 읽지 않는다(계약 1절).
+// ---------------------------------------------------------------------------
+
+/** `YYYY-MM-DD`이고 달력에 있는 날짜면 `{y,m,d}`, 아니면 null. */
+function parseIsoDate(value) {
+  if (typeof value !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const probe = new Date(Date.UTC(y, mo - 1, d));
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return null;
+  return { y, m: mo, d };
+}
+
+/**
+ * 만 나이. **기준일 규칙이 룰셋에 없다** — 엔진은 규칙을 만들지 않고 과세기간
+ * 종료일로 환산한 뒤 그 사실을 `age_reference_date_not_in_ruleset` 가정으로 낸다
+ * (계약 3.1절). 화면이 이 판단을 대신하지 않는 것이 D21의 요점이다.
+ */
+function ageAtReferenceDate(birth, referenceDate) {
+  const ref = parseIsoDate(referenceDate);
+  let age = ref.y - birth.y;
+  if (ref.m < birth.m || (ref.m === birth.m && ref.d < birth.d)) age -= 1;
+  return age;
+}
+
+function referenceDateFor(taxYear) {
+  return `${taxYear}-12-31`;
+}
+
+/** `birth`에서 n년 뒤 같은 날. 2월 29일은 그 달의 마지막 날로 맞춘다. */
+function datePlusYears(date, years) {
+  const y = date.y + years;
+  const lastDay = new Date(Date.UTC(y, date.m, 0)).getUTCDate();
+  const d = Math.min(date.d, lastDay);
+  return `${String(y).padStart(4, '0')}-${String(date.m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
 
 // ---------------------------------------------------------------------------
 // 룰셋 조회 헬퍼
@@ -128,9 +183,12 @@ function validateRequest(request) {
 
 function validateProfile(p) {
   const errors = [];
-  if (p.age_years == null) errors.push(err('missing_required', 'profile.age_years', {}));
-  else if (!isInt(p.age_years)) errors.push(err('not_integer', 'profile.age_years', {}));
-  else if (p.age_years < 0) errors.push(err('negative_value', 'profile.age_years', {}));
+  // 만 나이가 아니라 생년월일을 받는다(D21). 환산은 엔진이 한다.
+  if (p.birth_date == null) errors.push(err('missing_required', 'profile.birth_date', {}));
+  // 오류 params에 입력값을 되풀이하지 않는다(계약 8.1절).
+  else if (parseIsoDate(p.birth_date) === null) errors.push(err('invalid_date', 'profile.birth_date', { format: 'YYYY-MM-DD' }));
+
+  errors.push(...validatePriorYearTax(p.prior_year_tax));
 
   if (p.current_year_total_salary_krw == null)
     errors.push(err('missing_required', 'profile.current_year_total_salary_krw', {}));
@@ -183,13 +241,61 @@ function validateProfile(p) {
   return errors;
 }
 
+/**
+ * 계약 3.5절 `PriorYearTax` — 세액 한도의 재료. **결정세액과 연금계좌 세액공제액을
+ * 짝으로 받는다.** 짝이라는 사실을 규약이 아니라 자료형이 강제한다.
+ */
+function validatePriorYearTax(node) {
+  const errors = [];
+  const field = 'profile.prior_year_tax';
+  if (node == null || typeof node !== 'object') {
+    errors.push(err('missing_required', field, {}));
+    return errors;
+  }
+  if (node.state == null) errors.push(err('missing_required', `${field}.state`, {}));
+  else if (!PRIOR_TAX_STATES.includes(node.state)) errors.push(err('invalid_enum', `${field}.state`, { value: node.state }));
+
+  if (node.state === 'amount') {
+    if (node.determined_tax_krw == null) errors.push(err('missing_required', `${field}.determined_tax_krw`, {}));
+    else if (!isInt(node.determined_tax_krw)) errors.push(err('not_integer', `${field}.determined_tax_krw`, {}));
+    else if (node.determined_tax_krw < 0) errors.push(err('negative_value', `${field}.determined_tax_krw`, {}));
+  } else if (node.determined_tax_krw != null) {
+    // 금액을 실었는데 state가 금액을 뜻하지 않는다. 둘 중 무엇이 사용자의 답인지
+    // 엔진이 고르면 그것이 추론이다. 고르지 않고 되돌려준다.
+    errors.push(err('invalid_enum', `${field}.state`, { reason: 'determined_tax_krw_present' }));
+  }
+
+  if (node.pension_credit_applied_krw != null) {
+    if (!isInt(node.pension_credit_applied_krw)) errors.push(err('not_integer', `${field}.pension_credit_applied_krw`, {}));
+    else if (node.pension_credit_applied_krw < 0) errors.push(err('negative_value', `${field}.pension_credit_applied_krw`, {}));
+  }
+  return errors;
+}
+
 function validatePensionAccount(a, field, errors) {
   if (!a || a.ytd_contribution_krw == null) {
     errors.push(err('missing_required', `${field}.ytd_contribution_krw`, {}));
-    return;
-  }
-  if (!isInt(a.ytd_contribution_krw)) errors.push(err('not_integer', `${field}.ytd_contribution_krw`, {}));
+    if (!a) return;
+  } else if (!isInt(a.ytd_contribution_krw)) errors.push(err('not_integer', `${field}.ytd_contribution_krw`, {}));
   else if (a.ytd_contribution_krw < 0) errors.push(err('negative_value', `${field}.ytd_contribution_krw`, {}));
+
+  // **기본값을 두지 않는다.** 이 항목의 기본값 실수는 연금 수령 중인 사용자에게
+  // 납입 가능액을 주는 방향, 즉 과대 방향으로 틀린다(계약 0.5절 (1)).
+  if (a.annuity_start_status == null) errors.push(err('missing_required', `${field}.annuity_start_status`, {}));
+  else if (!ANNUITY_START_VALUES.includes(a.annuity_start_status)) {
+    errors.push(err('invalid_enum', `${field}.annuity_start_status`, { value: a.annuity_start_status }));
+  }
+
+  if (a.opened_on != null && parseIsoDate(a.opened_on) === null) {
+    errors.push(err('invalid_date', `${field}.opened_on`, { format: 'YYYY-MM-DD' }));
+  }
+  if (a.has_deferred_retirement_income != null && typeof a.has_deferred_retirement_income !== 'boolean') {
+    errors.push(err('invalid_enum', `${field}.has_deferred_retirement_income`, {}));
+  }
+  if (a.retirement_transfer_in_krw != null) {
+    if (!isInt(a.retirement_transfer_in_krw)) errors.push(err('not_integer', `${field}.retirement_transfer_in_krw`, {}));
+    else if (a.retirement_transfer_in_krw < 0) errors.push(err('negative_value', `${field}.retirement_transfer_in_krw`, {}));
+  }
 }
 
 function validateAccounts(accounts) {
@@ -304,6 +410,9 @@ function computeScenario(scenario, request, rulesets) {
   const accounts = request.accounts;
   const isaTransfer = request.isa_transfer ?? null;
   const months = request.months_remaining_effective;
+  const birth = parseIsoDate(profile.birth_date);
+  const referenceDate = referenceDateFor(request.tax_year);
+  const ageYears = ageAtReferenceDate(birth, referenceDate);
   const notices = [];
   const usedRules = new Map(); // ruleId -> { rule, appliedTo: Set }
   const missingRules = [];
@@ -404,24 +513,24 @@ function computeScenario(scenario, request, rulesets) {
     const anyOf = isaEligibilityRule.value.any_of || [];
     const unconditionalMinAge = anyOf.find((c) => !c.requires)?.min_age;
     const conditionalEntry = anyOf.find((c) => c.requires);
-    if (unconditionalMinAge != null && profile.age_years >= unconditionalMinAge) {
+    if (unconditionalMinAge != null && ageYears >= unconditionalMinAge) {
       // age19 요건을 그대로 충족 — 자격 있음
     } else if (
       conditionalEntry &&
-      profile.age_years >= conditionalEntry.min_age &&
+      ageYears >= conditionalEntry.min_age &&
       unconditionalMinAge != null &&
-      profile.age_years < unconditionalMinAge
+      ageYears < unconditionalMinAge
     ) {
       // age15_employed 요건은 '직전 과세기간 근로소득 보유' 확인이 필요하나 이
       // 입력을 받지 않는다(requirements.md 2절 — 1차 출시에서 묻지 않는 선택
       // 입력). 확인할 수 없는 조건이므로 보수적으로 배제한다.
       isaEligible = false;
       isaReasonCodes.push('isa_excluded_age');
-      notices.push({ code: 'isa_excluded_age', severity: 'warning', field: 'profile.age_years', params: {}, basis_rule_ids: [isaEligibilityRule.id] });
+      notices.push({ code: 'isa_excluded_age', severity: 'warning', field: 'profile.birth_date', params: {}, basis_rule_ids: [isaEligibilityRule.id] });
     } else {
       isaEligible = false;
       isaReasonCodes.push('isa_excluded_age');
-      notices.push({ code: 'isa_excluded_age', severity: 'warning', field: 'profile.age_years', params: {}, basis_rule_ids: [isaEligibilityRule.id] });
+      notices.push({ code: 'isa_excluded_age', severity: 'warning', field: 'profile.birth_date', params: {}, basis_rule_ids: [isaEligibilityRule.id] });
     }
   }
   if (profile.financial_income_taxpayer_last_3_years === true) {
@@ -445,9 +554,62 @@ function computeScenario(scenario, request, rulesets) {
     });
   }
 
+  // -- 연금 수령 개시 여부 (계약 3.2절 `annuity_start_status`) ---------------
+  // `started`면 그 계좌에 납입할 수 없어 배분 대상에서 빠지고, `unknown`이면
+  // 그 계좌의 배분을 **보류한다.** `unknown`을 `not_started`로 접으면 연금 수령
+  // 중인 사용자에게 납입 가능액을 주게 되고 오류의 방향이 과대다.
+  const annuityStartRule = use('pension.contribution.after_annuity_start', 'scenarios[].account_eligibility');
+  const pensionEligibility = {};
+  for (const account of PENSION_ACCOUNTS) {
+    const status = accounts[account].annuity_start_status;
+    if (status === 'started') {
+      pensionEligibility[account] = { eligible: false, code: 'pension_contribution_blocked_annuity_started' };
+      notices.push({
+        code: 'pension_contribution_blocked_annuity_started',
+        severity: 'warning',
+        field: `accounts.${account}.annuity_start_status`,
+        params: { account },
+        basis_rule_ids: annuityStartRule ? [annuityStartRule.id] : [],
+      });
+    } else if (status === 'unknown') {
+      pensionEligibility[account] = { eligible: false, code: 'pension_annuity_start_unknown' };
+      notices.push({
+        code: 'pension_annuity_start_unknown',
+        severity: 'warning',
+        field: `accounts.${account}.annuity_start_status`,
+        params: { account },
+        basis_rule_ids: [],
+      });
+    } else {
+      pensionEligibility[account] = { eligible: true, code: null };
+    }
+  }
+
+  const retirementTransferTotal = PENSION_ACCOUNTS.reduce(
+    (sum, account) => sum + (accounts[account].retirement_transfer_in_krw ?? 0),
+    0,
+  );
+  if (retirementTransferTotal > 0) {
+    const excludedRule = use('pension.credit.excluded_contributions', 'scenarios[].limits.retirement_transfer_in_krw');
+    notices.push({
+      code: 'retirement_transfer_excluded_from_credit',
+      severity: 'info',
+      field: null,
+      params: { amount_krw: retirementTransferTotal },
+      basis_rule_ids: excludedRule ? [excludedRule.id] : [],
+    });
+  }
+
   const accountEligibility = [
-    { account: 'retirement_pension', eligible: true, reason_codes: [], basis_rule_ids: [] },
-    { account: 'annuity_savings', eligible: true, reason_codes: [], basis_rule_ids: [] },
+    ...PENSION_ACCOUNTS.map((account) => ({
+      account,
+      eligible: pensionEligibility[account].eligible,
+      reason_codes: pensionEligibility[account].code ? [pensionEligibility[account].code] : [],
+      basis_rule_ids:
+        pensionEligibility[account].code === 'pension_contribution_blocked_annuity_started' && annuityStartRule
+          ? [annuityStartRule.id]
+          : [],
+    })),
     {
       account: 'isa',
       eligible: isaEligible,
@@ -560,8 +722,10 @@ function computeScenario(scenario, request, rulesets) {
         eligible = isaEligible;
       } else if (account === 'annuity_savings') {
         cap = Math.min(pensionPool, annuityCapByPlan[planId]);
+        eligible = pensionEligibility[account].eligible;
       } else {
         cap = pensionPool;
+        eligible = pensionEligibility[account].eligible;
       }
       if (!eligible) {
         allocByAccount[account] = 0;
@@ -602,11 +766,78 @@ function computeScenario(scenario, request, rulesets) {
     return Math.max(0, combinedCreditEligible);
   }
 
+  // -- 세액 한도 (계약 3.5·5.10절) ------------------------------------------
+  //
+  // **한도 = 결정세액 + 연금계좌 세액공제액.** 소득세법 §61 ③이 산출세액이 모자랄
+  // 때 밀려나는 공제로 연금계좌세액공제를 이름으로 지목하므로, 되더한 값이 곧
+  // 법정 한도와 **일치한다.** 근사가 아니라 등식이다.
+  //
+  // 모를 때 **지어내지 않는다.** 대신 오차의 방향을 낸다 — 한도가 공제액을 늘리는
+  // 경로가 조문에 없으므로 한도를 무시한 값은 언제나 과대이거나 같다.
+  const capRule = use('pension.credit.tax_liability_cap', 'scenarios[].pension_credit_tax_liability_cap');
+  const capSourceRule = use('pension.credit.tax_liability_cap.source_form', 'scenarios[].pension_credit_tax_liability_cap');
+  const capBasisRuleIds = [capRule?.id, capSourceRule?.id].filter(Boolean);
+  const priorTax = profile.prior_year_tax;
+  const priorPensionCredit = priorTax.pension_credit_applied_krw ?? 0;
+  let capKnown = false;
+  let capKrw = null;
+  let capSourceCode = null;
+  if (priorTax.state === 'amount') {
+    capKnown = true;
+    capKrw = priorTax.determined_tax_krw + priorPensionCredit;
+    capSourceCode = 'determined_tax_add_back';
+  } else if (priorTax.state === 'zero') {
+    capKnown = true;
+    capKrw = priorPensionCredit;
+    capSourceCode = 'declared_zero';
+  }
+  const capDeclaredNonzero = priorTax.state === 'nonzero_amount_unknown' || (capKnown && capKrw > 0);
+  const capErrorDirection = capKnown ? null : 'overstated_or_equal';
+
+  if (!capKnown) {
+    notices.push({
+      code: 'tax_liability_cap_unknown',
+      severity: 'warning',
+      field: 'profile.prior_year_tax',
+      params: { error_direction: capErrorDirection, declared_nonzero: capDeclaredNonzero },
+      basis_rule_ids: capBasisRuleIds,
+    });
+  } else if (capKrw === 0) {
+    // **오류가 아니라 결과다** — 이 사용자에게는 0이 정확한 답이다.
+    notices.push({ code: 'tax_liability_cap_zero', severity: 'info', field: null, params: {}, basis_rule_ids: capBasisRuleIds });
+  }
+
+  const carryoverRule = use('pension.credit.unused.contribution_carryover');
+  const creditCarryforward = capRule?.value?.credit_carryforward ?? false;
+
   const plans = rawPlans.map((p) => {
     const creditEligible = creditFor(p.allocByAccount.annuity_savings, p.allocByAccount.retirement_pension);
-    const incomeTaxKrw = Math.floor(creditEligible * incomeTaxRate);
-    const localTaxKrw = Math.floor(creditEligible * localTaxRate);
+    const incomeTaxBeforeCapKrw = Math.floor(creditEligible * incomeTaxRate);
+    const localTaxBeforeCapKrw = Math.floor(creditEligible * localTaxRate);
+    // 한도는 **소득세분에** 걸린다. 지방소득세분은 **인정된 소득세분에** 부가율을
+    // 다시 적용해 낸다 — 인정되지 않은 공제에 붙는 지방세를 남기지 않기 위해서다
+    // (`local_tax_follows_income_tax_cap` 가정).
+    const incomeTaxKrw = capKnown ? Math.min(incomeTaxBeforeCapKrw, capKrw) : incomeTaxBeforeCapKrw;
+    const localTaxKrw =
+      incomeTaxBeforeCapKrw > 0 ? Math.floor((localTaxBeforeCapKrw * incomeTaxKrw) / incomeTaxBeforeCapKrw) : 0;
     const totalCreditKrw = incomeTaxKrw + localTaxKrw;
+    const totalBeforeCapKrw = incomeTaxBeforeCapKrw + localTaxBeforeCapKrw;
+    const capApplied = capKnown && incomeTaxKrw < incomeTaxBeforeCapKrw;
+    const planCap = {
+      known: capKnown,
+      cap_krw: capKrw,
+      applied: capApplied,
+      reduced_income_tax_krw: incomeTaxBeforeCapKrw - incomeTaxKrw,
+      reduced_local_tax_krw: localTaxBeforeCapKrw - localTaxKrw,
+      reduced_total_krw: totalBeforeCapKrw - totalCreditKrw,
+      // **임계값.** 화면이 배분액에 공제율을 곱해 만들지 않는다 — 사용자가 나중에
+      // 영수증을 보고 스스로 대조할 수 있게 하는 값이다.
+      threshold_income_tax_krw: incomeTaxBeforeCapKrw,
+      credit_carryforward: creditCarryforward,
+      contribution_carryover_available: capApplied,
+      error_direction_code: capErrorDirection,
+      basis_rule_ids: capApplied && carryoverRule ? [...capBasisRuleIds, carryoverRule.id] : capBasisRuleIds,
+    };
 
     const allocations = ACCOUNTS.map((account) => {
       const annualKrw = p.allocByAccount[account] ?? 0;
@@ -694,6 +925,21 @@ function computeScenario(scenario, request, rulesets) {
           p.planId === 'isa_first'
             ? [use('pension.withdrawal.eligibility')?.id, use('isa.account.requirements')?.id].filter(Boolean)
             : [],
+        // 확정 룰셋에는 계좌에 따라 공제율이 갈리는 규칙이 없어 두 연금계좌의
+        // 한계 공제율이 언제나 같다 — 그래서 확정 시나리오는 언제나
+        // `withdrawal_flexibility_first`다(계약 5.6절).
+        tie_break:
+          p.planId === 'annuity_savings_first' || scenario === 'proposed'
+            ? { code: 'not_applicable', basis_rule_ids: [] }
+            : {
+                code: 'withdrawal_flexibility_first',
+                basis_rule_ids: [use('pension.withdrawal.midterm_restriction')?.id].filter(Boolean),
+              },
+        // **이 안이 이름으로 내세운 목적함수가 이 입력에서 순위를 정하지 못하는가.**
+        // 한도가 0이면 연금계좌에 얼마를 넣든 공제액이 0이라 최대값이 유일하지 않다.
+        // `isa_first`는 언제나 false다 — 그 안의 근거는 세액공제가 아니라 인출
+        // 가능성이라 한도가 0이어도 그대로 성립한다(계약 5.12절).
+        objective_degenerate: p.planId !== 'isa_first' && capKnown && capKrw === 0,
       },
       allocations: ACCOUNTS.map((a) => allocations.find((x) => x.account === a)),
       total_allocated_monthly_krw: totalMonthly,
@@ -702,11 +948,18 @@ function computeScenario(scenario, request, rulesets) {
       unallocated_annual_krw: p.unallocated,
       monthly_rounding_residual_krw: residual,
       deterministic_benefit: {
+        // 4.0.0 — 앞의 세 필드는 한도 적용 **후** 값이다.
         pension_credit_income_tax_krw: incomeTaxKrw,
         pension_credit_local_tax_krw: localTaxKrw,
         pension_credit_total_krw: totalCreditKrw,
+        pension_credit_income_tax_before_cap_krw: incomeTaxBeforeCapKrw,
+        pension_credit_local_tax_before_cap_krw: localTaxBeforeCapKrw,
+        pension_credit_total_before_cap_krw: totalBeforeCapKrw,
+        // **세액 한도로 잘리지 않는다** — 잘리는 것은 공제액이고 납입액은
+        // 전환 신청의 대상으로 살아남는다.
         credit_eligible_contribution_krw: creditEligible,
-        basis_rule_ids: [creditRateRule?.id, annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, surtaxRule?.id].filter(Boolean),
+        tax_liability_cap: planCap,
+        basis_rule_ids: [creditRateRule?.id, annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, surtaxRule?.id, capRule?.id].filter(Boolean),
       },
       delta_vs_baseline_krw: 0, // baseline 선정 후 채운다
       non_quantified_effects: nonQuantified,
@@ -768,6 +1021,12 @@ function computeScenario(scenario, request, rulesets) {
   }
   if (orderedPlans[0].plan_id !== 'max_tax_credit') comparisonNoteCodes.push('baseline_reordered_by_fund_use_horizon');
   if (orderedPlans.some((p) => !p.is_baseline && p.delta_vs_baseline_krw === 0)) comparisonNoteCodes.push('alternatives_have_equal_tax_credit');
+  // **세액공제액으로는 배분안이 갈리지 않는다** — `alternatives_have_equal_tax_credit`와
+  // 달리 그 동률이 앞으로 어떤 배분에서도 깨지지 않는다는 사실까지 말한다(계약 8.5절).
+  if (capKnown && capKrw === 0) comparisonNoteCodes.push('tax_credit_axis_not_discriminating');
+  if (orderedPlans.some((p) => p.deterministic_benefit.tax_liability_cap.applied)) {
+    notices.push({ code: 'tax_liability_cap_applied', severity: 'info', field: null, params: {}, basis_rule_ids: capBasisRuleIds });
+  }
 
   if (profile.fund_use_horizon === 'unknown') {
     notices.push({ code: 'fund_use_horizon_not_declared', severity: 'info', field: 'profile.fund_use_horizon', params: {}, basis_rule_ids: [] });
@@ -786,10 +1045,58 @@ function computeScenario(scenario, request, rulesets) {
 
   // -- FundUseHorizonBoundaries ---------------------------------------------
   const boundaries = computeBoundariesInternal(
-    { age_years: profile.age_years, isa_exists: accounts.isa.exists, isa_years_since_opening: accounts.isa.years_since_opening },
+    { age_years: ageYears, isa_exists: accounts.isa.exists, isa_years_since_opening: accounts.isa.years_since_opening },
     rulesets,
     files,
   );
+
+  // -- 연금 개시 가능 시점 (계약 5.11절) -------------------------------------
+  //
+  // **남은 기간을 배분 비율로 옮기지 않는다.** 세법이 정하는 것은 언제부터 연금으로
+  // 나올 수 있는가와 그 전에 꺼내면 얼마가 과세되는가뿐이고, 그 둘을 비율로 옮기는
+  // 것은 제품의 설계 결정이라고 규칙이 명시한다. 엔진은 시점만 낸다.
+  const earliestStartRule = use('pension.withdrawal.earliest_start', 'scenarios[].pension_withdrawal_start');
+  const withdrawalEligibilityRule = use('pension.withdrawal.eligibility', 'scenarios[].pension_withdrawal_start');
+  const requirements = withdrawalEligibilityRule?.value?.requirements ?? [];
+  const minAgeForStart = requirements.find((r) => r.id === 'age')?.min_age ?? null;
+  const holdingYears = requirements.find((r) => r.min_years != null)?.min_years ?? null;
+  let anyStartNotComputable = false;
+  const pensionWithdrawalStart = PENSION_ACCOUNTS.map((account) => {
+    const ageRequirementDate = minAgeForStart == null ? null : datePlusYears(birth, minAgeForStart);
+    const openedOn = accounts[account].opened_on ? parseIsoDate(accounts[account].opened_on) : null;
+    const waived = accounts[account].has_deferred_retirement_income === true;
+    const holdingRequirementDate =
+      openedOn && holdingYears != null && !waived ? datePlusYears(openedOn, holdingYears) : null;
+    // **가입일을 모르면 시점을 계산할 수 없고, 그때 남은 기간을 추정해서는 안 된다**
+    // (규칙의 `engine_note`). 나이 요건만 낸다.
+    const computable = ageRequirementDate != null && (waived || openedOn != null);
+    if (!computable) anyStartNotComputable = true;
+    const earliest = !computable
+      ? null
+      : holdingRequirementDate && holdingRequirementDate > ageRequirementDate
+        ? holdingRequirementDate
+        : ageRequirementDate;
+    // 과세기간 종료일부터 남은 햇수(**올림**) — 짧게 보이는 쪽이 위험하다.
+    const yearsUntil =
+      earliest == null
+        ? null
+        : Math.max(0, Math.ceil((Date.parse(earliest) - Date.parse(referenceDate)) / (365.2425 * 24 * 3600 * 1000)));
+    return {
+      account,
+      computable,
+      earliest_start_date: earliest,
+      years_until_earliest_start: yearsUntil,
+      age_requirement_date: ageRequirementDate,
+      holding_requirement_date: holdingRequirementDate,
+      holding_requirement_waived: waived,
+      bound_by_holding_period: Boolean(earliest && holdingRequirementDate && earliest === holdingRequirementDate),
+      reason_code: computable ? null : 'opened_on_missing',
+      basis_rule_ids: [earliestStartRule?.id, withdrawalEligibilityRule?.id].filter(Boolean),
+    };
+  });
+  if (anyStartNotComputable) {
+    notices.push({ code: 'pension_start_date_not_computable', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
+  }
 
   // -- legal_basis -----------------------------------------------------------
   const legalBasis = [...usedRules.values()]
@@ -836,13 +1143,31 @@ function computeScenario(scenario, request, rulesets) {
       effective_from: rulesets['2026.json']?.effective_from ?? '2026-01-01',
     },
     account_eligibility: accountEligibility,
+    // 세액 한도와 **그것을 어떻게 알았는지.** 두 시나리오에서 같은 값이다 —
+    // 한도는 개정예고 규칙의 대상이 아니다(계약 5.10절).
+    pension_credit_tax_liability_cap: {
+      known: capKnown,
+      // **`0`은 유효한 값이고 `null`(모름)과 다르다.**
+      cap_krw: capKrw,
+      determined_tax_krw: priorTax.state === 'amount' ? priorTax.determined_tax_krw : null,
+      prior_pension_credit_krw: capKnown ? priorPensionCredit : null,
+      source_code: capSourceCode,
+      declared_nonzero: capDeclaredNonzero,
+      error_direction_code: capErrorDirection,
+      credit_carryforward: creditCarryforward,
+      basis_rule_ids: capBasisRuleIds,
+    },
+    pension_withdrawal_start: pensionWithdrawalStart,
     limits: {
       by_account: ACCOUNTS.map((account) => {
         if (account === 'isa') {
           return {
             account,
             contribution_limit_remaining_krw: isaAnnualRoom,
+            // 이 한도를 함께 쓰는 다른 계좌 — 비어 있으면 이 계좌 전용이다(계약 5.3절).
+            contribution_limit_shared_with: [],
             credit_eligible_limit_remaining_krw: null,
+            credit_limit_shared_with: [],
             tax_free_limit_krw: taxFreeLimit,
             clamped_to_zero: accounts.isa.cumulative_contribution_krw > effectiveTotalLimit,
             basis_rule_ids: [isaRequirementsRule?.id].filter(Boolean),
@@ -850,10 +1175,15 @@ function computeScenario(scenario, request, rulesets) {
         }
         const ytd = accounts[account].ytd_contribution_krw;
         const cap = account === 'annuity_savings' ? annuityCreditCap : baseCombinedCreditCap + extraCreditLimit;
+        // **계좌별 한도를 더하면 안 된다** — 연금저축과 퇴직연금은 같은 풀을 본다.
+        // 합계가 필요하면 아래 `pension_*` 필드를 쓴다(계약 5.3절).
+        const other = PENSION_ACCOUNTS.filter((a) => a !== account);
         return {
           account,
           contribution_limit_remaining_krw: sharedPensionPoolBase,
+          contribution_limit_shared_with: other,
           credit_eligible_limit_remaining_krw: Math.max(0, cap - ytd),
+          credit_limit_shared_with: other,
           tax_free_limit_krw: null,
           clamped_to_zero: ytd > pensionContributionCap,
           basis_rule_ids: [pensionContributionLimitRule?.id].filter(Boolean),
@@ -868,6 +1198,9 @@ function computeScenario(scenario, request, rulesets) {
           accounts.retirement_pension.ytd_contribution_krw,
       ),
       pension_contribution_limit_remaining_krw: sharedPensionPoolBase,
+      // **세액공제 대상이 아니다.** 분리해 받은 값을 분리한 채로 되돌려 준다 —
+      // 화면이 이 금액을 절세액과 같은 축에 놓지 않게 하기 위해서다(계약 5.3절).
+      retirement_transfer_in_krw: retirementTransferTotal,
       basis_rule_ids: [combinedCreditLimitRule?.id, pensionContributionLimitRule?.id].filter(Boolean),
     },
     isa_transfer_extra_limit: isaTransferExtraLimit,
@@ -940,7 +1273,7 @@ function computeBoundariesInternal(input, rulesets, files) {
 export function compute(request, rulesets) {
   const errors = validateRequest(request);
   if (errors.length > 0) {
-    return { ok: false, schema_version: request?.schema_version ?? '2.1.0', errors };
+    return { ok: false, schema_version: request?.schema_version ?? MOCK_SCHEMA_VERSION, errors };
   }
 
   const months = request.profile.months_remaining_in_tax_year ?? 12;
@@ -975,6 +1308,33 @@ export function compute(request, rulesets) {
   }
   if (request.isa_transfer && request.isa_transfer.prior_year_applied_extra_credit_krw == null) {
     assumptions.push({ code: 'prior_transfer_credit_zero_assumed', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  }
+  // **만 나이의 기준일을 정하는 규칙이 룰셋에 없다.** 엔진은 규칙을 만들지 않고
+  // 과세기간 종료일로 환산한 뒤 그 사실을 값으로 낸다(계약 3.1절 · D21).
+  assumptions.push({
+    code: 'age_reference_date_not_in_ruleset',
+    params: { reference_date: referenceDateFor(request.tax_year) },
+    applies_to_scenarios: applyAll,
+    basis_rule_ids: [],
+  });
+  if (request.profile.prior_year_tax.pension_credit_applied_krw == null) {
+    assumptions.push({ code: 'prior_pension_credit_zero_assumed', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  }
+  assumptions.push({ code: 'local_tax_follows_income_tax_cap', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  if (['annuity_savings', 'retirement_pension'].some((k) => request.accounts[k].has_deferred_retirement_income == null)) {
+    assumptions.push({ code: 'deferred_retirement_income_absent_assumed', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  }
+  const retirementTransferSum = ['annuity_savings', 'retirement_pension'].reduce(
+    (sum, k) => sum + (request.accounts[k].retirement_transfer_in_krw ?? 0),
+    0,
+  );
+  if (retirementTransferSum > 0) {
+    assumptions.push({
+      code: 'retirement_transfer_counted_in_contribution_limit',
+      params: { amount_krw: retirementTransferSum },
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: [],
+    });
   }
   assumptions.push({ code: 'single_tax_year_only', params: { tax_year: request.tax_year }, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   assumptions.push({ code: 'other_deductions_excluded', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
@@ -1017,6 +1377,24 @@ export function compute(request, rulesets) {
         effective_rate: incomeTaxRate + localTaxRate,
         basis_rule_ids: [creditRateRule.id, surtaxRule.id],
       },
+      // **화면은 이 나이를 사용자에게 되비추지 않는다**(designer가 박은 프라이버시 못).
+      // `reference_date_from_ruleset`은 항상 false다 — 기준일 규칙이 룰셋에 없다는
+      // 사실을 값으로 낸다.
+      derived_age: {
+        age_years: ageAtReferenceDate(parseIsoDate(request.profile.birth_date), referenceDateFor(request.tax_year)),
+        reference_date: referenceDateFor(request.tax_year),
+        reference_date_from_ruleset: false,
+      },
+      // 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지 — 값이 고정이라 `qa`가
+      // 실제 동작과 대조할 수 있다(계약 4.2절).
+      tax_liability_cap_affects: {
+        allocation_amounts: false,
+        tax_credit_amounts: true,
+        limits: false,
+        plan_ordering: false,
+        baseline_selection: false,
+        warnings: false,
+      },
     },
     scenarios,
     assumptions,
@@ -1029,8 +1407,9 @@ export function computeFundUseHorizonBoundaries(request, rulesets) {
   else if (String(request.schema_version).split('.')[0] !== KNOWN_SCHEMA_MAJOR)
     errors.push(err('schema_version_mismatch', 'schema_version', {}));
   if (request?.tax_year == null) errors.push(err('missing_required', 'tax_year', {}));
-  if (request?.age_years == null) errors.push(err('missing_required', 'age_years', {}));
-  else if (!isInt(request.age_years) || request.age_years < 0) errors.push(err('negative_value', 'age_years', {}));
+  // compute와 같은 이유로 만 나이가 아니라 생년월일을 받는다(계약 9.1절 · D21).
+  if (request?.birth_date == null) errors.push(err('missing_required', 'birth_date', {}));
+  else if (parseIsoDate(request.birth_date) === null) errors.push(err('invalid_date', 'birth_date', { format: 'YYYY-MM-DD' }));
   if (request?.isa_exists == null) errors.push(err('missing_required', 'isa_exists', {}));
   if (request?.isa_years_since_opening != null && !isInt(request.isa_years_since_opening)) {
     errors.push(err('not_integer', 'isa_years_since_opening', {}));
@@ -1039,12 +1418,17 @@ export function computeFundUseHorizonBoundaries(request, rulesets) {
     errors.push(err('unknown_scenario', 'scenario', {}));
   }
 
-  if (errors.length > 0) return { ok: false, schema_version: request?.schema_version ?? '2.1.0', errors };
+  if (errors.length > 0) return { ok: false, schema_version: request?.schema_version ?? MOCK_SCHEMA_VERSION, errors };
 
   const scenario = request.scenario ?? 'current';
   const files = fileKeysForScenario(scenario).filter((k) => rulesets[k]);
+  // 만 나이 환산은 `compute`와 **같은 내부 함수**가 한다(계약 9.1절).
   const result = computeBoundariesInternal(
-    { age_years: request.age_years, isa_exists: request.isa_exists, isa_years_since_opening: request.isa_years_since_opening },
+    {
+      age_years: ageAtReferenceDate(parseIsoDate(request.birth_date), referenceDateFor(request.tax_year)),
+      isa_exists: request.isa_exists,
+      isa_years_since_opening: request.isa_years_since_opening,
+    },
     rulesets,
     files,
   );

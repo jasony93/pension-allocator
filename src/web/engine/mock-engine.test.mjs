@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { compute, computeFundUseHorizonBoundaries } from './mock-engine.js';
+import { compute, computeFundUseHorizonBoundaries, MOCK_SCHEMA_VERSION as SCHEMA_VERSION } from './mock-engine.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(here, '..', '..', '..');
@@ -18,13 +18,28 @@ function loadRulesets() {
 
 const rulesets = loadRulesets();
 
+/** 계약 3.2절 `PensionAccountState`. `annuity_start_status`는 **필수**이고 기본값이 없다. */
+function pensionAccount(overrides = {}) {
+  return {
+    ytd_contribution_krw: 0,
+    annuity_start_status: 'not_started',
+    opened_on: null,
+    has_deferred_retirement_income: null,
+    retirement_transfer_in_krw: null,
+    ...overrides,
+  };
+}
+
 function baseRequest(overrides = {}) {
   return {
-    schema_version: '2.1.0',
+    schema_version: SCHEMA_VERSION,
     tax_year: 2026,
     scenarios: ['current'],
     profile: {
-      age_years: 38,
+      // 4.0.0 — 만 나이가 아니라 생년월일을 보낸다(D21). 환산은 엔진이 한다.
+      birth_date: '1988-03-15',
+      // 세액 한도의 재료. 두 값을 짝으로 받는다(계약 3.5절).
+      prior_year_tax: { state: 'unknown', determined_tax_krw: null, pension_credit_applied_krw: null },
       current_year_total_salary_krw: 62000000,
       prior_year_total_salary_krw: null,
       financial_income_taxpayer_last_3_years: null,
@@ -34,8 +49,8 @@ function baseRequest(overrides = {}) {
       months_remaining_in_tax_year: null,
     },
     accounts: {
-      annuity_savings: { ytd_contribution_krw: 0 },
-      retirement_pension: { ytd_contribution_krw: 0 },
+      annuity_savings: pensionAccount(),
+      retirement_pension: pensionAccount(),
       isa: {
         exists: false,
         account_type: null,
@@ -53,7 +68,7 @@ function baseRequest(overrides = {}) {
 
 test('missing required fields collects all errors, not just the first', () => {
   const res = compute(
-    { schema_version: '2.1.0', tax_year: 2026, scenarios: ['current'], profile: {}, accounts: {} },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, scenarios: ['current'], profile: {}, accounts: {} },
     rulesets,
   );
   assert.equal(res.ok, false);
@@ -257,7 +272,7 @@ test('computeFundUseHorizonBoundaries matches the boundaries embedded in compute
   req.accounts.isa.years_since_opening = 1;
   const full = compute(req, rulesets);
   const boundariesOnly = computeFundUseHorizonBoundaries(
-    { schema_version: '2.1.0', tax_year: 2026, age_years: 38, isa_exists: true, isa_years_since_opening: 1, scenario: 'current' },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, birth_date: '1988-03-15', isa_exists: true, isa_years_since_opening: 1, scenario: 'current' },
     rulesets,
   );
   assert.equal(boundariesOnly.ok, true);
@@ -266,7 +281,7 @@ test('computeFundUseHorizonBoundaries matches the boundaries embedded in compute
 
 test('computeFundUseHorizonBoundaries never emits fund_use_horizon_not_declared — it does not ask that question', () => {
   const res = computeFundUseHorizonBoundaries(
-    { schema_version: '2.1.0', tax_year: 2026, age_years: 30, isa_exists: false, isa_years_since_opening: null, scenario: 'current' },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, birth_date: '1996-05-05', isa_exists: false, isa_years_since_opening: null, scenario: 'current' },
     rulesets,
   );
   assert.equal(res.ok, true);
@@ -285,11 +300,12 @@ test('ISA age eligibility reads its threshold from the injected ruleset, not a h
   const req = baseRequest();
   req.accounts.isa.exists = true;
   req.accounts.isa.cumulative_contribution_krw = 1000000;
-  req.profile.age_years = 19; // isa.eligibility의 age19 요건과 정확히 일치하는 경계값
+  // 만 나이는 과세기간 종료일(2026-12-31) 기준이다 — 생년월일로 경계를 만든다.
+  req.profile.birth_date = '2007-12-31'; // 2026-12-31에 만 19세 (경계값)
   const res19 = compute(req, rulesets);
   assert.equal(res19.scenarios[0].account_eligibility.find((a) => a.account === 'isa').eligible, true);
 
-  req.profile.age_years = 18; // age19 미달, age15_employed는 미확인 입력이라 보수적으로 배제
+  req.profile.birth_date = '2008-12-31'; // 만 18세 — age19 미달, age15_employed는 미확인 입력이라 보수적으로 배제
   const res18 = compute(req, rulesets);
   const isa18 = res18.scenarios[0].account_eligibility.find((a) => a.account === 'isa');
   assert.equal(isa18.eligible, false);
@@ -299,7 +315,7 @@ test('ISA age eligibility reads its threshold from the injected ruleset, not a h
   // 코드에 19가 하드코딩되어 있지 않다는 것을 이 방식으로 확인한다.
   const mutated = JSON.parse(JSON.stringify(rulesets));
   mutated['2026.json'].rules.find((r) => r.id === 'isa.eligibility').value.any_of.find((a) => a.id === 'age19').min_age = 21;
-  req.profile.age_years = 20;
+  req.profile.birth_date = '2006-12-31'; // 만 20세
   const resMutated = compute(req, mutated);
   assert.equal(resMutated.scenarios[0].account_eligibility.find((a) => a.account === 'isa').eligible, false);
 });
@@ -334,4 +350,156 @@ test('no plan ever contains a negative allocation or a negative credit amount', 
     assert.ok(plan.deterministic_benefit.pension_credit_total_krw >= 0);
   }
   assert.ok(res.scenarios[0].notices.some((n) => n.code === 'existing_contribution_over_limit'));
+});
+
+// ---------------------------------------------------------------------------
+// 계약 4.0.0 — 목이 낡으면 테스트가 통과해도 아무것도 증명하지 않는다
+//
+// 그래서 목을 **실제 엔진과 대조한다.** 값이 아니라 **형태**를 본다 — 배분
+// 알고리즘은 근사치라고 이 파일 머리말이 밝혔고, 목의 책임은 계약의 타입·필드·
+// 코드를 정확히 지키는 것까지다. 계약이 또 major로 오르면 이 테스트가 먼저 깨진다.
+// ---------------------------------------------------------------------------
+
+import { compute as realCompute, SCHEMA_VERSION as REAL_SCHEMA_VERSION } from '../../engine/index.mjs';
+
+test('the mock speaks the same contract major as the real engine', () => {
+  assert.equal(SCHEMA_VERSION.split('.')[0], REAL_SCHEMA_VERSION.split('.')[0]);
+});
+
+test('a 3.x request is rejected outright — the mock does not quietly keep computing', () => {
+  const res = compute(baseRequest({ schema_version: '3.3.1' }), rulesets);
+  assert.equal(res.ok, false);
+  assert.ok(res.errors.some((e) => e.code === 'schema_version_mismatch'));
+});
+
+test('the three fields 4.0.0 made required are actually required', () => {
+  for (const drop of [
+    (r) => delete r.profile.birth_date,
+    (r) => delete r.profile.prior_year_tax,
+    (r) => delete r.accounts.annuity_savings.annuity_start_status,
+  ]) {
+    const req = baseRequest();
+    drop(req);
+    const res = compute(req, rulesets);
+    assert.equal(res.ok, false, '없으면 부분 결과를 내지 않는다');
+    assert.ok(res.errors.some((e) => e.code === 'missing_required'));
+  }
+});
+
+test('an invalid birth date never repeats the value back in the error params', () => {
+  const req = baseRequest();
+  req.profile.birth_date = '1988-13-45';
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, false);
+  const e = res.errors.find((x) => x.code === 'invalid_date');
+  assert.ok(e);
+  assert.ok(!JSON.stringify(e.params).includes('1988'), JSON.stringify(e.params));
+});
+
+function shape(value, depth = 0) {
+  if (Array.isArray(value)) return depth > 4 ? '[]' : [shape(value[0], depth + 1)];
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value).sort()) out[k] = depth > 4 ? '…' : shape(value[k], depth + 1);
+    return out;
+  }
+  return typeof value;
+}
+
+test('the mock response has exactly the shape the real engine produces', () => {
+  const req = baseRequest({ scenarios: ['current'] });
+  req.accounts.isa.exists = true;
+  req.accounts.isa.account_type = 'general';
+  req.accounts.isa.cumulative_contribution_krw = 5000000;
+  req.profile.prior_year_tax = { state: 'amount', determined_tax_krw: 3000000, pension_credit_applied_krw: null };
+
+  const mockRes = compute(req, rulesets);
+  const realRes = realCompute(req, rulesets);
+  assert.equal(mockRes.ok, true);
+  assert.equal(realRes.ok, true, JSON.stringify(realRes.errors));
+
+  assert.deepEqual(Object.keys(mockRes).sort(), Object.keys(realRes).sort());
+  assert.deepEqual(Object.keys(mockRes.echo).sort(), Object.keys(realRes.echo).sort());
+  assert.deepEqual(shape(mockRes.echo.derived_age), shape(realRes.echo.derived_age));
+  assert.deepEqual(shape(mockRes.echo.tax_liability_cap_affects), shape(realRes.echo.tax_liability_cap_affects));
+
+  const m = mockRes.scenarios[0];
+  const r = realRes.scenarios[0];
+  assert.deepEqual(Object.keys(m).sort(), Object.keys(r).sort());
+  assert.deepEqual(shape(m.pension_credit_tax_liability_cap), shape(r.pension_credit_tax_liability_cap));
+  assert.deepEqual(shape(m.pension_withdrawal_start[0]), shape(r.pension_withdrawal_start[0]));
+  assert.deepEqual(Object.keys(m.limits).sort(), Object.keys(r.limits).sort());
+  assert.deepEqual(Object.keys(m.limits.by_account[0]).sort(), Object.keys(r.limits.by_account[0]).sort());
+  assert.deepEqual(Object.keys(m.plans[0]).sort(), Object.keys(r.plans[0]).sort());
+  assert.deepEqual(Object.keys(m.plans[0].deterministic_benefit).sort(), Object.keys(r.plans[0].deterministic_benefit).sort());
+  assert.deepEqual(
+    Object.keys(m.plans[0].deterministic_benefit.tax_liability_cap).sort(),
+    Object.keys(r.plans[0].deterministic_benefit.tax_liability_cap).sort(),
+  );
+  assert.deepEqual(Object.keys(m.plans[0].priority_basis).sort(), Object.keys(r.plans[0].priority_basis).sort());
+});
+
+test('the mock agrees with the real engine on the three states the screen branches on', () => {
+  const cases = [
+    { label: '모름', prior: { state: 'unknown', determined_tax_krw: null, pension_credit_applied_krw: null } },
+    { label: '0', prior: { state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: null } },
+    { label: '잘림', prior: { state: 'amount', determined_tax_krw: 500000, pension_credit_applied_krw: null } },
+    { label: '넉넉', prior: { state: 'amount', determined_tax_krw: 5000000, pension_credit_applied_krw: null } },
+  ];
+  for (const { label, prior } of cases) {
+    const req = baseRequest({ scenarios: ['current'] });
+    req.profile.prior_year_tax = prior;
+    const m = compute(req, rulesets).scenarios[0].plans[0].deterministic_benefit.tax_liability_cap;
+    const r = realCompute(req, rulesets).scenarios[0].plans[0].deterministic_benefit.tax_liability_cap;
+    // 화면이 상태를 고르는 데 쓰는 세 값이 일치해야 한다(tax-credit-view.js).
+    assert.equal(m.known, r.known, label + ': known');
+    assert.equal(m.cap_krw, r.cap_krw, label + ': cap_krw');
+    assert.equal(m.applied, r.applied, label + ': applied');
+  }
+});
+
+test('a started annuity takes that account out of the allocation, with a reason the screen can print', () => {
+  const req = baseRequest();
+  req.accounts.annuity_savings.annuity_start_status = 'started';
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, true);
+  const entry = res.scenarios[0].account_eligibility.find((e) => e.account === 'annuity_savings');
+  assert.equal(entry.eligible, false);
+  assert.deepEqual(entry.reason_codes, ['pension_contribution_blocked_annuity_started']);
+  for (const plan of res.scenarios[0].plans) {
+    assert.equal(plan.allocations.find((a) => a.account === 'annuity_savings').annual_krw, 0);
+  }
+});
+
+test('an unknown annuity status holds that account back rather than assuming not_started', () => {
+  const req = baseRequest();
+  req.accounts.retirement_pension.annuity_start_status = 'unknown';
+  const res = compute(req, rulesets);
+  const entry = res.scenarios[0].account_eligibility.find((e) => e.account === 'retirement_pension');
+  assert.equal(entry.eligible, false);
+  assert.deepEqual(entry.reason_codes, ['pension_annuity_start_unknown']);
+});
+
+test('a zero cap flattens the tax-credit axis and says so, without moving the allocations', () => {
+  const withCap = baseRequest();
+  withCap.profile.prior_year_tax = { state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: null };
+  const plentiful = baseRequest();
+  plentiful.profile.prior_year_tax = { state: 'amount', determined_tax_krw: 9000000, pension_credit_applied_krw: null };
+
+  const zero = compute(withCap, rulesets).scenarios[0];
+  const rich = compute(plentiful, rulesets).scenarios[0];
+
+  assert.ok(zero.comparison_note_codes.includes('tax_credit_axis_not_discriminating'));
+  assert.ok(!rich.comparison_note_codes.includes('tax_credit_axis_not_discriminating'));
+  // **배분은 그대로다** — 한도는 공제액만 자른다(계약 4.2절의 자기 선언).
+  assert.deepEqual(
+    zero.plans[0].allocations.map((a) => a.annual_krw),
+    rich.plans[0].allocations.map((a) => a.annual_krw),
+  );
+  assert.equal(zero.plans[0].deterministic_benefit.pension_credit_total_krw, 0);
+  assert.ok(zero.plans[0].deterministic_benefit.pension_credit_total_before_cap_krw > 0);
+  // `isa_first`만 목적함수가 무너지지 않는다 — 그 안의 근거는 인출 가능성이다.
+  for (const plan of zero.plans) {
+    assert.equal(plan.priority_basis.objective_degenerate, plan.plan_id !== 'isa_first');
+  }
 });

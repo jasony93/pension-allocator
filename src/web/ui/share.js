@@ -10,9 +10,43 @@
  */
 
 import { el } from './dom.js';
-import { ACCOUNT_LABEL, PLAN_LABEL, SERVICE_NAME, DISCLOSURE } from '../copy.js';
+import {
+  ACCOUNT_LABEL,
+  PLAN_LABEL,
+  SERVICE_NAME,
+  DISCLOSURE,
+  BOUNDED_AMOUNT_PREFIX,
+  boundedDirectionNote,
+  capReducedNote,
+  AMOUNT_CARD_CAPTION_ZERO_CLAUSE,
+} from '../copy.js';
 import { formatKrw, formatPercent } from '../format.js';
 import { CHART_ACCOUNT_ORDER } from './charts.js';
+import { taxCreditHeadlineView, HEADLINE_MODE } from '../tax-credit-view.js';
+
+/**
+ * **화면에서는 조건이 붙은 금액이 이미지에서는 조건 없이 나가는 상태를 만들지
+ * 않는다**(`screens.md` 9절). 이미지는 화면 밖으로 나가면 정정할 기회가 없고,
+ * 조건 없는 금액 표시는 헌장이 정면으로 금지한 것이다. 그래서 헤드라인 표기를
+ * 화면과 **같은 함수**(`taxCreditHeadlineView`)로 고른다 — 두 곳에서 따로
+ * 판정하면 한쪽만 고쳐진다.
+ */
+export function shareHeadline(plan) {
+  const view = taxCreditHeadlineView(plan);
+  if (view.mode === HEADLINE_MODE.BOUNDED) {
+    return {
+      amountText: `${BOUNDED_AMOUNT_PREFIX} ${formatKrw(view.totalKrw)}`,
+      conditionText: view.thresholdIncomeTaxKrw != null ? boundedDirectionNote(view.thresholdIncomeTaxKrw) : '',
+    };
+  }
+  if (view.mode === HEADLINE_MODE.ZERO) {
+    return { amountText: formatKrw(view.totalKrw), conditionText: AMOUNT_CARD_CAPTION_ZERO_CLAUSE };
+  }
+  if (view.mode === HEADLINE_MODE.REDUCED) {
+    return { amountText: formatKrw(view.totalKrw), conditionText: capReducedNote(view.beforeCapKrw, view.reducedTotalKrw) };
+  }
+  return { amountText: formatKrw(view.totalKrw), conditionText: '' };
+}
 
 function shareableSummary(plan, scenario) {
   const total = plan.allocations.reduce((s, a) => s + a.annual_krw, 0) + plan.unallocated_annual_krw;
@@ -21,10 +55,11 @@ function shareableSummary(plan, scenario) {
     const pct = total > 0 ? a.annual_krw / total : 0;
     return { label: ACCOUNT_LABEL[account], monthly: a.monthly_krw, pct };
   });
+  const headline = shareHeadline(plan);
   return {
     planLabel: PLAN_LABEL[plan.plan_id],
     rows,
-    creditTotal: plan.deterministic_benefit.pension_credit_total_krw,
+    headline,
     taxYear: scenario.ruleset.tax_year,
     lawEntries: scenario.legal_basis.map((l) => l.law),
     isProposed: !scenario.is_enacted,
@@ -51,7 +86,7 @@ function drawToCanvas(summary) {
 
   ctx.fillStyle = '#14181c';
   ctx.font = '700 28px sans-serif';
-  ctx.fillText(formatKrw(summary.creditTotal), 24, 130);
+  ctx.fillText(summary.headline.amountText, 24, 130);
   ctx.font = '400 12px sans-serif';
   ctx.fillStyle = '#4a535c';
   ctx.fillText(
@@ -59,9 +94,15 @@ function drawToCanvas(summary) {
     24,
     150,
   );
+  let conditionY = 168;
+  // 상한 접두가 붙은 금액은 그 조건 한 줄이 **같은 이미지 안에** 함께 들어간다.
+  if (summary.headline.conditionText) {
+    ctx.fillText(summary.headline.conditionText, 24, conditionY, width - 48);
+    conditionY += 18;
+  }
   if (summary.isProposed) {
     ctx.fillStyle = '#2f5d8c';
-    ctx.fillText('정부안 · 국회 통과 전 시나리오', 24, 168);
+    ctx.fillText('정부안 · 국회 통과 전 시나리오', 24, conditionY);
   }
 
   let y = 200;
@@ -106,8 +147,9 @@ export function openShareModal({ plan, scenario, onExport, onClose }) {
     el('p', { class: 'type-body-strong' }, [SERVICE_NAME]),
     el('p', { class: 'type-caption' }, [DISCLOSURE.nature]),
     el('p', { class: 'type-caption' }, [DISCLOSURE.qualification]),
-    el('p', { class: 'type-display-sub' }, [formatKrw(summary.creditTotal)]),
+    el('p', { class: 'type-display-sub' }, [summary.headline.amountText]),
     el('p', { class: 'type-caption' }, [`${summary.taxYear} 과세연도 기준 · ${summary.planLabel}`]),
+    summary.headline.conditionText ? el('p', { class: 'type-caption' }, [summary.headline.conditionText]) : null,
     previewList,
     el(
       'ul',
@@ -123,7 +165,9 @@ export function openShareModal({ plan, scenario, onExport, onClose }) {
       '배분 금액의 합계로 월 납입 여력이 추정될 수 있습니다.',
     ]),
     el('p', { class: 'type-caption' }, [
-      '나이·소득·월 납입 여력·기납입액 등 입력값은 이 이미지에 포함되지 않습니다.',
+      // 3.7.5절 못 일곱 중 일곱 번째 — 목록에 `나이`로만 적혀 있던 자리를
+      // `생년월일`로 교체했다. 이미지에는 만 나이조차 싣지 않는다.
+      '생년월일·만 나이·총급여액·직전 과세연도 결정세액·월 납입 여력·기납입액 등 입력값은 이 이미지에 포함되지 않습니다.',
     ]),
   ]);
 

@@ -114,10 +114,19 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   padding: var(--space-5); text-align: center; font-size: 12.5px; color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
 }
+/* 데스크톱 5:7 분할. **sticky는 결과 패널에 건다**(screens.md 1.1·3.11.4절 (a)).
+   입력이 길어져도 오른쪽 차트가 시야에서 사라지지 않아야 "값을 바꾸면 차트가
+   즉시 바뀌는 것을 본다"는 실시간 반영의 가치가 성립한다 — 입력 길이와 결과
+   가시성이 이 한 줄로 분리된다. 이번 개정으로 입력이 넷 늘어 왼쪽이 길어졌고,
+   sticky가 반대쪽(입력)에 걸려 있으면 그때부터 결과가 위로 밀려 사라진다. */
 @media (min-width: 1024px) {
   .app-main { flex-direction: row; align-items: flex-start; gap: var(--space-7); padding: var(--space-6) var(--space-6); }
-  .input-slot { flex: 5 1 0; min-width: 400px; max-width: 520px; position: sticky; top: 80px; }
-  .result-slot { flex: 7 1 0; }
+  .input-slot { flex: 5 1 0; min-width: 400px; max-width: 520px; }
+  /* 높이를 뷰포트보다 넉넉히 낮춰 둔다. sticky 요소는 컨테이너(.app-main) 아래
+     끝에서 바닥에 붙으므로, 패널이 뷰포트만큼 높으면 페이지 맨 아래에서 위쪽이
+     잘린다 — 잘리는 첫 블록이 하필 **접기 불가인 고지 ①②**다(실측으로 -68.6px
+     잘려 있었다). 여유를 두면 맨 아래에서도 고지가 화면에 남는다. */
+  .result-slot { flex: 7 1 0; position: sticky; top: var(--space-4); max-height: calc(100vh - 96px); overflow-y: auto; }
 }
 
 /* ---- 입력 패널 ---- */
@@ -140,7 +149,56 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .field-help { font-size: 12.5px; color: var(--text-secondary); margin: var(--space-1) 0 0; }
 .field-error-msg { font-size: 12.5px; color: var(--state-error); margin: var(--space-1) 0 0; }
 
+.field-warning-msg { font-size: 12.5px; color: var(--state-warning); margin: var(--space-1) 0 0; }
+.field-control:has(.field-input-warning) { border-color: var(--state-warning); }
+
 .checkbox-row { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; margin-bottom: var(--space-2); cursor: pointer; }
+
+/* 출처가 같은 입력 사이의 구분선(screens.md 3.11.4절 (c)) — 사용자가 서류를
+   꺼내는 횟수는 필드 개수가 아니라 필드가 흩어진 정도로 결정된다. */
+.input-source-divider {
+  display: flex; align-items: center; gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-3); font-size: 12.5px; color: var(--text-secondary);
+}
+.input-source-divider::before, .input-source-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border-subtle);
+}
+
+/* KnownOrUnknownField (design-system 5.26절) — 값 칸과 `모르겠습니다`가 한 묶음.
+   **기본 선택이 없다.** `모르겠습니다`도 사용자가 눌러야 선택된다. */
+.known-unknown-field { margin-bottom: var(--space-5); }
+.known-unknown-group { margin-top: var(--space-2); }
+.known-unknown-option {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 44px;
+  padding: 0 var(--space-3); text-align: left; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-m);
+  background: var(--surface-sunken); color: var(--text-secondary); font-size: 14px;
+}
+.known-unknown-option-selected { background: var(--accent-subtle); border-color: var(--accent); color: var(--text-primary); font-weight: 600; }
+.known-unknown-dot { color: var(--accent); }
+
+/* SourceGuide (design-system 5.27절) — 이 시스템에서 접기가 허용되는 유일한 자리.
+   접히는 것이 *답*이 아니라 *설명*이기 때문이다. 모달·툴팁이 아니다. */
+.source-guide { margin-top: var(--space-2); }
+.source-guide-trigger { min-height: 44px; display: flex; align-items: center; font-size: 14px; color: var(--text-link); cursor: pointer; }
+.source-guide ul { margin: 0; padding: var(--space-3) 0 0 var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.source-guide li { list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.source-guide-heading { font-weight: 600; color: var(--text-primary); }
+.source-guide-body { color: var(--text-secondary); }
+/* D19 — 미설정 상태는 조용하면 안 된다. 자리표시자가 남아 있으면 드러낸다. */
+.source-guide-placeholder { color: var(--state-warning); font-weight: 600; }
+
+/* ProvisionalStatusNote (design-system 5.28절) — 아직 법으로 정해지지 않은 상태.
+   **state-warning을 쓰지 않는다**: 사용자가 잘못한 것이 아니다.
+   **본문에 세법 수치가 없다** — 연령 범위는 룰셋에서 오고 화면에 인쇄되지 않는다. */
+.provisional-note {
+  margin: 0 0 var(--space-4); padding: var(--space-3);
+  border-left: 3px solid var(--state-info); background: var(--state-info-subtle);
+  border-radius: var(--radius-m); display: flex; flex-direction: column; gap: var(--space-2);
+}
+.provisional-note p { margin: 0; }
+.provisional-note-title { margin: 0; font-size: 14px; font-weight: 700; }
+.provisional-note .checkbox-row { margin-bottom: 0; }
 
 .segment-group { display: flex; gap: var(--space-2); }
 .segment-option {
@@ -197,6 +255,9 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .req-item-conditional { background: var(--surface-sunken); }
 .req-status { margin-left: auto; font-size: 12.5px; color: var(--text-link); }
 .req-dot { width: 1.2em; }
+/* "모르면 모르겠습니다를 고르면 됩니다" — 막는 항목이 아니라는 사실을 행에서
+   바로 말한다(screens.md 3.8.3절). 재촉이 아니라 되돌아갈 경로의 안내다. */
+.req-hint { display: block; font-size: 12.5px; color: var(--text-secondary); }
 
 .result-placeholder { border: 1px dashed var(--border-strong); border-radius: var(--radius-l); padding: var(--space-6); text-align: center; color: var(--text-secondary); }
 .placeholder-shape { width: 96px; height: 96px; margin: 0 auto var(--space-3); border-radius: 50%; background: var(--surface-sunken); }
@@ -214,6 +275,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .amount-card-label { font-size: 14px; color: var(--text-secondary); margin: 0; }
 .amount-card-value { margin: 0; }
 .amount-card-caption { font-size: 12.5px; color: var(--text-secondary); margin: 0; }
+/* AmountCard 상한 변형의 슬롯4 — **금액 아래 24px 이내, 같은 카드 안**(D11).
+   다른 카드로 밀거나 접으면 위반이다. `state-warning`을 쓰지 않는다: 상한은
+   오류가 아니라 사용자가 정직하게 답한 결과다(design-system 5.6절). */
+.amount-card-direction {
+  margin-top: var(--space-2); padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: var(--space-1); align-items: flex-start;
+}
+.amount-card-direction p { margin: 0; }
+.amount-card-direction .btn-text { height: auto; padding: 0; }
 
 .warning-note { display: flex; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-m); margin-top: var(--space-2); font-size: 14px; }
 .warning-note-warning { background: var(--state-warning-subtle); border-left: 3px solid var(--state-warning); }
@@ -257,6 +328,15 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   .donut-labels { display: none; }
   .donut-slice-indexes { display: block; }
   .donut-legend { display: flex; }
+  /* 1열이라 폼 길이가 곧 스크롤 길이다(3.11.4절 (d) 1). 그룹 헤더를 sticky로
+     두어 스크롤 중에도 지금 어느 그룹에 있는지 보이게 한다. **답한 그룹을
+     자동으로 접지 않는다** — 사용자가 만들지 않은 변화를 화면에서 일으키지 않는다. */
+  .input-group-title {
+    position: sticky; top: 0; z-index: 1;
+    min-height: 36px; display: flex; align-items: center;
+    background: var(--surface-raised); margin: 0 calc(-1 * var(--space-5)) var(--space-3);
+    padding: 0 var(--space-5);
+  }
 }
 .chart-note { text-align: center; }
 

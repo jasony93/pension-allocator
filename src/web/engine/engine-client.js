@@ -17,12 +17,19 @@
  * 불변식이었는데 아무도 잡지 못했었다고 커밋 메시지가 적고 있다. 이 파일과
  * `state/store.js`가 보내던 `'2.1.0'`은 이 개정 전 버전이었다 — 실제 엔진과
  * 맞춰 `'3.0.0'`으로 올렸다. 이 사실은 최종 보고에도 남긴다.
+ *
+ * **그 뒤 계약이 `4.0.0`(major)으로 다시 올랐다.** 요청에 `profile.birth_date`·
+ * `profile.prior_year_tax`·`accounts.*.annuity_start_status`가 필수로 들어오고
+ * `profile.age_years`가 사라졌다. 이 파일은 버전 문자열을 엔진에서 그대로
+ * 재수출하므로 고칠 것이 없었고, 바뀐 것은 요청을 만드는 쪽(`state/store.js`)과
+ * 그 값을 받는 화면이다. **버전 문자열을 두 곳에 적지 않은 것이 여기서 값을 했다.**
  */
 import {
   compute as engineCompute,
   computeFundUseHorizonBoundaries as engineBoundaries,
   SCHEMA_VERSION,
 } from '../../engine/index.mjs';
+import { youthProvisionalRule } from './provisional-rules.js';
 
 // 요청을 만드는 쪽(state/store.js)이 이 값을 그대로 쓴다 — 문자열을 두 곳에
 // 따로 적어 두면 다음 버전 올림에서 한쪽만 바뀌는 사고가 난다.
@@ -66,4 +73,15 @@ export async function compute(request) {
 export async function computeFundUseHorizonBoundaries(request) {
   const rulesets = await loadRulesets();
   return engineBoundaries(request, rulesets);
+}
+
+/**
+ * 아직 법으로 정해지지 않은 상태를 말하려면 룰셋에서 읽어야 한다 —
+ * `provisional-rules.js` 머리말 참조. 입력 패널의 청년 블록은 계산 이전에도
+ * 그려지므로 `scenario.legal_basis`가 아직 없고, 그래서 이 경로가 필요하다.
+ * 세법 수치(연령 범위)는 화면에 인쇄되지 않고 해당 여부 판정에만 쓰인다.
+ */
+export async function loadProvisionalYouthRule() {
+  const rulesets = await loadRulesets();
+  return youthProvisionalRule(rulesets);
 }
