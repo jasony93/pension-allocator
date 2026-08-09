@@ -8,7 +8,7 @@
  */
 
 import { el, svgEl } from './dom.js';
-import { ACCOUNT_LABEL } from '../copy.js';
+import { ACCOUNT_LABEL, UNALLOCATED_LABEL } from '../copy.js';
 import { formatKrw, formatPercent } from '../format.js';
 
 const CHART_ACCOUNT_ORDER = ['annuity_savings', 'retirement_pension', 'isa'];
@@ -135,9 +135,35 @@ export function sliceAngles(segments, { minDeg = MIN_SLICE_DEG } = {}) {
   });
 }
 
-/** 라벨 블록이 들어갈 좌우 여백과 위아래 여백. 도넛 자체의 기하는 건드리지 않는다. */
-export const LABEL_GUTTER = 136;
+/**
+ * 도넛 바깥지름. `screens.md` 5.2절(데스크톱 와이어프레임 주석 `외경 260px`)과
+ * 5.7절(모바일 `C-1 외경 200px`)이 정한 값이다 — 설계가 답한 수치이므로 이
+ * 유닛이 새로 정하지 않는다. 세법 수치가 아니라 화면 기하 상수다.
+ *
+ * `labelled`는 라벨이 도넛 옆에 붙는 모드(데스크톱), `legend`는 라벨이 도넛 아래
+ * 리스트로 내려가는 모드(모바일, 5.7절)다.
+ */
+export const DONUT_OUTER_DIAMETER = { labelled: 260, legend: 200 };
+
+/**
+ * 라벨 블록이 들어갈 좌우 여백.
+ *
+ * **실측에서 정한 값이다.** 세 프로필의 라벨 블록 폭을 브라우저에서
+ * `getBoundingClientRect()`로 재니 최대 108.8px이었고(가장 긴 줄은 금액
+ * `1,250,000원 / 월`), 자릿수가 더 늘어날 여지를 두어 `LABEL_TEXT_BUDGET`을
+ * 132px로 잡았다. 라벨의 x는 `cx ± (R×1.2 + 10)`이고 텍스트는 거기서 바깥쪽으로
+ * 뻗으므로, 여백은 `(R×1.2 + 10 + 텍스트폭) − R` 이상이어야 한다. R=130에서
+ * 그 값은 168px이고, 좌우 8px씩 더 남기려고 176으로 둔다.
+ *
+ * 이 관계는 테스트가 고정한다 — 예전 구현은 라벨을 `R×1.22` 지점에 찍으면서
+ * viewBox는 도넛 크기 그대로여서 라벨이 통째로 잘려 나갔고, 스크린샷으로는
+ * "원래 그런 디자인"과 구분되지 않았다.
+ */
+export const LABEL_GUTTER = 176;
+export const LABEL_TEXT_BUDGET = 132;
 const LABEL_VPAD = 26;
+/** 라벨을 그리지 않는 모드에서 도넛 둘레에 남기는 여백(압출 그림자·안티에일리어싱). */
+const LEGEND_PAD = 8;
 const LABEL_LINE_GAP = 56; // 세 줄짜리 라벨 블록의 최소 세로 간격
 /**
  * 라벨의 y는 **첫 줄의 기준선**이고 아래로 두 줄이 더 붙는다. 이 값을 계산에
@@ -146,6 +172,40 @@ const LABEL_LINE_GAP = 56; // 세 줄짜리 라벨 블록의 최소 세로 간�
  * 차지한다는 사실을 좌표 계산이 알아야 한다.
  */
 export const LABEL_BLOCK_BELOW = 42;
+
+/**
+ * 도넛의 기하를 한 곳에서 낸다. **순수 함수다** — `donutChart`와 테스트가 같은
+ * 값을 보게 하려는 것이다. 예전에는 이 계산이 렌더 함수 안에 있었고 테스트가
+ * 상수를 따로 베껴 두고 있어서, 지름을 바꾸면 테스트는 옛 상자를 검사했다.
+ */
+export function donutGeometry(labelMode = 'labelled') {
+  const mode = labelMode === 'legend' ? 'legend' : 'labelled';
+  const diameter = DONUT_OUTER_DIAMETER[mode];
+  const R = diameter / 2;
+  const pad = mode === 'labelled' ? LABEL_VPAD : LEGEND_PAD;
+  const gutter = mode === 'labelled' ? LABEL_GUTTER : LEGEND_PAD;
+  const depth = R * EXTRUDE_RATIO;
+  const width = diameter + gutter * 2;
+  const height = diameter + depth + pad * 2;
+  return { mode, diameter, R, rInner: R * 0.55, depth, width, height, cx: width / 2, cy: pad + R };
+}
+
+/**
+ * 라벨을 옆에 붙일 것인가(데스크톱) 아래 리스트로 내릴 것인가(모바일).
+ *
+ * CSS만으로는 `viewBox`를 바꿀 수 없다. 그래서 모바일에서 라벨을
+ * `display: none`으로 감추기만 했더니 **라벨 자리로 비워 둔 좌우 여백은 그대로
+ * 남아** 같은 폭 안에서 도넛만 작아졌다 — 실측에서 모바일 도넛 외경이 127.7px로,
+ * 설계가 정한 200px보다 72px 작았다. 폭이 아니라 상자 자체를 모드에 따라 다르게
+ * 만들어야 한다.
+ */
+export function preferredLabelMode() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'labelled';
+  return window.matchMedia(COMPACT_MEDIA_QUERY).matches ? 'legend' : 'labelled';
+}
+
+/** `styles.css`의 모바일 분기와 같은 폭이어야 한다. 어긋나면 라벨이 두 번 보이거나 아예 사라진다. */
+export const COMPACT_MEDIA_QUERY = '(max-width: 767px)';
 
 /**
  * 도넛 라벨의 배치를 정하는 **순수 함수**.
@@ -218,17 +278,14 @@ export function donutChart({
   allocations,
   unallocatedAnnualKrw,
   unallocatedMonthlyKrw = 0,
-  size = 240,
+  totalAllocatedMonthlyKrw = 0,
   isProposed = false,
   excludedAccounts = [],
+  labelMode = preferredLabelMode(),
 }) {
-  const R = size / 2 - 8;
-  const rInner = R * 0.55;
-  const depth = R * EXTRUDE_RATIO;
-  const width = size + LABEL_GUTTER * 2;
-  const height = size + depth + LABEL_VPAD * 2;
-  const cx = width / 2;
-  const cy = LABEL_VPAD + size / 2;
+  const geom = donutGeometry(labelMode);
+  const { R, rInner, depth, width, height, cx, cy } = geom;
+  const drawLabels = geom.mode === 'labelled';
 
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
   const total = segments.reduce((s, seg) => s + seg.amount, 0);
@@ -237,8 +294,7 @@ export function donutChart({
   // 라벨에 쓸 월 금액 — 엔진이 준 값을 그대로 쓴다(화면이 연 금액을 나누지 않는다).
   const monthlyByAccount = Object.fromEntries((allocations ?? []).map((a) => [a.account, a.monthly_krw]));
   const monthlyOf = (arc) => (arc.isUnallocated ? unallocatedMonthlyKrw : (monthlyByAccount[arc.account] ?? 0));
-  const nameOf = (arc) => (arc.isUnallocated ? '미배분' : ACCOUNT_LABEL[arc.account]);
-  const totalMonthly = arcs.reduce((sum, a) => sum + monthlyOf(a), 0);
+  const nameOf = (arc) => (arc.isUnallocated ? UNALLOCATED_LABEL : ACCOUNT_LABEL[arc.account]);
 
   const sides = arcs.map((a) =>
     svgEl('path', {
@@ -271,7 +327,7 @@ export function donutChart({
         )
     : [];
 
-  const layout = donutLabelLayout(arcs, { cx, cy, R, width, height });
+  const layout = drawLabels ? donutLabelLayout(arcs, { cx, cy, R, width, height }) : [];
 
   // 지시선 — 조각마다 하나. 라벨이 어느 조각의 값인지 모호하면 라벨이 값을 잃는다.
   const leaders = layout.map((l) =>
@@ -304,10 +360,15 @@ export function donutChart({
     ]);
   });
 
-  // 중앙 값 — 월 배분 총액(screens.md 5.8·5.12절).
+  // 중앙 값 — **월 배분 총액**(screens.md 5.8절이 절감세액을 여기 두지 않기로
+  // 하면서 확정한 값, 5.12절이 조각 하나일 때도 그대로 둔다고 재확인).
+  //
+  // 엔진의 `total_allocated_monthly_krw`를 그대로 쓴다. 조각의 월 금액을 화면이
+  // 더하면 **미배분 조각까지 더해져** 배분 총액이 아니라 납입 여력이 나온다 —
+  // 라벨이 `월 배분`인데 값은 배분되지 않은 돈까지 담게 된다.
   const centerText = svgEl('text', { class: 'donut-center', x: cx, y: cy, 'text-anchor': 'middle' }, [
     svgEl('tspan', { class: 'donut-center-label', x: cx, dy: '-0.4em' }, ['월 배분']),
-    svgEl('tspan', { class: 'donut-center-value', x: cx, dy: '1.5em' }, [formatKrw(totalMonthly)]),
+    svgEl('tspan', { class: 'donut-center-value', x: cx, dy: '1.5em' }, [formatKrw(totalAllocatedMonthlyKrw)]),
   ]);
 
   const defs = svgEl('defs', {}, [
@@ -327,10 +388,10 @@ export function donutChart({
       ...sides,
       ...tops,
       ...hatches,
-      svgEl('g', { class: 'donut-labels' }, [...leaders, ...labels]),
-      svgEl('g', { class: 'donut-slice-indexes' }, sliceNumbers),
+      drawLabels ? svgEl('g', { class: 'donut-labels' }, [...leaders, ...labels]) : null,
+      drawLabels ? null : svgEl('g', { class: 'donut-slice-indexes' }, sliceNumbers),
       centerText,
-    ],
+    ].filter(Boolean),
   );
 
   return svg;
@@ -340,6 +401,14 @@ export function donutChart({
  * 모바일 범례 — 도넛 라벨이 겹치는 폭에서 라벨을 대신한다(screens.md 5.7절).
  * **금액이 여기에도 들어간다** — 모바일에서 A2가 약해지는 것은 감수한 약점이지만
  * (5.13절), 금액까지 빠지면 값을 읽을 경로가 아예 사라진다.
+ *
+ * **배분액이 0인 계좌와 배제된 계좌는 여기 들어가지 않는다.** 범례는 도넛 라벨의
+ * 대역이므로 조각과 1:1이어야 한다 — 조각이 없는데 번호가 붙은 줄이 있으면
+ * ①②③이 어느 조각을 가리키는지가 무너진다. 설계가 두 경우를 각각 정해 두었고
+ * (5.9절: 배제 계좌는 "조각을 그리지 않는다. 라벨도 없다", 5.4절: 배분액 0인
+ * 계좌는 C-2 캡션 `이 배분에서는 배분하지 않음`이 자리를 맡는다), 두 사실을
+ * 말하는 자리는 모바일에서도 그대로 살아 있다(C-2는 폭만 줄고 그대로 성립한다,
+ * 5.7절). 그래서 범례에 다시 적지 않는다.
  */
 export function donutLegend({ allocations, unallocatedAnnualKrw, unallocatedMonthlyKrw = 0, excludedAccounts = [] }) {
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
@@ -356,7 +425,7 @@ export function donutLegend({ allocations, unallocatedAnnualKrw, unallocatedMont
       return el('li', { class: 'donut-legend-item' }, [
         el('span', { class: 'donut-legend-index' }, [CIRCLED_NUMBERS[i] ?? String(i + 1)]),
         el('span', { class: 'donut-legend-swatch', style: { background: color } }),
-        el('span', { class: 'donut-legend-name' }, [a.isUnallocated ? '미배분' : ACCOUNT_LABEL[a.account]]),
+        el('span', { class: 'donut-legend-name' }, [a.isUnallocated ? UNALLOCATED_LABEL : ACCOUNT_LABEL[a.account]]),
         el('span', { class: 'donut-legend-amount type-num' }, [`${formatKrw(monthly)} / 월`]),
         el('span', { class: 'donut-legend-pct' }, [formatPercent(total > 0 ? a.amount / total : 0)]),
       ]);

@@ -23,6 +23,28 @@ export const ACCOUNT_LABEL = {
   isa: 'ISA',
 };
 
+/**
+ * 계좌 이름에 붙는 조사. 이름에서 받침을 계산하지 않고 계좌 id마다 표로 둔다 —
+ * `IRP`·`ISA`는 로마자 표기라 글자만 보고는 받침을 알 수 없고(읽기로는 각각
+ * "아이알피"·"아이에스에이"로 끝나 받침이 없다), 이름이 바뀌면 표만 고치면 된다.
+ * 실측에서 `연금저축로 갑니다`가 화면에 그대로 떠 있었다.
+ */
+const ACCOUNT_PARTICLE = {
+  annuity_savings: { topic: '은', object: '을', subject: '이', direction: '으로', and: '과' },
+  retirement_pension: { topic: '는', object: '를', subject: '가', direction: '로', and: '와' },
+  isa: { topic: '는', object: '를', subject: '가', direction: '로', and: '와' },
+};
+
+/** `연금저축` + `object` → `연금저축을`. 모르는 계좌면 이름만 낸다. */
+export function accountWithParticle(account, kind) {
+  const name = ACCOUNT_LABEL[account] ?? account;
+  const particle = ACCOUNT_PARTICLE[account]?.[kind];
+  return particle ? `${name}${particle}` : name;
+}
+
+/** 도넛·범례·표에서 미배분 조각을 부르는 이름. 계좌가 아니므로 `ACCOUNT_LABEL`에 넣지 않는다. */
+export const UNALLOCATED_LABEL = '미배분';
+
 export const PLAN_LABEL = {
   max_tax_credit: '세액공제액이 가장 큰 배분',
   annuity_savings_first: '연금저축을 먼저 채우는 배분',
@@ -270,7 +292,53 @@ export const NOT_ALLOCATED_IN_PLAN_CAPTION = '이 배분에서는 배분하지 �
 
 /** 조각이 하나뿐인 도넛의 캡션 (5.12절). */
 export function donutSingleSliceCaption(account) {
-  return `이번 배분은 전액이 ${ACCOUNT_LABEL[account] ?? account}로 갑니다. 계좌별 한도와 남은 여력은 아래에서 볼 수 있습니다.`;
+  return `이번 배분은 전액이 ${accountWithParticle(account, 'direction')} 갑니다. 계좌별 한도와 남은 여력은 아래에서 볼 수 있습니다.`;
+}
+
+// ---------------------------------------------------------------------------
+// 왜 이 순서로 채웠는가 — 세제상 동점의 순서 (계약 0.4·5.6절 `PriorityBasis.tie_break`)
+//
+// 소유자가 프로토타입에서 "왜 IRP를 먼저 채우는지 알려달라"고 물었고 그 물음이
+// 맞았다. 화면은 이제 **묻기 전에** 답해야 한다.
+//
+// **사실과 제품 판단을 한 문장에 섞지 않는다.** 두 가지가 섞이면 "연금저축을
+// 먼저 채우는 것이 세법이 정한 결론"으로 읽히는데, 그것은 사실이 아니다 —
+// 근거 규칙(`pension.withdrawal.midterm_restriction`)의 `product_note`가
+// "어느 계좌를 먼저 채울지는 이 규칙이 정하지 않는다"고 명시한다. 그래서
+// 문장을 둘로 끊고 각각에 무엇이 정한 것인지 이름표를 붙인다.
+//
+// 계좌 이름을 문장에 박지 않는다. 어느 쪽이 인출이 자유로운지는 룰셋이 정하고
+// 엔진이 `fill_sequence`(실제로 쓴 순서)로 실어 보내므로, 룰셋이 바뀌면 문장도
+// 따라 바뀐다. 여기 `IRP`를 적어 두면 그 순간 문장이 룰셋과 갈라선다.
+// ---------------------------------------------------------------------------
+
+export const FILL_ORDER_NOTE_HEADING = '두 연금계좌 중 왜 이 순서인가';
+export const FILL_ORDER_TAG_FACT = '법령이 정한 것';
+export const FILL_ORDER_TAG_PRODUCT = '이 계산기가 정한 것';
+
+/**
+ * 사실 절. `flexible`은 중도인출에 법령상 제한이 없는 계좌, `restricted`는 열거된
+ * 사유에 해당해야 인출이 되는 계좌다. 둘 다 엔진의 `fill_sequence`에서 온다.
+ * **금액도 연수도 넣지 않는다** — 이 절이 말하는 것은 두 계좌의 과세가 같다는
+ * 사실과 인출 제한의 유무뿐이고, 둘 다 숫자가 아니다.
+ */
+export function fillOrderFactMessage(flexible, restricted) {
+  const flexibleTopic = accountWithParticle(flexible, 'topic');
+  const restrictedTopic = accountWithParticle(restricted, 'topic');
+  const restrictedName = ACCOUNT_LABEL[restricted] ?? restricted;
+  return (
+    `이 계산에서 ${accountWithParticle(flexible, 'and')} ${restrictedName}의 세액공제액은 같습니다 — 두 계좌에 적용되는 공제율이 같아, ` +
+    `어느 쪽을 먼저 채워도 계산되는 세액공제액이 달라지지 않습니다. ` +
+    `다만 ${restrictedTopic} 법령이 열거한 사유에 해당할 때만 중도인출이 되고, ${flexibleTopic} 그 제한을 받지 않습니다.`
+  );
+}
+
+/** 제품 판단 절. 지시형·권유형을 쓰지 않고 "이 계산기가 무엇을 했는가"로 끝낸다. */
+export function fillOrderDecisionMessage(flexible) {
+  return (
+    `세액공제액이 같은 구간에서는 이 계산기가 중도인출 제한을 받지 않는 ${accountWithParticle(flexible, 'object')} 먼저 채웁니다. ` +
+    `세법이 정한 순서가 아니라 이 계산기의 배분 기준이며, 이 선택으로 계산되는 세액공제액이 줄지는 않습니다.`
+  );
 }
 
 export const PROPOSED_BADGE_LABEL = '정부안 · 국회 통과 전';

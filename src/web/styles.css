@@ -279,7 +279,22 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .headroom-note p { margin: 0 0 var(--space-1); }
 .note-laws { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 
+/* 왜 이 순서로 채웠는가 (계약 0.4·5.6절).
+   **주의 색을 쓰지 않는다** — 사용자가 무언가를 잘못한 상태가 아니라 계산의
+   근거를 밝히는 자리다. EligibilityNote와 같은 이유로 info 계열을 쓴다.
+   사실 절과 제품 판단 절의 이름표는 색이 아니라 글자로 구분한다(색각 제약). */
+.fill-order-note { margin-top: var(--space-2); padding: var(--space-3); border-left: 3px solid var(--border-strong); background: var(--surface-sunken); border-radius: var(--radius-m); display: flex; flex-direction: column; gap: var(--space-2); }
+.fill-order-note h4 { margin: 0; }
+.fill-order-note p { margin: 0; }
+.fill-order-note .note-laws { margin-top: 0; }
+.note-tag { display: inline-block; margin-right: var(--space-1); padding: 1px 6px; border-radius: var(--radius-s); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.note-tag-fact { background: var(--surface-raised); border: 1px solid var(--border-strong); color: var(--text-primary); }
+.note-tag-product { background: var(--state-info-subtle); border: 1px solid var(--state-info); color: var(--state-info); }
+
 .stackbar { display: flex; flex-direction: column; gap: var(--space-2); }
+/* 배분안이 하나뿐일 때 — 자리를 없애지 않고 캡션 한 줄만 남긴다(screens.md 4.4절).
+   비교 영역이 통째로 사라지면 실시간 갱신 중에 아래 블록이 위로 튄다. */
+.stackbar-single { min-height: 44px; justify-content: center; }
 .stackbar-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; border: none; background: transparent; cursor: pointer; padding: var(--space-2); border-radius: var(--radius-m); }
 .stackbar-row-selected { background: var(--accent-subtle); }
 .stackbar-row-marker { width: 1em; color: var(--accent); }

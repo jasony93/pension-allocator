@@ -4,6 +4,7 @@ import {
   accountExclusion,
   accountLimitView,
   excludedAccounts,
+  fillOrderTieBreak,
   lawEntriesFor,
   lawEntriesForPath,
   pensionCreditHeadroomView,
@@ -279,4 +280,84 @@ test('a missing headroom value yields null and never a phantom zero', () => {
   const view = pensionCreditHeadroomView({ limits: {} }, planWithPension(0, 0));
   assert.equal(view.remainingKrw, null);
   assert.equal(view.exceeded, false);
+});
+
+// --- 왜 이 순서로 채웠는가 (계약 0.4·5.6절 `tie_break`) -----------------------
+//
+// 소유자가 "왜 IRP를 먼저 채우는지 알려달라"고 물었고, 그 물음이 엔진의 순서를
+// 바꿨다. 화면은 이제 묻기 전에 답해야 한다 — 다만 **동점일 때만** 그 답이
+// 사실이다. 공제율이 갈리는 구간에서 순서를 정한 것은 인출 유연성이 아니라
+// 세액공제 최대화다.
+
+function planWithTieBreak({ code, sequence, annuityAnnual = 6000000, retirementAnnual = 3000000, ruleIds = ['pension.withdrawal.midterm_restriction'] }) {
+  return {
+    plan_id: 'max_tax_credit',
+    priority_basis: {
+      code: 'tax_credit_maximization',
+      fill_sequence: sequence,
+      basis_rule_ids: ruleIds,
+      tie_break: { code, basis_rule_ids: code === 'withdrawal_flexibility_first' ? ruleIds : [] },
+    },
+    allocations: [
+      { account: 'retirement_pension', annual_krw: retirementAnnual },
+      { account: 'annuity_savings', annual_krw: annuityAnnual },
+      { account: 'isa', annual_krw: 0 },
+    ],
+  };
+}
+
+test('the tie-break explanation names the account the engine actually filled first, not a hardcoded one', () => {
+  const view = fillOrderTieBreak(
+    planWithTieBreak({ code: 'withdrawal_flexibility_first', sequence: ['annuity_savings', 'retirement_pension', 'isa'] }),
+  );
+  assert.deepEqual(
+    { flexible: view.flexible, restricted: view.restricted },
+    { flexible: 'annuity_savings', restricted: 'retirement_pension' },
+  );
+});
+
+test('if the ruleset ever flips which account is flexible, the explanation flips with it', () => {
+  // 계약 5.6절: "고정 배열로 가정하지 말고 이 값을 읽어라". 화면이 순서를 알고
+  // 있다고 가정하는 순간, 룰셋이 바뀌면 화면만 조용히 틀린다.
+  const view = fillOrderTieBreak(
+    planWithTieBreak({
+      code: 'withdrawal_flexibility_first',
+      sequence: ['retirement_pension', 'annuity_savings', 'isa'],
+      retirementAnnual: 9000000,
+      annuityAnnual: 0,
+    }),
+  );
+  assert.equal(view.flexible, 'retirement_pension');
+  assert.equal(view.restricted, 'annuity_savings');
+});
+
+test('no explanation when the rates are not tied — then it was tax credit maximisation that set the order', () => {
+  assert.equal(
+    fillOrderTieBreak(planWithTieBreak({ code: 'not_applicable', sequence: ['retirement_pension', 'annuity_savings', 'isa'] })),
+    null,
+  );
+});
+
+test('no explanation when the account filled first got nothing — there is no order on screen to explain', () => {
+  const view = fillOrderTieBreak(
+    planWithTieBreak({
+      code: 'withdrawal_flexibility_first',
+      sequence: ['annuity_savings', 'retirement_pension', 'isa'],
+      annuityAnnual: 0,
+      retirementAnnual: 0,
+    }),
+  );
+  assert.equal(view, null);
+});
+
+test('the explanation carries the rule ids the engine cited, so the screen can show the statute beside it', () => {
+  const view = fillOrderTieBreak(
+    planWithTieBreak({ code: 'withdrawal_flexibility_first', sequence: ['annuity_savings', 'retirement_pension', 'isa'] }),
+  );
+  assert.deepEqual(view.basisRuleIds, ['pension.withdrawal.midterm_restriction']);
+});
+
+test('a plan with no priority_basis at all does not crash the screen', () => {
+  assert.equal(fillOrderTieBreak({ allocations: [] }), null);
+  assert.equal(fillOrderTieBreak(null), null);
 });

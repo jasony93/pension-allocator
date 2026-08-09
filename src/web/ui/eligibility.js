@@ -140,6 +140,34 @@ export function pensionCreditHeadroomView(scenario, plan) {
 }
 
 /**
+ * 연금 두 계좌의 충당 순서를 **세제상 동점이 갈랐는가**, 갈랐다면 어느 쪽이
+ * 먼저인가. 화면이 "왜 이 순서인가"를 설명할 재료다(계약 0.4·5.6절).
+ *
+ * 판정하지 않는다. 엔진의 `priority_basis`를 읽기만 한다.
+ * - `tie_break.code`가 `withdrawal_flexibility_first`가 아니면 `null`. 공제율이
+ *   갈리는 구간에서는 순서를 정한 것이 인출 유연성이 아니라 세액공제
+ *   최대화이므로(계약 0.4절 "지킨 선" 1), 그 설명을 붙이면 거짓말이 된다.
+ * - 순서는 `fill_sequence`(**실제로 쓴 순서**)에서 읽는다. 계약 5.6절이
+ *   "고정 배열로 가정하지 말고 이 값을 읽어라"고 명시한다.
+ * - 먼저 채운 계좌에 실제로 들어간 금액이 0이면 `null`. 순서가 화면 어디에도
+ *   나타나지 않으므로 설명할 대상이 없다(예: ISA를 먼저 채우는 배분에서 연금
+ *   쌍이 둘 다 0원인 경우).
+ */
+export function fillOrderTieBreak(plan) {
+  const basis = plan?.priority_basis;
+  if (basis?.tie_break?.code !== 'withdrawal_flexibility_first') return null;
+
+  const pair = (basis.fill_sequence ?? []).filter((account) => PENSION_ACCOUNTS.includes(account));
+  if (pair.length !== 2) return null;
+  const [flexible, restricted] = pair;
+
+  const firstAllocation = (plan.allocations ?? []).find((a) => a.account === flexible);
+  if (!firstAllocation || firstAllocation.annual_krw <= 0) return null;
+
+  return { flexible, restricted, basisRuleIds: basis.tie_break.basis_rule_ids ?? [] };
+}
+
+/**
  * 규칙 id 목록에 해당하는 `legal_basis` 항목들. 배제 사유 옆에 붙일 `LawChip`의
  * 출처다 — 헌장 "계산에 쓴 법령 조항을 결과 화면에 노출한다"와 `screens.md`
  * 8.4(b) "차단 사유에 반드시 LawChip을 붙인다"를 같은 방식으로 지킨다.

@@ -20,6 +20,7 @@ import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { SERVICE_NAME } from '../copy.js';
 import { createStore } from '../state/store.js';
+import { COMPACT_MEDIA_QUERY } from './charts.js';
 
 function captureFocus(container) {
   const active = document.activeElement;
@@ -93,6 +94,18 @@ export function mountApp(root, { engineClient, analytics }) {
   };
 
   setRerenderHook(scheduleRender);
+
+  // 도넛은 라벨을 옆에 붙이는지 아래 리스트로 내리는지에 따라 **상자 크기 자체가
+  // 다르다**(charts.js `donutGeometry`). CSS는 `viewBox`를 바꿀 수 없으므로 그
+  // 판단이 렌더 시점에 들어가고, 폭이 경계를 넘으면 다시 그려야 한다. 없으면
+  // 창을 줄인 사용자가 라벨 자리만큼 작아진 도넛을 계속 보게 된다.
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    const compact = window.matchMedia(COMPACT_MEDIA_QUERY);
+    // Safari 13 이하는 addEventListener를 지원하지 않는다 — 있으면 그것만 쓴다.
+    if (typeof compact.addEventListener === 'function') compact.addEventListener('change', scheduleRender);
+    else if (typeof compact.addListener === 'function') compact.addListener(scheduleRender);
+  }
+
   renderNow();
 
   return { render: scheduleRender, store };

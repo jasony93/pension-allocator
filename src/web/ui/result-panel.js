@@ -30,6 +30,11 @@ import {
   EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
   CREDIT_HEADROOM_EXCEEDED_CAPTION,
   PROPOSED_BADGE_LABEL,
+  FILL_ORDER_NOTE_HEADING,
+  FILL_ORDER_TAG_FACT,
+  FILL_ORDER_TAG_PRODUCT,
+  fillOrderFactMessage,
+  fillOrderDecisionMessage,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIRED_FIELDS, formDerivedAssumptionCodes } from '../state/validation.js';
@@ -37,6 +42,7 @@ import { donutChart, donutLegend, allocationBar, stackBarSegments, computeTrackS
 import {
   accountLimitView,
   excludedAccounts,
+  fillOrderTieBreak,
   lawEntriesFor,
   lawEntriesForPath,
   pensionCreditHeadroomView,
@@ -245,6 +251,50 @@ function eligibilityNote(view, scenario) {
   ]);
 }
 
+/**
+ * 이 배분안이 연금 두 계좌를 어느 순서로 채웠는지, **그리고 왜 그 순서인지**.
+ *
+ * 소유자가 프로토타입을 보고 "왜 IRP를 먼저 채우는지 알려달라"고 물었다. 그
+ * 물음이 맞았고 엔진의 순서가 바뀌었다(계약 0.4절). 그러므로 화면은 이제
+ * **묻기 전에** 답해야 한다.
+ *
+ * **계좌 이름을 코드에 박지 않는다.** 어느 쪽이 인출이 자유로운지는 룰셋이
+ * 정하고, 엔진이 `priority_basis.fill_sequence`에 **실제로 쓴 순서**를 실어
+ * 보낸다(계약 5.6절: "고정 배열로 가정하지 말고 이 값을 읽어라"). 순서가
+ * 뒤집히면 이 문장도 따라 뒤집힌다.
+ *
+ * **언제 그리는가.** `tie_break.code`가 `withdrawal_flexibility_first`일 때만이다.
+ * 개정안 청년 우대처럼 두 계좌의 공제율이 갈리면 동점이 아니고 순서를 정한 것은
+ * 세액공제 최대화이므로(계약 0.4절 지킨 선 1), 이 문장은 사실이 아니게 된다.
+ * 더해서, 먼저 채운 계좌에 실제로 들어간 금액이 0이면 순서가 화면에 나타나지
+ * 않으므로 설명할 대상도 없다 — 그때는 그리지 않는다.
+ */
+function fillOrderNote(plan, scenario) {
+  const tieBreak = fillOrderTieBreak(plan);
+  if (!tieBreak) return null;
+  const { flexible, restricted } = tieBreak;
+
+  // 헌장 고지 요소 3 — 사실 절 바로 옆에 근거 조항을 붙인다. 근거는 엔진이
+  // `tie_break.basis_rule_ids`로 지목한 규칙이고, 그 조문은 `legal_basis`에서
+  // 한 글자도 바꾸지 않고 가져온다.
+  const laws = lawEntriesFor(scenario, tieBreak.basisRuleIds);
+
+  return el('div', { class: 'fill-order-note' }, [
+    el('h4', { class: 'type-title-s' }, [FILL_ORDER_NOTE_HEADING]),
+    el('p', { class: 'type-body-s' }, [
+      el('span', { class: 'note-tag note-tag-fact' }, [FILL_ORDER_TAG_FACT]),
+      ' ',
+      fillOrderFactMessage(flexible, restricted),
+    ]),
+    lawChipRow(laws, 'note-laws'),
+    el('p', { class: 'type-body-s' }, [
+      el('span', { class: 'note-tag note-tag-product' }, [FILL_ORDER_TAG_PRODUCT]),
+      ' ',
+      fillOrderDecisionMessage(flexible),
+    ]),
+  ]);
+}
+
 function chartArea(plan, scenario, months) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
@@ -254,7 +304,13 @@ function chartArea(plan, scenario, months) {
     unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
     excludedAccounts: excluded,
   };
-  const donut = donutChart({ ...donutArgs, isProposed: !scenario.is_enacted });
+  const donut = donutChart({
+    ...donutArgs,
+    // 도넛 중앙의 `월 배분`은 엔진이 낸 배분 총액이다. 화면이 조각을 더하면
+    // 미배분까지 섞여 라벨과 값이 어긋난다(charts.js 중앙 값 주석).
+    totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw,
+    isProposed: !scenario.is_enacted,
+  });
 
   // D16 — 공통 배율. 납입 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
   // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 납입 잔여 한도를 먼저 다
@@ -379,10 +435,21 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
   // 배제는 배분안마다 달라지지 않고 시나리오 전체에 걸린다 — 행마다 반복하면
   // 소음이므로 영역 위 한 줄로 세 행 모두에 적용된다는 것을 보인다(5.9절).
   const excludedLine = excluded.length ? el('p', { class: 'field-help' }, [excludedFromComparisonMessage(excluded)]) : null;
+  // 배분안이 하나면 **스택바를 그리지 않고 그 자리에 한 줄 캡션만** 둔다
+  // (screens.md 4.4절). 도넛과 한도 트랙 막대는 그대로 남는다 — 자리가 통째로
+  // 사라지면 실시간 갱신 중에 화면이 뛴다.
+  //
+  // 계약 0.4절의 동점 순서가 들어오면서 `max_tax_credit`과
+  // `annuity_savings_first`가 같은 배분이 되어 합쳐지는 경우가 늘었다. 즉 이
+  // 분기는 이제 드문 경로가 아니다.
   if (scenario.plans.length < 2) {
-    return el('div', { class: 'stackbar' }, [
-      el('p', { class: 'field-help' }, ['입력한 조건에서는 비교할 다른 배분이 나오지 않았습니다.']),
-      excludedLine,
+    return el('div', { class: 'stackbar stackbar-single' }, [
+      // 문장을 여기 따로 적지 않는다. 같은 사실을 말하는 문구가 사전에 이미
+      // 있고(`plans_collapsed_single`), 두 곳에 적으면 한쪽만 고쳐진다.
+      el('p', { class: 'field-help' }, [comparisonNoteMessage('plans_collapsed_single')]),
+      // **배제 안내는 여기서 내지 않는다.** 그 문장은 "아래 비교에 나타나지
+      // 않습니다"라고 말하는데, 비교 자체가 없으면 가리킬 대상이 없다. 배제된
+      // 계좌의 사정은 C-2 캡션과 `[4-D]` 표가 그대로 말한다(screens.md 5.9절).
     ]);
   }
   const rows = scenario.plans.map((plan) => {
@@ -529,6 +596,10 @@ function assumptionBlock(response, scenario, form) {
   for (const code of formDerivedAssumptionCodes(form ?? {})) items.push(assumptionMessage(code, {}));
   for (const n of scenario.notices.filter((n) => n.severity === 'info' || n.severity === 'warning')) {
     if (n.code === 'proposed_not_enacted') continue; // 고지 ⑥에서 별도 표시
+    // 배분안이 하나로 합쳐졌다는 사실은 **비교 자리에서** 이미 말한다(4.4절).
+    // 여기 한 번 더 적으면 "이 결과가 선 조건"이라는 목록의 성격과도 어긋난다 —
+    // 계산의 전제가 아니라 결과의 형태에 대한 안내다.
+    if (n.code === 'plans_collapsed_single') continue;
     items.push(noticeMessage(n));
   }
   return el('details', { class: 'assumption-block', open: true }, [
@@ -613,6 +684,7 @@ function resultPanelForScenario(response, scenario, activePlanId, store, onSelec
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year),
+    fillOrderNote(plan, scenario),
     reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),

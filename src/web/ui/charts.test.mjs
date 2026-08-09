@@ -1,14 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { UNALLOCATED_LABEL } from '../copy.js';
 import {
   computeTrackScalePercent,
   allocationSegments,
   annulusSlicePath,
   sliceAngles,
   donutLabelLayout,
+  donutGeometry,
+  preferredLabelMode,
   MIN_SLICE_DEG,
   LABEL_GUTTER,
+  LABEL_TEXT_BUDGET,
   LABEL_BLOCK_BELOW,
+  DONUT_OUTER_DIAMETER,
 } from './charts.js';
 
 test('the account with the largest remaining limit always scales to exactly 100%', () => {
@@ -167,11 +173,11 @@ test('never exceeds 100% even if remaining somehow equals maxRemaining exactly a
 // **그림 밖에 그려져 잘려 나갔다.** 스크린샷으로는 "원래 그런 디자인"과
 // 구분되지 않는 종류의 결함이므로 좌표를 테스트로 고정한다.
 
-const SIZE = 240;
-const R = SIZE / 2 - 8;
-const WIDTH = SIZE + LABEL_GUTTER * 2;
-const HEIGHT = SIZE + R * 0.08 + 52;
-const GEOM = { cx: WIDTH / 2, cy: 26 + SIZE / 2, R, width: WIDTH, height: HEIGHT };
+// 상자 수치를 테스트가 따로 베껴 두지 않는다 — 예전에는 그래서 지름을 바꿔도
+// 테스트가 옛 상자를 검사하고 통과했다. 구현과 같은 순수 함수를 부른다.
+const GEOM = donutGeometry('labelled');
+const { R, width: WIDTH, height: HEIGHT } = GEOM;
+const SIZE = GEOM.diameter;
 
 const arcsOf = (...spans) => {
   let angle = 0;
@@ -239,4 +245,66 @@ test('a single full-ring slice still gets a label with a leader', () => {
   const layout = donutLabelLayout(arcsOf(['isa', 360]), GEOM);
   assert.equal(layout.length, 1);
   assert.equal(layout[0].leader.length, 3);
+});
+
+// --- 도넛 바깥지름과 라벨 여백 (designer 미결 (a)) ---------------------------
+//
+// `screens.md` 5.2절 주석이 데스크톱 외경 260px, 5.7절이 모바일 200px로 답한다.
+// 실측에서는 각각 224.0px·127.7px이 나왔다 — 둘 다 설계보다 작았고, 모바일 쪽은
+// 라벨을 CSS로 감추기만 하고 라벨 자리(좌우 여백)는 그대로 둔 것이 원인이었다.
+
+test('the donut is drawn at the outer diameter the design fixed, on both layouts', () => {
+  assert.equal(donutGeometry('labelled').diameter, 260, 'screens.md 5.2절 데스크톱 외경');
+  assert.equal(donutGeometry('legend').diameter, 200, 'screens.md 5.7절 모바일 외경');
+  assert.deepEqual(DONUT_OUTER_DIAMETER, { labelled: 260, legend: 200 });
+});
+
+test('the legend layout spends almost none of its box on label margin — that margin is why the mobile donut shrank', () => {
+  const legend = donutGeometry('legend');
+  const wasted = legend.width - legend.diameter;
+  assert.ok(wasted <= 20, `라벨을 그리지 않는데 여백이 ${wasted}px 남아 있으면 도넛만 그만큼 작아진다`);
+});
+
+test('the labelled box leaves room for the whole label block on both sides', () => {
+  // 라벨의 x는 cx ± (R×1.2 + 10)이고 텍스트는 거기서 **바깥쪽으로** 뻗는다.
+  // anchor가 end/start라 x를 상자 안으로 잘라내는 것만으로는 글자가 안 들어온다.
+  const right = GEOM.cx + GEOM.R * 1.2 + 10 + LABEL_TEXT_BUDGET;
+  const left = GEOM.cx - GEOM.R * 1.2 - 10 - LABEL_TEXT_BUDGET;
+  assert.ok(right <= GEOM.width, `가장 긴 라벨이 오른쪽으로 ${(right - GEOM.width).toFixed(1)}px 삐져나간다`);
+  assert.ok(left >= 0, `가장 긴 라벨이 왼쪽으로 ${(-left).toFixed(1)}px 삐져나간다`);
+  assert.ok(LABEL_TEXT_BUDGET >= 109, '실측 최대 라벨 폭 108.8px보다 좁게 잡으면 긴 금액이 잘린다');
+  assert.ok(LABEL_GUTTER >= GEOM.R * 0.2 + 10 + LABEL_TEXT_BUDGET);
+});
+
+test('label mode falls back to the labelled layout where there is no matchMedia (tests, SSR)', () => {
+  assert.equal(preferredLabelMode(), 'labelled');
+});
+
+// --- 미배분 조각과 모바일 범례 (designer 미결 (c)·(d)) -----------------------
+
+test('the unallocated slice is named once, in the copy dictionary, not inline in the chart', () => {
+  // 조각 라벨의 형태는 계좌 조각과 같다 — 이름 / 금액 / 비율 세 줄(screens.md
+  // 5.6절). 다른 것은 이름뿐이고, 미배분은 계좌가 아니므로 `ACCOUNT_LABEL`이
+  // 아니라 별도 상수에서 온다. **왜 남았는지는 라벨에 넣지 않는다** — 그 사유는
+  // `limited_by`마다 달라지고 `[4-D]` 표의 미배분 행이 이미 말한다(qa 결함 Q1).
+  assert.equal(UNALLOCATED_LABEL, '미배분');
+  const source = readFileSync(new URL('./charts.js', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/['"]미배분['"]/.test(source), '차트가 이름을 직접 적으면 사전과 갈라진다');
+});
+
+test('the mobile legend stands in for the labels, so it lists exactly the slices that exist', () => {
+  // 범례의 번호 ①②③은 조각 위의 번호와 같은 배열에서 나온다. 조각이 없는 줄이
+  // 범례에 있으면 그 대응이 무너진다 — 배제된 계좌(5.9절)도, 배분액이 0인
+  // 계좌(5.4절)도 조각이 없으므로 범례에도 오르지 않는다.
+  const allocations = [
+    { account: 'retirement_pension', annual_krw: 3000000, monthly_krw: 250000 },
+    { account: 'annuity_savings', annual_krw: 0, monthly_krw: 0 },
+    { account: 'isa', annual_krw: 0, monthly_krw: 0 },
+  ];
+  const arcs = sliceAngles(allocationSegments({ allocations, unallocatedAnnualKrw: 600000, excludedAccounts: ['isa'] }));
+  assert.deepEqual(
+    arcs.map((a) => a.account),
+    ['retirement_pension', 'unallocated'],
+    '배분 0원인 연금저축도, 배제된 ISA도 조각이 없으니 범례에도 없다',
+  );
 });
