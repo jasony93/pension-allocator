@@ -60,6 +60,8 @@ test('M1 / GC-23 — 최대 격차 케이스. IRP를 잔여 공제한도에서 �
   assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 9_000_000);
   assert.equal(allocationOf(plan, 'annuity_savings').annual_krw, 0);
   assert.equal(allocationOf(plan, 'isa').annual_krw, 3_000_000);
+  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'credit_limit');
+  assert.equal(allocationOf(plan, 'isa').limited_by, 'budget');
 
   assert.deepStrictEqual(
     [
@@ -85,6 +87,9 @@ test('M1 / GC-19c — ISA라는 대안 목적지가 없어도 같은 결론이�
   const plan = planOf(scenario, 'max_tax_credit');
 
   assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 6_000_000);
+  assert.equal(allocationOf(plan, 'annuity_savings').annual_krw, 0);
+  assert.equal(allocationOf(plan, 'isa').annual_krw, 0);
+  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'budget');
   assert.equal(plan.deterministic_benefit.pension_credit_total_krw, 1_386_000);
 });
 
@@ -94,9 +99,17 @@ test('M1 / GC-19 — 확정 시나리오는 값이 바뀌지 않는다', () => {
     rulesets,
   );
 
-  // 두 계좌의 공제율이 같으므로 귀속이 세액을 바꾸지 않는다.
-  assert.equal(benefitOf(scenarioOf(response, 'current')).pension_credit_total_krw, 1_188_000);
-  assert.equal(benefitOf(scenarioOf(response, 'proposed')).pension_credit_total_krw, 1_386_000);
+  // 두 계좌의 공제율이 같으므로 귀속이 세액을 바꾸지 않는다 — 치환도 하지 않는다.
+  const current = planOf(scenarioOf(response, 'current'), 'max_tax_credit');
+  assert.equal(current.deterministic_benefit.pension_credit_total_krw, 1_188_000);
+  assert.equal(allocationOf(current, 'retirement_pension').annual_krw, 3_000_000);
+  assert.equal(allocationOf(current, 'retirement_pension').limited_by, 'credit_limit');
+  assert.equal(allocationOf(current, 'isa').annual_krw, 3_000_000);
+
+  const proposed = planOf(scenarioOf(response, 'proposed'), 'max_tax_credit');
+  assert.equal(proposed.deterministic_benefit.pension_credit_total_krw, 1_386_000);
+  assert.equal(allocationOf(proposed, 'retirement_pension').annual_krw, 6_000_000);
+  assert.equal(allocationOf(proposed, 'isa').annual_krw, 0);
 });
 
 test('M1 / GC-19b · GC-23-oracle — 인정 로직은 처음부터 옳았고 지금도 옳다', () => {
@@ -154,7 +167,82 @@ test('M1 / 소득이 공제율 경계 아래면 치환 이득이 없다', () => 
   const plan = planOf(scenario, 'max_tax_credit');
 
   assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 3_000_000);
+  assert.equal(allocationOf(plan, 'isa').annual_krw, 9_000_000);
+  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'credit_limit');
   assert.equal(plan.deterministic_benefit.pension_credit_total_krw, 1_485_000);
+});
+
+test('M1 / GC-25·GC-26 — 금액이 같아도 배분이 정반대인 경계 쌍', () => {
+  // `tax-domain`이 짚은 회귀 테스트의 함정. 두 케이스의 개정안 공제액이 **우연히 같고**
+  // 배분만 정반대다. 금액만 비교하면 조건이 뒤집혀도 통과한다.
+  const at = (salary) => {
+    const scenario = scenarioOf(
+      compute(
+        youthRequest({
+          scenarios: ['current', 'proposed'],
+          profile: {
+            current_year_total_salary_krw: salary,
+            prior_year_total_salary_krw: salary,
+            monthly_capacity_krw: 1_000_000,
+          },
+        }),
+        rulesets,
+      ),
+      'proposed',
+    );
+    const plan = planOf(scenario, 'max_tax_credit');
+    return {
+      credit: plan.deterministic_benefit.pension_credit_total_krw,
+      irp: allocationOf(plan, 'retirement_pension').annual_krw,
+      isa: allocationOf(plan, 'isa').annual_krw,
+      limitedBy: allocationOf(plan, 'retirement_pension').limited_by,
+    };
+  };
+
+  // 두 율이 같아지는 마지막 지점 — 치환하지 않는다.
+  const boundary = at(55_000_000);
+  // 두 율이 갈리는 첫 지점 — 치환한다.
+  const overBoundary = at(55_000_001);
+
+  assert.equal(boundary.credit, overBoundary.credit, '이 쌍의 요지는 금액이 같다는 것이다');
+  assert.deepStrictEqual([boundary.irp, boundary.isa], [3_000_000, 9_000_000]);
+  assert.deepStrictEqual([overBoundary.irp, overBoundary.isa], [9_000_000, 3_000_000]);
+  assert.equal(boundary.limitedBy, 'credit_limit');
+  assert.equal(overBoundary.limitedBy, 'credit_limit');
+});
+
+// ── M3 — 사실이 아닌 비교 안내가 배분 비교보다 앞섰다 ─────────────────────────
+//
+// M2로 ISA 추징 경고가 사라지자 `isa_first` 안의 warnings가 빈 배열이 됐는데,
+// `all_accounts_have_early_exit_penalty`는 horizon 값만 보고 그대로 나갔다.
+// "어느 안도 피하지 못한다"고 말하면서 실제로는 피하는 안이 목록에 있었다.
+
+test('M3 / GC-21 — 피할 수 있는 안이 있으면 그 안내를 내지 않는다', () => {
+  const scenario = scenarioOf(compute(elapsedLockInRequest(), rulesets));
+
+  assert.equal(scenario.fund_use_horizon_boundaries.isa_lock_in_years_remaining, 0);
+  assert.ok(
+    scenario.plans.some((p) => p.warnings.length === 0),
+    '불이익을 지지 않는 배분안이 실제로 존재하는 상황이어야 의미 있는 검증이다',
+  );
+  assert.equal(
+    scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'),
+    false,
+  );
+});
+
+test('M3 / 모든 안이 실제로 불이익을 지면 그 안내는 그대로 나간다', () => {
+  const scenario = scenarioOf(
+    compute(
+      elapsedLockInRequest({
+        accounts: { isa: { years_since_opening: 0, cumulative_contribution_krw: 0 } },
+      }),
+      rulesets,
+    ),
+  );
+
+  assert.ok(scenario.plans.every((p) => p.warnings.length > 0));
+  assert.ok(scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
 });
 
 // ── M2 — 의무가입기간이 경과했는데도 중도해지 추징 경고가 나갔다 ──────────────

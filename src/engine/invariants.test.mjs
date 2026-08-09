@@ -120,12 +120,17 @@ function* matrix() {
 // legal_basis[].applied_to가 가리키는 출력 경로가 실제로 존재하는지 확인한다.
 // `plans[]`는 모든 배분안, `by_account[isa]`는 account가 isa인 원소를 뜻한다.
 
+const TOKEN = /^([A-Za-z_]+)(?:\[([A-Za-z_]*)\])?$/;
+
 function resolvePath(path, scenario, response) {
   const tokens = path.split('.');
-  let nodes = [tokens[0] in scenario ? scenario : response];
+  // 첨자를 떼고 뿌리를 고른다. `plans[]`를 그대로 키로 쓰면 어디에도 없다.
+  const rootKey = TOKEN.exec(tokens[0])?.[1];
+  if (!rootKey) return false;
+  let nodes = [rootKey in scenario ? scenario : response];
 
   for (const token of tokens) {
-    const match = /^([A-Za-z_]+)(?:\[([A-Za-z_]*)\])?$/.exec(token);
+    const match = TOKEN.exec(token);
     if (!match) return false;
     const [, key, index] = match;
 
@@ -387,6 +392,36 @@ function walkAmounts(node, at, path = '') {
 }
 
 // ── 실행 ─────────────────────────────────────────────────────────
+
+// 검사기가 스스로 통과하는지 먼저 확인한다. 경로 해석기가 무엇이든 참을 반환하면
+// I11은 아무것도 막지 못하면서 통과한다 — 조용히 무력해지는 전형적인 자리다.
+test('경로 해석기가 실제로 없는 경로를 걸러낸다', () => {
+  const response = compute(baseRequest(), rulesets);
+  const scenario = response.scenarios[0];
+
+  for (const good of [
+    'limits.pension_combined_credit_limit_krw',
+    'limits.by_account[isa].contribution_limit_remaining_krw',
+    'plans[].deterministic_benefit',
+    'plans[].priority_basis',
+    'account_eligibility[isa]',
+    'fund_use_horizon_boundaries',
+    'echo.credit_rate_bracket',
+  ]) {
+    assert.ok(resolvePath(good, scenario, response), `있는 경로를 없다고 했다: ${good}`);
+  }
+
+  for (const bad of [
+    'limits.nope',
+    'limits.by_account[nosuch].contribution_limit_remaining_krw',
+    'plans[].no_such_field',
+    'nope.at.all',
+    'plans.deterministic_benefit',
+    'account_eligibility[isa].nope',
+  ]) {
+    assert.equal(resolvePath(bad, scenario, response), false, `없는 경로를 있다고 했다: ${bad}`);
+  }
+});
 
 test('모든 응답이 교차 필드 불변식을 만족한다', () => {
   let checked = 0;

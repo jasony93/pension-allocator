@@ -351,6 +351,11 @@ accounts.isa               : IsaAccountState
 
 `*_shared_with`가 이 사실을 **구조로** 드러낸다. 값이 비어 있지 않은 필드는 다른 계좌와 같은 풀을 가리키므로 합산 대상이 아니다. 합계가 필요하면 이미 계산된 `LimitBreakdown.pension_contribution_limit_remaining_krw`와 `pension_combined_credit_remaining_krw`를 쓴다. 규약으로 막지 않고 데이터가 스스로 말하게 한 것이다.
 
+**공유는 "같다"가 아니라 "더하면 안 된다"는 뜻이다.** 두 축의 성질이 다르다.
+
+- **납입 한도** — 계좌별 추가 제약이 없으므로 공유 계좌가 **같은 값**을 보고하고, 그 값은 `pension_contribution_limit_remaining_krw`와 같다.
+- **세액공제 한도** — 연금저축에만 단독 한도가 더 걸리므로 **두 계좌의 값이 다를 수 있다.** 각 값은 `pension_combined_credit_remaining_krw` 이하이고, 추가 제약이 없는 쪽(퇴직연금)이 그 풀 값을 그대로 보고한다.
+
 ### 5.4 `IsaTransferExtraLimit`
 
 | 필드 | 자료형 | 단위 | 설명 |
