@@ -39,7 +39,12 @@ import {
   YOUTH_DECLARED_RANGE_NOTE,
   WITHHOLDING_RECEIPT_DIVIDER,
   PROPOSED_BADGE_LABEL,
+  RESET_CONFIRM_TITLE,
+  RESET_CONFIRM_BODY,
+  RESET_CONFIRM_ACCEPT,
+  RESET_CONFIRM_CANCEL,
 } from '../copy.js';
+import { openConfirm } from './modal.js';
 import { formatYears } from '../format.js';
 import { isWithinYouthAgeRange } from '../engine/provisional-rules.js';
 
@@ -76,13 +81,17 @@ function numberField({ id, label, value, help, error, warning, onInput, onBlur, 
     'aria-invalid': Boolean(error),
     'aria-describedby': error ? `${id}-error` : warning ? `${id}-warning` : help ? `${id}-help` : null,
     oninput: (e) => onInput(e.target.value),
-    // 재렌더가 이 필드를 통째로 갈아치우는 순간에도 브라우저가 blur를 발생시킨다
+    // 재렌더가 이 필드를 갈아치우는 순간에도 브라우저가 blur를 발생시킨다
     // (포커스가 있던 노드가 DOM에서 떨어져 나가므로). 그 합성 blur까지 실제
     // blur로 취급해 재계산을 걸면 "렌더 → 포커스 노드 제거 → blur → 재계산 →
     // 재렌더 → …" 무한 루프가 된다(브라우저에서 실제로 재현해 크래시까지
     // 확인한 버그). `renderGuard`로 "우리가 지금 막 이 노드를 지운 것"과
-    // "사용자가 실제로 포커스를 옮긴 것"을 구분한다 — app.js가 mount() 호출을
+    // "사용자가 실제로 포커스를 옮긴 것"을 구분한다 — app.js가 렌더 호출을
     // 감싸는 동안만 true다.
+    //
+    // 지금은 렌더가 노드를 **고쳐 쓰므로**(app.js `patch`) 평소에는 이 합성
+    // blur가 아예 나지 않는다. 그래도 구조가 어긋나 노드를 교체하는 경로는
+    // 남아 있어 가드를 없애지 않았다.
     onblur: (e) => {
       if (!renderGuard?.active) onBlur(e);
     },
@@ -125,8 +134,14 @@ function segmentToggle({ id, label, value, options, onChange, help }) {
   ]);
 }
 
-function conditionalGroup(visible, children) {
-  return visible ? el('div', { class: 'conditional-group' }, children) : null;
+/**
+ * `data-key`는 `dom.js`의 `patch`가 노드를 짝지을 때 쓰는 표식이다. 조건부 블록은
+ * 나타났다 사라지면서 형제들의 자리를 밀어내는데, 표식이 없으면 `div` 하나가
+ * 다른 `div`로 **고쳐 써지면서** 안쪽을 통째로 갈아엎는다. 표식을 붙이면 그 자리는
+ * 깔끔한 교체가 되고, 그 위아래의 입력 칸은 건드리지 않는다.
+ */
+function conditionalGroup(visible, children, key) {
+  return visible ? el('div', { class: 'conditional-group', 'data-key': key }, children) : null;
 }
 
 /**
@@ -276,7 +291,7 @@ function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
 
   const showRangeNote = isWithinYouthAgeRange(provisionalYouth.ageRange, derivedAgeYears);
 
-  return el('div', { class: 'provisional-note' }, [
+  return el('div', { class: 'provisional-note', 'data-key': 'youthBlock' }, [
     el('h4', { class: 'provisional-note-title' }, [YOUTH_BLOCK_TITLE]),
     showRangeNote ? el('p', { class: 'type-body-s' }, [YOUTH_DECLARED_RANGE_NOTE]) : null,
     el('p', { class: 'type-body-s' }, [YOUTH_AGE_UNDETERMINED_LINE]),
@@ -336,17 +351,21 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   const priorSalaryHelp = el('p', { class: 'field-help' }, [
     '체크하지 않으면 ISA 비과세 한도 구간의 교차확인 없이 해당 연도 소득만으로 계산합니다.',
   ]);
-  const priorSalaryField = conditionalGroup(form.priorSalaryEnabled, [
-    numberField({
-      id: 'priorSalary',
-      label: '총급여액 (2025년, 직전 과세기간)',
-      value: form.priorSalary,
-      error: fieldError(errors, 'priorSalary'),
-      onInput: (v) => store.setField('priorSalary', v),
-      onBlur: () => store.flush(),
-      renderGuard,
-    }),
-  ]);
+  const priorSalaryField = conditionalGroup(
+    form.priorSalaryEnabled,
+    [
+      numberField({
+        id: 'priorSalary',
+        label: '총급여액 (2025년, 직전 과세기간)',
+        value: form.priorSalary,
+        error: fieldError(errors, 'priorSalary'),
+        onInput: (v) => store.setField('priorSalary', v),
+        onBlur: () => store.flush(),
+        renderGuard,
+      }),
+    ],
+    'priorSalaryGroup',
+  );
 
   const groupOne = el('section', { class: 'input-group' }, [
     el('h3', { class: 'input-group-title' }, ['① 나에 대해']),
@@ -394,7 +413,9 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   // 경고 색이 아니며 조치를 지시하지 않는다.
   const annuityStartedNote =
     form.annuityStarted === true
-      ? el('div', { class: 'eligibility-note' }, [el('p', { class: 'type-body-s' }, [ANNUITY_STARTED_HORIZON_NOTE])])
+      ? el('div', { class: 'eligibility-note', 'data-key': 'annuityStartedNote' }, [
+          el('p', { class: 'type-body-s' }, [ANNUITY_STARTED_HORIZON_NOTE]),
+        ])
       : null;
 
   const horizonOptions = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
@@ -525,7 +546,11 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     help: FINANCIAL_INCOME_EFFECT_CAPTION,
   });
 
-  const isaBlock = conditionalGroup(form.isaExists, [isaCumulativeField, isaYtdField, isaTypeToggle, financialIncomeToggle]);
+  const isaBlock = conditionalGroup(
+    form.isaExists,
+    [isaCumulativeField, isaYtdField, isaTypeToggle, financialIncomeToggle],
+    'isaBlock',
+  );
 
   const groupThree = el('section', { class: 'input-group' }, [
     el('h3', { class: 'input-group-title' }, ['③ 계좌 현황']),
@@ -581,14 +606,13 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
       renderGuard,
     });
 
-    const transferInner = conditionalGroup(form.isaTransferEnabled, [
-      transferAmountField,
-      destinationToggle,
-      destinationHelp,
-      priorAppliedField,
-    ]);
+    const transferInner = conditionalGroup(
+      form.isaTransferEnabled,
+      [transferAmountField, destinationToggle, destinationHelp, priorAppliedField],
+      'isaTransferGroup',
+    );
 
-    groupFour = el('section', { class: 'input-group input-group-conditional' }, [
+    groupFour = el('section', { class: 'input-group input-group-conditional', 'data-key': 'groupFour' }, [
       el('h3', { class: 'input-group-title' }, ['④ ISA 만기 자금 전환']),
       transferToggle,
       transferInner,
@@ -600,9 +624,17 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     {
       type: 'button',
       class: 'btn btn-text',
-      onclick: () => {
-        if (confirm('입력한 모든 값을 지우고 처음부터 다시 시작할까요?')) store.reset();
-      },
+      // 브라우저 모달(`confirm`)을 쓰지 않는다 — 샌드박스 iframe이 조용히 막으면
+      // 버튼이 죽은 것처럼 보인다(copy.js `RESET_CONFIRM_TITLE` 머리말). 확인은
+      // 화면 안에서 받는다(screens.md 3.2절 · design-system 5.18절).
+      onclick: () =>
+        openConfirm({
+          title: RESET_CONFIRM_TITLE,
+          body: RESET_CONFIRM_BODY,
+          acceptLabel: RESET_CONFIRM_ACCEPT,
+          cancelLabel: RESET_CONFIRM_CANCEL,
+          onAccept: () => store.reset(),
+        }),
     },
     ['초기화'],
   );

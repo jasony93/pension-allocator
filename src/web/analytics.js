@@ -57,9 +57,28 @@ function safeStorage(storage) {
   };
 }
 
+/**
+ * **프로퍼티를 읽는 것만으로 예외가 난다.** `safeStorage`가 `getItem`/`setItem`을
+ * 감싸 두었지만, `window.sessionStorage`에 **접근하는 순간** 던지는 환경이 있다 —
+ * `allow-same-origin` 없는 샌드박스 iframe, 쿠키를 전면 차단한 브라우저가 그렇다.
+ * (`typeof`는 예외를 막아 주지 않는다. 값을 꺼내는 쪽이 던진다.)
+ *
+ * 이 자리가 `createAnalytics()`의 기본 인자였기 때문에, 예외가 `main.js`의 첫
+ * 줄에서 터져 **계산 화면 전체가 뜨지 않았다.** 실제로 `sandbox="allow-scripts"`
+ * iframe에서 `#app`이 빈 채로 남는 것을 브라우저로 확인했다. 계측은 계산 기능을
+ * 절대 막지 않는다는 것이 이 모듈의 규약이고, 그 규약이 여기서 새고 있었다.
+ */
+function optionalStorage(name) {
+  try {
+    return typeof globalThis[name] !== 'undefined' ? globalThis[name] : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createAnalytics({
-  sessionStorageImpl = typeof sessionStorage !== 'undefined' ? sessionStorage : null,
-  localStorageImpl = typeof localStorage !== 'undefined' ? localStorage : null,
+  sessionStorageImpl = optionalStorage('sessionStorage'),
+  localStorageImpl = optionalStorage('localStorage'),
   transport = defaultTransport,
   strict = false,
 } = {}) {

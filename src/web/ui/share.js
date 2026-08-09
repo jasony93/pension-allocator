@@ -10,6 +10,7 @@
  */
 
 import { el } from './dom.js';
+import { openModal } from './modal.js';
 import {
   ACCOUNT_LABEL,
   PLAN_LABEL,
@@ -171,7 +172,8 @@ export function openShareModal({ plan, scenario, onExport, onClose }) {
     ]),
   ]);
 
-  const closeBtn = el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => close() }, ['닫기']);
+  let modal;
+  const closeBtn = el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => modal.close() }, ['닫기']);
   const exportBtn = el(
     'button',
     {
@@ -193,24 +195,14 @@ export function openShareModal({ plan, scenario, onExport, onClose }) {
     ['이미지로 저장'],
   );
 
-  const overlay = el('div', { class: 'modal-scrim', onclick: (e) => { if (e.target === overlay) close(); } }, [
-    el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': '결과 저장·공유 미리보기' }, [
-      el('h2', { class: 'type-title-m' }, ['저장·공유 미리보기']),
-      body,
-      el('div', { class: 'modal-actions' }, [exportBtn, closeBtn]),
-    ]),
-  ]);
-
-  function close() {
-    overlay.remove();
-    document.removeEventListener('keydown', onKeydown);
-    onClose?.();
-  }
-  function onKeydown(e) {
-    if (e.key === 'Escape') close();
-  }
-  document.addEventListener('keydown', onKeydown);
-  document.body.append(overlay);
-  exportBtn.focus();
-  return { close };
+  // 모달 뼈대(포커스 트랩 · `Esc` · 배경 스크롤 잠금 · 트리거로 포커스 복귀)는
+  // `modal.js`가 갖는다 — design-system 5.18절이 요구한 것들이고, 여기 있던
+  // 예전 판본에는 트랩·스크롤 잠금·포커스 복귀가 빠져 있었다.
+  modal = openModal({
+    label: '결과 저장·공유 미리보기',
+    body: [el('h2', { class: 'type-title-m' }, ['저장·공유 미리보기']), body],
+    actions: [exportBtn, closeBtn],
+    onClose,
+  });
+  return modal;
 }
