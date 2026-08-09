@@ -9,9 +9,14 @@ inputs:
   - docs/org/gate-decisions.md
   - docs/org/charter.md
 open_questions:
-  - "**[6차·세액 한도]** 이 문서의 36건은 전부 **세액공제의 세액 한도가 충분하다는 암묵적 전제** 위에 서 있다. 프로필에 결정세액·산출세액이 없어 한도를 판정할 수 없었고, 그래서 기대 세액공제액을 `납입 인정액 × 공제율`로만 산출했다. 이번 6차 조사로 그 전제가 **조문상 성립하지 않을 수 있음**이 확인됐다 — 소득세법 제61조 제3항은 감면·공제 합계가 산출세액을 넘으면 **연금계좌세액공제를 가장 먼저 밀어낸다**(`pension.credit.tax_liability_cap`). 지금 36건이 깨지지 않은 것은 엔진이 아직 이 규칙을 읽지 않기 때문이지 기대값이 맞아서가 아니다. **엔진이 이 규칙을 구현하는 순간 세액공제액이 0이 아닌 모든 케이스의 기대값을 재산출해야 하고, 한도가 0인 경계 케이스와 한도가 절단선을 지나는 경계 케이스를 새로 추가해야 한다.** 근거는 `docs/stage-1-discovery/tax-rules-report.md` 13절."
+  - "**[6차·실행기]** **이번 회차에 움직인 축 넷을 블록에 적을 수 없었다**(1-A.1절). 실행기의 허용 키에 자르기 전 금액(`*_before_cap_krw`)·임계값(`threshold_income_tax_krw`)·`objective_degenerate`·`pension_withdrawal_start`의 날짜 항목이 없다. 산출은 끝나 있고 적을 자리가 없었을 뿐이므로, `calc-engine-dev`가 키를 늘리면 같은 회차 안에 채울 수 있다. **적지 못한 축은 이번 전건 통과가 보증하지 않는다** — 그 사실을 통과 기록 옆에 함께 적었다(7.6절)."
+  - "**[6차·만 나이]** D21이 맡긴 기준일 규칙을 만들었다(`age.reckoning.reference_date`, 8절 (가)). **결론은 단일 기준일이 존재하지 않는다는 것이다** — 나이를 세는 방법(민법 §158)과 n년 뒤 날짜(민법 §160 ③)는 정해져 있으나 판정 시점은 요건마다 다르다. `pension.withdrawal.earliest_start`는 날짜로 환원되어 기준일이 필요 없고, `isa.eligibility`의 연령 요건은 **가입 시점**에 성립해야 한다. 엔진이 쓰는 과세기간 종료일은 ISA 쪽에서 **과대** 방향의 오차를 남긴다(그 해에 19세가 되는 사람). 계산 시점 입력을 넣을지, ISA 신규 가입 경로만 보류할지, 가정으로 드러낼지는 관리자 판정이다. 아울러 엔진의 가정 코드 `age_reference_date_not_in_ruleset`과 계약의 `reference_date_from_ruleset` 서술이 이제 사실과 다르다."
+  - "**[6차·퇴직급여]** 퇴직급여 입금액이 연간 납입한도 1,800만원을 쓰는지에 **답을 내지 못했다**(8절 (다)). 시행령 §40의2 ② 1호 가목의 '납입한 금액'에 이연퇴직소득의 이체가 들어가는지를 1차 출처로 확인하지 못했다. 엔진의 선택(쓰는 쪽)은 오차 방향이 과소라 안전하므로 판정 전까지 유지를 권한다. **두 읽기가 갈리는 골든 케이스는 일부러 만들지 않았다** — 근거 없이 한쪽을 정답으로 적으면 다음 검증자가 그것을 세법 결론으로 오독한다."
+  - "**[6차·지방세]** 개인지방소득세에 같은 세액 한도 구조가 있는지 **확인하지 못했다**(8절 (라)). 룰셋의 `tax.local.personal_income_surtax`는 원천징수 단계의 특별징수 규정이라 연말정산 후 확정되는 세액공제 구조를 말하지 않는다. 엔진의 선택(인정된 소득세분에 부가율 적용)은 절세액이 작게 나오는 방향이라 유지를 권하나, **방향에 근거한 선택이지 조문에 근거한 결론이 아니다.** `local_tax_follows_income_tax_cap` 가정이 결과 화면 고지 요소 4에 실려야 한다."
+  - "**[6차·결정세액]** 각 케이스의 `prior_year_tax`는 **케이스의 정의이지 세법에서 산출된 값이 아니다**(2절 CD1). 총급여에서 결정세액을 산출하는 규칙(근로소득공제·기본세율·근로소득세액공제)이 룰셋에 없고 넣지 않기로 한 범위 밖이기 때문이다. 대신 성립 가능한 **밴드**를 내고 그 안에서 골랐으며 밴드의 하한은 4대보험 요율을 쓰므로 근사다. **밴드는 근로소득만 있는 사람의 것이고**, 근로소득 외의 소득이 있는 사용자(GC-09)에게는 성립하지 않아 `unknown`으로 두었다. 서비스 대상 가정(A6)이 바뀌면 이 절차를 다시 세워야 한다."
+  - "~~**[6차·세액 한도]** 이 문서의 36건은 전부 **세액공제의 세액 한도가 충분하다는 암묵적 전제** 위에 서 있다. 프로필에 결정세액·산출세액이 없어 한도를 판정할 수 없었고, 그래서 기대 세액공제액을 `납입 인정액 × 공제율`로만 산출했다. 이번 6차 조사로 그 전제가 **조문상 성립하지 않을 수 있음**이 확인됐다 — 소득세법 제61조 제3항은 감면·공제 합계가 산출세액을 넘으면 **연금계좌세액공제를 가장 먼저 밀어낸다**(`pension.credit.tax_liability_cap`). 지금 36건이 깨지지 않은 것은 엔진이 아직 이 규칙을 읽지 않기 때문이지 기대값이 맞아서가 아니다. **엔진이 이 규칙을 구현하는 순간 세액공제액이 0이 아닌 모든 케이스의 기대값을 재산출해야 하고, 한도가 0인 경계 케이스와 한도가 절단선을 지나는 경계 케이스를 새로 추가해야 한다.** 근거는 `docs/stage-1-discovery/tax-rules-report.md` 13절.~~ **[6차에 해소]** 엔진이 계약 `4.0.0`으로 이 규칙을 구현했고, 이 회차에 36건 전부의 기대값을 세법에서 다시 산출하고 한도 경계 케이스 11건을 추가했다(7절). **기대값을 구현에 맞추지 않았다** — 산출을 먼저 적고 나서 돌렸다."
   - "**[5차]** 블록의 `request`에는 산문의 프로필이 적지 않은 필드가 있다(`fund_use_horizon` 등). 기대값이 아니라 케이스의 정의이므로 이 유닛이 골랐고 기준과 내역을 6.4절 (가)에 남겼으나, **케이스 정의를 사후에 채운 것은 사실이다.** 특히 horizon을 `at_or_after_pension_age`로 고정한 결과 그 케이스들의 `warning_count: 0`은 세법 산출이 아니라 입력 선택의 귀결이다. 다른 값으로 두는 편이 나은 케이스가 있는지는 관리자·`qa`가 볼 사안이다."
-  - "**[5차]** GC-28의 `isa_lock_in_already_elapsed`를 블록에 적지 못했다. 계약 8.2절(조건을 `within_isa_lock_in`으로 한정)과 8.4절(잔여 기간 조건으로 경고가 꺼진 경우 이 코드가 대신 나간다 — `unknown`에도 걸린다)이 서로 다른 답을 함의하기 때문이다. 산출 근거가 갈리므로 `notice_codes`·`notice_codes_absent` 어느 쪽에도 넣지 않았다. 계약이 어느 쪽으로 통일되는지에 따라 이 케이스의 블록을 보강해야 한다."
+  - "**[5차]** GC-28의 `isa_lock_in_already_elapsed`를 블록에 적지 못했다. 계약 8.2절(조건을 `within_isa_lock_in`으로 한정)과 8.4절(잔여 기간 조건으로 경고가 꺼진 경우 이 코드가 대신 나간다 — `unknown`에도 걸린다)이 서로 다른 답을 함의하기 때문이다. 산출 근거가 갈리므로 `notice_codes`·`notice_codes_absent` 어느 쪽에도 넣지 않았다. 계약이 어느 쪽으로 통일되는지에 따라 이 케이스의 블록을 보강해야 한다. **[6차에 해소]** D18이 조건을 8.2절 한 곳으로 모으고 `unknown`에서는 나가지 않는 것으로 통일했으므로, GC-28의 블록에 `notice_codes_absent: [\"isa_lock_in_already_elapsed\"]`를 적었다."
   - "**[4차]** 연금 두 계좌 사이의 충당 순서는 **세법이 정하지 않는다.** 두 계좌의 과세가 완전히 같기 때문이다(`pension.withdrawal.midterm_restriction.value.tax_treatment_is_identical`). 이번 개정에서 기대 배분을 확정할 수 있었던 근거는 세법이 아니라 계약 0.4절의 제품 결정이고, 룰셋에서 읽은 것은 `partial_withdrawal_without_statutory_cause`라는 **사실 하나**뿐이다. 규칙의 `product_note`도 '어느 계좌를 먼저 채울지는 이 규칙이 정하지 않는다'고 못박는다. 따라서 이 문서의 분할 기대값은 **세법 정답이 아니라 제품 결정의 검산**이며, 제품 결정이 바뀌면 세법 재조사 없이도 바뀐다. 이 구분이 흐려지면 다음 검증자가 분할을 세법 결론으로 오독한다."
   - "**[4차]** `calc-engine-dev`의 자기확인은 14개 항목(GC-04·09·10·11·12·13·18a~d·22)이 움직인다고 했으나, 세법·룰셋·계약 0.4절에서 독립 산출한 결과는 **21건**이 움직인다(6절). 누락된 10건은 GC-01·02·03·05·06·14·21·27·28·29이고, 엔진 실행 결과도 그 10건 전부에서 종전 기록과 다르다. 자기확인이 무엇을 세었는지는 확인하지 않았다(테스트 파일을 열지 않았다). 영향 범위 산정의 근거를 관리자가 `calc-engine-dev`에게 확인시킬 사안이다."
   - "**[4차]** 이번 순서 변경으로 배분안이 하나로 합쳐지는 케이스가 6건 늘었다(GC-04·09·11·13·14·29). 동점 구간에서 `max_tax_credit`이 `annuity_savings_first`와 같아지기 때문이며 계약 6.2절이 예정한 결과다. 다만 **사용자가 보는 비교 선택지가 줄어드는 방향**이고 `growth`의 `has_alternatives` 계측(헌장 「계측 허용 판정」)의 분포도 함께 움직인다. 세법 사안이 아니므로 불일치로 세지 않았고 `designer`·`web-dev`·`growth`에게 넘긴다."
@@ -28,9 +33,10 @@ open_questions:
 - 개정일: 2026-08-09 (3차) — M3 수정(커밋 `0ef9b52`) 재검증에 맞춰 **GC-29 1건을 추가**했다. M3 수정이 비교 안내의 조건을 **입력값이 아니라 결과의 사실**에 걸었으므로, 그 차이가 실제로 드러나는 케이스가 필요했다. 기존 34건의 기대값은 한 건도 바꾸지 않았다.
 - **개정일: 2026-08-09 (4차) — 계약 `3.3.0`(0.4절)이 세제상 동점 구간의 충당 순서를 `[IRP → 연금저축 → ISA]`에서 `[연금저축 → IRP → ISA]`로 바꿨다. 기대 배분을 전건 재산출했고 21건이 움직였다(6절). 세액공제액은 36건 어디에서도 움직이지 않았다. GC-30 1건을 추가했다.**
 - **개정일: 2026-08-09 (5차) — 기대값을 문서에서 기계가 읽는 블록(1-A절)으로 옮겼다. 블록이 없던 나머지 29건에 블록을 채워 **36건 전부가 실행된다.** 기대값은 한 건도 바꾸지 않았다 — 위 표에 이미 있던 값을 옮겨 적은 것이다. 표가 다루지 않아 새로 산출한 항목은 6.4절에 따로 적었다.**
+- **개정일: 2026-08-10 (6차) — 계약 `4.0.0`이 세액 한도·연금수령 개시·개시 가능 시점·퇴직급여 입금을 요청과 응답에 들였다. 5차까지의 36건이 서 있던 「세액 한도가 충분하다」는 암묵적 전제를 걷어내고 **36건 전부의 기대값을 세법에서 다시 산출했다.** 케이스마다 `profile.prior_year_tax`를 정하고 그 근거를 적었으며(2절 CD1~CD4·S14·S15), 세액 한도만 보는 경계 케이스 **11건(GC-31 · 32a~c · 33 · 34 · 35 · 36 · 37 · 38 · 39)을 추가**했다. 움직인 기대값은 4건이다(7절).**
 - 산출 유닛: `tax-domain`
-- 케이스 수: **36건** (그중 경계값 케이스 **28건**) · 기계가 읽는 블록 **36건 전부**
-- 계약 버전: `schema_version` **3.3.0** (M2로 3.0.0 → 3.1.0, M3으로 3.1.0 → 3.2.0, 동점 순서로 3.2.0 → 3.3.0, 전부 minor)
+- 케이스 수: **47건** (그중 경계값 케이스 **39건**) · 기계가 읽는 블록 **47건 전부**
+- 계약 버전: `schema_version` **4.0.0** (M2로 3.0.0 → 3.1.0, M3으로 3.1.0 → 3.2.0, 동점 순서로 3.2.0 → 3.3.0, D18 정정으로 3.3.1, 세액 한도·개시·퇴직급여로 **3.3.1 → 4.0.0 major**)
 - 대조 결과: `docs/stage-4-verification/verification-report.md`
 
 ## 1. 이 문서의 지위
@@ -80,6 +86,26 @@ open_questions:
 모르는 키는 오타로 보고 실패시킨다. `tax_credit`의 세 값은 소득세 + 지방세 = 합계가 맞는지도 함께 본다 — 옮겨 적다 어긋나는 자리이기 때문이다. 4차에 움직인 값(분할 · 배분안 수 · 경고 건수)은 위 표에 적었으면 블록에도 적는다. 그것이 이번 회차가 실제로 검사받는 부분이다.
 
 > ⚠ **산문에 케이스 이름의 범위 표기(`~`)를 쓸 때 조심하라.** 실행기는 커버리지 검사를 위해 **블록 밖 산문의 케이스 이름까지** 읽고 범위를 펼친다. 읽을 수 있는 것은 두 형태뿐이다 — **번호끼리** 이어지는 것(`GC-NN~NN`, 접미사 없이)과 **같은 번호 안에서 접미사끼리** 이어지는 것(`GC-NNa~d`). 번호와 접미사를 섞은 표기(`GC-NN~NNd` 꼴)는 **형식 오류로 실패한다.** 4차에서 실제로 밟은 지뢰다. 섞어 가리켜야 하면 **쉼표로 나열하라.**
+
+### 1-A.1 6차에 **적고 싶었으나 적지 못한 것** — 실행기의 어휘가 계약 `4.0.0`을 따라오지 못했다
+
+지난 회차에 `qa`에게 넘긴 지적이 있었다 — 실행기는 **모든 케이스에 블록이 있는지**는 강제하지만 **각 블록이 얼마나 많이 주장하는지**는 검사하지 않으므로, 새로 움직이는 축이 블록에 실리지 않으면 그 축은 아무도 보지 않는다. 이번에 그 축은 넷이었다. **그중 둘은 실었고 둘은 실을 수 없었다.**
+
+블록에 모르는 키를 넣으면 형식 검사가 허용 키 목록과 함께 실패한다. 그 목록을 확인한 결과 계약 `4.0.0`이 새로 낸 출력 중 블록이 실을 수 있는 것은 **`notices`·`comparison_note_codes`를 통한 간접 관측과 `tax_credit`(한도 적용 **후** 금액)뿐**이다.
+
+| 6차에 움직이는 축 | 블록에 실었는가 | 어떻게 / 왜 못했나 |
+|---|---|---|
+| **인정 공제액** (한도 적용 후) | **실었다** | `plans.*.tax_credit`이 이제 한도 적용 후 값이다(계약 5.6절). GC-04·14·31·32a가 이 축에서 값이 갈린다 |
+| **잘렸는가 / 한도가 0인가 / 모르는가** | **실었다** | `notice_codes` · `notice_codes_absent`로 `tax_liability_cap_applied` · `tax_liability_cap_zero` · `tax_liability_cap_unknown`을 **양방향으로** 적었다. 특히 `notice_codes_absent`가 "이 케이스는 잘리지 않는다"를 명시적 주장으로 만든다 — 6차 이전에는 그 사실이 아무 데도 적혀 있지 않았다 |
+| **자르기 전 금액** (`*_before_cap_krw`) | **못 했다** | 배분안 단위 허용 키에 없다 |
+| **임계값** (`tax_liability_cap.threshold_income_tax_krw`) | **못 했다** | 같음. 임계값은 자르기 전 소득세분과 같은 값이므로 위 항목이 생기면 함께 검사된다 |
+| **`objective_degenerate`** | **못 했다** | 배분안 단위 허용 키에 없다. 대신 `comparison_note_codes`의 `tax_credit_axis_not_discriminating`으로 **시나리오 단위에서만** 같은 사실을 잡았다(GC-14·31) |
+| **`pension_withdrawal_start`의 날짜·`bound_by_holding_period`** | **못 했다** | 시나리오 단위 허용 키에 없다. GC-38이 보려는 "시점을 정한 것이 나이가 아니라 5년 요건"이라는 사실은 산문에만 남았다 |
+| **`tax_liability_cap.cap_krw` / `known` / `source_code`** | **못 했다** | 같음. 한도 자체는 `tax_credit`의 결과로만 간접 관측된다 |
+
+**이 문서가 할 수 있는 것은 여기까지다.** 허용 키를 늘리는 것은 실행기(`src/engine/golden-cases.test.mjs`)의 몫이고 그 파일은 이 유닛이 열지 않는다. 필요한 키를 이름으로 적어 `open_questions`에 올렸다. **못 실은 축이 넷이라는 사실 자체를 여기 적어 두는 것이, 다음 회차에 그 축이 또 조용히 빠지는 것을 막는 유일한 장치다.**
+
+---
 
 ## 2. 산출 규칙 — 내가 쓴 계산 절차
 
@@ -152,6 +178,66 @@ open_questions:
 - **(나) 인출 경고 건수.** 배분액 > 0인 연금계좌가 둘이 되므로 `early_withdrawal_penalty_pension`이 **두 건** 나간다. 과세가 같으므로 **한쪽에만 붙으면 그것이 오류다**(계약 0.4절 「지킨 선」 2).
 - **(다) 월 반올림 잔차.** 계좌를 하나 더 나누면 버림이 한 번 더 일어난다. `잔차 = Σ(연간액 − floor(연간액 ÷ 개월수) × 개월수)`. 개월수가 12이고 연간액이 12의 배수인 케이스에서는 늘지 않고, GC-22(개월수 7)에서만 실제로 늘었다.
 
+**S14. 세액 한도 (6차 추가)** — `pension.credit.tax_liability_cap`, `pension.credit.tax_liability_cap.source_form`, `tax.local.personal_income_surtax`.
+
+**이 단계는 배분이 끝난 뒤에 붙는 상한이 아니라 공제액을 산출하는 마지막 단계다.** S7까지가 내는 것은 이제 **자르기 전** 금액이고, 인정액은 여기서 정해진다.
+
+1. **한도를 얻는다.** `state`에 따라 갈린다.
+   - `amount` → `결정세액 + 연금계좌 세액공제액`
+   - `zero` → `0 + 연금계좌 세액공제액`
+   - `nonzero_amount_unknown` / `unknown` → **모름**
+2. **되더하기를 빠뜨리지 않는다.** 서식의 결정세액은 `산출세액 − 세액감면 계 − 세액공제 계`이고 그 안에 이미 연금계좌 세액공제가 들어 있다. 그대로 쓰면 이미 받은 공제만큼 한도가 줄어 보이는 순환이 생긴다. 되더하면 "연금계좌 세액공제가 없었다면 남았을 세액"이 되고, §61 ③이 연금계좌세액공제를 초과분의 흡수 대상으로 지목하므로 그 값이 **법정 한도와 일치한다.** 근사가 아니라 등식이다.
+3. **인정 소득세분** = `min(자르기 전 소득세분, 한도)`. **한도를 모르면 자르지 않는다** — 지어낸 한도로 자르면 그 자름이 근거 없는 숫자가 된다. 그 결과는 "이만큼"이 아니라 "**최대** 이만큼"이다.
+4. **초과는 "초과"다.** §61 ③이 "초과하는 경우 그 초과하는 금액"만 없는 것으로 보므로 **한도와 공제액이 같으면 아무것도 잘리지 않는다**(GC-32b).
+5. **지방세분 = 인정된 소득세분 × 0.1, 원 미만 버림.** 자르기 전 소득세분에 곱하지 않는다 — 인정되지 않은 공제에 붙는 지방세를 남기지 않기 위해서다. 이 취급 자체는 룰셋이 정하지 않았다(개인지방소득세에 같은 한도 구조가 있는지 미확인). **오차의 방향은 지방세분을 작게 보는 쪽이라 과소이고, 과소한 절세액은 사용자를 잘못된 결정으로 밀지 않는다.**
+6. **배분은 이 단계에서 움직이지 않는다.** 잘리는 것은 공제액이고 납입액은 시행령 §118의3의 전환 신청 대상으로 살아남는다(`pension.credit.unused.contribution_carryover`).
+
+**S15. 각 케이스의 `prior_year_tax`를 무엇으로 정했는가 (6차 추가) — 이것이 이번 회차에서 가장 위험한 자리였다**
+
+`prior_year_tax`는 기대값이 아니라 **케이스의 정의**다. 그러나 그 한 칸을 정하는 순간 그 케이스의 기대 공제액이 정해지므로, 아무 값이나 넣으면 36건이 전부 초록색이 되면서 한도 로직을 하나도 검사하지 못한다. **그것이 5차까지의 상태였고 이번에 닫는 것이 그 결함이다.** 그래서 고르는 규칙을 먼저 세우고 케이스마다 적용했다.
+
+- **CD1 — 총급여에서 결정세액을 산출할 수 있는 규칙이 이 조직에 없다.** 근로소득공제(§47)·기본공제(§50)·기본세율(§55)·근로소득세액공제(§59)는 **룰셋에 없고, 넣지 않기로 한 범위 밖이다.** 그러므로 "이 소득이면 결정세액은 정확히 얼마"라고 단정하지 않는다. 단정하면 그것이 곧 지어낸 숫자다.
+- **CD2 — 프로필이 스스로 함의하는 값이 있으면 그것을 따른다.** 직전 과세기간에 근로소득이 없었던 사람의 결정세액은 0이다(GC-14). 기납입액이 이미 한도를 넘긴 사람은 작년에도 납입해 공제를 받았을 것이므로 되더할 값이 0이 아니다(GC-07).
+- **CD3 — 함의가 없으면 그 케이스가 검사하려는 축을 기준으로 고르되, 고른 값이 그 프로필에서 성립 가능한지를 밴드로 확인한다.** 아래 밴드 산출을 쓴다.
+- **CD4 — 근거가 없으면 `unknown`으로 둔다.** 다만 `unknown`인 케이스는 한도를 검사하지 않으므로 최소한으로 쓴다. 47건 중 `unknown`은 GC-09·GC-34 둘, `nonzero_amount_unknown`은 GC-35 하나다.
+
+**밴드 산출 — 정확한 값이 아니라 성립 가능한 구간을 낸다.** 어느 케이스에서도 이 구간의 끝값을 기대값으로 쓰지 않았고, 고른 값이 구간 안에 있는지 확인하는 데만 썼다.
+
+| | 무엇을 뺐는가 | 왜 |
+|---|---|---|
+| **상한** | 근로소득공제 · 본인 기본공제 1,500,000 · 근로소득세액공제 · 표준세액공제 130,000 | 전부 소득세법 항목이다 |
+| **하한** | 위에 더해 국민연금 4.5% · 건강보험 · 장기요양 · 고용보험 | 4대보험 요율은 **세법이 아니라 사회보험 법령에 있고 해마다 바뀐다.** 이 유닛이 확인하지 않았으므로 하한은 근사다 |
+
+| 직전연도 총급여 | 하한 | 상한 |
+|---|---|---|
+| 20,000,000 | 95,968 | 146,750 |
+| 40,000,000 | 1,449,255 | 2,013,500 |
+| 45,000,000 | 2,040,224 | 2,675,000 |
+| 50,000,000 | 2,682,194 | 3,387,500 |
+| 52,000,000 | 2,938,981 | 3,672,500 |
+| 55,000,000 | 3,324,163 | 4,100,000 |
+| 60,000,000 | 3,966,133 | 4,812,500 |
+
+**밴드는 부양가족이 없는 사람의 것이다.** 기본공제는 1인당 1,500,000원이고 이 소득대의 한계세율이 15%이므로 부양가족 한 사람마다 밴드가 **225,000원씩 아래로 평행이동한다.** 케이스가 절단선 근처의 값을 쓸 때는 그 사람에게 부양가족이 몇 명 필요한지를 함께 적었다(GC-04·32a~c·33).
+
+**이 밴드로 확인된 사실 하나를 그대로 적는다.** 부양가족이 없는 근로자에게는 이 서비스가 다루는 소득대(40,000,000~60,000,000)에서 **한도가 거의 물지 않는다** — 자르기 전 공제액의 최대치가 1,485,000원인데 밴드 하한이 40,000,000에서 이미 1,449,255원이고 45,000,000부터는 2,000,000원을 넘는다. **한도가 무는 사람은 소득이 낮거나, 부양가족이 많거나, 중도입사·은퇴로 근로기간이 짧거나, 이미 다른 공제로 산출세액을 소진한 사람이다.** 6차에 새로 만든 11건이 전부 그런 사람인 이유가 이것이고, 기존 36건 중 넷만 한도에 걸리는 이유도 이것이다.
+
+**S16. 연금수령 개시 (6차 추가)** — `pension.contribution.after_annuity_start`.
+
+`started`면 그 계좌의 납입은 연금보험료로 인정되지 않으므로 **배분 대상에서 빠진다.** `unknown`이면 **그 계좌의 배분을 보류한다** — 아니오로 접으면 연금 수령 중인 사용자에게 납입 가능액을 주게 되고 그 오류의 방향이 과대다. **두 계좌를 구분하지 않는다**(13.6.1절 — 조문이 "연금계좌"를 대상으로 쓴다). 한 계좌가 빠졌을 때 남은 계좌의 상한은 그 계좌에 걸리는 한도가 정한다 — 연금저축만 남으면 자기 한도 6,000,000이, IRP만 남으면 합산 한도 9,000,000이 상한이다(GC-36 대 GC-37).
+
+**S17. 퇴직급여 입금액·계약이전액 (6차 추가)** — `pension.credit.excluded_contributions`.
+
+§59의3 ① 1호·2호가 이 금액을 연금계좌 납입액에서 제외하므로 **세액공제 대상 납입액이 아니다.** 이것은 확정이다.
+
+**확정이 아닌 것 하나** — 이 금액이 연간 납입한도 1,800만원을 쓰는지를 룰셋이 정하지 않는다. 시행령 §40의2 ② 1호 가목의 문언은 "연금계좌에 납입한 금액의 합계액"이고, 이연퇴직소득의 이체가 그 "납입"에 들어가는지를 이 유닛이 1차 출처로 확인하지 못했다. **그러므로 답을 내지 않는다.** 엔진은 쓰는 쪽(배분이 작아지는 = 과소 방향)으로 보고 가정으로 드러내고 있으며, 방향이 과소이므로 판정이 날 때까지 그대로 두는 것이 안전하다. 6차 케이스는 두 읽기가 같은 답을 내는 자리에만 세웠다(GC-39).
+
+**S18. 나이와 기간의 계산 (6차 추가)** — `age.reckoning.reference_date`(6차에 룰셋에 새로 넣었다).
+
+- **만 나이** = 출생일을 산입한 만 나이, 연수 표시(민법 §158). 만 N세가 되는 날은 N번째 생일 당일이다. 세법에 특칙이 없으므로 민법이 그대로 적용된다(국세기본법 §4).
+- **n년 뒤의 날짜**는 역에 의해 계산하고, **최종의 월에 해당일이 없으면 그 월의 말일**이다(민법 §160 ③). 2월 29일생·2월 29일 가입의 처리가 여기서 정해진다.
+- **단일 기준일은 없다.** 각 요건이 성립하는 시점이 곧 그 요건의 판정 시점이다. `pension.withdrawal.earliest_start`는 나이가 아니라 **날짜**로 환원되므로 기준일을 필요로 하지 않고, `isa.eligibility`의 연령 요건은 **가입 시점**에 성립해야 한다. 자세한 것은 8절.
+
 ---
 
 ## 3. 확정 시나리오 케이스
@@ -183,6 +269,8 @@ open_questions:
 
 **4차 개정 사유** 종전에는 IRP가 합산한도 9,000,000을 먼저 다 가져갔다. S13이 동점 구간의 순서를 뒤집었으므로 연금저축 단독 한도 6,000,000이 먼저 소진되고 잔여 3,000,000만 IRP로 간다. **공제 총액은 1,485,000 그대로다** — 두 계좌의 한계 공제율이 같아 분할이 세액에 닿지 않는다. 잔차도 0 그대로다(6,000,000·3,000,000 모두 12로 나누어떨어진다).
 
+**세액 한도 (6차 산출)** 직전연도 총급여 55,000,000의 결정세액 밴드는 S15로 [3,324,163 , 4,100,000]이고 그 안의 **3,600,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,600,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-01",
@@ -191,7 +279,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 55000000,
       "prior_year_total_salary_krw": 55000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -202,10 +295,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -253,7 +348,13 @@ open_questions:
           "unallocated_krw": 0,
           "monthly_rounding_residual_krw": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ],
+      "notice_codes": [
+        "pension_start_date_not_computable"
+      ]
     }
   }
 }
@@ -269,6 +370,8 @@ open_questions:
 
 **4차 개정 사유** GC-01과 같다. 확정 시나리오에서는 12% 구간에서도 **두 계좌가 같은 12%**이므로 여전히 동점이고 S13이 그대로 걸린다. 공제율 구간이 동점 여부를 가르는 것은 **개정안 청년 우대가 걸릴 때뿐**이다(GC-26 참조).
 
+**세액 한도 (6차 산출)** 직전연도 총급여 55,000,000의 결정세액 밴드는 S15로 [3,324,163 , 4,100,000]이고 그 안의 **3,600,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,600,000이다. 자르기 전 소득세분 1,080,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다. 공제율이 12%로 내려가 자르기 전 금액이 더 작으므로 여유가 더 크다 — **공제율 경계와 한도 경계는 서로를 가리지 않는다.**
+
 ```golden
 {
   "case": "GC-02",
@@ -277,7 +380,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 55000001,
       "prior_year_total_salary_krw": 55000001,
       "financial_income_taxpayer_last_3_years": false,
@@ -288,10 +396,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -328,7 +438,10 @@ open_questions:
             "retirement_pension": 2
           }
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -344,6 +457,8 @@ open_questions:
 
 **4차 개정 사유** GC-01과 같다(S13 동점 → 연금저축 우선).
 
+**세액 한도 (6차 산출)** 직전연도 총급여 55,000,000의 결정세액 밴드는 S15로 [3,324,163 , 4,100,000]이고 그 안의 **3,600,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,600,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-03",
@@ -352,7 +467,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 54999999,
       "prior_year_total_salary_krw": 54999999,
       "financial_income_taxpayer_last_3_years": false,
@@ -363,10 +483,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -400,7 +522,10 @@ open_questions:
             "retirement_pension": 2
           }
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -427,6 +552,23 @@ open_questions:
 
 **4차 개정 사유** 분할이 바뀌었고 **배분안이 3개에서 1개로 합쳐졌다**(S13-가). ISA 잔여 20,000,000이 연금 배분 후 남는 예산 21,000,000보다 작으므로 `isa_first`도 결국 세 계좌를 같은 금액으로 채우게 되어 세 안의 배분 벡터가 전부 일치한다. **잔차 8은 그대로다** — 새로 나뉜 두 연금 금액이 모두 12로 나누어떨어져 버림이 생기지 않는다. 잔차가 언제 늘고 언제 안 느는지를 GC-22와 짝으로 고정한다.
 
+**세액 한도 (6차 산출) — 이 케이스는 잘린다**
+
+직전연도 총급여 40,000,000의 밴드는 S15로 [1,449,255 , 2,013,500]이고, **부양가족이 없는 사람에게는 이 케이스가 잘리지 않는다.** 그러나 이 사람은 배우자를 부양하는 외벌이로 정의한다 — 기본공제 1인이 늘면 과세표준이 1,500,000 줄고 한계세율 15%에서 세액이 225,000 낮아지므로 밴드가 **[1,224,255 , 1,788,500]**으로 내려온다. 그 안의 **1,300,000**을 골랐다.
+
+**왜 이 케이스에 이 사람을 세웠나.** 36건 중 자르기 전 공제액이 밴드 하한에 가장 가까운 것이 이 케이스다(총급여 40,000,000인데 예산이 커서 연금 공제한도를 꽉 채운다). **실제로 한도가 무는 사람이 서 있는 자리가 여기이고, 그 자리를 비워 두고 넉넉한 결정세액을 넣으면 36건 어디에서도 자르기가 관측되지 않는다.** 이 케이스의 축(한도를 정확히 채우고 예산이 남는 배분)은 배분에 관한 것이고, 계약 4.2절이 **세액 한도는 배분을 바꾸지 않는다**고 선언하므로 두 축이 서로를 가리지 않는다.
+
+| 항목 | 값 |
+|---|---|
+| 자르기 전 소득세분 (= 임계값) | 1,350,000 |
+| 한도 (= 1,300,000 + 0) | **1,300,000** |
+| 인정 소득세분 | **1,300,000** |
+| 지방세분 | **130,000** (인정된 소득세분 × 0.1) |
+| 합계 | **1,430,000** (종전 1,485,000) |
+| 잘린 금액 | 소득세분 50,000 + 지방세분 5,000 |
+
+**배분은 한 원도 움직이지 않는다.** 연금저축 6,000,000 + IRP 3,000,000 + ISA 20,000,000, 미배분 1,000,000, 잔차 8 전부 그대로다.
+
 ```golden
 {
   "case": "GC-04",
@@ -435,7 +577,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 1300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 40000000,
       "prior_year_total_salary_krw": 40000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -446,10 +593,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -481,9 +630,9 @@ open_questions:
             "isa": 20000000
           },
           "tax_credit": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 1300000,
+            "local_tax": 130000,
+            "total": 1430000
           },
           "warning_count": 0,
           "fill_order": {
@@ -499,7 +648,10 @@ open_questions:
           "unallocated_krw": 1000000,
           "monthly_rounding_residual_krw": 8
         }
-      }
+      },
+      "notice_codes": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -517,6 +669,8 @@ open_questions:
 
 **두 소득 기준이 다른 해를 본다는 점이 이 케이스의 핵심이다.** 공제율은 **해당** 과세기간(60,000,000 → 12%), ISA 유형은 **직전** 과세기간(50,000,000 → 서민형)으로 갈린다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 50,000,000의 결정세액 밴드는 S15로 [2,682,194 , 3,387,500]이고 그 안의 **3,000,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,000,000이다. 자르기 전 소득세분 720,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-05",
@@ -525,7 +679,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3000000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 50000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -536,10 +695,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -559,7 +720,8 @@ open_questions:
         "isa_tax_free_limit_krw": 4000000
       },
       "notice_codes_absent": [
-        "isa_type_conflicts_with_prior_income"
+        "isa_type_conflicts_with_prior_income",
+        "tax_liability_cap_applied"
       ],
       "plans": {
         "max_tax_credit": {
@@ -594,6 +756,8 @@ open_questions:
 
 **도출 과정** S9에서 직전 50,000,001 > 50,000,000 → 소득 기준으로는 일반형. 그러나 계약 3.2절이 "사용자 선언을 그대로 신뢰하고 엔진이 덮어쓰지 않는다"고 정하므로 한도는 4,000,000을 유지하고 불일치만 알린다. **세법 판정과 표시 값이 갈리는 유일한 지점이므로 경고 누락은 곧 오답이다.**
 
+**세액 한도 (6차 산출)** 직전연도 총급여 50,000,000의 결정세액 밴드는 S15로 [2,682,194 , 3,387,500]이고 그 안의 **3,000,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,000,000이다. 자르기 전 소득세분 720,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-06",
@@ -602,7 +766,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3000000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 50000001,
       "financial_income_taxpayer_last_3_years": false,
@@ -613,10 +782,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -652,7 +823,10 @@ open_questions:
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -681,6 +855,14 @@ open_questions:
 
 **4차 — 기대값이 바뀌지 않는다. 이유는 "동점이 아니어서"가 아니다.** 동점은 맞다(두 계좌 모두 15%). 그런데 합산 공제 잔여가 0이라 **연금계좌에 갈 돈이 애초에 없다.** S13은 연금 배분 총액을 두 계좌에 나누는 규칙이므로 총액이 0이면 적용할 것이 없다. 배분안도 종전대로 하나로 합쳐진다(세 안 전부 ISA 12,000,000). **D17(인정 순서)과 S13(충당 순서)은 다른 단계라는 점도 이 케이스가 드러낸다** — D17은 기납입액을 어느 계좌 몫으로 인정할지, S13은 새 돈을 어디에 넣을지를 정한다. 여기서는 D17만 걸리고 S13은 걸리지 않는다.
 
+**세액 한도 (6차 산출) — 되더하기가 실제로 결과를 바꾸는 케이스**
+
+이 사람은 이미 연금저축 7,000,000 + IRP 5,000,000을 납입해 합산 한도를 넘긴 사람이다. **작년에 처음 그랬다고 볼 이유가 없다** — 이 규모로 납입하는 사람은 직전 과세연도에도 납입해 공제를 받았다고 보는 것이 CD2에 맞다. 그래서 되더할 값이 0이 아니다.
+
+직전연도 총급여 45,000,000의 밴드는 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 한도로 잡되, 작년에 9,000,000을 납입해 1,350,000의 연금계좌 세액공제를 받았으므로 서식의 결정세액은 2,400,000 − 1,350,000 = **1,050,000**으로 적혀 있다. 즉 `결정세액 1,050,000 + 연금계좌 세액공제액 1,350,000 = 한도 2,400,000`이다.
+
+**되더하기를 빠뜨리면 한도가 1,050,000이 되어 자르기 전 소득세분 1,350,000을 자른다** — 공제액이 1,485,000에서 1,155,000으로 330,000원 줄어든다. 되더하면 자르지 않는다. 블록의 `notice_codes_absent: ["tax_liability_cap_applied"]`가 이 차이를 검사한다.
+
 ```golden
 {
   "case": "GC-07",
@@ -689,7 +871,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 1050000,
+        "pension_credit_applied_krw": 1350000
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -700,10 +887,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 7000000
+        "ytd_contribution_krw": 7000000,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 5000000
+        "ytd_contribution_krw": 5000000,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -744,11 +933,16 @@ open_questions:
           "warning_count": 0,
           "credit_eligible_krw": 9000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
 ```
+
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,800,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다. 전환 추가한도로 인정액이 12,000,000까지 늘어난 케이스라 자르기 전 금액이 이 문서에서 가장 크다. 그래도 밴드 안이다.
 
 ```golden
 {
@@ -758,7 +952,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -769,10 +968,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -815,7 +1016,10 @@ open_questions:
           "warning_count": 0,
           "credit_eligible_krw": 12000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -831,6 +1035,8 @@ open_questions:
 
 **4차 — 기대값이 바뀌지 않는다.** 예산이 0이라 나눌 돈 자체가 없다. GC-07과 같은 이유(연금계좌에 갈 돈이 없음)이되 원인이 다르다 — GC-07은 한도 소진, 여기는 여력 0이다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 밴드 안에서 **2,400,000**을 골랐다. 다만 이 케이스에서 한도는 결과를 바꾸지 않는다 — 월 여력이 0이라 자르기 전 소득세분이 이미 0이고, `min(0, 한도)`는 한도가 무엇이든 0이다. **그럼에도 `unknown`으로 두지 않았다.** 여력 0을 보는 케이스에 한도 미확인 상태를 섞으면 `tax_liability_cap_unknown`이 붙어 이 케이스가 보려는 것과 다른 안내가 결과에 얹힌다.
+
 ```golden
 {
   "case": "GC-08",
@@ -839,7 +1045,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -850,10 +1061,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -893,7 +1106,10 @@ open_questions:
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -909,6 +1125,12 @@ open_questions:
 
 **도출 과정** 최대공제안은 공제를 낳지 않는 곳에 돈을 밀어 넣지 않는다. 연금 납입한도는 18,000,000이지만 9,000,000을 넘는 납입은 `pension.credit.limit.combined`상 공제가 붙지 않으므로 공제한도에서 멈추는 것이 목적함수에 부합한다. 따라서 미배분 = 240,000,000 − 29,000,000.
 
+**세액 한도 (6차 산출) — 이 케이스는 `unknown`으로 둔다**
+
+예산이 세 계좌의 잔여 한도를 전부 넘기는 사람이다. 여력이 연 240,000,000이면 직전 과세연도 결정세액이 얼마였을지를 **총급여 45,000,000이라는 진술만으로 말할 수 없다** — 근로소득 외의 소득이 있을 개연성이 높고, 그러면 S15의 밴드(근로소득만 있는 사람의 것)가 성립하지 않는다. **밴드가 성립하지 않는 자리에 밴드에서 뽑은 값을 넣는 것이 곧 지어내는 것이다.** CD4에 따라 `unknown`으로 둔다.
+
+**그 대가로 이 케이스는 한도를 검사하지 않는다.** 대신 `tax_liability_cap_unknown`이 붙는다는 것과 **한도를 모르면 자르지 않는다**는 것을 검사한다 — 공제액은 자르기 전 값 1,485,000 그대로이고, 그 값은 "이만큼"이 아니라 "최대 이만큼"이다.
+
 ```golden
 {
   "case": "GC-09",
@@ -917,7 +1139,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "unknown",
+        "determined_tax_krw": null,
+        "pension_credit_applied_krw": null
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -928,10 +1155,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -951,7 +1180,8 @@ open_questions:
         "plans_collapsed_single"
       ],
       "notice_codes": [
-        "budget_exceeds_all_limits"
+        "budget_exceeds_all_limits",
+        "tax_liability_cap_unknown"
       ],
       "plans": {
         "max_tax_credit": {
@@ -969,7 +1199,11 @@ open_questions:
           "unallocated_krw": 211000000,
           "monthly_rounding_residual_krw": 8
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "tax_liability_cap_zero"
+      ]
     }
   }
 }
@@ -985,6 +1219,8 @@ open_questions:
 
 **도출 과정** S8 `isa.contribution.annual_limit` = 20,000,000 × [1 + min(5, 4)] − 30,000,000 = 100,000,000 − 30,000,000 = **70,000,000**. 총한도 쪽도 100,000,000 − 30,000,000 = 70,000,000으로 같다. **경과 4년과 5년이 같은 값을 내야 한다** — 규칙의 `cap_behavior`가 그렇게 정한다. S12 3 − 5 < 0 → 0.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-10",
@@ -993,7 +1229,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1004,10 +1245,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1044,7 +1287,10 @@ open_questions:
           "warning_count": 0,
           "monthly_rounding_residual_krw": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1060,6 +1306,8 @@ open_questions:
 
 **도출 과정** S8 20,000,000×5 − 100,000,000 = 0. 총한도 쪽도 0. 산식과 총한도가 정확히 같은 지점에서 맞물린다는 것을 고정한다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-11",
@@ -1068,7 +1316,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1079,10 +1332,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1125,7 +1380,10 @@ open_questions:
           },
           "unallocated_krw": 15000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1141,6 +1399,8 @@ open_questions:
 
 **도출 과정** S8 산식 쪽 = 20,000,000×5 − 0 = 100,000,000. 총한도 쪽 = (100,000,000 − 40,000,000) − 0 = 60,000,000. 둘 중 작은 값 **60,000,000**. `isa.account.requirements`의 `total_limit_reduction`이 근거다. **산식만 보고 총한도 차감을 빠뜨리면 40,000,000원을 과대 안내한다.**
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-12",
@@ -1149,7 +1409,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1160,10 +1425,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1196,7 +1463,10 @@ open_questions:
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1212,6 +1482,8 @@ open_questions:
 
 **도출 과정** S10 `isa.exclusion.financial_income_taxpayer` — 조특법 §129조의2① 배제. 판정 기준이 **직전 3개** 과세기간이라는 점이 핵심이며, 직전 1개만 보면 오판한다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-13",
@@ -1220,7 +1492,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": true,
@@ -1231,10 +1508,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1281,7 +1560,10 @@ open_questions:
           },
           "unallocated_krw": 21000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1299,6 +1581,23 @@ open_questions:
 
 **연금계좌에는 최소 연령 규칙이 룰셋에 없다.** 따라서 14세에게도 연금 배분이 나가고 안내 `pension_age_not_evaluated`가 함께 나가는 것이 맞다. 룰셋에 없는 규칙을 엔진이 지어내면 안 된다.
 
+**세액 한도 (6차 산출) — 한도가 0이라 공제액이 0이 된다**
+
+만 14세이고 직전 과세기간 근로소득이 없어 ISA 15세 경로가 성립하지 않는 사람이다. **직전 과세기간에 근로소득이 없었다면 그 해의 결정세액은 0이다** — 산출세액이 없으면 결정세액도 없다. CD2가 그대로 적용되는 자리이고, 여기에 넉넉한 결정세액을 넣는 것은 프로필과 모순된다. `state: "zero"`로 두고 연금계좌 세액공제액은 0이므로 **한도 = 0**이다.
+
+| 항목 | 값 |
+|---|---|
+| 자르기 전 소득세분 (= 임계값) | 900,000 |
+| 한도 | **0** |
+| 인정 세액공제 소득세 / 지방세 / 합계 | **0 / 0 / 0** (종전 900,000 / 90,000 / 990,000) |
+| 배분 | 연금저축 6,000,000 · IRP 0 · ISA 0 — **움직이지 않는다** |
+| 안내 | `tax_liability_cap_zero` · `tax_liability_cap_applied` |
+| 비교 안내 | `tax_credit_axis_not_discriminating` |
+
+**이 케이스가 5차까지 990,000원을 약속하고 있었다.** 직전 과세기간에 소득이 없던 사람에게 99만원의 절세액을 제시하고 있었다는 뜻이고, **그것이 6차 조사가 지목한 바로 그 결함이다.** 기대값이 엔진과 같은 누락을 공유하고 있었으므로 대조가 이것을 잡지 못했다.
+
+**해당 과세연도에는 총급여 20,000,000이 있으니 한도가 0이 아니지 않은가.** 그럴 수 있다. 그러나 `tax_liability_cap.source_form`의 `exactness`가 적어 둔 대로 이 값은 **직전 과세연도로 해당 과세연도를 추정하는 것**이고, 그 전제는 반드시 깨진다. 엔진이 추정을 고쳐 쓰기 시작하면 그 순간 지어내는 쪽으로 넘어간다. 사용자가 진술한 것을 그대로 쓰는 것이 옳다.
+
 ```golden
 {
   "case": "GC-14",
@@ -1307,7 +1606,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 14,
+      "birth_date": "2012-06-15",
+      "prior_year_tax": {
+        "state": "zero",
+        "determined_tax_krw": null,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 20000000,
       "prior_year_total_salary_krw": null,
       "financial_income_taxpayer_last_3_years": false,
@@ -1318,10 +1622,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": false,
@@ -1346,10 +1652,13 @@ open_questions:
         "isa_tenure_missing",
         "isa_type_not_declared",
         "prior_year_income_missing",
-        "pension_age_not_evaluated"
+        "pension_age_not_evaluated",
+        "tax_liability_cap_zero",
+        "tax_liability_cap_applied"
       ],
       "comparison_note_codes": [
-        "plans_collapsed_single"
+        "plans_collapsed_single",
+        "tax_credit_axis_not_discriminating"
       ],
       "boundaries": {
         "pension_years_remaining": 41
@@ -1362,9 +1671,9 @@ open_questions:
             "isa": 0
           },
           "tax_credit": {
-            "income_tax": 900000,
-            "local_tax": 90000,
-            "total": 990000
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
           },
           "warning_count": 0
         }
@@ -1401,6 +1710,8 @@ open_questions:
 
 **도출 과정** S4 min(10,000,000×0.10 = 1,000,000, 3,000,000) = **1,000,000** (이번엔 10%가 구속) → S5 10,000,000 → S6 IRP인정 10,000,000 → S2 60,000,000 > 55,000,000 → 12% → S7 10,000,000×0.12 = 1,200,000. GC-15와 쌍으로 `min` 두 항이 각각 구속되는 경우를 모두 덮는다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,200,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-16",
@@ -1409,7 +1720,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1420,10 +1736,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1463,7 +1781,10 @@ open_questions:
           "warning_count": 0,
           "credit_eligible_krw": 10000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1477,6 +1798,8 @@ open_questions:
 
 **도출 과정** S4 min(4,000,000, 3,000,000 − 1,200,000 = 1,800,000) = **1,800,000**. 규칙의 `period` 필드가 정한 차감이다. S7 10,800,000×0.15 = 1,620,000.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,620,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-17",
@@ -1485,7 +1808,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1496,10 +1824,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1538,7 +1868,10 @@ open_questions:
           "warning_count": 0,
           "credit_eligible_krw": 10800000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1565,6 +1898,8 @@ open_questions:
 
 **4차 개정 사유 — 경고 건수를 세법으로 정한다.** 경고는 `배분액 > 0`인 계좌마다 붙는다(계약 5.6절). S13이 연금 배분을 두 계좌로 쪼갰으므로 배분액이 양수인 연금계좌가 하나에서 **둘**이 됐고, 따라서 연금 경고도 하나에서 **둘**이 된다. **이것이 임의의 표시 규칙이 아니라 세법 결론이라는 점이 중요하다** — `pension.withdrawal.eligibility`와 `pension.early_withdrawal.other_income_rate`가 계좌 종류를 가리지 않고 똑같이 걸리므로, 연금저축 6,000,000에 붙는 불이익과 IRP 3,000,000에 붙는 불이익은 성질이 같다. **한쪽에만 붙이면 사용자는 자기 돈의 3분의 2에 걸린 제약을 못 본다.** (a)의 3건은 `연금저축 · IRP · ISA`이고, (b)의 2건은 `연금저축 · IRP`다. (c)는 요건 자체가 성립하지 않아 0건 그대로다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-18a",
@@ -1573,7 +1908,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1584,10 +1924,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1642,11 +1984,16 @@ open_questions:
             "early_termination_clawback_isa"
           ]
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
 ```
+
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
 
 ```golden
 {
@@ -1656,7 +2003,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1667,10 +2019,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1723,11 +2077,16 @@ open_questions:
           "warning_count": 0,
           "delta_vs_baseline_krw": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
 ```
+
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
 
 ```golden
 {
@@ -1737,7 +2096,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1748,10 +2112,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1800,11 +2166,16 @@ open_questions:
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
 ```
+
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
 
 ```golden
 {
@@ -1814,7 +2185,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1825,10 +2201,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -1885,7 +2263,10 @@ open_questions:
             "early_termination_clawback_isa"
           ]
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1923,13 +2304,22 @@ open_questions:
 
 **4차 개정 — 연금 경고가 1건에서 2건으로 는다.** 분할이 바뀌어 배분액 > 0인 연금계좌가 둘이 됐기 때문이다. `all_accounts_have_early_exit_penalty`가 **여전히 나가지 않아야 한다**는 결론은 그대로다 — `isa_first` 안(ISA 12,000,000 · 연금 0)이 경고를 하나도 지지 않고, 그 안이 배분안 목록에 남아 있다. 즉 이번 변경이 3차에서 확정한 이 케이스의 정답을 흔들지 않았는지가 관전 포인트이며, 흔들지 않았다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-21",
   "request": {
-    "scenarios": ["current"],
+    "scenarios": [
+      "current"
+    ],
     "profile": {
-      "age_years": 56,
+      "birth_date": "1970-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -1939,8 +2329,14 @@ open_questions:
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 0 },
-      "retirement_pension": { "ytd_contribution_krw": 0 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": true,
         "account_type": "low_income",
@@ -1960,17 +2356,37 @@ open_questions:
         "pension_years_remaining": 0,
         "pension_holding_period_evaluated": false
       },
-      "limits": { "isa_contribution_remaining_krw": 60000000 },
-      "notice_codes": ["isa_lock_in_already_elapsed", "pension_holding_period_not_evaluated"],
-      "comparison_note_codes_absent": ["all_accounts_have_early_exit_penalty"],
+      "limits": {
+        "isa_contribution_remaining_krw": 60000000
+      },
+      "notice_codes": [
+        "isa_lock_in_already_elapsed",
+        "pension_holding_period_not_evaluated"
+      ],
+      "comparison_note_codes_absent": [
+        "all_accounts_have_early_exit_penalty"
+      ],
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 6000000, "retirement_pension": 3000000, "isa": 3000000 },
-          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 3000000
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
           "warning_count": 2,
-          "warning_codes": ["early_withdrawal_penalty_pension"]
+          "warning_codes": [
+            "early_withdrawal_penalty_pension"
+          ]
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -1995,6 +2411,8 @@ open_questions:
 
 **종전 3차 문서의 참고 문장은 이제 본문이 됐다.** 3차까지 "`annuity_savings_first` 안의 잔차는 14"라고 참고로 적어 둔 값이 그것이다. S13이 `max_tax_credit`을 그 안과 같은 순서로 만들었으므로 두 안이 합쳐졌고, 14가 최대공제안 자신의 잔차가 됐다. **잔차를 삼키지 않고 내보내는지가 여전히 요지다**(계약 5.5절).
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-22",
@@ -2003,7 +2421,12 @@ open_questions:
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2014,10 +2437,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2054,7 +2479,10 @@ open_questions:
           "monthly_rounding_residual_krw": 14,
           "unallocated_krw": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2092,13 +2520,23 @@ open_questions:
 
 **D17 전제 표시** — 반대 해석(연금저축 우선 인정)이면 `연금저축인정 6,000,000 × 0.12` + `IRP인정 3,000,000 × 0.15` = 720,000 + 450,000 = 1,170,000 소득세가 되고, 추가 IRP 납입의 이점 자체가 사라진다. **이 케이스의 정답은 D17에 의존한다.** 법안 통과 시 재산출 대상이다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,260,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다. 확정 1,080,000 · 개정안 1,260,000 둘 다 한도 아래이므로 **청년 우대의 효과가 한도에 가려지지 않는다.** 이 케이스가 보려는 것이 그 효과이므로 가려지면 안 된다.
+
 ```golden
 {
   "case": "GC-19",
   "request": {
-    "scenarios": ["current", "proposed"],
+    "scenarios": [
+      "current",
+      "proposed"
+    ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2108,8 +2546,14 @@ open_questions:
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 6000000 },
-      "retirement_pension": { "ytd_contribution_krw": 0 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": true,
         "account_type": "general",
@@ -2125,21 +2569,45 @@ open_questions:
     "current": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 3000000, "isa": 3000000 },
-          "tax_credit": { "income_tax": 1080000, "local_tax": 108000, "total": 1188000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 3000000,
+            "isa": 3000000
+          },
+          "tax_credit": {
+            "income_tax": 1080000,
+            "local_tax": 108000,
+            "total": 1188000
+          },
           "warning_count": 0,
-          "limited_by": { "retirement_pension": "credit_limit" }
+          "limited_by": {
+            "retirement_pension": "credit_limit"
+          }
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     },
     "proposed": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 6000000, "isa": 0 },
-          "tax_credit": { "income_tax": 1260000, "local_tax": 126000, "total": 1386000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 6000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1260000,
+            "local_tax": 126000,
+            "total": 1386000
+          },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2153,13 +2621,22 @@ open_questions:
 
 **도출 과정** 배분을 0으로 묶어 **S6·S7만** 검사한다. 기납입만으로 IRP 6,000,000 + 연금저축 6,000,000이 이미 있으므로 D17 인정 결과는 GC-19의 목표 배분과 같다. **이 케이스가 맞고 GC-19c가 틀리면 결함은 인정 로직이 아니라 배분 탐색에 있다.**
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,260,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-19b",
   "request": {
-    "scenarios": ["proposed"],
+    "scenarios": [
+      "proposed"
+    ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2169,8 +2646,14 @@ open_questions:
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 6000000 },
-      "retirement_pension": { "ytd_contribution_krw": 6000000 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": true,
         "account_type": "general",
@@ -2184,15 +2667,28 @@ open_questions:
   },
   "expect": {
     "proposed": {
-      "limits": { "pension_combined_credit_remaining_krw": 0 },
+      "limits": {
+        "pension_combined_credit_remaining_krw": 0
+      },
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 0, "isa": 0 },
-          "tax_credit": { "income_tax": 1260000, "local_tax": 126000, "total": 1386000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1260000,
+            "local_tax": 126000,
+            "total": 1386000
+          },
           "credit_eligible_krw": 9000000,
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2206,13 +2702,22 @@ open_questions:
 
 **도출 과정** GC-19와 같되 ISA라는 대안 목적지를 없애 배분 선택을 좁혔다. 예산 6,000,000을 전부 IRP에 넣는 것이 세액공제를 최대화한다. 연금 납입 잔여 한도는 18,000,000 − 6,000,000 = 12,000,000이므로 6,000,000 납입은 가능하다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,260,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-19c",
   "request": {
-    "scenarios": ["proposed"],
+    "scenarios": [
+      "proposed"
+    ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2222,8 +2727,14 @@ open_questions:
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 6000000 },
-      "retirement_pension": { "ytd_contribution_krw": 0 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": false,
         "account_type": "general",
@@ -2239,12 +2750,25 @@ open_questions:
     "proposed": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 6000000, "isa": 0 },
-          "tax_credit": { "income_tax": 1260000, "local_tax": 126000, "total": 1386000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 6000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1260000,
+            "local_tax": 126000,
+            "total": 1386000
+          },
           "warning_count": 0,
-          "limited_by": { "retirement_pension": "budget" }
+          "limited_by": {
+            "retirement_pension": "budget"
+          }
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2260,13 +2784,22 @@ open_questions:
 
 **이것이 이 구조에서 가능한 최대 격차다.** 잔여 공제한도(3,000,000)만 보고 멈추면 1,170,000 소득세(총 1,287,000)이므로 **차이 198,000원.**
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-23",
   "request": {
-    "scenarios": ["proposed"],
+    "scenarios": [
+      "proposed"
+    ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2276,8 +2809,14 @@ open_questions:
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 6000000 },
-      "retirement_pension": { "ytd_contribution_krw": 0 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": true,
         "account_type": "general",
@@ -2293,12 +2832,26 @@ open_questions:
     "proposed": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 9000000, "isa": 3000000 },
-          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 9000000,
+            "isa": 3000000
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
           "warning_count": 0,
-          "limited_by": { "retirement_pension": "credit_limit", "isa": "budget" }
+          "limited_by": {
+            "retirement_pension": "credit_limit",
+            "isa": "budget"
+          }
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2312,6 +2865,8 @@ open_questions:
 
 **도출 과정** GC-23이 제안하는 최종 상태(IRP 9,000,000 + 연금저축 6,000,000)를 기납입으로 직접 주어 인정·공제 계산만 확인한다. **이 값이 1,485,000이면 GC-23의 기대값이 도달 가능한 상태임이 증명된다** — 배분 탐색이 그 상태를 못 찾았을 뿐이라는 결론이 성립한다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-23-oracle",
@@ -2320,7 +2875,12 @@ open_questions:
       "proposed"
     ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2331,10 +2891,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 6000000
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 9000000
+        "ytd_contribution_krw": 9000000,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2370,7 +2932,10 @@ open_questions:
           "warning_count": 0,
           "credit_eligible_krw": 9000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2384,6 +2949,8 @@ open_questions:
 
 **도출 과정** 규칙의 `unverified`가 "'대통령령으로 정하는 청년'의 연령 범위가 미확정이므로 엔진이 청년 여부를 스스로 판정해서는 안 된다"고 정한다. 따라서 나이 30세여도 자기신고가 없으면 우대를 적용하지 않는 것이 맞다. **엔진이 나이로 청년을 추정하면 오답이다.**
 
+**세액 한도 (6차 산출)** 직전연도 총급여 60,000,000의 결정세액 밴드는 S15로 [3,966,133 , 4,812,500]이고 그 안의 **4,300,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 4,300,000이다. 자르기 전 소득세분 1,080,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-20",
@@ -2393,7 +2960,12 @@ open_questions:
       "proposed"
     ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 4300000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 60000000,
       "prior_year_total_salary_krw": 60000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2404,10 +2976,12 @@ open_questions:
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 6000000
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2436,7 +3010,10 @@ open_questions:
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     },
     "proposed": {
       "notice_codes": [
@@ -2457,7 +3034,10 @@ open_questions:
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2490,6 +3070,8 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
 
 **4차 — 기대값이 바뀌지 않는다. 다만 `tie_break`는 여기서 처음으로 `withdrawal_flexibility_first`가 된다.** 두 율이 같으므로 이 케이스는 **개정안 시나리오이면서 동점**인 유일한 부류다(GC-25도 같다). S13이 걸리지만 연금저축 자기 한도 잔여가 0이라 배분이 움직이지 않는다(4-0절). **금액이 안 움직인다고 S13이 안 걸린 것은 아니다** — 순서는 적용됐고 받을 몫이 없었을 뿐이다. 이 구분이 GC-26과의 대비를 만든다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 52,000,000의 결정세액 밴드는 S15로 [2,938,981 , 3,672,500]이고 그 안의 **3,200,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,200,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-24",
@@ -2499,7 +3081,12 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
       "proposed"
     ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3200000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 50000000,
       "prior_year_total_salary_krw": 52000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2510,10 +3097,12 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 6000000
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2542,7 +3131,10 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
           },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     },
     "proposed": {
       "plans": {
@@ -2560,7 +3152,10 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
           "warning_count": 0,
           "tie_break": "withdrawal_flexibility_first"
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2574,13 +3169,23 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
 
 **도출 과정** `pension.credit.rate`의 `boundary_rule`이 "이하"이므로 55,000,000원 정확히는 15% 구간이다. 청년 우대율과 같아지는 마지막 지점이다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 55,000,000의 결정세액 밴드는 S15로 [3,324,163 , 4,100,000]이고 그 안의 **3,600,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,600,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-25",
   "request": {
-    "scenarios": ["current", "proposed"],
+    "scenarios": [
+      "current",
+      "proposed"
+    ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 55000000,
       "prior_year_total_salary_krw": 55000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2590,8 +3195,14 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 6000000 },
-      "retirement_pension": { "ytd_contribution_krw": 0 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": true,
         "account_type": "general",
@@ -2603,27 +3214,53 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.15 },
+  "credit_rate": {
+    "income_tax": 0.15
+  },
   "expect": {
     "current": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 3000000, "isa": 9000000 },
-          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 3000000,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     },
     "proposed": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 3000000, "isa": 9000000 },
-          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 3000000,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
           "warning_count": 0,
-          "limited_by": { "retirement_pension": "credit_limit" },
+          "limited_by": {
+            "retirement_pension": "credit_limit"
+          },
           "tie_break": "withdrawal_flexibility_first"
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2646,13 +3283,23 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
 
 **4차 — 기대값이 바뀌지 않는다. 그리고 이 쌍이 이제 `tie_break`의 경계까지 겸한다.** 55,000,000원(GC-25)에서는 개정안에서도 두 율이 15%로 같아 `tie_break: withdrawal_flexibility_first`이고, 55,000,001원(GC-26)에서는 IRP만 15%가 되어 `tie_break: not_applicable`로 뒤집힌다. **동점 판정의 경계가 공제율 경계와 정확히 같은 자리에 있다는 사실을 1원 단위로 고정하는 유일한 쌍이다.** 배분이 안 바뀌는 것은 두 케이스 모두 연금저축 자기 한도가 이미 소진돼 있기 때문이고(4-0절), 동점 판정 자체는 여기서 갈린다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 55,000,000의 결정세액 밴드는 S15로 [3,324,163 , 4,100,000]이고 그 안의 **3,600,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 3,600,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다. 확정 시나리오의 자르기 전 금액은 1,080,000이고 개정안은 1,350,000이다. 둘 다 한도 아래다.
+
 ```golden
 {
   "case": "GC-26",
   "request": {
-    "scenarios": ["current", "proposed"],
+    "scenarios": [
+      "current",
+      "proposed"
+    ],
     "profile": {
-      "age_years": 30,
+      "birth_date": "1996-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 55000001,
       "prior_year_total_salary_krw": 55000001,
       "financial_income_taxpayer_last_3_years": false,
@@ -2662,8 +3309,14 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
       "months_remaining_in_tax_year": 12
     },
     "accounts": {
-      "annuity_savings": { "ytd_contribution_krw": 6000000 },
-      "retirement_pension": { "ytd_contribution_krw": 0 },
+      "annuity_savings": {
+        "ytd_contribution_krw": 6000000,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
       "isa": {
         "exists": true,
         "account_type": "general",
@@ -2675,27 +3328,53 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.12 },
+  "credit_rate": {
+    "income_tax": 0.12
+  },
   "expect": {
     "current": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 3000000, "isa": 9000000 },
-          "tax_credit": { "income_tax": 1080000, "local_tax": 108000, "total": 1188000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 3000000,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 1080000,
+            "local_tax": 108000,
+            "total": 1188000
+          },
           "warning_count": 0
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     },
     "proposed": {
       "plans": {
         "max_tax_credit": {
-          "allocation": { "annuity_savings": 0, "retirement_pension": 9000000, "isa": 3000000 },
-          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 9000000,
+            "isa": 3000000
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
           "warning_count": 0,
-          "limited_by": { "retirement_pension": "credit_limit" },
+          "limited_by": {
+            "retirement_pension": "credit_limit"
+          },
           "tie_break": "not_applicable"
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2713,6 +3392,8 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
 
 **이 케이스의 목적은 수정의 과잉을 잡는 것이다.** M2 수정이 조건을 좁히면서 잔여 기간이 남은 경우까지 경고를 없앴다면, 사용자는 실제로 지게 될 추징 위험을 고지받지 못한다. **경고를 없애는 수정에서 가장 흔한 실패 방식이다.**
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-27",
@@ -2721,7 +3402,12 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2732,10 +3418,12 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2778,7 +3466,10 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
             "early_termination_clawback_isa"
           ]
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -2794,6 +3485,8 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
 
 **도출 과정** 계약 8.4절이 "`unknown`이면 배분액>0인 계좌 전부에 `info`로 낸다"고 하면서 **"ISA 쪽은 이때도 잔여 의무가입기간 조건이 함께 걸린다"**고 정한다. 세법상으로도 같다 — 사용자가 사용 시점을 밝히지 않았다고 해서 이미 경과한 의무가입기간이 되살아나지는 않는다. 추징 요건이 성립할 수 없으므로 정보 등급으로도 알릴 내용이 아니다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-28",
@@ -2802,7 +3495,12 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
       "current"
     ],
     "profile": {
-      "age_years": 56,
+      "birth_date": "1970-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2813,10 +3511,12 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2855,7 +3555,11 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
             "early_withdrawal_penalty_pension"
           ]
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "isa_lock_in_already_elapsed"
+      ]
     }
   }
 }
@@ -2892,6 +3596,8 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 
 **그러나 배분안이 하나가 되면서 이 케이스의 감별력이 떨어졌다.** GC-29는 3차에서 "안내 조건이 **입력값 기반인가 결과 기반인가**"를 가르려고 만들었고, 그 감별은 **배분안이 둘 이상이어야** 성립한다. 안이 하나뿐이면 "모든 안이 경고를 진다"와 "그 안이 경고를 진다"가 같은 문장이 되어, 잘못 구현된 쪽도 통과할 수 있다. **감별력을 되살리려면 의무가입기간이 경과했는데도 배분안이 둘로 갈리고 그 둘이 모두 경고를 지는 케이스가 필요하다.** 그것이 아래 GC-30이다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다.
+
 ```golden
 {
   "case": "GC-29",
@@ -2900,7 +3606,12 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -2911,10 +3622,12 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -2964,7 +3677,10 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
           },
           "unallocated_krw": 3000000
         }
-      }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
     }
   }
 }
@@ -3003,6 +3719,8 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 
 **이 케이스가 무엇을 막는가.** (1) 안내 조건을 `isa_lock_in_years_remaining`(입력 파생값)으로 되돌리면 여기서 잘못 꺼진다 — GC-29가 단일 안으로 접힌 뒤 비어 버린 자리를 메운다. (2) `isa_first`가 ISA 잔여 한도를 넘겨 채우면 배분이 틀린다. (3) 두 번째 순위 이후에도 S13이 적용되는지를 본다 — `isa_first`의 연금 몫 7,000,000이 연금저축 6,000,000 + IRP 1,000,000으로 나뉘어야 하고, 순서가 안 걸리면 IRP 6,000,000 + 연금저축 1,000,000이 되는데 **인정액과 세액이 같아 금액으로는 구별되지 않는다.** 배분을 함께 봐야 잡힌다.
 
+**세액 한도 (6차 산출)** 직전연도 총급여 45,000,000의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 안의 **2,400,000**을 골랐다 — 부양가족이 없는 근로자다. 연금계좌에 납입한 적이 없어 되더할 세액공제액은 0이므로 한도는 그대로 2,400,000이다. 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다 — 6차 이전에는 이 케이스가 한도에 대해 아무 주장도 하지 않았다. 유동성 우선안의 자르기 전 소득세분은 1,050,000이므로 그쪽도 자르지 않는다.
+
 ```golden
 {
   "case": "GC-30",
@@ -3011,7 +3729,12 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
       "current"
     ],
     "profile": {
-      "age_years": 40,
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
       "current_year_total_salary_krw": 45000000,
       "prior_year_total_salary_krw": 45000000,
       "financial_income_taxpayer_last_3_years": false,
@@ -3022,10 +3745,12 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
     },
     "accounts": {
       "annuity_savings": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "retirement_pension": {
-        "ytd_contribution_krw": 0
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
       },
       "isa": {
         "exists": true,
@@ -3102,6 +3827,1145 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
           "delta_vs_baseline_krw": -330000,
           "monthly_rounding_residual_krw": 12
         }
+      },
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ]
+    }
+  }
+}
+```
+
+---
+
+## 4-B. 6차 — 세액 한도·연금수령 개시·개시 가능 시점·퇴직급여 입금 (신규 11건)
+
+**이 절의 케이스는 전부 6차에 새로 만들었다.** 기존 36건 중 세액 한도가 실제로 무는 것은 GC-04(잘림)·GC-14(한도 0)·GC-07(되더하기)·GC-09(모름) 넷뿐이고, 그 넷은 다른 축을 보러 만든 케이스에 한도가 얹힌 것이다. **경계에서 오류가 난다** — 절단선의 양쪽과 그 위, 되더하기의 유무, `0`과 `모름`의 갈림은 그것만 보는 케이스가 있어야 닫힌다.
+
+전 케이스 공통: `tax_year: 2026`, 룰셋 `2026.json`, `financial_income_taxpayer_last_3_years: false`.
+
+### GC-31 - 결정세액 0: 한도가 0으로 확정된 사람 【경계 · 6차 추가】
+
+**프로필** 만 40세(1986-06-15) · 해당연도 총급여 45,000,000 · **직전연도 총급여 20,000,000** · 월 750,000 · horizon `at_or_after_pension_age` · 연금 두 계좌 ytd 0 · 개시 `not_started` · ISA 보유/서민형/누적 0/경과 0년 · **직전 과세연도 결정세액 0 · 연금계좌 세액공제액 0**
+
+**결정세액을 0으로 정한 근거 (CD2)** 이 사람은 직전 과세연도에 총급여 20,000,000이었고 부양가족이 둘 있었다. 그 조합에서 산출세액은 근로소득세액공제와 표준세액공제만으로 전부 소진된다 — S15의 밴드 산출을 총급여 20,000,000에 적용하면 상한이 146,750원이고, 여기에 부양가족 2인의 기본공제 3,000,000원(과세표준 −3,000,000 → 세액 −180,000)을 더 빼면 **0 아래로 내려간다.** 이 프로필에서 결정세액 0은 억지로 고른 값이 아니라 흔한 값이다. 연금계좌에 납입한 적이 없으므로 되더할 세액공제액도 0이다.
+
+**기대 결과** 한도 = 0 + 0 = **0**. `pension.credit.tax_liability_cap`의 `effect_when_zero`가 이 경우를 이름으로 지목한다 — "연금계좌에 얼마를 납입하든 그 과세기간의 연금계좌 세액공제액은 0이다."
+
+| 항목 | 값 |
+|---|---|
+| 자르기 전 소득세분 (= 임계값) | 1,350,000 |
+| 세액 한도 | **0** |
+| 인정 세액공제 소득세 / 지방세 / 합계 | **0 / 0 / 0** |
+| 배분 (최대공제안) | 연금저축 6,000,000 + IRP 3,000,000 · ISA 0 — **한도가 넉넉한 경우와 완전히 같다** |
+| 배분안 수 | 2 |
+| 안내 | `tax_liability_cap_zero` · `tax_liability_cap_applied` |
+| 비교 안내 | `tax_credit_axis_not_discriminating` · `alternatives_have_equal_tax_credit` |
+
+**도출 과정** S1 750,000 × 12 = 9,000,000 → S2 45,000,000 ≤ 55,000,000 이므로 15% → S5 합산 공제한도 9,000,000 → S13 동점이므로 연금저축을 자기 한도 6,000,000까지 먼저 채우고 잔여 3,000,000이 IRP로 → S7 자르기 전 소득세분 9,000,000 × 0.15 = 1,350,000 → **S14 한도가 0이므로 인정액 min(1,350,000, 0) = 0**, 지방세분은 인정된 소득세분에 부가율을 곱하므로 0 × 0.1 = 0.
+
+**배분이 움직이지 않는다는 것이 이 케이스의 절반이다.** 계약 4.2절 `tax_liability_cap_affects.allocation_amounts: false`가 그렇게 선언하고, 근거는 §61 ③이 초과분을 "받지 아니한 것으로" 의제해 시행령 §118의3의 전환 신청 대상으로 남기기 때문이다(`pension.credit.unused.contribution_carryover`). **"한도가 0이면 넣지 마라"는 세법의 결론이 아니다.** 배분을 0으로 만드는 엔진은 조문에 없는 선호를 지어낸 것이 된다.
+
+**`tax_liability_cap_applied`도 함께 나가야 한다.** 계약 8.2절이 그 코드의 조건을 "반환된 배분안 중 하나 이상에서 계산된 세액공제액이 한도에 걸려 잘림"으로 정하고, 한도 0은 1,350,000을 0으로 자른 것이므로 조건을 충족한다. `tax_liability_cap_zero`가 따로 있다는 이유로 이쪽이 꺼진다고 볼 근거가 계약에 없다.
+
+```golden
+{
+  "case": "GC-31",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 0,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 20000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "limits": {
+        "pension_combined_credit_limit_krw": 9000000,
+        "pension_combined_credit_remaining_krw": 9000000,
+        "isa_tax_free_limit_krw": 4000000
+      },
+      "boundaries": {
+        "isa_lock_in_years_remaining": 3,
+        "pension_years_remaining": 15
+      },
+      "notice_codes": [
+        "tax_liability_cap_zero",
+        "tax_liability_cap_applied"
+      ],
+      "notice_codes_absent": [
+        "tax_liability_cap_unknown"
+      ],
+      "comparison_note_codes": [
+        "tax_credit_axis_not_discriminating",
+        "alternatives_have_equal_tax_credit"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "annuity_savings": 1,
+            "retirement_pension": 2
+          },
+          "unallocated_krw": 0
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "delta_vs_baseline_krw": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-32a~c - 한도가 공제액보다 1원 적을 때 / 정확히 같을 때 / 1원 많을 때 【경계 3건 · 6차 추가】
+
+**공통 프로필** 만 40세(1986-06-15) · 해당·직전연도 총급여 45,000,000 · 월 750,000 · horizon `at_or_after_pension_age` · 연금 두 계좌 ytd 0 · 개시 `not_started` · ISA 보유/서민형/누적 0/경과 0년 · 직전 과세연도 **연금계좌 세액공제액 0**. 세 케이스는 **결정세액 한 칸만** 다르다.
+
+**결정세액을 이 구간에서 고른 근거 (CD3)** 자르기 전 소득세분이 1,350,000원이므로 절단선이 거기 있다. 총급여 45,000,000이고 부양가족이 없는 사람의 결정세액 밴드는 S15로 [2,040,224 , 2,675,000]이고 그 구간은 절단선 **위**다 — 그 사람에게는 이 경계가 오지 않는다. 기본공제는 1인당 1,500,000원이고 이 소득이면 한계세율이 15%이므로 부양가족 한 사람마다 세액이 225,000원씩 낮아진다. **부양가족이 셋이면 밴드 하한이 2,040,224 − 675,000 = 1,365,224로 내려와 절단선 바로 위에 선다.** 즉 이 세 케이스의 사람은 총급여 45,000,000에 부양가족 3인인 외벌이이고, 그 사람의 결정세액이 1원 단위로 어디에 놓이느냐가 결과를 가른다. **지어낸 자리가 아니라 실제로 사람이 서 있는 자리다.**
+
+| | 결정세액 | 한도 | 인정 소득세분 | 지방세분 | 합계 | 잘렸는가 |
+|---|---|---|---|---|---|---|
+| **GC-32a** | 1,349,999 | 1,349,999 | **1,349,999** | **134,999** | **1,484,998** | **예** |
+| **GC-32b** | 1,350,000 | 1,350,000 | 1,350,000 | 135,000 | 1,485,000 | **아니오** |
+| **GC-32c** | 1,350,001 | 1,350,001 | 1,350,000 | 135,000 | 1,485,000 | **아니오** |
+
+**도출 과정** 세 건 모두 S1~S13이 GC-31과 같아 자르기 전 소득세분이 1,350,000이다. S14의 인정액 = `min(1,350,000, 한도)`.
+
+- **32a** — `min(1,350,000, 1,349,999) = 1,349,999`. 지방세분은 **인정된** 소득세분에 부가율을 곱한다(`local_tax_follows_income_tax_cap`): 1,349,999 × 0.1 = 134,999.9 → **원 미만 버림으로 134,999**. 잘린 금액은 소득세분 1원과 지방세분 1원이다. 지방세분을 자르기 전 값 135,000으로 두면 인정되지 않은 공제에 붙은 지방세가 남는다.
+- **32b** — 한도와 공제액이 **같으면 초과분이 없다.** §61 ③은 "합계액이 산출세액을 **초과**하는 경우 그 초과하는 금액"만 없는 것으로 보므로 같은 값에서는 아무것도 밀려나지 않는다. 따라서 `tax_liability_cap_applied`가 **나가면 안 된다** — 이 한 줄이 32a와 32b를 가른다.
+- **32c** — 한도가 1원 남는다. 인정액은 공제액 그대로이고 남은 1원은 어디에도 쓰이지 않는다.
+
+**왜 세 건을 다 두는가.** `<`와 `≤`를 뒤집는 오류는 32b에서만 드러난다. 32a만 있으면 "자른다"는 것만, 32c만 있으면 "안 자른다"만 확인된다. 경계는 양쪽과 그 위를 동시에 봐야 닫힌다 — GC-01·02·03이 공제율 경계에서 쓴 것과 같은 형태다.
+
+```golden
+{
+  "case": "GC-32a",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 1349999,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "notice_codes": [
+        "tax_liability_cap_applied"
+      ],
+      "notice_codes_absent": [
+        "tax_liability_cap_zero",
+        "tax_liability_cap_unknown"
+      ],
+      "comparison_note_codes_absent": [
+        "tax_credit_axis_not_discriminating"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1349999,
+            "local_tax": 134999,
+            "total": 1484998
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "annuity_savings": 1,
+            "retirement_pension": 2
+          },
+          "unallocated_krw": 0
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "delta_vs_baseline_krw": -1484998
+        }
+      }
+    }
+  }
+}
+```
+
+```golden
+{
+  "case": "GC-32b",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 1350000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "tax_liability_cap_zero",
+        "tax_liability_cap_unknown"
+      ],
+      "comparison_note_codes_absent": [
+        "tax_credit_axis_not_discriminating"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "annuity_savings": 1,
+            "retirement_pension": 2
+          },
+          "unallocated_krw": 0
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "delta_vs_baseline_krw": -1485000
+        }
+      }
+    }
+  }
+}
+```
+
+```golden
+{
+  "case": "GC-32c",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 1350001,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "tax_liability_cap_zero",
+        "tax_liability_cap_unknown"
+      ],
+      "comparison_note_codes_absent": [
+        "tax_credit_axis_not_discriminating"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "annuity_savings": 1,
+            "retirement_pension": 2
+          },
+          "unallocated_krw": 0
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "delta_vs_baseline_krw": -1485000
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-33 - 되더하기가 순환을 없앤다: 결정세액 0 + 연금계좌 세액공제액 1,350,000 【경계 · 6차 추가】
+
+**프로필** GC-32b와 같은 사람이되 **직전 과세연도에 이미 연금계좌 세액공제를 받아 결정세액이 0으로 내려간 경우**다. `state: "amount"` · 결정세액 **0** · 연금계좌 세액공제액 **1,350,000**.
+
+**이 케이스가 보는 것은 §61 ③ 등식 하나다.** 서식의 결정세액은 `산출세액 − 세액감면 계 − 세액공제 계`이고 **세액공제 계 안에 이미 연금계좌 세액공제가 들어 있다**(`pension.credit.tax_liability_cap.source_form`의 `why_this_avoids_circularity`). 그 값을 그대로 한도로 쓰면 이미 받은 공제만큼 한도가 줄어 보이는 **순환**이 생긴다. 이 사람에게 그 순환이 극단으로 나타난다.
+
+| | 한도 | 인정 소득세분 | 결과 |
+|---|---|---|---|
+| **되더하기를 하면 (옳음)** | 0 + 1,350,000 = **1,350,000** | 1,350,000 | 자르지 않는다 |
+| **되더하기를 빠뜨리면 (틀림)** | 0 | 0 | 공제액이 통째로 0이 된다 |
+
+**차이가 1,485,000원이다.** 그리고 그 오류는 **연금계좌에 꾸준히 납입해 온 사람에게만** 나타난다 — 납입한 적이 없으면 되더할 값이 0이라 두 계산이 같은 답을 낸다. 이 케이스가 없으면 §61 ③ 등식을 아무도 보지 않는다.
+
+**작년에 결정세액이 0이 되는 것이 이상한가.** 아니다. 되더한 한도 1,350,000이 곧 `산출세액 − 감면 − 연금계좌 외 공제`이므로 이 사람은 그 잔여를 연금계좌 세액공제로 **정확히 다 쓴** 사람이다. GC-32b와 같은 프로필(총급여 45,000,000 · 부양가족 3인)에서 작년에도 9,000,000원을 납입했다면 나오는 값이다.
+
+**기대 결과** GC-32b와 **한 원도 다르지 않다** — 1,350,000 / 135,000 / 1,485,000, 자르지 않음. 두 케이스가 같은 답을 내는 것이 이 쌍의 요지다. 같은 한도를 두 가지 방식으로 진술했을 뿐이기 때문이다.
+
+```golden
+{
+  "case": "GC-33",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 0,
+        "pension_credit_applied_krw": 1350000
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "tax_liability_cap_zero",
+        "tax_liability_cap_unknown"
+      ],
+      "comparison_note_codes_absent": [
+        "tax_credit_axis_not_discriminating"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "annuity_savings": 1,
+            "retirement_pension": 2
+          }
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "delta_vs_baseline_krw": -1485000
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-34 - 한도를 모른다 (`state: "unknown"`) 【경계 · 6차 추가】
+
+**프로필** GC-32b와 같은 사람이되 직전 과세연도 세액을 **모른다.** `state: "unknown"` · 두 금액 칸 모두 `null`.
+
+**기대 결과** 한도를 모르면 **자르지 않는다.** 지어낸 한도로 자르면 그 자름 자체가 근거 없는 숫자가 되기 때문이다(`unknown_value_policy.rule` — "사용자가 이 값을 모르면 엔진이 지어내지 않는다"). 따라서 인정액은 자르기 전 값 그대로 1,350,000 / 135,000 / 1,485,000이고 안내 `tax_liability_cap_unknown`이 붙는다. **이 결과는 "이만큼"이 아니라 "최대 이만큼"이다** — 한도가 공제액을 늘리는 경로가 조문에 없으므로 오차는 언제나 과대이거나 같다(`direction_of_error`).
+
+**GC-31과 짝으로 읽어야 한다.** 두 케이스의 차이는 입력 한 칸뿐인데 결과가 0과 1,485,000으로 갈린다. **`0`과 `모름`을 같게 다루면 그중 하나는 반드시 틀린다.**
+
+```golden
+{
+  "case": "GC-34",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "unknown",
+        "determined_tax_krw": null,
+        "pension_credit_applied_krw": null
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "notice_codes": [
+        "tax_liability_cap_unknown"
+      ],
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "tax_liability_cap_zero"
+      ],
+      "comparison_note_codes_absent": [
+        "tax_credit_axis_not_discriminating"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-35 - "0은 아니었다"까지만 안다 (`state: "nonzero_amount_unknown"`) 【경계 · 6차 추가】
+
+**프로필** GC-34와 같되 `state: "nonzero_amount_unknown"`. 사용자가 금액은 모르지만 직전 과세연도 결정세액이 0은 아니었다고 답한 경우다.
+
+**이 상태를 왜 따로 두는가.** 6차 조사가 `unknown_value_policy.escape_hatch`로 지목한 대체 신호다 — 금액을 묻는 것보다 답하기 쉽고 **최악의 오류(한도 0인 사람에게 절세액을 제시하는 것)를 걸러낸다.** 다만 크기를 주지 않으므로 **한도는 여전히 모름**이고 결과는 상한이다.
+
+**기대 결과** GC-34와 같다 — 자르지 않고 1,350,000 / 135,000 / 1,485,000, 안내 `tax_liability_cap_unknown`. 두 상태의 차이는 `declared_nonzero`에만 나타나고 그 값은 지금 블록이 실을 수 있는 항목이 아니다(1-A.1절).
+
+```golden
+{
+  "case": "GC-35",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "nonzero_amount_unknown",
+        "determined_tax_krw": null,
+        "pension_credit_applied_krw": null
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "notice_codes": [
+        "tax_liability_cap_unknown"
+      ],
+      "notice_codes_absent": [
+        "tax_liability_cap_applied",
+        "tax_liability_cap_zero"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-36 - 연금수령을 개시한 계좌 (`started`) 【경계 · 6차 추가】
+
+**프로필** 만 60세(1966-06-15) · 해당·직전연도 총급여 45,000,000 · 월 750,000 · horizon `at_or_after_pension_age` · **IRP `started` · 연금저축 `not_started`** · 두 계좌 ytd 0 · ISA 보유/서민형/누적 0/경과 0년 · 직전 과세연도 결정세액 2,400,000 · 연금계좌 세액공제액 0
+
+**근거** `pension.contribution.after_annuity_start` — 연금계좌 납입액이 연금보험료로 인정되려면 "연금수령 개시를 신청한 날 이후에는 연금보험료를 납입하지 않을 것"이라는 요건을 갖추어야 한다(시행령 §40의2 ② 2호). 요건을 벗어난 납입은 연금보험료가 아니므로 **세액공제 대상 납입액이 될 수 없다.** 그래서 그 계좌는 배분 대상에서 빠진다.
+
+**두 계좌를 구분하지 않는다.** 6차 조사 13.6.1절이 확인한 것이 이것이다 — 조문이 대상을 "연금계좌"로 쓰고 연금저축계좌와 퇴직연금계좌를 구분하지 않으며, 근퇴법 쪽에 대응하는 별도 제한도 없다. **중도인출이 비대칭이었다고 해서 이 항목도 그럴 것이라고 보면 안 된다.** 이 케이스에서 개시된 쪽을 IRP로 둔 것은 임의이고, 연금저축을 개시된 쪽으로 바꿔도 같은 구조의 답이 나와야 한다.
+
+**기대 결과**
+
+| 항목 | 값 |
+|---|---|
+| IRP 배분 | **0** (`limited_by: not_eligible`) |
+| 연금저축 배분 | 6,000,000 — 자기 한도가 상한이다. IRP가 빠졌다고 합산 한도 9,000,000이 연금저축으로 넘어오지 않는다 |
+| ISA 배분 | 3,000,000 (예산 잔액) |
+| 세액공제 소득세 / 지방세 / 합계 | **900,000 / 90,000 / 990,000** |
+| 배분안 수 | 2 |
+| 안내 | `pension_contribution_blocked_annuity_started` |
+| 경계 연수 | 연금 잔여 0년 (만 60세) |
+
+**도출 과정** S1 9,000,000 → S3 납입 잔여 18,000,000 → S5 합산 공제한도 9,000,000 → **개시한 IRP는 배분 대상이 아니므로 연금 쪽 상한이 연금저축 자기 한도 6,000,000으로 좁혀진다**(`pension.credit.limit.annuity_savings`) → S13은 순서 문제이고 여기서는 채울 계좌가 하나뿐이라 걸리지 않는다 → 남은 예산 3,000,000이 ISA로(S8 잔여 20,000,000) → S7 6,000,000 × 0.15 = 900,000, 지방세분 90,000 → S14 한도 2,400,000 > 900,000이므로 자르지 않는다.
+
+**이 케이스가 막는 오류는 방향이 정해져 있다.** 개시 여부를 기본값 "아니오"로 접으면 이 사람에게 IRP 납입 3,000,000원과 그에 붙는 세액공제 450,000원을 **없는데 있다고** 제시하게 된다. 6차 조사 13.12절 주의 2가 그 기본값을 명시적으로 금지한 이유다.
+
+```golden
+{
+  "case": "GC-36",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1966-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "limits": {
+        "pension_combined_credit_limit_krw": 9000000,
+        "pension_contribution_limit_remaining_krw": 18000000
+      },
+      "boundaries": {
+        "pension_years_remaining": 0
+      },
+      "notice_codes": [
+        "pension_contribution_blocked_annuity_started"
+      ],
+      "notice_codes_absent": [
+        "pension_annuity_start_unknown",
+        "tax_liability_cap_applied"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 0,
+            "isa": 3000000
+          },
+          "tax_credit": {
+            "income_tax": 900000,
+            "local_tax": 90000,
+            "total": 990000
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "annuity_savings": 1,
+            "isa": 2
+          },
+          "limited_by": {
+            "retirement_pension": "not_eligible"
+          },
+          "unallocated_krw": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-37 - 개시 여부를 모른다 (`unknown`): 아니오로 접지 않고 보류한다 【경계 · 6차 추가】
+
+**프로필** 만 40세(1986-06-15) · 해당·직전연도 총급여 45,000,000 · 월 750,000 · horizon `at_or_after_pension_age` · **연금저축 `unknown` · IRP `not_started`** · 두 계좌 ytd 0 · ISA 보유/서민형/누적 0/경과 0년 · 직전 과세연도 결정세액 2,400,000 · 연금계좌 세액공제액 0
+
+**근거** 모름은 아니오가 아니다. 아니오로 접으면 연금 수령 중인 사용자에게 납입 가능액을 주게 되고 그 오류의 방향은 **과대**다. 그래서 모름 상태의 처리는 **그 계좌의 배분 보류**이고, 이것은 계약이 새 입력을 선택 필드로 두지 않은 이유이기도 하다(0.5절 (1)).
+
+**기대 결과** 연금저축 배분 **0**, IRP 배분 **9,000,000**(합산 공제한도가 상한), ISA 0. 세액공제는 **1,350,000 / 135,000 / 1,485,000**으로 GC-32b와 같다 — 보류된 것은 한 계좌이지 공제 자체가 아니고, 합산 한도가 계좌를 가리지 않기 때문이다.
+
+**이 케이스가 GC-36과 다른 점.** GC-36에서는 개시된 계좌가 빠지면서 연금 쪽 상한이 연금저축 자기 한도 6,000,000으로 좁혀졌다. 여기서는 남은 계좌가 IRP라 **자기 한도가 없으므로** 합산 한도 9,000,000을 그대로 쓴다. 같은 "한 계좌가 빠진다"인데 결과가 다르고, 그 차이를 만드는 것은 `pension.credit.limit.annuity_savings`가 연금저축에만 걸린다는 사실이다.
+
+**도출 과정** S5 합산 공제한도 9,000,000 → 연금저축 보류 → IRP가 예산 9,000,000 전액을 받는다(S3 납입 잔여 18,000,000이 더 크므로 걸리지 않는다) → S7 9,000,000 × 0.15 = 1,350,000 → S14 한도 2,400,000 > 1,350,000이므로 자르지 않는다.
+
+```golden
+{
+  "case": "GC-37",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "unknown"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "max_tax_credit",
+      "notice_codes": [
+        "pension_annuity_start_unknown"
+      ],
+      "notice_codes_absent": [
+        "pension_contribution_blocked_annuity_started",
+        "tax_liability_cap_applied"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 9000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0,
+          "fill_order": {
+            "retirement_pension": 1
+          },
+          "unallocated_krw": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-38 - 개시 가능 시점을 나이가 아니라 5년 요건이 정한다 (55세 근처 신규 가입) 【경계 · 6차 추가】
+
+**프로필** 만 54세(1972-06-15) · 해당·직전연도 총급여 45,000,000 · 월 750,000 · **horizon `before_pension_age`** · 연금 두 계좌 `not_started` · **두 계좌 가입일 2026-03-02** · 이연퇴직소득 없음 · ISA 보유/서민형/누적 0/경과 0년 · 직전 과세연도 결정세액 2,400,000
+
+**이 케이스가 잡는 것.** `pension.withdrawal.earliest_start`가 개시 가능 시점을 `max(만 55세가 되는 날, 가입일부터 5년이 되는 날)`로 정한다. 두 요건은 선택이 아니라 병렬이므로 **늦게 충족되는 쪽이 시점을 정한다.**
+
+| | 값 | 근거 |
+|---|---|---|
+| 만 55세가 되는 날 | **2027-06-15** | 민법 §158 — 나이는 출생일을 산입해 만 나이로 계산한다. 1972-06-15생은 2027-06-15에 만 55세가 된다 |
+| 가입일부터 5년이 되는 날 | **2031-03-02** | 국세기본법 §4 → 민법 §160 ② |
+| 개시 가능 시점 | **2031-03-02** | 늦은 쪽 |
+| 시점을 정한 요건 | **5년 요건** (나이 요건이 아니다) | |
+| `pension_years_remaining` | **1** | S12 = max(0, 55 − 54) |
+
+**경계 연수만 보면 이 사람에게 틀린 말을 하게 된다.** `pension_years_remaining`은 1년이라고 말하지만 이 사람의 실질 잠금기간은 **약 4년 2개월**이다. 계약 5.6절이 연금 경고의 `params`에 `earliest_start_date`·`years_until_earliest_start`·`earliest_start_computable`을 함께 싣게 한 이유가 정확히 이것이다 — "나이 요건만으로 만든 문구는 55세에 가까운 사람에게 틀린다."
+
+**기대 결과** 배분·세액공제는 GC-32b와 같다(한도 2,400,000 > 1,350,000이므로 자르지 않는다). 움직이는 것은 horizon이 바꾸는 것들뿐이다 — 기본안이 `isa_first`로 옮겨지고(`baseline_reordered_by_fund_use_horizon`), 최대공제안의 연금 두 계좌에 `early_withdrawal_penalty_pension`이 **두 건** 붙는다. 가입일을 주었으므로 `pension_start_date_not_computable`은 **나가지 않는다.**
+
+**도출 과정** S1~S14는 GC-32b와 같다. S12 `pension.withdrawal.eligibility`의 55세에서 만 54세를 빼 1년. 경고는 계약 8.4절 — 배분액 > 0인 연금계좌 둘, horizon이 `before_pension_age`. ISA 배분이 0이므로 ISA 경고는 성립하지 않는다.
+
+```golden
+{
+  "case": "GC-38",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1972-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "before_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started",
+        "opened_on": "2026-03-02"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started",
+        "opened_on": "2026-03-02"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "baseline_plan": "isa_first",
+      "boundaries": {
+        "pension_years_remaining": 1,
+        "isa_lock_in_years_remaining": 3
+      },
+      "notice_codes_absent": [
+        "pension_start_date_not_computable",
+        "tax_liability_cap_applied"
+      ],
+      "comparison_note_codes": [
+        "baseline_reordered_by_fund_use_horizon"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 2,
+          "is_baseline": false,
+          "warning_codes": [
+            "early_withdrawal_penalty_pension"
+          ],
+          "delta_vs_baseline_krw": 1485000
+        },
+        "isa_first": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 9000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "is_baseline": true,
+          "delta_vs_baseline_krw": 0
+        }
+      }
+    }
+  }
+}
+```
+
+### GC-39 - 퇴직급여 입금액은 세액공제 대상이 아니다 【경계 · 6차 추가】
+
+**프로필** 만 58세(1968-06-15) · 해당·직전연도 총급여 45,000,000 · 월 750,000(= 본인이 새로 넣는 돈 9,000,000) · horizon `at_or_after_pension_age` · 연금 두 계좌 `not_started` · **IRP에 퇴직급여 입금액 3,000,000 · 그 계좌에 이연퇴직소득 있음** · ISA 보유/서민형 · 직전 과세연도 결정세액 2,400,000
+
+**근거** `pension.credit.excluded_contributions` — 소득세법 §59의3 ① 1호는 "제146조 제2항에 따라 소득세가 원천징수되지 아니한 퇴직소득 등 과세가 이연된 소득"을 연금계좌 납입액에서 **제외**한다. 계좌 잔액은 늘지만 세액공제 대상 납입액이 아니다. 2호의 계약이전액도 같다.
+
+**기대 결과** 세액공제 대상으로 인정된 납입액은 **9,000,000이지 12,000,000이 아니다.** 세액공제는 1,350,000 / 135,000 / 1,485,000이고, 퇴직급여 3,000,000원은 그 어느 칸에도 들어가지 않는다. 안내 `retirement_transfer_excluded_from_credit`가 붙는다.
+
+**틀리면 얼마나 틀리는가.** 사용자가 퇴직급여 입금액을 "납입 여력"에 섞어 넣으면 인정액이 12,000,000이 되고 — 합산 한도 9,000,000이 그중 9,000,000만 받으므로 이 케이스에서는 공제액이 같아진다. **그래서 이 케이스만으로는 부족하고, 인정액 자체(`credit_eligible_krw`)를 블록에 적어야 검사가 성립한다.** 적어 두었다.
+
+**이 케이스가 일부러 피해 간 것 하나 — 1,800만원 납입한도.** 퇴직급여 입금액이 연간 납입한도를 쓰는지를 룰셋이 정하지 않는다(S17). 이 케이스는 입금액을 3,000,000으로 두어 **두 읽기가 같은 답을 내는 자리**에 세웠다 — 쓰는 쪽이면 잔여 15,000,000, 안 쓰는 쪽이면 18,000,000이고 어느 쪽이든 예산 9,000,000보다 크므로 배분이 같다. 두 읽기가 갈리는 케이스(입금액 18,000,000 이상)는 **판정이 나온 뒤에 만든다.** 근거 없이 한쪽을 정답으로 적으면 그것이 곧 지어낸 정답이다. 그래서 `pension_contribution_limit_remaining_krw`도 이 블록에 적지 않았다.
+
+```golden
+{
+  "case": "GC-39",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1968-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 2400000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 45000000,
+      "prior_year_total_salary_krw": 45000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started",
+        "retirement_transfer_in_krw": 3000000,
+        "has_deferred_retirement_income": true
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 2,
+      "boundaries": {
+        "pension_years_remaining": 0
+      },
+      "notice_codes": [
+        "retirement_transfer_excluded_from_credit"
+      ],
+      "notice_codes_absent": [
+        "tax_liability_cap_applied"
+      ],
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 6000000,
+            "retirement_pension": 3000000,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 1350000,
+            "local_tax": 135000,
+            "total": 1485000
+          },
+          "warning_count": 0,
+          "credit_eligible_krw": 9000000,
+          "fill_order": {
+            "annuity_savings": 1,
+            "retirement_pension": 2
+          }
+        }
       }
     }
   }
@@ -3137,6 +5001,18 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 | **동점인데 배분이 안 움직이는 경우** — 연금저축 자기 한도가 이미 소진 (4차) | GC-19 확정분 · GC-20 · GC-24 |
 | **잔차가 늘어나는 분할 / 안 늘어나는 분할** (4차) | GC-22(7→14) · GC-04·GC-09(8 불변) |
 | **배분안 합치기의 경계** — ISA 잔여 `R`과 예산 `B`·연금 공제잔여 `C`의 관계 (4차) | `R ≥ B`: GC-21 · `B−C < R < B`: **GC-30** · `R ≤ B−C`: GC-29 |
+| **세액 한도가 0** (6차) | **GC-31**(`state: amount`, 결정세액 0) · **GC-14**(`state: zero`) — 두 진술 형태 모두 |
+| **한도가 자르기 전 공제액보다 1원 적음 / 정확히 같음 / 1원 많음** (6차) | **GC-32a** · **GC-32b** · **GC-32c** |
+| **한도가 무는 실제 케이스** — 다른 축을 보던 케이스 위에서 (6차) | **GC-04**(잘림 50,000) |
+| **되더하기(§61 ③ 등식)가 결과를 바꾸는 경우** (6차) | **GC-33**(결정세액 0 + 공제액 1,350,000) · **GC-07**(결정세액 1,050,000 + 공제액 1,350,000) |
+| **한도를 모름** — `unknown` / `nonzero_amount_unknown` (6차) | **GC-34** · **GC-35** · GC-09 |
+| **지방세분이 인정된 소득세분을 따라간다** — 원 미만 버림이 걸리는 자리 (6차) | **GC-32a**(134,999) |
+| **연금수령 개시** — `started` / `unknown` (6차) | **GC-36**(IRP 개시 → 상한이 연금저축 자기 한도로 좁혀짐) · **GC-37**(연금저축 모름 → 보류, 상한은 합산 한도) |
+| **개시 가능 시점을 5년 요건이 정하는 경우** (6차) | **GC-38**(만 54세 신규 가입 — `pension_years_remaining` 1년, 실질 잠금 4년 2개월) |
+| **가입일 미입력** — 시점을 계산하지 않음 (6차) | GC-01 외 `opened_on`을 주지 않은 전 케이스 (`pension_start_date_not_computable`) |
+| **퇴직급여 입금액** — 세액공제 대상이 아님 (6차) | **GC-39**(`credit_eligible_krw` 9,000,000, 12,000,000이 아님) |
+| **⚠ 덮지 못한 구간 (6차)** — 퇴직급여 입금액이 **1,800만원 납입한도를 쓰는가**로 답이 갈리는 자리 | **없음.** S17이 답을 내지 못했으므로 두 읽기가 갈리는 케이스(입금액 18,000,000 이상)를 만들지 않았다. 판정이 나오면 그때 만든다 |
+| **⚠ 덮지 못한 구간 (6차)** — ISA 연령 요건의 기준일이 **과세기간 종료일과 가입 시점 사이에서 갈리는** 사람(그 과세연도 중에 19세가 되는 사람) | **없음.** 계산 시점이 요청에 없어 엔진이 낼 수 있는 답이 하나뿐이다. 8절 (가) 참조 |
 
 ---
 
@@ -3224,3 +5100,144 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 - **GC-14의 ISA 비과세 한도 `null`** — 표는 `null`이라고 적었으나 `limits`에 넣지 않았다. 블록 형식이 `null`을 "값이 없음"으로 볼지 "값이 `null`임"으로 볼지가 1-A절에 없다.
 - **GC-28의 `isa_lock_in_already_elapsed`** — 계약 8.2절이 이 코드의 조건을 `fund_use_horizon`이 `within_isa_lock_in`인 경우로 한정하는데 GC-28의 horizon은 `unknown`이다. 나가는지 안 나가는지를 산출할 근거가 없어 `notice_codes`·`notice_codes_absent` 어느 쪽에도 적지 않았다.
 - **`isa_first`·`annuity_savings_first`의 값 일반** — 표가 다룬 GC-18a~d(경고 건수)와 GC-30(배분·공제액·잔차) 외에는 적지 않았다. 배분안 수는 `plan_count`로 고정했으므로 합쳐짐 여부는 그것으로 검사된다.
+
+---
+
+## 7. 6차 재산출 — 무엇이 움직였고 무엇이 움직이지 않았나
+
+### 7.1 이 회차가 닫은 결함
+
+5차의 머리말이 스스로 적어 둔 것이 이번 일의 정의다.
+
+> 지금 36건이 깨지지 않은 것은 엔진이 아직 이 규칙을 읽지 않기 때문이지 기대값이 맞아서가 아니다. **골든 케이스와 엔진이 같은 누락을 공유하고 있어서 대조가 그 누락을 잡아내지 못한다.**
+
+교차검증의 값어치는 독립성에서 나온다. 양쪽이 같은 것을 빠뜨리면 대조는 그 빠뜨림을 통과시킨다. 그래서 이번 회차는 **엔진이 세액 한도를 구현했다는 사실을 확인한 뒤에 기대값을 다시 산출한 것이 아니라, 세법에서 다시 산출한 값을 적고 나서 돌렸다.** 순서가 바뀌면 이 장치는 다시 무의미해진다.
+
+### 7.2 요청이 47건 전부 바뀌었다
+
+계약 `4.0.0`이 요청 형태를 바꿨으므로 블록의 `request`는 한 건도 예외 없이 손을 댔다.
+
+| 무엇 | 몇 건 | 무엇으로 |
+|---|---|---|
+| `profile.age_years` 제거 → `profile.birth_date` | 47 | 만 40세 → `1986-06-15`, 만 14세 → `2012-06-15`, 만 56세 → `1970-06-15`, 만 30세 → `1996-06-15`, 만 60세 → `1966-06-15`, 만 54세 → `1972-06-15`, 만 58세 → `1968-06-15`. **모두 과세기간 종료일에 그 나이가 되도록 골랐다** — 케이스가 보려는 것을 바꾸지 않기 위해서다 |
+| `profile.prior_year_tax` 추가 | 47 | 2절 S15의 규칙으로 케이스마다 정하고 근거를 각 케이스에 적었다 |
+| `accounts.*.annuity_start_status` 추가 | 47 | 개시를 다루는 GC-36·37 외에는 전부 `not_started`. 기본값이 없는 필수 필드이므로 **비워 둘 수 없고, 무엇으로 채웠는지가 곧 케이스의 정의다** |
+| `accounts.*.opened_on` 추가 | 1 | GC-38만. 나머지는 주지 않았고 그 결과 `pension_start_date_not_computable`이 나간다 |
+| `accounts.retirement_pension.retirement_transfer_in_krw` 추가 | 1 | GC-39만 |
+
+### 7.3 기대 금액이 움직인 것은 2건뿐이다
+
+| 케이스 | 종전 | 6차 | 왜 |
+|---|---|---|---|
+| **GC-04** | 1,350,000 / 135,000 / 1,485,000 | **1,300,000 / 130,000 / 1,430,000** | 한도 1,300,000이 자르기 전 1,350,000을 자른다. 배우자를 부양하는 총급여 40,000,000 외벌이 |
+| **GC-14** | 900,000 / 90,000 / 990,000 | **0 / 0 / 0** | 직전 과세기간 근로소득이 없어 결정세액이 0이고 되더할 공제액도 0이므로 한도가 0이다 |
+
+**나머지 45건의 금액은 한 원도 움직이지 않았다.** 이유는 회피가 아니라 산출 결과다 — S15의 밴드가 보여 주듯 **부양가족이 없는 근로자에게는 이 소득대에서 한도가 거의 물지 않는다.** 그 사실을 확인한 것도 이번 회차의 산출물이다. 45건을 억지로 자르려면 그 케이스의 사람을 다른 사람으로 바꿔야 하고, 그것은 케이스가 보려던 것을 지우는 일이다.
+
+### 7.4 금액은 안 움직였지만 **주장이 늘어난 것은 47건 전부다**
+
+이것이 4차·5차와 다른 점이다. 종전 블록은 한도에 대해 **아무 말도 하지 않았다.** 이번에 47건 전부가 다음 중 하나 이상을 명시적으로 주장한다.
+
+| 주장 | 케이스 수 | 어떻게 |
+|---|---|---|
+| **이 케이스는 잘리지 않는다** | 43 | `notice_codes_absent: ["tax_liability_cap_applied"]` |
+| **이 케이스는 잘린다** | 4 | `notice_codes: ["tax_liability_cap_applied"]` — GC-04 · 14 · 31 · 32a |
+| **한도가 0으로 확정됐다** | 2 | `notice_codes: ["tax_liability_cap_zero"]` — GC-14 · 31 |
+| **한도를 모른다** | 3 | `notice_codes: ["tax_liability_cap_unknown"]` — GC-09 · 34 · 35 |
+| **세액공제로는 배분안이 갈리지 않는다** | 2 | `comparison_note_codes: ["tax_credit_axis_not_discriminating"]` — GC-14 · 31 |
+| **개시 상태가 배분을 바꾼다** | 2 | GC-36 · 37 |
+| **퇴직급여 입금액은 인정액에 들어가지 않는다** | 1 | GC-39의 `credit_eligible_krw: 9000000` |
+
+**`notice_codes_absent`가 이번 회차의 알맹이다.** 없는 것을 주장하지 않으면 "잘리지 않았다"는 사실은 검사되지 않는다 — 엔진이 한도를 아예 읽지 않아도 결과가 같기 때문이다. **5차까지의 36건이 정확히 그 상태였다.**
+
+### 7.5 검산 — 세액 한도는 배분을 바꾸지 않았다
+
+계약 4.2절 `tax_liability_cap_affects.allocation_amounts: false`가 스스로 선언한 성질이다. 47건 전건에서 확인했다.
+
+- **배분·`limited_by`·`fill_order`·미배분액·월 반올림 잔차가 종전 값 그대로다.** 금액이 움직인 GC-04·14에서도 배분은 한 원도 다르지 않다.
+- **배분안 수와 기본안도 그대로다.** 한도가 0인 GC-14·31에서도 `plans`가 합쳐지거나 기본안이 `isa_first`로 옮겨 가지 않는다 — 계약 5.12절이 그것을 하지 않기로 한 판단과 일치한다.
+- 근거는 §61 ③이 초과분을 "받지 아니한 것으로" 의제하고 시행령 §118의3이 그 납입액을 이후 과세기간으로 전환 신청할 수 있게 하기 때문이다. **잘린 것은 공제액이고 납입액은 살아 있다.**
+
+### 7.6 실행 결과
+
+`node --test "src/engine/*.test.mjs"` — **전건 통과.** 골든 케이스 47건 + 형식·커버리지 검사 2건 = 49건이 통과했고, 이 문서가 세법에서 산출한 기대값과 엔진의 출력 사이에 **불일치가 0건**이다.
+
+**이 초록색을 5차의 초록색과 같게 읽으면 안 된다.** 5차의 통과는 "양쪽이 같은 것을 빠뜨렸다"로도 설명되는 통과였고, 이번 통과는 그렇지 않다. 근거 셋을 적는다.
+
+1. **기대값이 먼저 움직였다.** GC-04는 1,430,000을, GC-14는 0을, GC-32a는 1,484,998을 이 문서가 먼저 적었고 엔진이 거기에 맞았다. 특히 GC-32a의 지방세분 134,999는 **인정된 소득세분에 부가율을 곱하고 원 미만을 버린** 결과여야만 나오는 값이라, 자르기 전 금액에 곱했거나 반올림했으면 여기서 어긋난다.
+2. **경계의 양쪽과 그 위를 모두 적었다.** GC-32a·b·c가 1원 간격으로 서 있으므로 `<`와 `≤`를 뒤집는 오류는 32b에서 반드시 드러난다.
+3. **되더하기가 결과를 바꾸는 자리를 만들었다.** GC-33과 GC-07은 되더하기를 빠뜨리면 각각 1,485,000원과 330,000원이 사라진다. 두 케이스가 통과했다는 것은 §61 ③ 등식이 실제로 구현되어 있다는 뜻이다.
+
+**그래도 이 통과가 덮지 못하는 것을 함께 적는다.** 1-A.1절의 넷(자르기 전 금액·임계값·`objective_degenerate`·개시 가능 시점의 날짜)은 블록이 실을 수 없어 **검사되지 않았다.** 그 축들이 옳다는 근거는 이 회차에 없다.
+
+---
+
+## 8. 엔진 유닛이 `open_questions`로 올린 넷에 대한 판정
+
+계약 `4.0.0`의 머리말이 이 유닛의 판정을 기다린다고 적은 항목이 넷이다. **답을 낸 것 둘, 내지 못한 것 둘이다.** 내지 못한 것을 낸 척하지 않는다.
+
+### (가) 만 나이의 기준일 — **규칙을 만들었다. 다만 단일 기준일은 만들 수 없다는 것이 그 규칙의 내용이다**
+
+D21이 "기준일 규칙이 룰셋에 없으면 `tax-domain`이 만들고, 만들 수 없으면 그 사실이 `assumptions`에 실려야 한다"고 정했다. 6차에 룰셋 규칙 **`age.reckoning.reference_date`**를 넣었다.
+
+**정해져 있는 것 둘.**
+
+- **나이를 세는 방법** — 출생일을 산입한 만 나이, 연수 표시(민법 §158). 세법에 특칙이 없으므로 민법이 그대로 적용된다(국세기본법 §4). 만 N세가 되는 날은 N번째 생일 당일이다.
+- **n년 뒤의 날짜** — 역에 의해 계산하고 최종의 월에 해당일이 없으면 그 월의 말일이다(민법 §160 ③).
+
+**정해져 있지 않은 것 하나 — 그리고 그것이 "기준일"이다.** 만 나이를 어느 날짜 기준으로 판정하는지를 일률적으로 정한 규정은 없다. **각 요건이 성립해야 하는 시점이 곧 그 요건의 판정 시점이므로 기준일은 규칙마다 다르고, 하나로 정하면 오히려 틀린다.**
+
+| 규칙 | 요건이 성립해야 하는 시점 | 기준일이 필요한가 |
+|---|---|---|
+| `pension.withdrawal.earliest_start` (만 55세) | 인출 시점 | **아니다.** 이 요건은 나이(정수)가 아니라 **날짜**로 환원된다 — 만 55세가 되는 날은 생년월일만으로 정해진다. 개시 가능 시점을 날짜로 산출하는 한 기준일 문제가 발생하지 않는다 |
+| `isa.eligibility` (19세 / 15세) | **가입(계좌 개설) 시점** | **그렇다.** 조문이 가입할 수 있는 자의 요건으로 연령을 정한다 |
+
+**엔진의 처리에 대한 판정.** 과세기간 종료일로 환산하는 것은 `pension` 쪽에서는 무해하다(그쪽은 날짜로 비교하면 되고 나이는 표시용 파생값이다). **`isa.eligibility`에서는 오차가 남고 그 방향이 과대다** — 그 과세연도 중에 19세가 되는 사람에게 아직 성립하지 않은 가입 자격을 준다. 다만 **엔진이 이것을 고칠 방법이 지금은 없다.** 요청에 계산 시점(또는 가입 예정일)이 없고, 순수 함수는 현재 시각을 읽지 않기 때문이다.
+
+**권고 (관리자 판정 사안).** 셋 중 하나다.
+
+1. 요청에 계산 시점을 넣는다 — 가장 정확하지만 입력이 하나 는다.
+2. `accounts.isa.exists`가 `false`일 때만 연령 판정을 **보류**한다 — 이미 보유한 사용자에게는 판정이 끝난 사항이므로 실제로 문제가 되는 것은 신규 가입 경로뿐이다.
+3. 지금대로 두고 가정으로 드러낸다 — 엔진이 이미 `age_reference_date_not_in_ruleset`을 내고 있으나, **그 가정의 문구는 "룰셋에 규칙이 없다"이고 이제 그것은 사실이 아니다.** 규칙은 있고, 그 규칙이 "이 자리에는 계산 시점이 필요하다"고 말한다. 가정 코드의 뜻을 고쳐야 한다.
+
+**`echo.derived_age.reference_date_from_ruleset`이 항상 `false`라는 계약 서술도 함께 손봐야 한다.** 규칙이 생겼으므로 그 필드가 무엇을 뜻하는지가 달라진다 — 계약과 코드는 이 유닛의 소관이 아니므로 사실만 넘긴다.
+
+### (나) 윤년 2월 29일 — **답을 냈고, 엔진의 처리가 맞다**
+
+엔진이 "2월 29일생의 n년 뒤 날짜를 그 달의 마지막 날로 맞춘다"고 적고 확인을 요청했다. **민법 §160 ③이 정확히 그렇게 정한다** — "월 또는 연으로 정한 경우에 최종의 월에 해당일이 없는 때에는 그 월의 말일로 기간이 만료한다." 국세기본법 §4가 세법의 기간 계산에 민법을 준용하므로 그대로 적용된다.
+
+따라서 2월 29일생이 만 55세가 되는 날, 그리고 2월 29일에 가입한 계좌의 5년이 되는 날은 **해당 해에 2월 29일이 없으면 2월 28일**이다. **엔진의 처리와 일치하고, 이제 그것은 가정이 아니라 룰셋의 규칙이다.**
+
+### (다) 퇴직급여 입금액이 1,800만원 납입한도를 쓰는가 — **답을 내지 못했다**
+
+시행령 §40의2 ② 1호 가목의 문언은 "연금계좌에 납입한 금액의 합계액이 연 1천800만원 이내일 것"이고, **이연퇴직소득의 이체가 그 "납입"에 들어가는지를 조문이 스스로 말하지 않는다.** 이번 회차에 1차 출처로 확인하지 못했다.
+
+**그러므로 판정하지 않는다.** 엔진의 선택(쓰는 쪽)에 대해서는 다음을 적는다.
+
+- **오차의 방향이 과소다.** 쓰는 쪽으로 보면 연금 배분이 작아지고 절세액이 작게 나온다. 반대로 틀리면 실제로 넣을 수 없는 금액을 권하게 된다. **판정이 날 때까지는 지금 선택을 유지하는 것이 안전하다.**
+- **그 선택은 `assumptions`에 실려 있어야 한다.** 엔진이 `retirement_transfer_counted_in_contribution_limit`로 내고 있다고 적었다.
+- **검증 방법을 지정한다.** 시행령 §40의2 ② 각 호 외의 부분이 "연금보험료"를 무엇으로 정의하는지, 그리고 §146 ②의 이연퇴직소득이 §40의2 ②의 적용을 받는지를 조문 원문으로 확인해야 한다. 국가법령정보센터 조문 화면이 동적 렌더링이라 이번 회차에 열리지 않았다.
+
+**골든 케이스는 이 미결을 우회했다.** GC-39는 입금액을 3,000,000으로 두어 두 읽기가 같은 답을 내는 자리에 세웠다. **근거 없이 한쪽을 정답으로 적으면 그것이 곧 지어낸 정답이고, 다음 검증자가 그것을 세법 결론으로 오독한다.**
+
+### (라) 개인지방소득세에 같은 세액 한도 구조가 있는가 — **답을 내지 못했다**
+
+6차 조사 13.8절이 미확인으로 남긴 항목 그대로다. 이번 회차에도 확인하지 못했다.
+
+**확인해야 하는 것은 둘이다.** (1) 개인지방소득세에 연금계좌 세액공제에 대응하는 세액공제가 별도로 규정되어 있는지, (2) 있다면 그 공제에도 산출세액 초과분을 없는 것으로 보는 구조가 있는지. 룰셋이 지금 갖고 있는 것은 `tax.local.personal_income_surtax` 하나이고, 그 규칙의 근거는 **원천징수 단계의 특별징수 규정**이라 연말정산 후 확정되는 개인지방소득세의 세액공제 구조를 말하지 않는다.
+
+**엔진의 선택(인정된 소득세분에 부가율을 적용)에 대한 판단.** 유지하는 것이 옳다고 본다. 근거는 방향이다 — 인정되지 않은 공제에 붙는 지방세를 남기지 않으므로 절세액이 **작게** 나오고, 과소한 절세액은 사용자를 잘못된 결정으로 밀지 않는다. 반대로 자르기 전 소득세분에 곱하면 소득세 공제가 0인 사람에게 지방세 절세액만 남는 **성립하지 않는 숫자**가 나온다.
+
+**다만 이것은 방향에 근거한 선택이지 조문에 근거한 결론이 아니다.** `local_tax_follows_income_tax_cap` 가정이 그대로 나가야 하고, 결과 화면의 고지 요소 4(가정)에 이 항목이 실려야 한다.
+
+---
+
+## 9. 6차에 남기는 미결
+
+**이 절은 머리말 `open_questions`의 요약이 아니라, 다음 회차가 무엇부터 해야 하는지의 순서다.**
+
+1. **실행기의 허용 키를 늘려야 한다** (`calc-engine-dev`). 1-A.1절의 넷 — `tax_credit_before_cap`(배분안 단위) · `tax_liability_cap`의 `cap_krw`·`known`·`applied`·`threshold_income_tax_krw`(배분안 단위) · `objective_degenerate`(배분안 단위) · `pension_withdrawal_start`의 `earliest_start_date`·`bound_by_holding_period`(시나리오 단위). **키가 생기면 이 문서는 같은 회차 안에 값을 채울 수 있다** — 산출은 이미 끝나 있고 적을 자리가 없었을 뿐이다.
+2. **만 나이 기준일에 대한 관리자 판정** (8절 (가)의 셋 중 하나).
+3. **퇴직급여 입금액의 납입한도 취급 확인** (8절 (다)). 확인되면 GC-39 옆에 두 읽기가 갈리는 케이스를 하나 더 만든다.
+4. **개인지방소득세 한도 구조 확인** (8절 (라)).
+5. **`prior_year_tax`의 밴드가 근로소득자만을 전제한다**(S15). 근로소득 외의 소득이 있는 사용자에게는 이 밴드가 성립하지 않고, GC-09를 `unknown`으로 둔 이유가 그것이다. 서비스 대상이 근로소득자로 좁혀져 있다는 가정(리포트 4.1절 A6)이 바뀌면 이 절차를 다시 세워야 한다.
