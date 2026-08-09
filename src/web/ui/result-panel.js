@@ -676,7 +676,19 @@ function accountTable(plan, scenario) {
 
 function assumptionBlock(response, scenario, form) {
   const items = [];
-  for (const a of response.assumptions) items.push(assumptionMessage(a.code, a.params));
+  for (const a of response.assumptions) {
+    // 이 가정이 **어느 요건에 걸리는지**를 엔진이 규칙 id로 지목하면, 그 요건의
+    // 조항을 항목 옆에 붙인다(헌장 고지 요소 3 · 계약 5.7절의 두 방향 연결).
+    // **화면이 요건 이름을 지어내지 않는다** — `legal_basis`에 실린 것만 그린다.
+    // 지목이 없거나 그 규칙이 이 시나리오의 근거 목록에 없으면 아무것도 그리지
+    // 않는다(값이 없으면 그 줄을 그리지 않는 규약).
+    const affected = lawEntriesFor(scenario, a.params?.requires_reference_date_rule_ids ?? []);
+    // 기준 과세연도는 엔진이 `echo`로 이미 되돌려 준 값이다. 문구가 그것을 쓰고
+    // 싶을 때 쓸 수 있게 넘기되, **엔진이 실은 `params`가 언제나 이긴다** —
+    // 화면이 엔진의 값을 덮어쓰는 경로를 만들지 않는다.
+    const params = { tax_year: response.echo?.tax_year, ...a.params };
+    items.push(affected.length ? [assumptionMessage(a.code, params), lawChipRow(affected, 'note-laws')] : assumptionMessage(a.code, params));
+  }
   // 화면 파생 항목(screens.md 4.5절) — 엔진 notice가 아니라 폼 상태에서 나온다.
   // 이 넷이 빠져 있어서 입력 부족 화면의 "그 사실을 아래 가정에 적습니다"가
   // 지켜지지 않고 있었다.
@@ -694,7 +706,7 @@ function assumptionBlock(response, scenario, form) {
     el(
       'ul',
       {},
-      items.map((text) => el('li', { class: 'type-body-s' }, [text])),
+      items.map((item) => el('li', { class: 'type-body-s' }, [].concat(item))),
     ),
   ]);
 }

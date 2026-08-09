@@ -503,3 +503,108 @@ test('a zero cap flattens the tax-credit axis and says so, without moving the al
     assert.equal(plan.priority_basis.objective_degenerate, plan.plan_id !== 'isa_first');
   }
 });
+
+// ---------------------------------------------------------------------------
+// 어디까지가 "목이 계약을 따른다"이고, 어디부터가 "목이 엔진을 베낀다"인가
+//
+// 관리자가 물었다. 위 형태 대조가 **키 집합과 값 타입**만 보기 때문에 빈 배열과
+// 비지 않은 배열이 같아 보여, 엔진이 `age.reckoning.reference_date`를 실제로 읽기
+// 시작한 변화를 잡지 못했다. 넓힐지 말지에 선을 긋는다.
+//
+// **선을 긋는 기준은 "그 값을 누가 정하는가"다.**
+//
+// - **계약이 정하는 것 → 대조한다.** 필드 이름, 자료형, 열거형 값, 계약이 "항상
+//   이 값"이라고 못박은 고정값, 그리고 **계약이 그 자리에 무엇을 담으라고 정한
+//   약속**. `basis_rule_ids`가 여기 든다 — 계약 4.3절이 "룰셋 근거가 없는 순수
+//   표시 규칙이면 빈 배열"이라고 정했으므로, **빈 배열은 타입이 아니라 주장이다.**
+//   "이 문장에는 법령 근거가 없다"는 주장이고, 그것이 사실과 다르면 화면이 근거
+//   있는 문장을 근거 없는 것처럼 다룬다(고지 요소 3이 걸리는 자리다).
+//   `params`의 키도 같다 — 문구 사전이 그 키로 문장을 만들기 때문에, 키가 늘거나
+//   빠지면 화면 문구가 조용히 낡는다. 이번에 실제로 그렇게 됐다.
+//
+// - **알고리즘이 정하는 것 → 대조하지 않는다.** 금액·비율·연수·배분 벡터, 그리고
+//   **어떤 규칙을 읽었는가**. 이 파일 머리말이 목의 배분 알고리즘을 근사치라고
+//   이미 선언했고, 읽는 규칙 목록은 그 알고리즘의 함수다. 실제로 두 구현의
+//   `legal_basis` 구성원은 서로 두 건씩 다르다(목은 연금 개시·전환 특례 규칙을
+//   읽고, 실제 엔진은 ISA 과세 규칙 둘을 더 읽는다). 그것을 같게 만들라고 요구하면
+//   목은 알고리즘까지 같아져야 하고, 그 순간 **목은 두 번째 엔진이지 대조 기준이
+//   아니다.** 두 벌을 유지하는 비용만 남고 잡히는 결함은 없다.
+//
+// 그래서 넓히되 **`assumptions`의 세 술어만** 넓힌다 — 코드 집합, 각 코드의 params
+// 키 집합, `basis_rule_ids`가 비었는가. 셋 다 계약이 정한 것이고 셋 다 금액이 아니다.
+// 이 셋이 이번 변화를 정확히 잡는다(params 키가 늘었고 basis가 비었다가 찼다).
+// ---------------------------------------------------------------------------
+
+/** 배열이 비었는가 / 안 비었는가. **내용이 아니라 주장만 본다.** */
+const claimsBasis = (arr) => (Array.isArray(arr) ? arr.length > 0 : null);
+
+test('the mock and the engine make the same assumptions, with the same params keys and the same basis claim', () => {
+  const req = baseRequest({ scenarios: ['current'] });
+  req.accounts.isa.exists = true;
+  req.accounts.isa.account_type = 'general';
+  req.accounts.isa.cumulative_contribution_krw = 5000000;
+
+  const mockRes = compute(req, rulesets);
+  const realRes = realCompute(req, rulesets);
+
+  const digest = (res) =>
+    Object.fromEntries(
+      res.assumptions.map((a) => [
+        a.code,
+        { paramKeys: Object.keys(a.params ?? {}).sort(), claimsBasis: claimsBasis(a.basis_rule_ids) },
+      ]),
+    );
+
+  const m = digest(mockRes);
+  const r = digest(realRes);
+  assert.deepEqual(Object.keys(m).sort(), Object.keys(r).sort(), '가정 코드 집합이 다르다');
+  for (const code of Object.keys(r)) {
+    assert.deepEqual(m[code].paramKeys, r[code].paramKeys, `${code}: params 키가 다르다 — 문구 사전이 조용히 낡는 자리다`);
+    assert.equal(m[code].claimsBasis, r[code].claimsBasis, `${code}: 법령 근거가 있다/없다는 주장이 다르다`);
+  }
+});
+
+test('the age-reference assumption now claims a legal basis, and that rule is in legal_basis with a path back', () => {
+  // 이 테스트가 이번 변화 자체를 고정한다. 엔진이 규칙을 읽기 전에는 이 주장이
+  // 빈 배열이었고, 그때 화면 문구는 "규칙이 룰셋에 없어"라고 말하고 있었다.
+  const res = compute(baseRequest({ scenarios: ['current'] }), rulesets);
+  const assumption = res.assumptions.find((a) => a.code === 'age_reference_date_not_in_ruleset');
+  assert.ok(assumption.basis_rule_ids.length > 0, '읽은 규칙이 있으면 빈 배열로 두지 않는다');
+
+  const entry = res.scenarios[0].legal_basis.find((l) => l.rule_id === assumption.basis_rule_ids[0]);
+  assert.ok(entry, 'basis_rule_ids가 가리키는 규칙이 legal_basis에 없으면 화면이 근거를 붙일 수 없다');
+  assert.ok(entry.applied_to.includes('echo.derived_age.reference_date'), '두 방향 연결(계약 5.7절)이 끊긴다');
+
+  // 걸리는 요건만 드러난다. **목록이 룰셋에서 온다는 것을 grep이 아니라 행동으로
+  // 확인한다** — 규칙 id 문자열은 다른 목적으로도 코드에 정당하게 등장하므로
+  // (`isa.eligibility`는 ISA 자격 판정에도 쓰인다) 문자열 검사로는 가릴 수 없다.
+  // 룰셋의 `needs_reference_date`를 뒤집으면 출력이 따라 뒤집혀야 한다.
+  const affected = assumption.params.requires_reference_date_rule_ids;
+  assert.deepEqual(affected, ['isa.eligibility'], '지금 룰셋이 지목하는 요건');
+
+  const flipped = JSON.parse(JSON.stringify(rulesets));
+  for (const entry of flipped['2026.json'].rules.find((r) => r.id === 'age.reckoning.reference_date').value
+    .no_single_reference_date.per_rule) {
+    entry.needs_reference_date = !entry.needs_reference_date;
+  }
+  const after = compute(baseRequest({ scenarios: ['current'] }), flipped).assumptions.find(
+    (a) => a.code === 'age_reference_date_not_in_ruleset',
+  );
+  assert.deepEqual(
+    after.params.requires_reference_date_rule_ids,
+    ['pension.withdrawal.earliest_start'],
+    '룰셋을 바꿨는데 목록이 그대로면 코드가 목록을 들고 있는 것이다',
+  );
+});
+
+test('the mock stops rather than inventing a reference date when the rule is absent', () => {
+  // 실제 엔진과 같은 자리에서 같게 멈춘다 — 대체값을 만들지 않는다(계약 8.1절).
+  const base = rulesets['2026.json'];
+  const stripped = { '2026.json': { ...base, rules: base.rules.filter((r) => r.id !== 'age.reckoning.reference_date') } };
+  const mockRes = compute(baseRequest({ scenarios: ['current'] }), stripped);
+  const realRes = realCompute(baseRequest({ scenarios: ['current'] }), stripped);
+  assert.equal(mockRes.ok, false);
+  assert.equal(realRes.ok, false);
+  assert.ok(mockRes.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === 'age.reckoning.reference_date'));
+  assert.ok(realRes.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === 'age.reckoning.reference_date'));
+});

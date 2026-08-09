@@ -160,7 +160,12 @@ const ASSUMPTION_MESSAGE = {
   isa_tenure_zero_assumed: () => 'ISA 가입 시기를 받지 않아, 남은 의무가입기간을 가장 길게 잡았습니다. 실제로는 이보다 짧을 수 있습니다.',
   other_savings_zero_assumed: () => '재형저축·장기집합투자증권저축을 보유하지 않은 것으로 보고 ISA 총 납입한도를 계산했습니다.',
   prior_transfer_credit_zero_assumed: () => '직전 과세기간에 받은 전환 추가공제를 0으로 보았습니다. 실제로 받은 금액이 있으면 추가 한도가 결과보다 줄어듭니다.',
-  single_tax_year_only: (params) => `${params.tax_year ?? ''} 과세연도 하나만 계산했습니다. 다음 해 이후는 반영하지 않았습니다.`,
+  // **없는 `params`에 기대지 않는다.** 엔진은 이 코드에 파라미터를 싣지 않는데
+  // 문구가 `params.tax_year`를 쓰고 있어, 실측 화면에 `" 과세연도 하나만
+  // 계산했습니다"`가 앞이 빈 채로 떠 있었다. 연도는 있으면 쓰고 없으면 문장이
+  // 스스로 완결된다 — 호출부가 응답의 `echo.tax_year`를 채워 준다.
+  single_tax_year_only: (params) =>
+    `${params.tax_year ? `${params.tax_year} 과세연도` : '이 과세연도'} 하나만 계산했습니다. 다음 해 이후는 반영하지 않았습니다.`,
   other_deductions_excluded: () => '연말정산의 다른 소득공제·세액공제(부양가족 등)는 반영하지 않았습니다.',
   rounding_floor_to_won: () => '원 미만은 버려서 계산했습니다.',
   isa_benefit_not_quantified: () => '투자 수익률과 계좌 운용 결과는 계산에 포함되지 않았습니다.',
@@ -171,10 +176,24 @@ const ASSUMPTION_MESSAGE = {
   // -- 계약 4.0.0으로 들어온 가정 코드 ---------------------------------------
   // **값이 아니라 처리 방식을 말한다**(점검표 11.6). 만 나이 자체를 여기 적으면
   // 이 항목이 공유 이미지에 실릴 때 나이가 함께 나간다 — designer가 박은 못이다.
-  age_reference_date_not_in_ruleset: (params) =>
-    `만 나이의 판정 기준일을 정하는 규칙이 세법 룰셋에 없어, 과세기간 종료일${
+  //
+  // **문구를 고쳤다.** 코드 이름은 여전히 `..._not_in_ruleset`이지만, 엔진이
+  // `age.reckoning.reference_date`를 실제로 읽기 시작하면서 "규칙이 룰셋에 없다"는
+  // 옛 문장이 **사실과 달라졌다.** 룰셋에 규칙은 있고, 그 규칙이 말하는 것이
+  // "단일 기준일은 존재하지 않는다"이다 — 요건마다 판정 시점이 다르기 때문이다.
+  // 코드 이름은 엔진의 것이라 화면이 고치지 않고, 문구는 화면의 것이라 고친다
+  // (계약 7절). 이름과 뜻이 어긋난 상태는 보고에 올렸다.
+  age_reference_date_not_in_ruleset: (params) => {
+    const affected = params.requires_reference_date_rule_ids ?? [];
+    const head = `만 나이를 어느 날짜 기준으로 볼지는 요건마다 달라 하나로 정해져 있지 않습니다. 그래서 과세기간 종료일${
       params.reference_date ? `(${params.reference_date})` : ''
-    }을 기준으로 환산해 계산했습니다. 기준일이 다르면 결과가 달라질 수 있습니다.`,
+    }을 기준으로 환산해 계산했습니다.`;
+    // 걸리는 요건이 없으면 그 문장을 붙이지 않는다 — 값이 없으면 그 줄을 그리지
+    // 않는 규약과 같다. 연금 쪽은 날짜 대 날짜 비교라 애초에 걸리지 않는다.
+    return affected.length === 0
+      ? `${head} 판정 시점이 다른 요건에서는 결과가 달라질 수 있습니다.`
+      : `${head} 아래 조항이 정한 요건은 판정 시점이 이 기준일과 달라, 그 요건에서는 결과가 달라질 수 있습니다.`;
+  },
   prior_pension_credit_zero_assumed: () =>
     '직전 과세연도에 이미 받은 연금계좌 세액공제액을 받지 않아 0으로 보고 계산했습니다. 실제로 받은 금액이 있으면 낼 세금의 한도가 결과보다 커집니다.',
   retirement_transfer_counted_in_contribution_limit: () =>

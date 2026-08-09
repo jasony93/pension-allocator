@@ -429,6 +429,19 @@ function computeScenario(scenario, request, rulesets) {
   }
 
   // -- 연금계좌 세액공제율 구간 --------------------------------------------
+  // -- 만 나이의 기준일 -----------------------------------------------------
+  //
+  // **이 규칙을 실제로 읽는다.** 지금까지는 아무도 읽지 않으면서 나이를 환산하고
+  // 있었다 — 그러면 `legal_basis`가 "실제로 읽은 규칙만 담는다"(계약 5.7절)를
+  // 지키는 대신, 읽지 않은 근거 위에서 계산한 값을 근거 없이 내보내는 것이 된다.
+  // 규칙이 없으면 `rule_missing`으로 멈춘다(`use`가 그렇게 동작한다) — 대체값을
+  // 만들지 않는다.
+  //
+  // 규칙이 주는 것은 값이 아니라 **판정 시점**이다. 단일 기준일이 존재하지
+  // 않는다는 것이 이 규칙의 결론이고, 그래서 기준일을 하나 고른 사실이
+  // 가정으로 나가야 한다.
+  use('age.reckoning.reference_date', 'echo.derived_age.reference_date');
+
   const creditRateRule = use('pension.credit.rate', 'echo.credit_rate_bracket');
   const surtaxRule = use('tax.local.personal_income_surtax', 'echo.credit_rate_bracket');
   // 기본값 0 — creditRateRule이 없으면(=rule_missing) 아래에서 이미 missingRules에
@@ -1309,20 +1322,47 @@ export function compute(request, rulesets) {
   if (request.isa_transfer && request.isa_transfer.prior_year_applied_extra_credit_krw == null) {
     assumptions.push({ code: 'prior_transfer_credit_zero_assumed', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   }
-  // **만 나이의 기준일을 정하는 규칙이 룰셋에 없다.** 엔진은 규칙을 만들지 않고
-  // 과세기간 종료일로 환산한 뒤 그 사실을 값으로 낸다(계약 3.1절 · D21).
+  // 만 나이를 **어느 날짜 기준으로** 환산했는가. 규칙은 나이 세는 방법과 각 요건의
+  // 판정 시점을 주지만 **단일 기준일은 주지 않는다** — 그래서 엔진이 과세기간
+  // 종료일을 골랐다는 사실이 가정으로 나간다(계약 3.1절 · D21).
+  //
+  // `requires_reference_date_rule_ids`는 **걸리는 요건만** 드러낸다. 목록을 코드에
+  // 적지 않고 룰셋에서 읽는다 — 연금 쪽은 날짜 대 날짜 비교라 안 걸리고, 그
+  // 사실은 `pension_withdrawal_start`가 이미 날짜로 말하고 있다.
+  const ageReckoningRule = findRule(rulesets, 'age.reckoning.reference_date', ['2026.json']).rule;
+  const requiresReferenceDate = (ageReckoningRule.value?.no_single_reference_date?.per_rule ?? [])
+    .filter((entry) => entry.needs_reference_date === true)
+    .map((entry) => entry.rule_id);
   assumptions.push({
     code: 'age_reference_date_not_in_ruleset',
-    params: { reference_date: referenceDateFor(request.tax_year) },
+    params: {
+      reference_date: referenceDateFor(request.tax_year),
+      requires_reference_date_rule_ids: requiresReferenceDate,
+    },
     applies_to_scenarios: applyAll,
-    basis_rule_ids: [],
+    basis_rule_ids: [ageReckoningRule.id],
   });
   if (request.profile.prior_year_tax.pension_credit_applied_krw == null) {
-    assumptions.push({ code: 'prior_pension_credit_zero_assumed', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+    assumptions.push({
+      code: 'prior_pension_credit_zero_assumed',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: ['pension.credit.tax_liability_cap.source_form'],
+    });
   }
-  assumptions.push({ code: 'local_tax_follows_income_tax_cap', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  assumptions.push({
+    code: 'local_tax_follows_income_tax_cap',
+    params: {},
+    applies_to_scenarios: applyAll,
+    basis_rule_ids: ['pension.credit.tax_liability_cap', 'tax.local.personal_income_surtax'],
+  });
   if (['annuity_savings', 'retirement_pension'].some((k) => request.accounts[k].has_deferred_retirement_income == null)) {
-    assumptions.push({ code: 'deferred_retirement_income_absent_assumed', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+    assumptions.push({
+      code: 'deferred_retirement_income_absent_assumed',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: ['pension.withdrawal.earliest_start'],
+    });
   }
   const retirementTransferSum = ['annuity_savings', 'retirement_pension'].reduce(
     (sum, k) => sum + (request.accounts[k].retirement_transfer_in_krw ?? 0),
@@ -1336,13 +1376,26 @@ export function compute(request, rulesets) {
       basis_rule_ids: [],
     });
   }
-  assumptions.push({ code: 'single_tax_year_only', params: { tax_year: request.tax_year }, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  // **`basis_rule_ids`를 비워 두는 것도 주장이다** — 계약 4.3절이 빈 배열을 "룰셋
+  // 근거가 없는 순수 표시 규칙"으로 정했다. 아래 넷은 실제로 표시 규칙이라 비어 있고,
+  // 위의 것들은 근거가 있어 채워져 있다.
+  assumptions.push({ code: 'single_tax_year_only', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   assumptions.push({ code: 'other_deductions_excluded', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   assumptions.push({ code: 'rounding_floor_to_won', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
-  assumptions.push({ code: 'isa_benefit_not_quantified', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  assumptions.push({ code: 'isa_benefit_not_quantified', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: ['isa.tax_free_limit'] });
   assumptions.push({ code: 'fund_use_horizon_excluded_from_amounts', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
-  assumptions.push({ code: 'early_exit_penalty_not_quantified', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
-  assumptions.push({ code: 'pension_holding_period_not_evaluated', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  assumptions.push({
+    code: 'early_exit_penalty_not_quantified',
+    params: {},
+    applies_to_scenarios: applyAll,
+    basis_rule_ids: ['isa.early_termination.clawback', 'pension.early_withdrawal.other_income_rate'],
+  });
+  assumptions.push({
+    code: 'pension_holding_period_not_evaluated',
+    params: {},
+    applies_to_scenarios: applyAll,
+    basis_rule_ids: ['pension.withdrawal.eligibility'],
+  });
 
   // echo.credit_rate_bracket은 확정 룰셋(2026.json) 기준으로 채운다 — 개정예고가
   // 있어도 echo는 요청 자체(해당 과세연도 소득)에서 결정되는 값이라 시나리오와 무관하다.

@@ -293,3 +293,78 @@ test('the age-reference assumption states how it computed, not what the age is',
   assert.ok(!text.includes('38'), `가정 문구에 만 나이가 실렸다: ${text}`);
   assert.match(text, /과세기간 종료일/);
 });
+
+// ---------------------------------------------------------------------------
+// 엔진이 넓어질 때 조용히 낡는 문구 — 두 자리를 고정한다
+// ---------------------------------------------------------------------------
+
+test('no assumption sentence claims a rule is missing from the ruleset when it is not', () => {
+  // 엔진이 `age.reckoning.reference_date`를 실제로 읽기 시작하면서, "규칙이 룰셋에
+  // 없어"라고 말하던 옛 문장이 사실과 달라졌다. 코드 이름(`..._not_in_ruleset`)은
+  // 엔진의 것이라 화면이 고치지 않지만, **문구는 화면의 것이라 사실을 따라야 한다.**
+  const text = assumptionMessage('age_reference_date_not_in_ruleset', {
+    reference_date: '2026-12-31',
+    requires_reference_date_rule_ids: ['isa.eligibility'],
+  });
+  assert.ok(!/룰셋에 없/.test(text), `사실과 다른 문장이다: ${text}`);
+  assert.ok(!/규칙이 없/.test(text), text);
+  assert.match(text, /하나로 정해져 있지 않습니다/, '단일 기준일이 없다는 것이 이 규칙의 결론이다');
+  assert.match(text, /2026-12-31/, '어느 날짜로 환산했는지가 사라지면 사용자가 대조할 수 없다');
+  // 규칙 id를 사용자에게 그대로 보이지 않는다 — 조항은 `LawChip`이 담는다.
+  assert.ok(!text.includes('isa.eligibility'), text);
+});
+
+test('the affected-requirement clause appears only when the engine names one', () => {
+  const withNone = assumptionMessage('age_reference_date_not_in_ruleset', {
+    reference_date: '2026-12-31',
+    requires_reference_date_rule_ids: [],
+  });
+  assert.ok(!/아래 조항/.test(withNone), '가리킬 조항이 없는데 "아래 조항"이라고 말하면 빈 곳을 가리킨다');
+  const withSome = assumptionMessage('age_reference_date_not_in_ruleset', {
+    reference_date: '2026-12-31',
+    requires_reference_date_rule_ids: ['isa.eligibility'],
+  });
+  assert.match(withSome, /아래 조항/);
+});
+
+test('a sentence never opens with a hole where a missing param used to be', () => {
+  // 실측 화면에 `" 과세연도 하나만 계산했습니다"`가 앞이 빈 채로 떠 있었다 —
+  // 엔진이 싣지 않는 `params.tax_year`를 문구가 기대하고 있었다.
+  const withoutYear = assumptionMessage('single_tax_year_only', {});
+  assert.ok(!/^\s/.test(withoutYear), `문장이 공백으로 시작한다: ${JSON.stringify(withoutYear)}`);
+  assert.match(withoutYear, /^이 과세연도 하나만/);
+  const withYear = assumptionMessage('single_tax_year_only', { tax_year: 2026 });
+  assert.match(withYear, /^2026 과세연도 하나만/);
+});
+
+test('every assumption sentence survives an empty params object without leaving a gap', () => {
+  // 같은 부류의 결함을 한 번에 막는다 — 엔진이 params를 줄이거나 늘려도 문장이
+  // 스스로 완결되어야 한다.
+  const codes = [
+    'months_remaining_defaulted',
+    'age_reference_date_not_in_ruleset',
+    'prior_pension_credit_zero_assumed',
+    'local_tax_follows_income_tax_cap',
+    'deferred_retirement_income_absent_assumed',
+    'retirement_transfer_counted_in_contribution_limit',
+    'single_tax_year_only',
+    'other_deductions_excluded',
+    'rounding_floor_to_won',
+    'isa_benefit_not_quantified',
+    'fund_use_horizon_excluded_from_amounts',
+    'early_exit_penalty_not_quantified',
+    'pension_holding_period_not_evaluated',
+    'isa_new_account_assumed',
+    'isa_tenure_zero_assumed',
+    'other_savings_zero_assumed',
+    'prior_transfer_credit_zero_assumed',
+  ];
+  for (const code of codes) {
+    const text = assumptionMessage(code, {});
+    assert.notEqual(text, code, `${code}에 대응하는 문구가 없다`);
+    assert.ok(!/^\s/.test(text), `${code}: 공백으로 시작한다 — ${JSON.stringify(text)}`);
+    assert.ok(!/\(\)/.test(text), `${code}: 빈 괄호가 남았다 — ${text}`);
+    assert.ok(!/undefined|null|NaN/.test(text), `${code}: 값이 없는 자리가 그대로 새어 나왔다 — ${text}`);
+    assert.ok(!/\s{2,}/.test(text), `${code}: 값이 빠진 자리에 공백이 두 칸 남았다 — ${JSON.stringify(text)}`);
+  }
+});
