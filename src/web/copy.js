@@ -260,6 +260,14 @@ export const CONDITIONAL_PENDING_ALERT =
 /** 아래 결과가 아직 전환을 반영하지 않았다는 표시(3.5절) — 금액 바로 옆에 둔다. */
 export const CONDITIONAL_PENDING_STALE_CAPTION = '아래 결과에는 ISA 만기 전환이 아직 반영되지 않았습니다.';
 
+/**
+ * 배분액이 0인 계좌의 C-2 캡션(screens.md 5.4절). 도넛에는 조각이 없으므로
+ * (design-system 5.20절 비활성 상태) "그 계좌가 어디 갔는지"를 말하는 자리가
+ * 여기와 `[4-D]` 표다. 배분 대상이 아닌 것과는 다른 사실이다 — 이 계좌는
+ * 대상이지만 이 배분안이 넣지 않았을 뿐이다.
+ */
+export const NOT_ALLOCATED_IN_PLAN_CAPTION = '이 배분에서는 배분하지 않음';
+
 /** 조각이 하나뿐인 도넛의 캡션 (5.12절). */
 export function donutSingleSliceCaption(account) {
   return `이번 배분은 전액이 ${ACCOUNT_LABEL[account] ?? account}로 갑니다. 계좌별 한도와 남은 여력은 아래에서 볼 수 있습니다.`;

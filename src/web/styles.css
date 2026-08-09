@@ -228,8 +228,36 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
 .chart-area { display: flex; flex-direction: column; gap: var(--space-4); }
 .donut-wrap { display: flex; justify-content: center; }
-.chart-donut { max-width: 100%; }
-.donut-label { font-size: 11px; fill: var(--text-primary); }
+.chart-donut { max-width: 100%; height: auto; }
+
+/* 도넛 라벨 — 계좌명 / 금액 / 비율의 위계를 크기와 굵기로 만든다
+   (screens.md 5.6절: type-body-s + type-num + type-caption). */
+.donut-label { fill: var(--text-primary); }
+.donut-label-name { font-size: 14px; font-weight: 400; fill: var(--text-primary); }
+.donut-label-amount { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; fill: var(--text-primary); }
+.donut-label-pct { font-size: 12.5px; font-weight: 400; letter-spacing: 0.005em; fill: var(--text-secondary); }
+.donut-leader { stroke: var(--border-strong); stroke-width: 1; }
+.donut-center { fill: var(--text-primary); }
+.donut-center-label { font-size: 12.5px; fill: var(--text-secondary); }
+.donut-center-value { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; fill: var(--text-primary); }
+/* 조각 위 번호는 모바일에서만 — 데스크톱은 직접 라벨이 그 역할을 한다. */
+.donut-slice-indexes { display: none; }
+.donut-slice-index { font-size: 13px; font-weight: 600; fill: var(--surface-raised); }
+
+.donut-legend { display: none; list-style: none; margin: var(--space-3) 0 0; padding: 0; flex-direction: column; gap: var(--space-2); }
+.donut-legend-item { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; }
+.donut-legend-index { color: var(--text-secondary); width: 1.2em; }
+.donut-legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+.donut-legend-name { flex: 1; }
+.donut-legend-amount { font-variant-numeric: tabular-nums; font-weight: 600; }
+.donut-legend-pct { color: var(--text-secondary); width: 3.5em; text-align: right; }
+
+/* 모바일 — 라벨 블록 셋이 겹치므로 리스트로 내리고 조각과 번호로 잇는다(5.7절). */
+@media (max-width: 767px) {
+  .donut-labels { display: none; }
+  .donut-slice-indexes { display: block; }
+  .donut-legend { display: flex; }
+}
 .chart-note { text-align: center; }
 
 .allocation-bars { display: flex; flex-direction: column; gap: var(--space-4); }

@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeTrackScalePercent, allocationSegments, annulusSlicePath, sliceAngles, MIN_SLICE_DEG } from './charts.js';
+import {
+  computeTrackScalePercent,
+  allocationSegments,
+  annulusSlicePath,
+  sliceAngles,
+  donutLabelLayout,
+  MIN_SLICE_DEG,
+  LABEL_GUTTER,
+  LABEL_BLOCK_BELOW,
+} from './charts.js';
 
 test('the account with the largest remaining limit always scales to exactly 100%', () => {
   assert.equal(computeTrackScalePercent(18000000, 18000000), 100);
@@ -149,4 +158,85 @@ test('proportions are untouched when every slice is already above the minimum', 
 test('never exceeds 100% even if remaining somehow equals maxRemaining exactly at the boundary', () => {
   assert.equal(computeTrackScalePercent(18000000, 18000000), 100);
   assert.ok(computeTrackScalePercent(20000000, 18000000) <= 100); // 방어적 클램프 — remaining이 max를 넘는 입력은 없어야 하지만 클램프로 안전하게 막는다
+});
+
+// --- C-1 라벨 배치 (screens.md 5.2·5.6절, A2 왜곡 완화 장치) -----------------
+//
+// 소유자가 "라벨이 안 보인다"고 지적했고 실측에서 원인이 드러났다 — 라벨을
+// 도넛 반지름의 1.22배 지점에 찍으면서 viewBox는 도넛 크기 그대로였다. 즉
+// **그림 밖에 그려져 잘려 나갔다.** 스크린샷으로는 "원래 그런 디자인"과
+// 구분되지 않는 종류의 결함이므로 좌표를 테스트로 고정한다.
+
+const SIZE = 240;
+const R = SIZE / 2 - 8;
+const WIDTH = SIZE + LABEL_GUTTER * 2;
+const HEIGHT = SIZE + R * 0.08 + 52;
+const GEOM = { cx: WIDTH / 2, cy: 26 + SIZE / 2, R, width: WIDTH, height: HEIGHT };
+
+const arcsOf = (...spans) => {
+  let angle = 0;
+  return spans.map(([account, sweep]) => {
+    const arc = { account, isUnallocated: account === 'unallocated', amount: sweep, start: angle, end: angle + sweep };
+    angle += sweep;
+    return arc;
+  });
+};
+
+test('every label lands inside the drawing box — a label outside the viewBox is simply invisible', () => {
+  const layout = donutLabelLayout(arcsOf(['annuity_savings', 160], ['retirement_pension', 110], ['isa', 90]), GEOM);
+  for (const l of layout) {
+    assert.ok(l.textX >= 0 && l.textX <= WIDTH, `라벨 x가 상자 밖이다: ${l.account} → ${l.textX}`);
+    // y는 첫 줄의 기준선이고 아래로 두 줄이 더 붙는다 — 블록 전체가 들어가야 한다.
+    assert.ok(l.textY >= 0, `라벨 y가 상자 위로 나갔다: ${l.account} → ${l.textY}`);
+    assert.ok(
+      l.textY + LABEL_BLOCK_BELOW <= HEIGHT,
+      `라벨 블록의 아래 두 줄이 상자 밖으로 잘린다: ${l.account} → ${l.textY} + ${LABEL_BLOCK_BELOW} > ${HEIGHT}`,
+    );
+  }
+});
+
+test('the box is wider than the donut, because labels need room beside it', () => {
+  assert.ok(WIDTH > SIZE, '도넛과 같은 폭의 상자에서는 옆에 붙는 라벨이 잘린다');
+});
+
+test('every slice gets exactly one leader line, and it starts on that slice', () => {
+  const arcs = arcsOf(['annuity_savings', 160], ['retirement_pension', 110], ['isa', 90]);
+  const layout = donutLabelLayout(arcs, GEOM);
+  assert.equal(layout.length, arcs.length, '지시선이 라벨 수보다 적으면 어느 조각의 값인지 모호해진다');
+  for (const l of layout) {
+    assert.equal(l.leader.length, 3, '조각 → 꺾임점 → 라벨의 세 점');
+    const [[sx, sy]] = l.leader;
+    const distance = Math.hypot(sx - GEOM.cx, sy - GEOM.cy);
+    assert.ok(distance <= R + 1, '지시선은 조각의 테두리에서 출발해야 한다');
+  }
+});
+
+test('labels never overlap vertically, even when three slices share one side', () => {
+  // 오른쪽에 몰린 배치 — 겹치면 어느 조각의 금액인지 읽을 수 없다.
+  const layout = donutLabelLayout(arcsOf(['annuity_savings', 20], ['retirement_pension', 20], ['isa', 20], ['unallocated', 300]), GEOM);
+  for (const side of ['left', 'right']) {
+    const ys = layout.filter((l) => l.side === side).map((l) => l.textY).sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i++) {
+      assert.ok(ys[i] - ys[i - 1] >= 54, `라벨 블록(세 줄)이 겹친다: ${ys[i - 1]} / ${ys[i]}`);
+    }
+  }
+});
+
+test('labels sit outside the ring on the side their slice is on, anchored away from the donut', () => {
+  const layout = donutLabelLayout(arcsOf(['annuity_savings', 90], ['isa', 270]), GEOM);
+  for (const l of layout) {
+    if (l.side === 'right') {
+      assert.equal(l.anchor, 'start');
+      assert.ok(l.textX > GEOM.cx + R, '오른쪽 라벨이 고리 위에 겹쳐 있다');
+    } else {
+      assert.equal(l.anchor, 'end');
+      assert.ok(l.textX < GEOM.cx - R, '왼쪽 라벨이 고리 위에 겹쳐 있다');
+    }
+  }
+});
+
+test('a single full-ring slice still gets a label with a leader', () => {
+  const layout = donutLabelLayout(arcsOf(['isa', 360]), GEOM);
+  assert.equal(layout.length, 1);
+  assert.equal(layout[0].leader.length, 3);
 });

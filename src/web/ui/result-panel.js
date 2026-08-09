@@ -23,6 +23,7 @@ import {
   isaTaxFreeCaption,
   donutSingleSliceCaption,
   unallocatedReasonMessage,
+  NOT_ALLOCATED_IN_PLAN_CAPTION,
   CONDITIONAL_PENDING_ALERT,
   CONDITIONAL_PENDING_STALE_CAPTION,
   EXCLUDED_ACCOUNT_FALLBACK_REASON,
@@ -32,7 +33,7 @@ import {
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIRED_FIELDS, formDerivedAssumptionCodes } from '../state/validation.js';
-import { donutChart, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
+import { donutChart, donutLegend, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
 import {
   accountLimitView,
   excludedAccounts,
@@ -247,12 +248,13 @@ function eligibilityNote(view, scenario) {
 function chartArea(plan, scenario, months) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
-  const donut = donutChart({
+  const donutArgs = {
     allocations: plan.allocations,
     unallocatedAnnualKrw: unallocated,
-    isProposed: !scenario.is_enacted,
+    unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
     excludedAccounts: excluded,
-  });
+  };
+  const donut = donutChart({ ...donutArgs, isProposed: !scenario.is_enacted });
 
   // D16 — 공통 배율. 납입 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
   // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 납입 잔여 한도를 먼저 다
@@ -307,6 +309,9 @@ function chartArea(plan, scenario, months) {
         // 한도만 쓴다**(screens.md 5.10절 (1)) — 세액공제 인정 여지는 넘을 수
         // 있는 값이라 트랙-채움 관계가 성립하지 않는다.
         el('p', { class: 'field-help' }, [contributionRemainingCaption(remaining, Math.min(1, percentOfLimit))]),
+        // 배분액이 0인 계좌는 도넛에 조각이 없다(design-system 5.20절 비활성).
+        // "그 계좌는 어디 갔나"에 답하는 자리가 여기다 — screens.md 5.4절이 정한 캡션.
+        alloc.annual_krw === 0 ? el('p', { class: 'field-help' }, [NOT_ALLOCATED_IN_PLAN_CAPTION]) : null,
         // 연금계좌 묶음의 세액공제 인정 여지는 **마지막 연금계좌 행에 한 번만**
         // 적는다(5.10절 (4)). 계좌마다 적으면 사용자가 둘을 더한다.
         account === creditCaptionAccount ? creditHeadroomBlock(scenario, plan) : null,
@@ -322,6 +327,9 @@ function chartArea(plan, scenario, months) {
 
   return el('div', { class: 'chart-area' }, [
     el('div', { class: 'donut-wrap' }, [donut]),
+    // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
+    // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
+    donutLegend(donutArgs),
     singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
     el('p', { class: 'field-help chart-note' }, ['같은 값을 납입 잔여 한도와 함께 —']),
     barSection,

@@ -27,6 +27,8 @@ const ACCOUNT_COLOR_DARK = {
   isa: 'var(--data-isa-side)',
 };
 const UNALLOCATED_COLOR = 'var(--data-unallocated)';
+/** 모바일에서 조각과 범례를 잇는 번호(screens.md 5.7절 ①②③). */
+const CIRCLED_NUMBERS = ['①', '②', '③', '④'];
 
 function polar(cx, cy, rx, ry, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
@@ -133,22 +135,110 @@ export function sliceAngles(segments, { minDeg = MIN_SLICE_DEG } = {}) {
   });
 }
 
+/** 라벨 블록이 들어갈 좌우 여백과 위아래 여백. 도넛 자체의 기하는 건드리지 않는다. */
+export const LABEL_GUTTER = 136;
+const LABEL_VPAD = 26;
+const LABEL_LINE_GAP = 56; // 세 줄짜리 라벨 블록의 최소 세로 간격
 /**
- * C-1 입체 도넛. `allocations`는 `{account, annual_krw}[]`, `unallocatedAnnualKrw`는
- * 이번 배분에서 남는 금액(없으면 0), `isProposed`는 개정예고 시나리오 여부
- * (상단면에만 사선 해칭, design-system 3.5절 규약 3), `excludedAccounts`는
- * 배분 대상에서 배제된 계좌(조각도 라벨도 그리지 않는다).
+ * 라벨의 y는 **첫 줄의 기준선**이고 아래로 두 줄이 더 붙는다. 이 값을 계산에
+ * 넣지 않으면 마지막 라벨의 아래 두 줄이 상자 밖으로 나간다 — 실제로 브라우저
+ * 실측에서 6px 잘려 나온 것을 잡았다. 라벨 하나가 아니라 **블록**이 자리를
+ * 차지한다는 사실을 좌표 계산이 알아야 한다.
  */
-export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isProposed = false, excludedAccounts = [] }) {
+export const LABEL_BLOCK_BELOW = 42;
+
+/**
+ * 도넛 라벨의 배치를 정하는 **순수 함수**.
+ *
+ * 왜 따로 뺐나 — 이전 구현은 라벨을 `R * 1.22` 지점에 찍었는데 viewBox는 도넛
+ * 크기 그대로였다. 즉 **라벨이 그림 밖에 그려져 잘려 나갔다.** 소유자가 "라벨이
+ * 안 보인다"고 한 것이 그것이고, 스크린샷으로는 "원래 그런 디자인"과 구분되지
+ * 않는다. 좌표 계산을 DOM 밖으로 꺼내야 "라벨이 화면 안에 있는가"를 테스트로
+ * 고정할 수 있다.
+ *
+ * 반환값의 `leader`는 조각 → 꺾임점 → 라벨로 이어지는 지시선의 점 목록이고,
+ * 조각마다 정확히 하나다(screens.md 5.6절: 지시선 `border-strong` 1px).
+ */
+export function donutLabelLayout(arcs, { cx, cy, R, ry = RY_RATIO, width, height, gap = LABEL_LINE_GAP }) {
+  const placed = arcs.map((a) => {
+    const mid = (a.start + a.end) / 2;
+    const [px, py] = polar(cx, cy, R, R * ry, mid); // 조각 바깥 테두리의 한 점
+    const [ex, ey] = polar(cx, cy, R * 1.16, R * ry * 1.16, mid); // 꺾임점
+    const side = px >= cx ? 'right' : 'left';
+    return { arc: a, side, px, py, ex, ey, y: ey };
+  });
+
+  // 좌우 각각에서 위에서 아래로 밀어내 겹침을 없앤다. 라벨이 겹치면 어느 조각의
+  // 값인지 알 수 없어 A2(직접 라벨)가 무너진다.
+  const firstBaseline = LABEL_VPAD + 14; // 첫 줄 기준선이 상자 위쪽으로 나가지 않게
+  const lastBaseline = height - LABEL_BLOCK_BELOW; // 아래 두 줄이 들어갈 자리를 남긴다
+  for (const side of ['left', 'right']) {
+    const column = placed.filter((p) => p.side === side).sort((a, b) => a.y - b.y);
+    let cursor = firstBaseline;
+    for (const item of column) {
+      item.y = Math.max(item.y, cursor);
+      cursor = item.y + gap;
+    }
+    const overflow = cursor - gap - lastBaseline;
+    if (overflow > 0) for (const item of column) item.y = Math.max(firstBaseline, item.y - overflow);
+  }
+
+  return placed.map((p) => {
+    const textX = p.side === 'right' ? Math.min(width - 8, cx + R * 1.2 + 10) : Math.max(8, cx - R * 1.2 - 10);
+    const elbowX = p.side === 'right' ? textX - 8 : textX + 8;
+    return {
+      account: p.arc.account,
+      isUnallocated: p.arc.isUnallocated,
+      side: p.side,
+      anchor: p.side === 'right' ? 'start' : 'end',
+      textX,
+      textY: p.y,
+      leader: [
+        [p.px, p.py],
+        [p.ex, p.ey],
+        [elbowX, p.y],
+      ],
+    };
+  });
+}
+
+/**
+ * C-1 입체 도넛. `allocations`는 계약의 `Allocation[]`(월·연 금액을 모두 갖는다),
+ * `unallocatedAnnualKrw`/`unallocatedMonthlyKrw`는 이번 배분에서 남는 금액,
+ * `isProposed`는 개정예고 시나리오 여부(상단면에만 사선 해칭, design-system
+ * 3.5절 규약 3), `excludedAccounts`는 배분 대상에서 배제된 계좌(조각도 라벨도
+ * 그리지 않는다 — design-system 5.20절 비활성 상태).
+ *
+ * **라벨은 계좌명 + 금액 + 비율 세 줄이다**(screens.md 5.2 와이어프레임 · 5.6절).
+ * 금액이 빠지면 A2(직접 라벨)가 절반만 작동한다 — 입체 도넛의 원근 왜곡은
+ * 비율만으로 보정되지 않고, 사용자가 면적을 눈으로 재지 않아도 값을 읽을 수
+ * 있게 하는 것이 이 장치의 목적이기 때문이다(5.3절).
+ */
+export function donutChart({
+  allocations,
+  unallocatedAnnualKrw,
+  unallocatedMonthlyKrw = 0,
+  size = 240,
+  isProposed = false,
+  excludedAccounts = [],
+}) {
   const R = size / 2 - 8;
   const rInner = R * 0.55;
-  const cx = size / 2;
-  const cy = size / 2 + R * EXTRUDE_RATIO; // 압출 두께만큼 아래로 여유
   const depth = R * EXTRUDE_RATIO;
+  const width = size + LABEL_GUTTER * 2;
+  const height = size + depth + LABEL_VPAD * 2;
+  const cx = width / 2;
+  const cy = LABEL_VPAD + size / 2;
 
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
   const total = segments.reduce((s, seg) => s + seg.amount, 0);
   const arcs = sliceAngles(segments);
+
+  // 라벨에 쓸 월 금액 — 엔진이 준 값을 그대로 쓴다(화면이 연 금액을 나누지 않는다).
+  const monthlyByAccount = Object.fromEntries((allocations ?? []).map((a) => [a.account, a.monthly_krw]));
+  const monthlyOf = (arc) => (arc.isUnallocated ? unallocatedMonthlyKrw : (monthlyByAccount[arc.account] ?? 0));
+  const nameOf = (arc) => (arc.isUnallocated ? '미배분' : ACCOUNT_LABEL[arc.account]);
+  const totalMonthly = arcs.reduce((sum, a) => sum + monthlyOf(a), 0);
 
   const sides = arcs.map((a) =>
     svgEl('path', {
@@ -164,7 +254,7 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
       fill: a.isUnallocated ? UNALLOCATED_COLOR : ACCOUNT_COLOR[a.account],
       tabindex: '0',
       role: 'img',
-      'aria-label': `${a.isUnallocated ? '미배분' : ACCOUNT_LABEL[a.account]}, 연 ${formatKrw(a.amount)}, 전체의 ${formatPercent(total > 0 ? a.amount / total : 0)}`,
+      'aria-label': `${nameOf(a)}, 월 ${formatKrw(monthlyOf(a))}, 연 ${formatKrw(a.amount)}, 전체의 ${formatPercent(total > 0 ? a.amount / total : 0)}`,
     });
     return path;
   });
@@ -181,16 +271,44 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
         )
     : [];
 
-  const labels = arcs.map((a) => {
-    const mid = (a.start + a.end) / 2;
-    const [lx, ly] = polar(cx, cy, R * 1.22, R * RY_RATIO * 1.1, mid);
+  const layout = donutLabelLayout(arcs, { cx, cy, R, width, height });
+
+  // 지시선 — 조각마다 하나. 라벨이 어느 조각의 값인지 모호하면 라벨이 값을 잃는다.
+  const leaders = layout.map((l) =>
+    svgEl('polyline', {
+      class: 'donut-leader',
+      points: l.leader.map(([x, y]) => `${x},${y}`).join(' '),
+      fill: 'none',
+    }),
+  );
+
+  // 라벨 세 줄 — 계좌명(type-body-s) / 금액(type-num) / 비율(type-caption).
+  // 위계를 크기와 굵기로 만든다. 전부 같은 크기면 무엇이 값인지 보이지 않는다.
+  const labels = layout.map((l, i) => {
+    const a = arcs[i];
     const pct = total > 0 ? a.amount / total : 0;
-    return svgEl(
-      'text',
-      { x: lx, y: ly, class: 'donut-label', 'text-anchor': lx > cx ? 'start' : lx < cx ? 'end' : 'middle' },
-      [`${a.isUnallocated ? '미배분' : ACCOUNT_LABEL[a.account]} ${formatPercent(pct)}`],
-    );
+    return svgEl('text', { class: 'donut-label', x: l.textX, y: l.textY, 'text-anchor': l.anchor }, [
+      svgEl('tspan', { class: 'donut-label-name', x: l.textX, dy: '0' }, [nameOf(a)]),
+      svgEl('tspan', { class: 'donut-label-amount', x: l.textX, dy: '1.35em' }, [`${formatKrw(monthlyOf(a))} / 월`]),
+      svgEl('tspan', { class: 'donut-label-pct', x: l.textX, dy: '1.3em' }, [formatPercent(pct)]),
+    ]);
   });
+
+  // 모바일 — 라벨 블록이 겹치므로 아래 리스트로 내리고 조각과는 색 + 번호로
+  // 잇는다(screens.md 5.7절). 번호는 조각 위에, 리스트는 SVG 밖에 둔다.
+  const sliceNumbers = arcs.map((a, i) => {
+    const mid = (a.start + a.end) / 2;
+    const [nx, ny] = polar(cx, cy, (R + rInner) / 2, ((R + rInner) / 2) * RY_RATIO, mid);
+    return svgEl('text', { class: 'donut-slice-index', x: nx, y: ny, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, [
+      CIRCLED_NUMBERS[i] ?? String(i + 1),
+    ]);
+  });
+
+  // 중앙 값 — 월 배분 총액(screens.md 5.8·5.12절).
+  const centerText = svgEl('text', { class: 'donut-center', x: cx, y: cy, 'text-anchor': 'middle' }, [
+    svgEl('tspan', { class: 'donut-center-label', x: cx, dy: '-0.4em' }, ['월 배분']),
+    svgEl('tspan', { class: 'donut-center-value', x: cx, dy: '1.5em' }, [formatKrw(totalMonthly)]),
+  ]);
 
   const defs = svgEl('defs', {}, [
     svgEl('pattern', { id: 'donut-hatch', width: 6, height: 6, patternTransform: 'rotate(45)', patternUnits: 'userSpaceOnUse' }, [
@@ -199,10 +317,50 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
     ]),
   ]);
 
-  return svgEl(
+  // viewBox가 도넛 크기 그대로였을 때 라벨이 그림 밖에 그려져 잘려 나갔다.
+  // 이제 라벨 여백을 포함한 상자를 쓰고, 폭은 CSS가 반응형으로 줄인다.
+  const svg = svgEl(
     'svg',
-    { viewBox: `0 0 ${size} ${size + depth + 4}`, width: size, height: size + depth + 4, class: 'chart-donut' },
-    [defs, ...sides, ...tops, ...hatches, ...labels],
+    { viewBox: `0 0 ${width} ${height}`, width, height, class: 'chart-donut', preserveAspectRatio: 'xMidYMid meet' },
+    [
+      defs,
+      ...sides,
+      ...tops,
+      ...hatches,
+      svgEl('g', { class: 'donut-labels' }, [...leaders, ...labels]),
+      svgEl('g', { class: 'donut-slice-indexes' }, sliceNumbers),
+      centerText,
+    ],
+  );
+
+  return svg;
+}
+
+/**
+ * 모바일 범례 — 도넛 라벨이 겹치는 폭에서 라벨을 대신한다(screens.md 5.7절).
+ * **금액이 여기에도 들어간다** — 모바일에서 A2가 약해지는 것은 감수한 약점이지만
+ * (5.13절), 금액까지 빠지면 값을 읽을 경로가 아예 사라진다.
+ */
+export function donutLegend({ allocations, unallocatedAnnualKrw, unallocatedMonthlyKrw = 0, excludedAccounts = [] }) {
+  const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
+  const arcs = sliceAngles(segments);
+  const total = segments.reduce((s, seg) => s + seg.amount, 0);
+  const monthlyByAccount = Object.fromEntries((allocations ?? []).map((a) => [a.account, a.monthly_krw]));
+
+  return el(
+    'ul',
+    { class: 'donut-legend' },
+    arcs.map((a, i) => {
+      const monthly = a.isUnallocated ? unallocatedMonthlyKrw : (monthlyByAccount[a.account] ?? 0);
+      const color = a.isUnallocated ? UNALLOCATED_COLOR : ACCOUNT_COLOR[a.account];
+      return el('li', { class: 'donut-legend-item' }, [
+        el('span', { class: 'donut-legend-index' }, [CIRCLED_NUMBERS[i] ?? String(i + 1)]),
+        el('span', { class: 'donut-legend-swatch', style: { background: color } }),
+        el('span', { class: 'donut-legend-name' }, [a.isUnallocated ? '미배분' : ACCOUNT_LABEL[a.account]]),
+        el('span', { class: 'donut-legend-amount type-num' }, [`${formatKrw(monthly)} / 월`]),
+        el('span', { class: 'donut-legend-pct' }, [formatPercent(total > 0 ? a.amount / total : 0)]),
+      ]);
+    }),
   );
 }
 
