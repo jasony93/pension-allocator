@@ -24,7 +24,7 @@ import { applyRate, clampToZero } from './ratio.mjs';
 const PENSION_ACCOUNTS = new Set([ACCOUNT.PENSION, ACCOUNT.ANNUITY]);
 
 /** 한 배분안의 금액. 자금 사용 시점을 읽지 않는다. */
-function allocate(planId, { state, budget, months, eligible }) {
+function allocate(planId, { state, budget, eligible, rates }) {
   let remainingBudget = budget;
   let annuityCounted = state.annuityCounted;
   let pensionCounted = state.pensionCounted;
@@ -36,9 +36,28 @@ function allocate(planId, { state, budget, months, eligible }) {
   const fillOrder = {};
   let order = 0;
 
+  // ⚠ D17(합산 한도 절단 시 IRP 우선 인정)이 코드에 새겨지는 두 번째 지점이다.
+  //   첫 번째는 benefitOf()의 인정 로직이고, 여기는 그 인정 구조를 아는 배분 탐색이다.
+  //   D17은 조문이 정하지 않아 소유자가 판정한 해석이며 **법안 통과 시 재검토 대상**이다.
+  //   전말과 재검토 절차는 engine-design.md 6.4절 표에 있다.
+  //
+  //   퇴직연금 공제율이 연금저축보다 높으면(개정안 청년 우대) 추가 IRP 납입은
+  //   잔여 공제한도를 채우는 데 그치지 않는다. D17의 IRP 우선 인정 아래에서
+  //   **이미 인정된 연금저축분을 공제 풀에서 밀어내고 그만큼이 높은 율로 갈아탄다.**
+  //   따라서 상한은 "남은 합산 room"이 아니라 "IRP 인정액이 합산 한도에 닿는 지점"이다.
+  //   4단계 교차검증 M1이 잡아낸 결함이 정확히 이 구분을 놓친 것이었다.
+  const pensionRate = rates.youthIrpRate ?? rates.incomeTaxRate;
+  const pensionRateIsHigher = pensionRate > rates.incomeTaxRate;
+
   const creditCapacity = (account) => {
     const combinedRoom = clampToZero(state.combinedLimit - (annuityCounted + pensionCounted));
-    if (account === ACCOUNT.PENSION) return combinedRoom;
+    if (account === ACCOUNT.PENSION) {
+      // 두 율이 같으면 치환해도 세액이 그대로다. 공제를 늘리지 못하는 납입을
+      // 연금계좌에 밀어 넣지 않는다 — 인출 제약만 지게 된다.
+      if (!pensionRateIsHigher) return combinedRoom;
+      return clampToZero(state.combinedLimit - pensionCounted);
+    }
+    // 연금저축 추가분은 IRP를 밀어내지 못한다(D17). 남은 room이 그대로 상한이다.
     return clampToZero(Math.min(state.annuityLimit - annuityCounted, combinedRoom));
   };
 
@@ -131,6 +150,12 @@ function warningsOf(amounts, { horizon, boundaries }) {
   const trigger = unknown ? 'horizon_unknown' : 'declared_horizon';
   const out = [];
 
+  // 의무가입기간이 이미 지났으면 추징 요건 자체가 성립할 수 없다 —
+  // `isa.early_termination.clawback`은 "3년이 되는 날 전" 해지에만 걸린다.
+  // 성립할 수 없는 불이익을 고지하면 하지 않아도 될 걱정을 시켜 옳은 행동을 막는다.
+  // 4단계 교차검증 M2. 계약 8.4절을 함께 고쳤다.
+  const isaLockInRemaining = boundaries.isa_lock_in_years_remaining ?? 0;
+
   for (const account of ACCOUNT_ORDER) {
     if (amounts[account] <= 0) continue;
 
@@ -146,7 +171,7 @@ function warningsOf(amounts, { horizon, boundaries }) {
           pension_years_remaining: boundaries.pension_years_remaining,
         },
       });
-    } else if (unknown || horizon === HORIZON.WITHIN_ISA_LOCK_IN) {
+    } else if ((unknown || horizon === HORIZON.WITHIN_ISA_LOCK_IN) && isaLockInRemaining > 0) {
       out.push({
         code: WARNING.ISA_CLAWBACK,
         account,

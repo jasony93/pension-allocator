@@ -26,7 +26,7 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `3.0.0`.**
+**현재 계약 버전: `3.1.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
@@ -34,6 +34,7 @@ open_questions:
 | `2.0.0` | **게이트 2 D10.** 입력 `profile.risk_profile`을 제거하고 `profile.fund_use_horizon`으로 대체. `Plan.warnings`, `ScenarioResult.fund_use_horizon_boundaries` 추가. `echo.risk_profile*`을 `echo.fund_use_horizon*`으로 교체 |
 | `2.1.0` | **게이트 2 마감 판단.** 경계값 전용 진입점 `computeFundUseHorizonBoundaries` 추가(9절). 기존 진입점과 타입은 그대로이므로 minor다 — `2.0.0`에 맞춘 목은 계속 동작한다 |
 | `3.0.0` | **3단계 구현 중 발견된 계약 오류의 정정.** `Plan.delta_vs_baseline_krw`의 "0 이하" 제약을 제거했다(0.1절). `AccountLimit`에 `contribution_limit_shared_with`·`credit_limit_shared_with`를 추가해 계좌 간 공유 한도를 구조로 드러냈다(5.3절) |
+| `3.1.0` | **4단계 교차검증 M2의 정정.** `early_termination_clawback_isa` 경고 조건에 "의무가입기간이 남아 있을 것"을 추가했다(0.2절, 8.4절). 안내 코드 `isa_lock_in_already_elapsed`를 추가했다(8.2절). 필드 추가·제거가 없고 **없어야 할 경고가 사라지는 방향**이라 기존 소비자가 깨지지 않으므로 minor다 |
 
 ### 0.1 `delta_vs_baseline_krw` 제약을 제거한 경위
 
@@ -50,6 +51,16 @@ open_questions:
 3. 아래 규약이 "기존 필드의 의미 변경"을 major로 정하고 있다. 계약이 보장하던 성질을 거두는 것은 그 범주다.
 
 **채택하지 않은 대안:** patch로 처리하기(엔진이 그 제약을 지킨 적이 없으므로 문서 정정일 뿐이라는 읽기). 기각 근거는 소비자가 가진 것이 문서뿐이라는 점이다. 문서가 보장한 것을 거두면 그것은 계약 변경이다.
+
+### 0.2 ISA 추징 경고 조건을 좁힌 경위 (4단계 M2)
+
+**계약이 틀렸고 코드가 맞았다.** `tax-domain`의 독립 교차검증(GC-21)이 잡았다.
+
+`2.0.0`의 8.4절은 `early_termination_clawback_isa`의 조건을 "ISA 배분액 > 0 이고 `fund_use_horizon`이 `within_isa_lock_in`"으로만 정했다. 그런데 근거 규칙 `isa.early_termination.clawback`(조특법 §91조의18⑦)은 **"3년이 되는 날 전"** 해지에만 추징을 건다. 의무가입기간이 이미 지난 사용자에게는 그 요건이 성립할 수 없다. 엔진은 계약을 정확히 구현했고, 그래서 **성립할 수 없는 법적 불이익을 고지하고 있었다.**
+
+**관리자 판정: 계약을 고친다.** 사실과 다른 경고는 하지 않아도 될 걱정을 시켜 옳은 행동을 막는다. 조건에 `fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0`을 추가했다.
+
+**모순되는 입력을 어떻게 볼 것인가.** 사용자가 `within_isa_lock_in`을 골랐는데 잔여 기간이 0이면 그 선택의 ISA 쪽 절반은 공허해진다. 경고를 끄는 것만으로는 화면이 이 사실을 알 수 없으므로 안내 코드 `isa_lock_in_already_elapsed`(info)를 함께 낸다. **경고가 아니라 사실 통지다** — 법적 불이익이 아니라 입력과 현실이 어긋난다는 정보이고, 다시 물을지 문구를 바꿀지는 화면이 정한다. 연금 쪽 경고는 그대로 유효하다(자금이 곧 필요하다는 사용자의 진술은 연금계좌에 대해서는 여전히 성립한다).
 
 **버전 규약 (이 문서가 확정한다).**
 
@@ -122,7 +133,7 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 
 | 필드 | 자료형 | 단위 | 필수 | 설명 / null일 때 |
 |---|---|---|---|---|
-| `schema_version` | string | — | 필수 | `"2.1.0"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
+| `schema_version` | string | — | 필수 | `"3.1.0"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
 | `tax_year` | integer | 년 | 필수 | 기준 과세연도. 확정 시나리오가 읽을 룰셋을 고른다 |
 | `scenarios` | string[] | — | 필수 | 비어 있지 않은 배열. 값은 `"current"` / `"proposed"`. 중복은 제거된다. 순서는 응답 순서를 정하지 않는다(6.1절) |
 | `profile` | Profile | — | 필수 | 3.1절 |
@@ -326,6 +337,8 @@ accounts.isa               : IsaAccountState
 | `basis_rule_ids` | string[] | — | |
 
 **⚠ 계좌별 한도를 더하면 안 된다.** 연금저축과 퇴직연금은 **같은 풀**을 본다 — 납입 한도는 `pension.contribution.annual_limit`이 계좌 합산으로 정하고, 세액공제 한도는 `pension.credit.limit.combined`가 합산으로 정한다. 두 계좌의 값을 더하면 이중계상이고 실제보다 큰 한도가 화면에 뜬다.
+
+**`credit_eligible_limit_remaining_krw`는 "추가로 인정될 여지"이지 배분 상한이 아니다.** 개정안 시나리오에서 청년 우대가 적용되면(`proposed.pension.credit.youth_irp_rate`) 추가 IRP 납입이 이미 인정된 연금저축 기납입분을 공제 풀에서 밀어내고 그만큼이 높은 율로 갈아탄다. 그래서 **배분액이 이 값을 넘을 수 있다.** 화면이 "잔여 한도"로 라벨을 붙여 배분액과 나란히 놓으면 모순처럼 보인다 — 근거와 전말은 `engine-design.md` 6.4절이다.
 
 `*_shared_with`가 이 사실을 **구조로** 드러낸다. 값이 비어 있지 않은 필드는 다른 계좌와 같은 풀을 가리키므로 합산 대상이 아니다. 합계가 필요하면 이미 계산된 `LimitBreakdown.pension_contribution_limit_remaining_krw`와 `pension_combined_credit_remaining_krw`를 쓴다. 규약으로 막지 않고 데이터가 스스로 말하게 한 것이다.
 
@@ -543,6 +556,7 @@ accounts.isa               : IsaAccountState
 | `isa_type_conflicts_with_prior_income` | warning | 사용자가 선언한 ISA 유형이 직전 과세기간 소득 기준 판정과 다름. **계산은 사용자 선언을 따른다** |
 | `isa_type_not_declared` | info | ISA 유형 미선언으로 비과세 한도 표시 생략 |
 | `isa_tenure_missing` | warning | ISA 가입경과연수 미입력으로 가장 보수적인 값으로 계산 |
+| `isa_lock_in_already_elapsed` | info | `fund_use_horizon`이 `within_isa_lock_in`인데 의무가입기간이 이미 경과했다. ISA 추징 경고는 성립하지 않아 나가지 않는다(0.2절). 입력과 현실이 어긋난다는 **사실 통지**이며 법적 불이익 고지가 아니다 |
 | `financial_income_status_unknown` | info | 금융소득종합과세 대상 여부 미입력으로 배제 규칙 미적용 |
 | `isa_excluded_financial_income_taxpayer` | warning | 금융소득종합과세 대상자로 ISA 배제 |
 | `isa_excluded_age` | warning | 연령 요건 미달로 ISA 배제 |
@@ -577,9 +591,11 @@ accounts.isa               : IsaAccountState
 | 코드 | 계좌 | 조건 | 근거 규칙 |
 |---|---|---|---|
 | `early_withdrawal_penalty_pension` | `annuity_savings`, `retirement_pension` | 배분액 > 0 이고 `fund_use_horizon`이 `within_isa_lock_in` 또는 `before_pension_age` | `pension.withdrawal.eligibility`, `pension.early_withdrawal.other_income_rate` |
-| `early_termination_clawback_isa` | `isa` | 배분액 > 0 이고 `fund_use_horizon`이 `within_isa_lock_in` | `isa.early_termination.clawback`, `isa.account.requirements` |
+| `early_termination_clawback_isa` | `isa` | 배분액 > 0 이고 `fund_use_horizon`이 `within_isa_lock_in` **이고 `fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0`** | `isa.early_termination.clawback`, `isa.account.requirements` |
 
-`fund_use_horizon`이 `"unknown"`이면 위 둘을 배분액 > 0인 계좌 전부에 대해 `severity: "info"` · `trigger: "horizon_unknown"`으로 낸다. `"at_or_after_pension_age"`면 경고를 내지 않는다.
+`fund_use_horizon`이 `"unknown"`이면 위 둘을 배분액 > 0인 계좌 전부에 대해 `severity: "info"` · `trigger: "horizon_unknown"`으로 낸다. **ISA 쪽은 이때도 잔여 의무가입기간 조건이 함께 걸린다.** `"at_or_after_pension_age"`면 경고를 내지 않는다.
+
+**잔여 의무가입기간 조건의 근거.** 추징 규칙은 의무가입기간이 되는 날 **전** 해지에만 걸린다. 기간이 지난 계좌에는 추징 위험이 없으므로 경고도 성립하지 않는다. 경위는 0.2절. 이 조건 때문에 경고가 꺼진 경우에는 안내 코드 `isa_lock_in_already_elapsed`가 대신 나간다.
 
 ### 8.5 배분안 비교 안내 코드 (`comparison_note_codes`)
 

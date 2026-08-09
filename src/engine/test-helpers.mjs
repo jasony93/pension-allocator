@@ -71,7 +71,8 @@ export function baseRequest(overrides = {}) {
   return deepMerge(request, overrides);
 }
 
-function deepMerge(base, patch) {
+/** 중첩 객체를 통째로 갈아치우지 않고 병합한다. 픽스처가 조용히 값을 잃지 않게 한다. */
+export function deepMerge(base, patch) {
   const out = Array.isArray(base) ? [...base] : { ...base };
   for (const [key, value] of Object.entries(patch)) {
     if (value !== null && typeof value === 'object' && !Array.isArray(value) && typeof out[key] === 'object' && out[key] !== null && !Array.isArray(out[key])) {

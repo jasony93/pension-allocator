@@ -151,6 +151,20 @@ function computeScenario(scenarioId, request, rulesets) {
   if (request.profile.fund_use_horizon === HORIZON.UNKNOWN) {
     notices.push(notice(NOTICE.HORIZON_NOT_DECLARED, 'info', 'profile.fund_use_horizon'));
   }
+  // 사용자가 "의무가입기간 안에 쓸 수 있다"를 골랐는데 그 기간이 이미 지났다.
+  // ISA 추징 경고는 성립하지 않아 끄지만(M2), 입력이 현실과 어긋난다는 사실 자체는
+  // 화면이 알아야 다시 물어보든 문구를 바꾸든 할 수 있다. 경고가 아니라 사실 통지다.
+  if (
+    request.profile.fund_use_horizon === HORIZON.WITHIN_ISA_LOCK_IN &&
+    boundaries.isa_lock_in_years_remaining === 0
+  ) {
+    notices.push(
+      notice(NOTICE.ISA_LOCK_IN_ELAPSED, 'info', 'profile.fund_use_horizon', {}, [
+        RULE.ISA_CLAWBACK,
+        RULE.ISA_ACCOUNT_REQUIREMENTS,
+      ]),
+    );
+  }
   notices.push(
     notice(NOTICE.PENSION_HOLDING_NOT_EVALUATED, 'info', null, {}, [RULE.PENSION_WITHDRAWAL_ELIGIBILITY]),
   );

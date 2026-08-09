@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '3.0.0';
+export const SCHEMA_VERSION = '3.1.0';
 export const SUPPORTED_MAJOR = 3;
 
 export const ACCOUNT = {
@@ -152,6 +152,7 @@ export const NOTICE = {
   ISA_TYPE_CONFLICT: 'isa_type_conflicts_with_prior_income',
   ISA_TYPE_NOT_DECLARED: 'isa_type_not_declared',
   ISA_TENURE_MISSING: 'isa_tenure_missing',
+  ISA_LOCK_IN_ELAPSED: 'isa_lock_in_already_elapsed',
   FINANCIAL_INCOME_UNKNOWN: 'financial_income_status_unknown',
   ISA_EXCLUDED_FINANCIAL: 'isa_excluded_financial_income_taxpayer',
   ISA_EXCLUDED_AGE: 'isa_excluded_age',
