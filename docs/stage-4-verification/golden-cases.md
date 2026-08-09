@@ -1,7 +1,7 @@
 ---
 unit: tax-domain
 stage: 4
-status: draft
+status: approved
 inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json

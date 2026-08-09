@@ -1,7 +1,7 @@
 ---
 unit: qa
 stage: 4
-status: draft
+status: approved
 inputs:
   - docs/stage-1-discovery/requirements.md
   - docs/stage-2-design/screens.md
