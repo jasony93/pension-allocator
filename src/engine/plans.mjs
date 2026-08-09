@@ -17,14 +17,54 @@ import {
   PLAN_ORDER,
   PRIORITY_BASIS,
   RULE,
+  TIE_BREAK,
   WARNING,
 } from './constants.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
 
 const PENSION_ACCOUNTS = new Set([ACCOUNT.PENSION, ACCOUNT.ANNUITY]);
 
+/**
+ * 세제상 동점인가 — 두 연금계좌의 한계 공제율이 같은가.
+ * 동점이면 어느 쪽에 넣어도 세액이 같으므로 순서를 다른 기준으로 정할 수 있다.
+ * 동점이 아니면 **세액공제 최대화가 앞선다.** 인출 편의로 세액을 깎지 않는다.
+ */
+function creditRatesAreTied(rates) {
+  return (rates.youthIrpRate ?? rates.incomeTaxRate) <= rates.incomeTaxRate;
+}
+
+/**
+ * 이 배분안이 실제로 쓰는 충당 순서.
+ *
+ * `annuity_savings_first`는 이름이 순서를 이미 고정하므로 손대지 않는다.
+ * 나머지 둘은 연금 쌍의 순서가 이름에 매여 있지 않으므로, **세제상 동점 구간에서만**
+ * 인출이 자유로운 계좌를 앞세운다(engine-design.md 3.3절).
+ */
+function fillSequenceFor(planId, { rates, withdrawalOrder }) {
+  const standard = FILL_SEQUENCE[planId];
+  if (planId === PLAN.ANNUITY_FIRST || withdrawalOrder === null) return standard;
+  if (!creditRatesAreTied(rates)) return standard;
+
+  const pensionPart = [...withdrawalOrder];
+  return standard.map((account) =>
+    account === ACCOUNT.ISA ? account : pensionPart.shift(),
+  );
+}
+
+function tieBreakOf(planId, ctx) {
+  const applied =
+    planId !== PLAN.ANNUITY_FIRST &&
+    ctx.withdrawalOrder !== null &&
+    creditRatesAreTied(ctx.rates);
+
+  return applied
+    ? { code: TIE_BREAK.WITHDRAWAL_FLEXIBILITY, basis_rule_ids: [RULE.PENSION_MIDTERM_RESTRICTION] }
+    : { code: TIE_BREAK.NOT_APPLICABLE, basis_rule_ids: [] };
+}
+
 /** 한 배분안의 금액. 자금 사용 시점을 읽지 않는다. */
-function allocate(planId, { state, budget, eligible, rates }) {
+function allocate(planId, ctx) {
+  const { state, budget, eligible, rates } = ctx;
   let remainingBudget = budget;
   let annuityCounted = state.annuityCounted;
   let pensionCounted = state.pensionCounted;
@@ -46,8 +86,7 @@ function allocate(planId, { state, budget, eligible, rates }) {
   //   **이미 인정된 연금저축분을 공제 풀에서 밀어내고 그만큼이 높은 율로 갈아탄다.**
   //   따라서 상한은 "남은 합산 room"이 아니라 "IRP 인정액이 합산 한도에 닿는 지점"이다.
   //   4단계 교차검증 M1이 잡아낸 결함이 정확히 이 구분을 놓친 것이었다.
-  const pensionRate = rates.youthIrpRate ?? rates.incomeTaxRate;
-  const pensionRateIsHigher = pensionRate > rates.incomeTaxRate;
+  const pensionRateIsHigher = !creditRatesAreTied(rates);
 
   const creditCapacity = (account) => {
     const combinedRoom = clampToZero(state.combinedLimit - (annuityCounted + pensionCounted));
@@ -61,7 +100,7 @@ function allocate(planId, { state, budget, eligible, rates }) {
     return clampToZero(Math.min(state.annuityLimit - annuityCounted, combinedRoom));
   };
 
-  for (const account of FILL_SEQUENCE[planId]) {
+  for (const account of fillSequenceFor(planId, ctx)) {
     if (!eligible[account]) {
       limitedBy[account] = LIMITED_BY.NOT_ELIGIBLE;
       continue;
@@ -235,6 +274,10 @@ export function buildPlans(ctx) {
     for (const ruleId of PRIORITY_BASIS[planId].basis_rule_ids) {
       access.markUsed(ruleId, 'plans[].priority_basis');
     }
+    // 순서를 이 규칙으로 정했으면 화면이 근거를 보여줄 수 있어야 한다(헌장 고지 요소 3).
+    for (const ruleId of tieBreakOf(planId, ctx).basis_rule_ids) {
+      access.markUsed(ruleId, 'plans[].priority_basis');
+    }
 
     const warnings = warningsOf(result.amounts, ctx);
     for (const warning of warnings) {
@@ -265,8 +308,14 @@ export function buildPlans(ctx) {
       warnings,
       priority_basis: {
         code: PRIORITY_BASIS[planId].code,
-        fill_sequence: FILL_SEQUENCE[planId],
-        basis_rule_ids: [...PRIORITY_BASIS[planId].basis_rule_ids].sort(),
+        // 표준 순서가 아니라 **실제로 쓴 순서**를 낸다. 순서 보고가 거짓말하면
+        // 화면이 근거를 잘못 설명한다.
+        fill_sequence: fillSequenceFor(planId, ctx),
+        basis_rule_ids: [
+          ...PRIORITY_BASIS[planId].basis_rule_ids,
+          ...tieBreakOf(planId, ctx).basis_rule_ids,
+        ].sort(),
+        tie_break: tieBreakOf(planId, ctx),
       },
       allocations,
       total_allocated_monthly_krw: totalMonthly,

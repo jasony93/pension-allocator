@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '3.2.0';
+export const SCHEMA_VERSION = '3.3.0';
 export const SUPPORTED_MAJOR = 3;
 
 export const ACCOUNT = {
@@ -52,6 +52,15 @@ export const MONTHS_IN_TAX_YEAR = 12;
  */
 export const RULESET_STATUS = { CONFIRMED: '확정', PROPOSED: '개정예고' };
 
+/**
+ * 룰셋이 계좌를 가리킬 때 쓰는 이름. 이것도 룰셋 어휘이지 세법 수치가 아니다.
+ * 여러 규칙의 `conditions`와 `value.by_account`가 이 표기를 쓴다.
+ */
+export const ACCOUNT_TYPE_IN_RULESET = {
+  [ACCOUNT.ANNUITY]: '연금저축계좌',
+  [ACCOUNT.PENSION]: '퇴직연금계좌',
+};
+
 /** 엔진이 참조하는 규칙 id. 문자열일 뿐 수치가 아니다. */
 export const RULE = {
   CREDIT_RATE: 'pension.credit.rate',
@@ -61,6 +70,7 @@ export const RULE = {
   PENSION_CONTRIBUTION_LIMIT: 'pension.contribution.annual_limit',
   PENSION_WITHDRAWAL_ELIGIBILITY: 'pension.withdrawal.eligibility',
   PENSION_EARLY_WITHDRAWAL_RATE: 'pension.early_withdrawal.other_income_rate',
+  PENSION_MIDTERM_RESTRICTION: 'pension.withdrawal.midterm_restriction',
   ISA_ELIGIBILITY: 'isa.eligibility',
   ISA_EXCLUSION_FINANCIAL: 'isa.exclusion.financial_income_taxpayer',
   ISA_TAX_FREE_LIMIT: 'isa.tax_free_limit',
@@ -198,6 +208,15 @@ export const LIMITED_BY = {
   CONTRIBUTION_LIMIT: 'contribution_limit',
   CREDIT_LIMIT: 'credit_limit',
   NOT_ELIGIBLE: 'not_eligible',
+};
+
+/**
+ * 세제상 동점일 때 순서를 무엇으로 깼는지. 이름이 거짓말하지 않게 하려고 둔다 —
+ * `max_tax_credit`은 공제를 최대화하되, 동점 구간에서는 이 기준으로 순서를 정한다.
+ */
+export const TIE_BREAK = {
+  WITHDRAWAL_FLEXIBILITY: 'withdrawal_flexibility_first',
+  NOT_APPLICABLE: 'not_applicable',
 };
 
 export const NON_QUANTIFIED = {

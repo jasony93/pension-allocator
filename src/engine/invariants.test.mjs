@@ -24,9 +24,14 @@ import {
   RULESET_STATUS,
   WARNING,
 } from './constants.mjs';
-import { loadRulesets, baseRequest, deepMerge, PROPOSED_FILE } from './test-helpers.mjs';
+import { loadRulesets, baseRequest, deepMerge, PROPOSED_FILE, CONFIRMED_FILE } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
+
+/** 공제율 경계 위인가 — 룰셋에서 읽는다. 경계 위 + 청년 + 개정안이면 동점이 아니다. */
+const CREDIT_BOUNDARY = rulesets[CONFIRMED_FILE].rules.find((r) => r.id === 'pension.credit.rate')
+  .value.brackets[0].total_salary_only_max_krw;
+const overBoundary = (request) => request.profile.current_year_total_salary_krw > CREDIT_BOUNDARY;
 
 const KNOWN_NOTICES = new Set(Object.values(NOTICE));
 const KNOWN_WARNINGS = new Set(Object.values(WARNING));
@@ -364,6 +369,72 @@ function checkScenario(scenario, response, request, at) {
     assert.deepStrictEqual(scenario.unapplied_proposed_rules, [], `${at} I16`);
   }
 
+  // I18 — 인출 편의로 세액을 깎지 않는다.
+  // 동점 판정이 들어오면서 가장 먼저 무너질 수 있는 선이다. 순서를 무엇으로 정하든
+  // `max_tax_credit`의 공제액은 어떤 안보다 작아서는 안 된다.
+  const maxCreditPlan = plans.find((p) => p.plan_id === PLAN.MAX_CREDIT);
+  if (maxCreditPlan) {
+    for (const plan of plans) {
+      assert.ok(
+        plan.deterministic_benefit.pension_credit_total_krw <=
+          maxCreditPlan.deterministic_benefit.pension_credit_total_krw,
+        `${at} I18: ${plan.plan_id}가 최대공제안보다 공제액이 크다`,
+      );
+    }
+  }
+
+  // I19 — 동점일 때만 인출 유연을 앞세운다.
+  // 동점이 아니면(개정안 청년 우대) 공제가 큰 쪽이 이겨야 한다.
+  const tied = !(request.profile.declared_youth === true && scenario.scenario_id === 'proposed' && overBoundary(request));
+  for (const plan of plans) {
+    const tieBreak = plan.priority_basis.tie_break;
+    if (plan.plan_id === PLAN.ANNUITY_FIRST) {
+      assert.equal(tieBreak.code, 'not_applicable', `${at} I19: 이름이 순서를 고정한 안에 동점 판정이 붙었다`);
+      continue;
+    }
+    assert.equal(
+      tieBreak.code,
+      tied ? 'withdrawal_flexibility_first' : 'not_applicable',
+      `${at} I19: ${plan.plan_id}의 동점 판정이 실제 공제율 관계와 어긋난다`,
+    );
+    if (tieBreak.code === 'withdrawal_flexibility_first') {
+      assert.ok(tieBreak.basis_rule_ids.length > 0, `${at} I19: 동점 판정에 근거 규칙이 없다`);
+      const pensionPart = plan.priority_basis.fill_sequence.filter((a) => a !== 'isa');
+      assert.deepStrictEqual(
+        pensionPart,
+        ['annuity_savings', 'retirement_pension'],
+        `${at} I19: 동점인데 더 묶이는 계좌를 먼저 채운다`,
+      );
+    }
+  }
+
+  // I20 — 순서 보고가 거짓말하지 않는다.
+  // fill_sequence가 실제 배분 순서(fill_order)와 어긋나면 화면이 근거를 잘못 설명한다.
+  for (const plan of plans) {
+    const filled = plan.allocations
+      .filter((a) => a.fill_order !== null)
+      .sort((x, y) => x.fill_order - y.fill_order)
+      .map((a) => a.account);
+    const expected = plan.priority_basis.fill_sequence.filter((account) =>
+      filled.includes(account),
+    );
+    assert.deepStrictEqual(filled, expected, `${at} I20: 보고한 순서와 실제 충당 순서가 다르다`);
+  }
+
+  // I21 — 이 규칙이 가르는 것은 과세가 아니다.
+  // 중도인출 제약은 연금저축과 IRP를 가르지만 과세는 같다. 경고를 한쪽에만 붙이면
+  // 그것이 새로운 오류다.
+  for (const plan of plans) {
+    for (const account of ['retirement_pension', 'annuity_savings']) {
+      if (allocOf(plan, account).annual_krw <= 0) continue;
+      if (horizon === 'at_or_after_pension_age') continue;
+      assert.ok(
+        plan.warnings.some((w) => w.code === WARNING.PENSION_EARLY_WITHDRAWAL && w.account === account),
+        `${at} I21: ${account}에 연금 인출 경고가 빠졌다 — 과세는 두 계좌가 같다`,
+      );
+    }
+  }
+
   // I17 — 코드가 계약 목록 안에 있다
   for (const code of noticeCodes) assert.ok(KNOWN_NOTICES.has(code), `${at} I17: 알 수 없는 안내 코드 ${code}`);
   for (const code of notes) {
@@ -425,6 +496,9 @@ test('경로 해석기가 실제로 없는 경로를 걸러낸다', () => {
 
 test('모든 응답이 교차 필드 불변식을 만족한다', () => {
   let checked = 0;
+  // 조건부 분기가 양쪽 다 실제로 등장했는지 센다. 한쪽만 돌면 그 불변식은
+  // 통과하면서도 아무것도 막지 못한다.
+  const tieBreaksSeen = new Set();
   for (const { label, request } of matrix()) {
     const response = compute(request, rulesets);
     assert.equal(response.ok, true, `${label}: 계산이 실패했다 — ${JSON.stringify(response.errors)}`);
@@ -440,6 +514,7 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
 
     for (const scenario of response.scenarios) {
       checkScenario(scenario, response, request, `${label} / ${scenario.scenario_id}`);
+      for (const plan of scenario.plans) tieBreaksSeen.add(plan.priority_basis.tie_break.code);
       assert.deepStrictEqual(
         scenario.account_eligibility.map((e) => e.account),
         ACCOUNT_ORDER,
@@ -450,6 +525,11 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
   }
 
   assert.ok(checked >= 100, `행렬이 너무 작다 (${checked}건)`);
+  assert.deepStrictEqual(
+    [...tieBreaksSeen].sort(),
+    ['not_applicable', 'withdrawal_flexibility_first'],
+    '동점 판정의 양쪽이 모두 행렬에 등장해야 I19가 실제로 무언가를 막는다',
+  );
 });
 
 // I9 — 자금 사용 시점은 금액을 바꾸지 않는다.

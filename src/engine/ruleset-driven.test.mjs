@@ -21,6 +21,13 @@ const rulesets = loadRulesets();
 
 const BIG_BUDGET = { profile: { monthly_capacity_krw: 5_000_000 } };
 
+// 동점 구간에서는 최대공제안이 연금저축을 먼저 채우므로 두 안의 배분 벡터가 같아져
+// 하나로 합쳐진다. 연금저축 우선안 자체를 보려면 명시적으로 요청한다.
+const ANNUITY_FIRST_ONLY = {
+  ...BIG_BUDGET,
+  options: { plan_variants: ['annuity_savings_first'] },
+};
+
 test('연금저축 단독 한도를 바꾸면 연금저축 우선안의 배분이 따라 바뀐다', () => {
   const patched = cloneRulesets(rulesets);
   const rule = findRule(patched, CONFIRMED_FILE, 'pension.credit.limit.annuity_savings');
@@ -28,8 +35,8 @@ test('연금저축 단독 한도를 바꾸면 연금저축 우선안의 배분�
   const halved = Math.floor(rule.value.amount_krw / 2);
   rule.value.amount_krw = halved;
 
-  const before = planOf(scenarioOf(compute(baseRequest(BIG_BUDGET), rulesets)), 'annuity_savings_first');
-  const after = planOf(scenarioOf(compute(baseRequest(BIG_BUDGET), patched)), 'annuity_savings_first');
+  const before = planOf(scenarioOf(compute(baseRequest(ANNUITY_FIRST_ONLY), rulesets)), 'annuity_savings_first');
+  const after = planOf(scenarioOf(compute(baseRequest(ANNUITY_FIRST_ONLY), patched)), 'annuity_savings_first');
 
   assert.notEqual(
     allocationOf(after, 'annuity_savings').annual_krw,

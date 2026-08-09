@@ -23,6 +23,7 @@ import {
   resolveLimits,
   resolveRates,
   resolveTransfer,
+  resolveWithdrawalOrder,
 } from './limits.mjs';
 import { validateBoundariesRequest, validateRequest } from './validate.mjs';
 
@@ -125,8 +126,12 @@ function computeScenario(scenarioId, request, rulesets) {
   const eligible = Object.fromEntries(
     eligibilityResult.eligibility.map((e) => [e.account, e.eligible]),
   );
+  // 세제상 동점 구간에서 쓸 연금계좌 순서. 사실은 룰셋에서 읽고 판단은 제품이 한다.
+  const withdrawalOrder = resolveWithdrawalOrder(access);
+
   const { plans, comparisonNotes } = buildPlans({
     access,
+    withdrawalOrder,
     options: request.options,
     horizon: request.profile.fund_use_horizon,
     months,

@@ -26,7 +26,7 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `3.2.0`.**
+**현재 계약 버전: `3.3.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
@@ -35,6 +35,7 @@ open_questions:
 | `2.1.0` | **게이트 2 마감 판단.** 경계값 전용 진입점 `computeFundUseHorizonBoundaries` 추가(9절). 기존 진입점과 타입은 그대로이므로 minor다 — `2.0.0`에 맞춘 목은 계속 동작한다 |
 | `3.0.0` | **3단계 구현 중 발견된 계약 오류의 정정.** `Plan.delta_vs_baseline_krw`의 "0 이하" 제약을 제거했다(0.1절). `AccountLimit`에 `contribution_limit_shared_with`·`credit_limit_shared_with`를 추가해 계좌 간 공유 한도를 구조로 드러냈다(5.3절) |
 | `3.1.0` | **4단계 교차검증 M2의 정정.** `early_termination_clawback_isa` 경고 조건에 "의무가입기간이 남아 있을 것"을 추가했다(0.2절, 8.4절). 안내 코드 `isa_lock_in_already_elapsed`를 추가했다(8.2절). 필드 추가·제거가 없고 **없어야 할 경고가 사라지는 방향**이라 기존 소비자가 깨지지 않으므로 minor다 |
+| `3.3.0` | **게이트 4 후속 — 세제상 동점일 때의 순서 원칙.** `max_tax_credit`·`isa_first`가 동점 구간에서 인출이 자유로운 연금계좌를 먼저 채운다(0.4절). `PriorityBasis`에 `tie_break`를 추가했다(5.6절). 필드 추가뿐이고 `max_tax_credit`이 세액공제를 최대화한다는 보장은 그대로여서 minor다 |
 | `3.2.0` | **4단계 2차 교차검증 M3의 정정.** `all_accounts_have_early_exit_penalty`의 발생 조건을 8.4절의 경고와 맞췄다(0.3절, 8.5절). `3.1.0`과 같은 이유로 minor다 — **없어야 할 안내가 사라지는 방향**이다 |
 
 ### 0.1 `delta_vs_baseline_krw` 제약을 제거한 경위
@@ -70,6 +71,30 @@ open_questions:
 **고친 방식:** 조건을 `fund_use_horizon` 값이 아니라 **결과의 사실**에 걸었다 — 모든 배분안이 실제로 경고를 지고 있을 때만 낸다(8.5절).
 
 **이것이 M1과 같은 형태다.** 어떤 전제가 조건부로 바뀌었는데 그 전제를 공유하던 다른 출력이 따라오지 못했다. M1은 D17의 파급을 배분 탐색이 놓쳤고, M3은 M2의 파급을 비교 안내가 놓쳤다. 개별 수정만으로는 세 번째가 나온다. 그래서 **출력 필드 사이의 사실 일관성을 기계적으로 강제하는 불변식 테스트**를 세웠다 — `src/engine/invariants.test.mjs`. 목록과 각 항목이 막는 것은 `engine-design.md` 7.1절에 있다.
+
+### 0.4 세제상 동점일 때의 순서 원칙 (게이트 4 후속)
+
+소유자가 프로토타입에서 지적했다 — 일반적으로 연금저축을 먼저 채우는 것으로 아는데 엔진이 IRP로 기운다. 확인해 보니 두 안의 세액공제액이 **완전히 같았다.**
+
+**무엇이 문제였나.** 2단계 설계는 합산 한도 구조상 퇴직연금 우선이 약우월임을 증명했고 그 자체는 옳다. 문제는 **동점을 깨는 방향**이었다 — 세금이 같을 때 더 묶이는 계좌를 먼저 권하고 있었다.
+
+**새 근거.** `tax-domain`이 `pension.withdrawal.midterm_restriction`을 조사해 룰셋에 넣었다. 퇴직연금은 시행령이 중도인출 사유를 **열거**하고 열거에 없으면 부분 인출이 불가능해 계좌 전체를 해지해야 한다. 연금저축에는 그런 제한이 없다. **과세는 두 계좌가 완전히 같다** — 이 규칙이 가르는 것은 세금이 아니라 인출이 법적으로 가능한가다.
+
+**원칙:** 세제상 동점이면 인출이 자유로운 계좌를 먼저 채운다. 비용이 0이고 이득이 양수인 선택이므로 기본값이어야 한다.
+
+**지킨 선 넷.**
+
+1. **동점일 때만.** 개정안 청년 우대로 두 계좌의 공제율이 갈리면 동점이 아니고, 그때는 세액공제 최대화가 앞선다. **인출 편의로 세액을 깎지 않는다.** `priority_basis.tie_break.code`가 어느 쪽이 적용됐는지 매 응답에 실린다.
+2. **경고는 그대로 두 계좌에.** 과세가 같으므로 `early_withdrawal_penalty_pension`을 한쪽에만 붙이면 그것이 새 오류다.
+3. **`fund_use_horizon`과 무관하게 항상 적용한다.** 근거는 아래.
+4. **결론은 룰셋이 아니라 제품이 정했다.** 규칙의 `product_note`가 "어느 계좌를 먼저 채울지는 이 규칙이 정하지 않는다"고 명시한다. 엔진이 룰셋에서 읽는 것은 `partial_withdrawal_without_statutory_cause`라는 **사실**뿐이고, 사유 목록은 미확정이므로 목록에 의존하는 로직을 만들지 않았다.
+
+**왜 `fund_use_horizon`에 걸지 않았나.** 자금을 일찍 쓸 수 있다고 밝힌 사용자에게만 적용하는 쪽이 자연스러워 보이지만 그렇게 하지 않았다.
+
+- **비용이 0이다.** 동점의 정의상 세액이 같으므로, 자금을 늦게 쓸 사용자에게도 손해가 없고 회수 가능성만 는다. 조건을 달 이유가 없다.
+- **`unknown`을 고른 사용자가 더 나쁜 기본값을 받게 된다.** 밝히지 않았다는 이유로 더 묶이는 배분을 주는 것은 그 입력을 넣은 취지에 어긋난다.
+- **계약이 스스로 한 선언과 충돌한다.** `echo.fund_use_horizon_affects`는 이 입력이 `allocation_amounts`를 바꾸지 않는다고 선언한다(4.2절). 동점 판정을 horizon에 걸면 배분 금액이 horizon의 함수가 되어 그 선언이 거짓이 된다. **이것이 결정적이다.**
+- 두 입력이 보는 축이 다르다. `fund_use_horizon`은 **언제** 쓸 것인가이고, 이 규칙은 **일부만 빼는 것이 법적으로 가능한가**다. 연금계좌 대 ISA는 전자가, 연금저축 대 퇴직연금은 후자가 가른다.
 
 **버전 규약 (이 문서가 확정한다).**
 
@@ -142,7 +167,7 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 
 | 필드 | 자료형 | 단위 | 필수 | 설명 / null일 때 |
 |---|---|---|---|---|
-| `schema_version` | string | — | 필수 | `"3.1.0"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
+| `schema_version` | string | — | 필수 | `"3.3.0"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
 | `tax_year` | integer | 년 | 필수 | 기준 과세연도. 확정 시나리오가 읽을 룰셋을 고른다 |
 | `scenarios` | string[] | — | 필수 | 비어 있지 않은 배열. 값은 `"current"` / `"proposed"`. 중복은 제거된다. 순서는 응답 순서를 정하지 않는다(6.1절) |
 | `profile` | Profile | — | 필수 | 3.1절 |
@@ -403,8 +428,20 @@ accounts.isa               : IsaAccountState
 | 필드 | 자료형 | 설명 |
 |---|---|---|
 | `code` | string | `"tax_credit_maximization"` / `"annuity_savings_limit_first"` / `"isa_liquidity_first"` |
-| `fill_sequence` | 계좌 id[] | 이 안의 충당 순서. 길이 3 |
-| `basis_rule_ids` | string[] | 이 우선순위를 뒷받침하는 규칙 id. 예: 유동성 우선안은 연금계좌 인출 요건·연금외수령 과세 규칙 |
+| `fill_sequence` | 계좌 id[] | **실제로 쓴 충당 순서.** 길이 3. `max_tax_credit`·`isa_first`에서는 연금 쌍의 순서가 `tie_break`에 따라 달라지므로 **고정 배열로 가정하지 말고 이 값을 읽어라** |
+| `basis_rule_ids` | string[] | 이 우선순위를 뒷받침하는 규칙 id. 동점 판정이 적용됐으면 그 근거 규칙도 포함된다 |
+| `tie_break` | TieBreak | 세제상 동점을 무엇으로 깼는가. 아래 |
+
+**`TieBreak`**
+
+| 필드 | 자료형 | 설명 |
+|---|---|---|
+| `code` | string | `"withdrawal_flexibility_first"` — 두 연금계좌의 한계 공제율이 같아 인출이 자유로운 쪽을 먼저 채웠다. `"not_applicable"` — 공제율이 갈려 세액공제 최대화가 순서를 정했거나, 이름이 이미 순서를 고정한 안이다 |
+| `basis_rule_ids` | string[] | `withdrawal_flexibility_first`일 때 근거 규칙(`pension.withdrawal.midterm_restriction`). 아니면 빈 배열 |
+
+**`max_tax_credit`이라는 이름이 뜻하는 것.** 이 안은 **언제나 세액공제액을 최대화한다** — 그 보장은 바뀌지 않았다. `tie_break`가 말하는 것은 최대화하는 배분이 여럿일 때 그중 무엇을 골랐는가다. 세액이 갈리는 구간에서는 공제가 큰 쪽이 이기고, 동점 구간에서만 인출 유연성이 순서를 정한다. 경위는 0.4절.
+
+**동점 구간에서는 `max_tax_credit`과 `annuity_savings_first`의 배분이 같아져 하나로 합쳐진다**(6.2절). 남는 비교 대상은 `isa_first`다. 화면은 `plans.length`를 읽어 대응한다.
 
 **`DeterministicBenefit`** — 금액이 확정적으로 계산되는 효과. 현재는 연금계좌 세액공제뿐이다.
 

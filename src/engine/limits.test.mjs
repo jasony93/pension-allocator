@@ -98,13 +98,15 @@ test('한도를 정확히 채운다 — 남는 금액이 0이다', () => {
   const plan = planOf(scenario, 'max_tax_credit');
 
   assert.equal(plan.deterministic_benefit.credit_eligible_contribution_krw, COMBINED_LIMIT);
-  assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, COMBINED_LIMIT);
-  assert.equal(allocationOf(plan, 'annuity_savings').annual_krw, 0);
+  // 세제상 동점이므로 덜 묶이는 연금저축을 먼저 채운다(게이트 4 후속).
+  // 합산 한도를 정확히 채운다는 사실은 그대로다 — 바뀐 것은 그 안의 순서뿐이다.
+  assert.equal(allocationOf(plan, 'annuity_savings').annual_krw, ANNUITY_LIMIT);
+  assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, COMBINED_LIMIT - ANNUITY_LIMIT);
   assert.equal(plan.unallocated_annual_krw, 0);
   assert.equal(plan.monthly_rounding_residual_krw, 0);
 });
 
-test('IRP 우선 충당이 약우월이다 — 같은 예산에서 세액공제액이 낮아지지 않는다', () => {
+test('최대공제안은 언제나 세액공제 최대다 — 순서를 바꿔도 깎이지 않는다', () => {
   const scenario = scenarioOf(
     compute(baseRequest({ profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 } }), rulesets),
   );
@@ -117,8 +119,19 @@ test('IRP 우선 충당이 약우월이다 — 같은 예산에서 세액공제�
     );
   }
 
-  // 연금저축 우선안은 단독 한도를 넘는 구간에서 엄격히 불리해진다.
-  const annuityFirst = planOf(scenario, 'annuity_savings_first');
+  // 연금저축 우선안은 명시적으로 요청하면 언제나 받을 수 있다.
+  const annuityFirst = planOf(
+    scenarioOf(
+      compute(
+        baseRequest({
+          profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 },
+          options: { plan_variants: ['annuity_savings_first'] },
+        }),
+        rulesets,
+      ),
+    ),
+    'annuity_savings_first',
+  );
   assert.equal(allocationOf(annuityFirst, 'annuity_savings').annual_krw, ANNUITY_LIMIT);
 });
 
@@ -140,12 +153,11 @@ test('예산이 모든 한도를 넘으면 남는 금액을 명시한다', () =>
       allocationOf(maxCredit, 'annuity_savings').annual_krw,
     COMBINED_LIMIT,
   );
-  assert.equal(allocationOf(maxCredit, 'retirement_pension').limited_by, 'credit_limit');
+  assert.equal(allocationOf(maxCredit, 'annuity_savings').limited_by, 'credit_limit');
 
-  // 같은 절세액을 내는 다른 배분이 남는다 — 헌장이 요구하는 선택지 비교의 형태다.
-  const equalCredit = scenario.plans.filter((p) => p.delta_vs_baseline_krw === 0);
-  assert.ok(equalCredit.length >= 2);
-  assert.ok(scenario.comparison_note_codes.includes('alternatives_have_equal_tax_credit'));
+  // 예산이 모든 한도를 넘으면 세 안이 같은 곳에 도달한다 — 순서가 결과를 바꾸지 못한다.
+  assert.equal(scenario.plans.length, 1);
+  assert.ok(scenario.comparison_note_codes.includes('plans_collapsed_single'));
 });
 
 test('납입 여력 0 — 오류가 아니다. 한도 정보는 그대로 나온다', () => {

@@ -4,6 +4,7 @@
 
 import {
   ACCOUNT,
+  ACCOUNT_TYPE_IN_RULESET,
   ERROR,
   NOTICE,
   RULE,
@@ -74,6 +75,49 @@ export function resolveRates(access, { profile, scenarioId }) {
           : null,
     },
   };
+}
+
+/**
+ * 세제상 동점일 때 쓸 연금계좌 순서를 룰셋에서 읽는다.
+ *
+ * `pension.withdrawal.midterm_restriction`이 두 계좌의 **인출 가능성 비대칭**을 사실로
+ * 정한다 — 퇴직연금은 시행령이 열거한 사유에만 부분 인출이 되고, 연금저축에는 그런
+ * 제한이 없다. 과세는 두 계좌가 같으므로 이 규칙은 세액을 바꾸지 않는다.
+ *
+ * **결론(어느 쪽을 먼저 채울지)은 룰셋이 정하지 않는다**(규칙의 product_note).
+ * 엔진이 읽는 것은 `partial_withdrawal_without_statutory_cause`라는 사실이고,
+ * "동점이면 덜 묶이는 쪽을 먼저"라는 판단은 제품 결정이다(engine-design.md 3.3절).
+ *
+ * 사유 '목록'은 미확정이므로 목록에 의존하지 않는다. 쓰는 것은 열거주의라는 구조뿐이다.
+ */
+export function resolveWithdrawalOrder(access) {
+  const appliedTo = 'plans[].priority_basis';
+  const byAccount = access.value(
+    RULE.PENSION_MIDTERM_RESTRICTION,
+    ['value', 'by_account'],
+    appliedTo,
+  );
+  if (byAccount === undefined) return null;
+
+  const flexible = {};
+  for (const account of [ACCOUNT.PENSION, ACCOUNT.ANNUITY]) {
+    const node = byAccount[ACCOUNT_TYPE_IN_RULESET[account]];
+    if (node === undefined || typeof node.partial_withdrawal_without_statutory_cause !== 'boolean') {
+      access.value(
+        RULE.PENSION_MIDTERM_RESTRICTION,
+        ['value', 'by_account', ACCOUNT_TYPE_IN_RULESET[account], 'partial_withdrawal_without_statutory_cause'],
+        appliedTo,
+      );
+      return null;
+    }
+    flexible[account] = node.partial_withdrawal_without_statutory_cause;
+  }
+
+  // 인출이 자유로운 계좌를 앞에 둔다. 정렬이 안정적이므로 두 계좌의 조건이 같으면
+  // 기존 고정 순서가 그대로 유지된다 — 결정성이 깨지지 않는다.
+  return [ACCOUNT.PENSION, ACCOUNT.ANNUITY].sort(
+    (a, b) => Number(flexible[b]) - Number(flexible[a]),
+  );
 }
 
 export function resolveTransfer(access, { request, scenarioId }) {
