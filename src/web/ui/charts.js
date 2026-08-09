@@ -133,6 +133,32 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
   );
 }
 
+// D16 — 트랙 길이의 공통 배율. screens.md 5.4절: "세 막대는 공통 배율을 쓴다.
+// 잔여 한도가 가장 큰 계좌의 트랙이 화면 폭을 채우고, 나머지는 그 비율만큼
+// 짧아진다." 잔여 한도가 가장 큰 계좌를 100%로 잡는다 — 그 계좌가 이 회차에
+// 실제로 더 채울 수 있는 최대치이므로, "이 배분 시점에 계좌들이 서로 얼마나
+// 여유로운가"를 그대로 반영하는 자연스러운 기준이다. 총 납입한도(ISA 1억원 등
+// 세법 상수) 같은 고정값을 100%로 잡지 않은 이유: 그 값은 여기 화면에 안
+// 나온다(세법 수치를 코드에 두지 않는다는 원칙과도 맞지 않는다), 계좌마다
+// 성격이 달라(연금계좌는 매년 리셋되는 공유 풀, ISA는 누적 총액) 공통 분모가
+// 없다.
+const MIN_TRACK_PERCENT = 8; // 잔여 한도가 있지만 최댓값 대비 작은 계좌가 안 보이지 않게 하는 바닥값
+const ZERO_TRACK_PERCENT = 3; // "완전히 소진"을 "작지만 남음"과 구분하는, 그보다 더 낮은 바닥값
+
+/**
+ * `remaining`(이 계좌의 잔여 한도)을 `maxRemaining`(세 계좌 중 최댓값) 대비
+ * 트랙 길이(%)로 바꾼다. 순서(0 < 작음 < … < 최댓값=100)는 어떤 입력에서도
+ * 뒤집히지 않는다 — 바닥값은 "안 보일 정도로 작은 값"만 끌어올릴 뿐, 상대
+ * 크기 비교 자체를 왜곡하지 않는다. 정확한 값은 트랙 옆 캡션에 원 단위로
+ * 그대로 적으므로, 바닥값으로 눌린 트랙이라도 사용자가 실제 숫자를 볼 수 있다.
+ */
+export function computeTrackScalePercent(remaining, maxRemaining) {
+  if (maxRemaining <= 0) return ZERO_TRACK_PERCENT; // 세 계좌 모두 한도 소진 — 동률로 그린다
+  if (remaining <= 0) return ZERO_TRACK_PERCENT;
+  const raw = (remaining / maxRemaining) * 100;
+  return Math.min(100, Math.max(MIN_TRACK_PERCENT, raw));
+}
+
 /**
  * C-2 한도 트랙 막대 하나. `AllocationBar`(design-system 5.7절)의 최소 구현.
  *
@@ -144,11 +170,16 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
  * 요소는 `width`/`height`를 무시하므로 CSS에 `height: 20px`가 있어도 렌더
  * 크기가 0×0이 된다. 관리자가 브라우저 실측(`getBoundingClientRect`)으로
  * 잡은 버그이고, `stackBarSegments`의 래퍼도 같은 실수였다.
+ *
+ * **트랙 자체의 길이도 `trackScalePercent`로 스케일한다(D16).** 채움
+ * (`percentOfLimit`)은 그 트랙 **안에서** 몇 %를 채웠는지이고, 트랙 길이는
+ * 그 계좌의 한도가 세 계좌 중 얼마나 큰지다 — 서로 다른 두 사실이라 같은
+ * 요소의 서로 다른 치수(트랙 폭 vs 채움 폭)로 나눠 표현한다.
  */
-export function allocationBar({ account, monthlyKrw, remainingLimitKrw, percentOfLimit, unavailable = false }) {
+export function allocationBar({ account, monthlyKrw, remainingLimitKrw, percentOfLimit, trackScalePercent = 100, unavailable = false }) {
   const track = el(
     'div',
-    { class: 'alloc-bar-track', role: 'img', tabindex: '0' },
+    { class: 'alloc-bar-track', role: 'img', tabindex: '0', style: { width: `${trackScalePercent}%` } },
     [
       el('div', {
         class: 'alloc-bar-fill',
@@ -158,7 +189,7 @@ export function allocationBar({ account, monthlyKrw, remainingLimitKrw, percentO
   );
   track.setAttribute(
     'aria-label',
-    `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 잔여 한도의 ${formatPercent(percentOfLimit)}`,
+    `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 잔여 한도 ${formatKrw(remainingLimitKrw)} 중 ${formatPercent(percentOfLimit)} 사용`,
   );
   return track;
 }

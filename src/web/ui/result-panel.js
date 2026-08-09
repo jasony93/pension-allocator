@@ -19,7 +19,7 @@ import {
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
-import { donutChart, allocationBar, stackBarSegments, CHART_ACCOUNT_ORDER } from './charts.js';
+import { donutChart, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
 import { openShareModal } from './share.js';
 
 const CORE_FIELD_LABEL = {
@@ -194,22 +194,35 @@ function chartArea(plan, scenario, months) {
   const unallocated = plan.unallocated_annual_krw;
   const donut = donutChart({ allocations: plan.allocations, unallocatedAnnualKrw: unallocated, isProposed: !scenario.is_enacted });
 
+  // D16 — 공통 배율. 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
+  // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 잔여 한도를 먼저 다
+  // 모아야 계좌별 트랙 하나를 그릴 때 "셋 중 최댓값"을 알 수 있다.
+  const remainingByAccount = Object.fromEntries(
+    CHART_ACCOUNT_ORDER.map((account) => {
+      const limit = scenario.limits.by_account.find((l) => l.account === account);
+      return [account, limit ? limit.contribution_limit_remaining_krw : 0];
+    }),
+  );
+  const maxRemaining = Math.max(...Object.values(remainingByAccount));
+
   const barSection = el(
     'div',
     { class: 'allocation-bars' },
     CHART_ACCOUNT_ORDER.map((account) => {
       const alloc = plan.allocations.find((a) => a.account === account);
-      const limit = scenario.limits.by_account.find((l) => l.account === account);
-      const remaining = limit ? limit.contribution_limit_remaining_krw : 0;
+      const remaining = remainingByAccount[account];
       const percentOfLimit = remaining > 0 ? alloc.annual_krw / remaining : alloc.annual_krw > 0 ? 1 : 0;
+      const trackScalePercent = computeTrackScalePercent(remaining, maxRemaining);
       const warning = plan.warnings.find((w) => w.account === account);
       return el('div', { class: 'allocation-bar-row' }, [
         el('div', { class: 'allocation-bar-labels' }, [
           el('span', { class: 'type-body-strong' }, [ACCOUNT_LABEL[account]]),
           el('span', { class: 'type-num' }, [`${formatKrw(alloc.monthly_krw)} / 월`]),
         ]),
-        allocationBar({ account, monthlyKrw: alloc.monthly_krw, remainingLimitKrw: remaining, percentOfLimit }),
-        el('p', { class: 'field-help' }, [`잔여 한도의 ${formatPercent(Math.min(1, percentOfLimit))}`]),
+        allocationBar({ account, monthlyKrw: alloc.monthly_krw, remainingLimitKrw: remaining, percentOfLimit, trackScalePercent }),
+        // 바닥값으로 트랙이 눌린 계좌라도 정확한 숫자는 항상 원 단위로 보인다 —
+        // 배율이 "거짓말"하지 않게 하는 장치(D16 지시사항).
+        el('p', { class: 'field-help' }, [`잔여 한도 ${formatKrw(remaining)} · 이 중 ${formatPercent(Math.min(1, percentOfLimit))} 사용`]),
         warning ? el('div', { class: `warning-note warning-note-${warning.severity}` }, [el('p', {}, [warningMessage(warning, scenario.fund_use_horizon_boundaries)])]) : null,
       ]);
     }),

@@ -232,7 +232,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .allocation-bars { display: flex; flex-direction: column; gap: var(--space-4); }
 .allocation-bar-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .allocation-bar-labels { display: flex; justify-content: space-between; margin-bottom: var(--space-1); }
-.alloc-bar-track { height: 20px; border-radius: var(--radius-full); background: var(--data-track); overflow: hidden; cursor: default; }
+.alloc-bar-track { height: 20px; border-radius: var(--radius-full); background: var(--data-track); overflow: hidden; cursor: default; transition: width 240ms ease-out; }
 .alloc-bar-fill { height: 100%; border-radius: var(--radius-full); transition: width 240ms ease-out; }
 
 .stackbar { display: flex; flex-direction: column; gap: var(--space-2); }
