@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 
 import { compute, computeFundUseHorizonBoundaries, SCHEMA_VERSION } from './index.mjs';
 import { boundariesSource } from './boundaries.mjs';
-import { loadRulesets, baseRequest, scenarioOf } from './test-helpers.mjs';
+import { loadRulesets, baseRequest, birthDateForAge, scenarioOf } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
 
@@ -14,7 +14,7 @@ function boundariesRequestFrom(request, scenario = 'current') {
   return {
     schema_version: request.schema_version,
     tax_year: request.tax_year,
-    age_years: request.profile.age_years,
+    birth_date: request.profile.birth_date,
     isa_exists: request.accounts.isa.exists,
     isa_years_since_opening: request.accounts.isa.years_since_opening,
     scenario,
@@ -25,8 +25,8 @@ const CASES = [
   { label: '기본', patch: {} },
   { label: 'ISA 미보유', patch: { accounts: { isa: { exists: false, years_since_opening: null } } } },
   { label: '가입경과연수 미입력', patch: { accounts: { isa: { years_since_opening: null } } } },
-  { label: '연금 개시 연령 이후', patch: { profile: { age_years: 70 } } },
-  { label: '아주 젊은 사용자', patch: { profile: { age_years: 19 } } },
+  { label: '연금 개시 연령 이후', patch: { profile: { birth_date: birthDateForAge(70) } } },
+  { label: '아주 젊은 사용자', patch: { profile: { birth_date: birthDateForAge(19) } } },
   { label: '가입경과연수가 의무기간보다 큼', patch: { accounts: { isa: { years_since_opening: 9 } } } },
 ];
 
@@ -54,7 +54,7 @@ test('두 진입점이 같은 내부 함수를 쓴다', () => {
 
   const request = baseRequest();
   const direct = boundariesSource(
-    { ageYears: 40, isaExists: true, isaYearsSinceOpening: 1 },
+    { birthDate: { year: 1986, month: 3, day: 2 }, isaExists: true, isaYearsSinceOpening: 1 },
     rulesets,
     'current',
     request.tax_year,
@@ -82,7 +82,7 @@ test('경계값은 룰셋에서 온다 — 값을 바꾸면 결과가 따라 바
 
 test('경계값 조회는 소득·납입액·예산을 받지 않아도 동작한다', () => {
   const response = computeFundUseHorizonBoundaries(
-    { schema_version: SCHEMA_VERSION, tax_year: 2026, age_years: 30, isa_exists: false },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, birth_date: birthDateForAge(30), isa_exists: false },
     rulesets,
   );
 
@@ -94,10 +94,10 @@ test('경계값 조회는 소득·납입액·예산을 받지 않아도 동작�
 
 test('경계값 조회도 잘못된 입력을 반환값으로 표현한다', () => {
   const response = computeFundUseHorizonBoundaries(
-    { schema_version: SCHEMA_VERSION, tax_year: 2026, age_years: 30.5, isa_exists: false },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, birth_date: '2026-02-30', isa_exists: false },
     rulesets,
   );
 
   assert.equal(response.ok, false);
-  assert.deepStrictEqual(response.errors.map((e) => e.code), ['not_integer']);
+  assert.deepStrictEqual(response.errors.map((e) => e.code), ['invalid_date']);
 });

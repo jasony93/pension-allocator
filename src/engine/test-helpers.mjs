@@ -41,7 +41,16 @@ export function baseRequest(overrides = {}) {
     tax_year: 2026,
     scenarios: ['current'],
     profile: {
-      age_years: 40,
+      // 만 나이 40이 되는 생년월일. 기준일이 과세기간 종료일(2026-12-31)이므로
+      // 1986-03-02생은 그날 만 40세다. 나이를 바꾸려면 birth_date를 덮어쓴다.
+      birth_date: '1986-03-02',
+      // 기본 요청의 한도는 넉넉하게 둔다 — 기본값이 늘 한도에 걸려 있으면
+      // 한도를 검증하는 테스트가 의미를 잃는다.
+      prior_year_tax: {
+        state: 'amount',
+        determined_tax_krw: 5_000_000,
+        pension_credit_applied_krw: 0,
+      },
       current_year_total_salary_krw: 50_000_000,
       // 서민형 구간 상한 위로 둔다. 기본 요청에서 ISA 유형 교차확인 경고가
       // 늘 켜져 있으면 그 경고를 검증하는 테스트가 의미를 잃는다.
@@ -53,8 +62,8 @@ export function baseRequest(overrides = {}) {
       months_remaining_in_tax_year: 12,
     },
     accounts: {
-      annuity_savings: { ytd_contribution_krw: 0 },
-      retirement_pension: { ytd_contribution_krw: 0 },
+      annuity_savings: { ytd_contribution_krw: 0, annuity_start_status: 'not_started' },
+      retirement_pension: { ytd_contribution_krw: 0, annuity_start_status: 'not_started' },
       isa: {
         exists: true,
         account_type: 'general',
@@ -69,6 +78,15 @@ export function baseRequest(overrides = {}) {
   };
 
   return deepMerge(request, overrides);
+}
+
+/**
+ * 그 과세연도 종료일 기준으로 정확히 `age`세가 되는 생년월일.
+ * 나이로 케이스를 적어 온 기존 테스트가 그 뜻을 잃지 않게 하는 변환이고,
+ * 기준일 자체는 엔진이 정한다(assumptions에 실린다).
+ */
+export function birthDateForAge(age, taxYear = 2026) {
+  return `${taxYear - age}-03-02`;
 }
 
 /** 중첩 객체를 통째로 갈아치우지 않고 병합한다. 픽스처가 조용히 값을 잃지 않게 한다. */

@@ -15,6 +15,7 @@ import {
   planOf,
   allocationOf,
   CONFIRMED_FILE,
+  birthDateForAge,
 } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
@@ -136,7 +137,7 @@ test('ISA 의무가입기간과 연금 개시 연령을 바꾸면 경계값이 �
   ).min_age = 60;
 
   const response = computeFundUseHorizonBoundaries(
-    { schema_version: SCHEMA_VERSION, tax_year: 2026, age_years: 40, isa_exists: true, isa_years_since_opening: 1 },
+    { schema_version: SCHEMA_VERSION, tax_year: 2026, birth_date: birthDateForAge(40), isa_exists: true, isa_years_since_opening: 1 },
     patched,
   );
 

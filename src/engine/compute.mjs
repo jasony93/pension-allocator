@@ -21,10 +21,13 @@ import {
   notice,
   resolveEligibility,
   resolveLimits,
+  resolvePensionStartDates,
   resolveRates,
+  resolveTaxLiabilityCap,
   resolveTransfer,
   resolveWithdrawalOrder,
 } from './limits.mjs';
+import { ageOn, endOfTaxYear, formatIsoDate } from './dates.mjs';
 import { validateBoundariesRequest, validateRequest } from './validate.mjs';
 
 export function compute(request, rulesets) {
@@ -49,6 +52,7 @@ export function compute(request, rulesets) {
   if (errors.length > 0) return failure(request, dedupeErrors(errors));
 
   const months = normalized.profile.months_remaining_in_tax_year;
+  const referenceDate = endOfTaxYear(normalized.tax_year);
   return {
     ok: true,
     schema_version: normalized.schema_version,
@@ -68,6 +72,24 @@ export function compute(request, rulesets) {
         warnings: true,
       },
       credit_rate_bracket: creditRateBracket,
+      // 화면이 만 나이를 만들지 않는다(D21). 환산 결과와 **그 기준일**을 함께 되돌려 주어
+      // 무엇을 기준으로 센 나이인지가 응답만 보고도 드러나게 한다.
+      derived_age: {
+        age_years: ageOn(normalized.profile.birth_date, referenceDate),
+        reference_date: formatIsoDate(referenceDate),
+        // 기준일을 정하는 규칙이 룰셋에 없다. 엔진이 만들지 않았다는 사실을 값으로 낸다.
+        reference_date_from_ruleset: false,
+      },
+      // 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지. fund_use_horizon과 같은 형태의
+      // 자기 선언이고, 값이 고정이라 qa가 실제 동작과 대조할 수 있다.
+      tax_liability_cap_affects: {
+        allocation_amounts: false,
+        tax_credit_amounts: true,
+        limits: false,
+        plan_ordering: false,
+        baseline_selection: false,
+        warnings: false,
+      },
     },
     scenarios: scenarioResults,
     assumptions: buildAssumptions(normalized),
@@ -90,9 +112,22 @@ function computeScenario(scenarioId, request, rulesets) {
   const eligibilityResult = resolveEligibility(access, {
     profile: request.profile,
     accounts: request.accounts,
+    taxYear: request.tax_year,
   });
   notices.push(...eligibilityResult.notices);
   const isaEligible = eligibilityResult.eligibility.find((e) => e.account === ACCOUNT.ISA).eligible;
+
+  // 4.5. 세액 한도. **마지막에 걸리는 상한이 아니라 계산 전체의 전제다**(규칙의 engine_note).
+  const capResult = resolveTaxLiabilityCap(access, { priorYearTax: request.profile.prior_year_tax });
+  notices.push(...capResult.notices);
+
+  // 4.6. 연금으로 꺼낼 수 있는 가장 이른 시점. 배분 비율을 바꾸지 않는다 — 시점만 낸다.
+  const startDateResult = resolvePensionStartDates(access, {
+    birthDate: request.profile.birth_date,
+    taxYear: request.tax_year,
+    accounts: request.accounts,
+  });
+  notices.push(...startDateResult.notices);
 
   // 5~6. 전환 추가한도와 계좌별 한도
   const transferResult = resolveTransfer(access, { request, scenarioId });
@@ -107,14 +142,21 @@ function computeScenario(scenarioId, request, rulesets) {
   notices.push(...limitResult.notices);
 
   const boundaries = boundariesFrom(access, {
-    ageYears: request.profile.age_years,
+    birthDate: request.profile.birth_date,
+    taxYear: request.tax_year,
     isaExists: request.accounts.isa.exists,
     isaYearsSinceOpening: request.accounts.isa.years_since_opening,
   });
 
   // 필요한 규칙이나 값을 하나라도 읽지 못했으면 중단한다. 대체값을 만들지 않는다.
   const missing = access.missing();
-  if (missing.length > 0 || limitResult.limits === null || rates.incomeTaxRate === null) {
+  if (
+    missing.length > 0 ||
+    limitResult.limits === null ||
+    rates.incomeTaxRate === null ||
+    capResult.cap === null ||
+    startDateResult.entries === null
+  ) {
     return { errors: dedupeErrors(missing.length > 0 ? missing : [ruleMissingFallback()]) };
   }
 
@@ -140,7 +182,15 @@ function computeScenario(scenarioId, request, rulesets) {
     rates,
     eligible,
     boundaries,
+    cap: capResult.cap,
+    startDates: startDateResult.entries,
   });
+
+  if (plans.some((plan) => plan.deterministic_benefit.tax_liability_cap.applied)) {
+    notices.push(
+      notice(NOTICE.TAX_CAP_APPLIED, 'info', null, {}, capResult.cap.basis_rule_ids),
+    );
+  }
 
   // 13~14. 안내·근거·메타
   if (request.profile.monthly_capacity_krw === 0) {
@@ -201,6 +251,8 @@ function computeScenario(scenarioId, request, rulesets) {
       bill_stages: collectBillStages(access),
       account_eligibility: eligibilityResult.eligibility,
       limits: limitResult.limits,
+      pension_credit_tax_liability_cap: capResult.cap,
+      pension_withdrawal_start: startDateResult.entries,
       isa_transfer_extra_limit: transferResult.transfer
         ? {
             transfer_amount_krw: transferResult.transfer.amount_krw,
@@ -265,6 +317,38 @@ function buildAssumptions(request) {
   if (request.profile.months_defaulted) {
     add(ASSUMPTION.MONTHS_DEFAULTED, { months: request.profile.months_remaining_in_tax_year });
   }
+
+  // 만 나이의 기준일을 정하는 규칙이 룰셋에 없다. **엔진이 규칙을 만들지 않는다** —
+  // 쓴 값과 그것이 룰셋 근거가 아니라는 사실을 가정으로 내보내고 tax-domain에 넘긴다.
+  // 근거 규칙이 비어 있는 것은 rounding_floor_to_won과 같은 이유다.
+  add(ASSUMPTION.AGE_REFERENCE_DATE, {
+    reference_date: formatIsoDate(endOfTaxYear(request.tax_year)),
+  });
+
+  if (!request.profile.prior_year_tax.pension_credit_provided) {
+    // 되더하기의 가산항을 0으로 두었다. 한도가 과소로 나오는 방향이고,
+    // 과소한 한도는 절세액을 과대로 만들지 않는다.
+    add(ASSUMPTION.PRIOR_PENSION_CREDIT_ZERO, {}, [RULE.CREDIT_TAX_CAP_SOURCE]);
+  }
+  add(ASSUMPTION.LOCAL_TAX_FOLLOWS_CAP, {}, [RULE.CREDIT_TAX_CAP, RULE.LOCAL_SURTAX]);
+
+  const retirementTransferIn =
+    request.accounts.annuity_savings.retirement_transfer_in_krw +
+    request.accounts.retirement_pension.retirement_transfer_in_krw;
+  if (retirementTransferIn > 0) {
+    add(ASSUMPTION.RETIREMENT_TRANSFER_IN_CONTRIBUTION_LIMIT, { amount_krw: retirementTransferIn }, [
+      RULE.CREDIT_EXCLUDED_CONTRIBUTIONS,
+      RULE.PENSION_CONTRIBUTION_LIMIT,
+    ]);
+  }
+  if (
+    [ACCOUNT.ANNUITY, ACCOUNT.PENSION].some(
+      (account) => request.accounts[account].has_deferred_retirement_income === null,
+    )
+  ) {
+    // 없다고 보면 5년 요건이 살아 있어 잠금기간을 길게 본다 = 보수적이다.
+    add(ASSUMPTION.DEFERRED_RETIREMENT_INCOME_ABSENT, {}, [RULE.PENSION_EARLIEST_START]);
+  }
   if (!request.accounts.isa.exists) add(ASSUMPTION.ISA_NEW_ACCOUNT);
   if (!request.accounts.isa.years_since_opening_provided) add(ASSUMPTION.ISA_TENURE_ZERO);
   if (!request.accounts.isa.other_savings_provided) add(ASSUMPTION.OTHER_SAVINGS_ZERO);
@@ -306,7 +390,7 @@ export function computeFundUseHorizonBoundaries(request, rulesets) {
 
   const outcome = boundariesSource(
     {
-      ageYears: normalized.ageYears,
+      birthDate: normalized.birthDate,
       isaExists: normalized.isaExists,
       isaYearsSinceOpening: normalized.isaYearsSinceOpening,
     },

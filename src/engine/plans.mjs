@@ -141,8 +141,59 @@ function allocate(planId, ctx) {
   return { amounts, limitedBy, fillOrder, annuityCounted, pensionCounted, remainingBudget };
 }
 
+/**
+ * 세액 한도를 적용한다. **자르기 전 금액과 자른 뒤 금액을 둘 다 낸다** —
+ * 화면이 "최대 이만큼인데 낼 세금 때문에 이만큼이 된다"를 말하려면 뺄셈의 두 항이 다 필요하고,
+ * 그 뺄셈을 화면이 하게 두면 세법 판단이 화면 코드로 새어 들어간다.
+ *
+ * **자르는 대상은 소득세분이다.** 사용자가 답하는 결정세액이 소득세이고 §61 ②③도 소득세의
+ * 조문이다. 개인지방소득세는 그 소득세액의 10%로 산출되므로, 인정되지 않은 소득세 공제에
+ * 붙는 지방세를 남겨 두면 근거가 사라진 금액이 남는다. 그래서 **인정된 소득세분에 부가율을
+ * 다시 적용한다.** 지방세 쪽에 같은 한도 구조가 있는지는 룰셋이 미확인으로 남겨 두었고,
+ * 그 사실은 assumptions로 나간다.
+ */
+function applyCap(incomeTax, localTax, { cap, rates, access }) {
+  const known = cap.known;
+  const recognizedIncomeTax = known ? Math.min(incomeTax, cap.cap_krw) : incomeTax;
+  const recognizedLocalTax =
+    recognizedIncomeTax === incomeTax ? localTax : applyRate(recognizedIncomeTax, rates.surtaxRate) ?? 0;
+
+  const reducedIncomeTax = incomeTax - recognizedIncomeTax;
+  const applied = known && reducedIncomeTax > 0;
+
+  if (applied) {
+    // 잘린 것은 공제액이고 납입액이 아니다. 그 납입액은 전환 신청의 대상이 된다 —
+    // "넣은 돈이 사라진다"가 아니라 "올해의 공제는 0이고 납입액은 넘길 수 있다"가 정확한 서술이다.
+    access.markUsed(RULE.CREDIT_UNUSED_CARRYOVER, 'plans[].deterministic_benefit.tax_liability_cap');
+  }
+
+  return {
+    recognizedIncomeTax,
+    recognizedLocalTax,
+    cap: {
+      known,
+      cap_krw: cap.cap_krw,
+      applied,
+      reduced_income_tax_krw: reducedIncomeTax,
+      reduced_local_tax_krw: localTax - recognizedLocalTax,
+      reduced_total_krw: incomeTax + localTax - (recognizedIncomeTax + recognizedLocalTax),
+      // 임계값. 낼 세금이 이 값보다 적으면 결과가 달라진다 — 사용자가 나중에
+      // 영수증을 보고 스스로 대조할 수 있게 하는 값이고, 화면이 만들지 않는다.
+      threshold_income_tax_krw: incomeTax,
+      // 초과분의 세액공제액은 이월되지 않는다. 다만 그 납입액은 신청으로 넘길 수 있다.
+      credit_carryforward: cap.credit_carryforward,
+      contribution_carryover_available: applied,
+      error_direction_code: cap.error_direction_code,
+      basis_rule_ids: [
+        ...cap.basis_rule_ids,
+        ...(applied ? [RULE.CREDIT_UNUSED_CARRYOVER] : []),
+      ].sort(),
+    },
+  };
+}
+
 /** 세액공제액. 대상액을 계좌별 공제율로 나눠 적용한다. */
-function benefitOf({ annuityCounted, pensionCounted }, { state, rates }) {
+function benefitOf({ annuityCounted, pensionCounted }, { state, rates, cap, access }) {
   const eligibleTotal = Math.min(annuityCounted + pensionCounted, state.combinedLimit);
 
   // ⚠ 조문이 정하지 않아 엔진이 정한 지점. engine-design.md 6.4절에 전말이 있고
@@ -165,15 +216,26 @@ function benefitOf({ annuityCounted, pensionCounted }, { state, rates }) {
   for (const [rate, amount] of groups) incomeTax += applyRate(amount, rate) ?? 0;
   const localTax = applyRate(incomeTax, rates.surtaxRate) ?? 0;
 
+  const capped = applyCap(incomeTax, localTax, { cap, rates, access });
+
   return {
-    pension_credit_income_tax_krw: incomeTax,
-    pension_credit_local_tax_krw: localTax,
-    pension_credit_total_krw: incomeTax + localTax,
+    pension_credit_income_tax_krw: capped.recognizedIncomeTax,
+    pension_credit_local_tax_krw: capped.recognizedLocalTax,
+    pension_credit_total_krw: capped.recognizedIncomeTax + capped.recognizedLocalTax,
+    // 자르기 전 금액. 화면이 "계산된 공제액 중 얼마가 이번 과세연도에 쓰이지 않는지"를
+    // 말하려면 이 값이 함께 있어야 한다.
+    pension_credit_income_tax_before_cap_krw: incomeTax,
+    pension_credit_local_tax_before_cap_krw: localTax,
+    pension_credit_total_before_cap_krw: incomeTax + localTax,
+    // 세액공제 대상으로 **인정된 납입액**은 한도로 잘리지 않는다. 잘리는 것은 공제액이고
+    // 납입액은 살아남아 전환 신청의 대상이 된다(시행령 §118의3).
     credit_eligible_contribution_krw: eligibleTotal,
+    tax_liability_cap: capped.cap,
     basis_rule_ids: [
       RULE.CREDIT_RATE,
       RULE.CREDIT_LIMIT_ANNUITY,
       RULE.CREDIT_LIMIT_COMBINED,
+      RULE.CREDIT_TAX_CAP,
       RULE.LOCAL_SURTAX,
       ...(rates.youthIrpRate !== null ? [RULE.PROPOSED_YOUTH_IRP_RATE] : []),
     ].sort(),
@@ -181,7 +243,7 @@ function benefitOf({ annuityCounted, pensionCounted }, { state, rates }) {
 }
 
 /** 자금 사용 시점에 따라 걸리는 중도 불이익. 금액은 내지 않는다. */
-function warningsOf(amounts, { horizon, boundaries }) {
+function warningsOf(amounts, { horizon, boundaries, startDates }) {
   if (horizon === HORIZON.AT_OR_AFTER_PENSION_AGE) return [];
 
   const unknown = horizon === HORIZON.UNKNOWN;
@@ -199,15 +261,26 @@ function warningsOf(amounts, { horizon, boundaries }) {
     if (amounts[account] <= 0) continue;
 
     if (PENSION_ACCOUNTS.has(account)) {
+      // 나이 요건만이 아니라 **가입 후 5년 요건까지 반영된 시점**을 함께 싣는다.
+      // 55세에 가까운 사람이 계좌를 처음 여는 경우 실질 잠금기간은 5년이고,
+      // 나이만 보고 만든 문구는 그 사람에게 틀린다.
+      const startDate = startDates?.find((entry) => entry.account === account) ?? null;
       out.push({
         code: WARNING.PENSION_EARLY_WITHDRAWAL,
         account,
         severity,
         trigger,
-        basis_rule_ids: [RULE.PENSION_WITHDRAWAL_ELIGIBILITY, RULE.PENSION_EARLY_WITHDRAWAL_RATE].sort(),
+        basis_rule_ids: [
+          RULE.PENSION_EARLIEST_START,
+          RULE.PENSION_WITHDRAWAL_ELIGIBILITY,
+          RULE.PENSION_EARLY_WITHDRAWAL_RATE,
+        ].sort(),
         params: {
           pension_min_age_years: boundaries.pension_min_age_years,
           pension_years_remaining: boundaries.pension_years_remaining,
+          earliest_start_date: startDate?.earliest_start_date ?? null,
+          years_until_earliest_start: startDate?.years_until_earliest_start ?? null,
+          earliest_start_computable: startDate?.computable ?? false,
         },
       });
     } else if ((unknown || horizon === HORIZON.WITHIN_ISA_LOCK_IN) && isaLockInRemaining > 0) {
@@ -243,8 +316,25 @@ function nonQuantifiedOf(amounts, { state }) {
   ];
 }
 
+/**
+ * 이 배분안이 이름으로 내세운 목적함수가 이 입력에서 순위를 정하지 못하는가.
+ *
+ * 한도가 0이면 연금계좌에 얼마를 넣든 공제액이 0이라 **최대값이 유일하지 않다.**
+ * 그때 엔진이 조용히 아무 배분이나 고르고 `max_tax_credit`이라는 이름을 그대로 달면,
+ * 근거 없는 답을 근거 있는 답처럼 내놓는 것이 된다. 이름이 실제 근거를 말해야 한다는
+ * 원칙(D17·tie_break)이 여기서도 그대로 걸리므로, 이름을 유지하되 **그 이름이 이 입력에서
+ * 아무것도 가르지 못한다는 사실을 값으로** 낸다.
+ *
+ * `isa_first`는 해당하지 않는다. 그 안의 근거는 세액공제가 아니라 인출 가능성이고
+ * (`pension.withdrawal.eligibility`·`early_withdrawal.other_income_rate`), 한도가 0이어도
+ * 그 사실은 그대로 성립한다.
+ */
+function objectiveDegenerate(planId, { cap }) {
+  return cap.known && cap.cap_krw === 0 && planId !== PLAN.ISA_FIRST;
+}
+
 export function buildPlans(ctx) {
-  const { options, horizon, months, budget, access } = ctx;
+  const { options, horizon, months, budget, access, cap } = ctx;
   const requested = options.plan_variants ?? PLAN_ORDER;
 
   // ── 금액 계산. 자금 사용 시점을 읽지 않는다. ──────────────────────
@@ -316,6 +406,7 @@ export function buildPlans(ctx) {
           ...tieBreakOf(planId, ctx).basis_rule_ids,
         ].sort(),
         tie_break: tieBreakOf(planId, ctx),
+        objective_degenerate: objectiveDegenerate(planId, ctx),
       },
       allocations,
       total_allocated_monthly_krw: totalMonthly,
@@ -355,6 +446,12 @@ export function buildPlans(ctx) {
   if (plans[0].plan_id !== PLAN.MAX_CREDIT) comparisonNotes.push(COMPARISON_NOTE.BASELINE_REORDERED);
   if (plans.length > 1 && plans.slice(1).some((p) => p.delta_vs_baseline_krw === 0)) {
     comparisonNotes.push(COMPARISON_NOTE.EQUAL_TAX_CREDIT);
+  }
+  // 한도가 0이면 모든 안의 공제액이 0이라 비교의 축이 사라진다. `alternatives_have_equal_tax_credit`
+  // 만으로는 부족하다 — 그것은 "동률"이라고만 말하고 **왜** 동률인지, 그리고 그 동률이
+  // 앞으로도 어떤 배분에서든 깨지지 않는다는 사실을 말하지 않는다.
+  if (cap.known && cap.cap_krw === 0) {
+    comparisonNotes.push(COMPARISON_NOTE.TAX_CREDIT_AXIS_FLAT);
   }
 
   return { plans, comparisonNotes };

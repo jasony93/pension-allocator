@@ -4,6 +4,7 @@
 // 두 곳에서 따로 조립하면 키 순서 하나로 캡션이 어긋난다.
 
 import { ERROR, RULE, SCENARIO_ORDER } from './constants.mjs';
+import { ageOn, endOfTaxYear } from './dates.mjs';
 import { clampToZero } from './ratio.mjs';
 import { createAccess, selectRulesets, buildLegalBasis } from './ruleset.mjs';
 
@@ -13,7 +14,9 @@ const APPLIED_TO = 'fund_use_horizon_boundaries';
  * 경계값 본체. 이 함수 하나가 두 진입점의 유일한 출처다.
  * 규칙을 읽으면서 access에 근거를 등록하므로, 호출한 쪽의 legal_basis에 그대로 실린다.
  */
-export function boundariesFrom(access, { ageYears, isaExists, isaYearsSinceOpening }) {
+export function boundariesFrom(access, { birthDate, taxYear, isaExists, isaYearsSinceOpening }) {
+  // 만 나이는 여기서 한 번만 만든다. 두 진입점이 이 함수를 공유하므로 환산이 갈릴 자리가 없다.
+  const ageYears = ageOn(birthDate, endOfTaxYear(taxYear));
   const lockInYears = access.value(
     RULE.ISA_ACCOUNT_REQUIREMENTS,
     ['value', 'min_contract_years'],
@@ -69,7 +72,7 @@ export function boundariesSource(input, rulesets, scenarioId, taxYear) {
   if (selection.errors) return { ok: false, errors: selection.errors };
 
   const access = createAccess(selection);
-  const boundaries = boundariesFrom(access, input);
+  const boundaries = boundariesFrom(access, { ...input, taxYear });
 
   const missing = access.missing();
   if (missing.length > 0) return { ok: false, errors: dedupeErrors(missing) };

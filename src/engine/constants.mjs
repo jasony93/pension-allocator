@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '3.3.1';
-export const SUPPORTED_MAJOR = 3;
+export const SCHEMA_VERSION = '4.0.0';
+export const SUPPORTED_MAJOR = 4;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -44,6 +44,53 @@ export const HORIZONS = Object.values(HORIZON);
 export const ISA_ACCOUNT_TYPES = ['general', 'low_income'];
 export const TRANSFER_DESTINATIONS = [ACCOUNT.PENSION, ACCOUNT.ANNUITY];
 
+/** 두 연금계좌만 대상이다. ISA에는 연금수령 개시라는 상태가 없다. */
+export const PENSION_ACCOUNT_KEYS = [ACCOUNT.PENSION, ACCOUNT.ANNUITY];
+
+/**
+ * 연금수령 개시 여부. **boolean이 아니라 세 값짜리 열거형이다.**
+ * `unknown`을 `not_started`로 접으면 수령 중인 사용자에게 납입 가능액을 주게 되고,
+ * 그 오류의 방향이 과대다(tax-rules-report.md 13.12절 주의 2).
+ */
+export const ANNUITY_START = {
+  NOT_STARTED: 'not_started',
+  STARTED: 'started',
+  UNKNOWN: 'unknown',
+};
+
+export const ANNUITY_START_VALUES = Object.values(ANNUITY_START);
+
+/**
+ * 세액 한도를 무엇으로 알았는가. 사용자가 답한 형태를 그대로 나타내는 값이고
+ * 엔진이 상태를 추론해 만들지 않는다.
+ */
+export const PRIOR_TAX_STATE = {
+  /** 결정세액 금액을 안다 */
+  AMOUNT: 'amount',
+  /** 금액은 모르나 "직전 과세연도 결정세액이 0이었다"고 답했다 */
+  ZERO: 'zero',
+  /** "0이 아니었다"까지만 답했다 — 한도의 크기는 여전히 모른다 */
+  NONZERO_AMOUNT_UNKNOWN: 'nonzero_amount_unknown',
+  /** 모르겠다 */
+  UNKNOWN: 'unknown',
+};
+
+export const PRIOR_TAX_STATES = Object.values(PRIOR_TAX_STATE);
+
+/** 한도를 어떻게 얻었는지. `null`이면 한도를 모르는 것이다. */
+export const CAP_SOURCE = {
+  ADD_BACK: 'determined_tax_add_back',
+  DECLARED_ZERO: 'declared_zero',
+};
+
+/** 한도를 모른 채 낸 값이 어느 쪽으로 틀리는가. 조문상 방향이 한쪽으로만 열려 있다. */
+export const CAP_ERROR_DIRECTION = 'overstated_or_equal';
+
+/** 개시 가능 시점을 계산하지 못한 이유. */
+export const START_DATE_REASON = {
+  OPENED_ON_MISSING: 'opened_on_missing',
+};
+
 export const MONTHS_IN_TAX_YEAR = 12;
 
 /**
@@ -80,6 +127,14 @@ export const RULE = {
   ISA_ANNUAL_LIMIT: 'isa.contribution.annual_limit',
   ISA_CLAWBACK: 'isa.early_termination.clawback',
   LOCAL_SURTAX: 'tax.local.personal_income_surtax',
+
+  // 6차 조사(tax-rules-report.md 13절)로 들어온 확정 규칙 6건.
+  CREDIT_TAX_CAP: 'pension.credit.tax_liability_cap',
+  CREDIT_TAX_CAP_SOURCE: 'pension.credit.tax_liability_cap.source_form',
+  CREDIT_UNUSED_CARRYOVER: 'pension.credit.unused.contribution_carryover',
+  CREDIT_EXCLUDED_CONTRIBUTIONS: 'pension.credit.excluded_contributions',
+  CONTRIBUTION_AFTER_ANNUITY_START: 'pension.contribution.after_annuity_start',
+  PENSION_EARLIEST_START: 'pension.withdrawal.earliest_start',
 
   PROPOSED_ISA_ANNUAL_LIMIT: 'proposed.isa.annual_contribution_limit',
   PROPOSED_YOUTH_IRP_RATE: 'proposed.pension.credit.youth_irp_rate',
@@ -145,6 +200,7 @@ export const ERROR = {
   NEGATIVE_VALUE: 'negative_value',
   OUT_OF_RANGE: 'out_of_range',
   INVALID_ENUM: 'invalid_enum',
+  INVALID_DATE: 'invalid_date',
   ISA_TRANSFER_EXCEEDS_CUMULATIVE: 'isa_transfer_exceeds_cumulative',
   ISA_YTD_EXCEEDS_CUMULATIVE: 'isa_ytd_exceeds_cumulative',
   EMPTY_SCENARIOS: 'empty_scenarios',
@@ -174,6 +230,13 @@ export const NOTICE = {
   PLANS_COLLAPSED_SINGLE: 'plans_collapsed_single',
   HORIZON_NOT_DECLARED: 'fund_use_horizon_not_declared',
   PENSION_HOLDING_NOT_EVALUATED: 'pension_holding_period_not_evaluated',
+  TAX_CAP_UNKNOWN: 'tax_liability_cap_unknown',
+  TAX_CAP_ZERO: 'tax_liability_cap_zero',
+  TAX_CAP_APPLIED: 'tax_liability_cap_applied',
+  ANNUITY_STARTED: 'pension_contribution_blocked_annuity_started',
+  ANNUITY_START_UNKNOWN: 'pension_annuity_start_unknown',
+  PENSION_START_DATE_NOT_COMPUTABLE: 'pension_start_date_not_computable',
+  RETIREMENT_TRANSFER_EXCLUDED: 'retirement_transfer_excluded_from_credit',
 };
 
 export const COMPARISON_NOTE = {
@@ -181,6 +244,7 @@ export const COMPARISON_NOTE = {
   ALL_ACCOUNTS_PENALTY: 'all_accounts_have_early_exit_penalty',
   BASELINE_REORDERED: 'baseline_reordered_by_fund_use_horizon',
   EQUAL_TAX_CREDIT: 'alternatives_have_equal_tax_credit',
+  TAX_CREDIT_AXIS_FLAT: 'tax_credit_axis_not_discriminating',
 };
 
 export const WARNING = {
@@ -201,6 +265,11 @@ export const ASSUMPTION = {
   HORIZON_EXCLUDED_FROM_AMOUNTS: 'fund_use_horizon_excluded_from_amounts',
   EARLY_EXIT_NOT_QUANTIFIED: 'early_exit_penalty_not_quantified',
   PENSION_HOLDING_NOT_EVALUATED: 'pension_holding_period_not_evaluated',
+  AGE_REFERENCE_DATE: 'age_reference_date_not_in_ruleset',
+  PRIOR_PENSION_CREDIT_ZERO: 'prior_pension_credit_zero_assumed',
+  RETIREMENT_TRANSFER_IN_CONTRIBUTION_LIMIT: 'retirement_transfer_counted_in_contribution_limit',
+  DEFERRED_RETIREMENT_INCOME_ABSENT: 'deferred_retirement_income_absent_assumed',
+  LOCAL_TAX_FOLLOWS_CAP: 'local_tax_follows_income_tax_cap',
 };
 
 export const LIMITED_BY = {

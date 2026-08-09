@@ -24,7 +24,14 @@ import {
   RULESET_STATUS,
   WARNING,
 } from './constants.mjs';
-import { loadRulesets, baseRequest, deepMerge, PROPOSED_FILE, CONFIRMED_FILE } from './test-helpers.mjs';
+import {
+  loadRulesets,
+  baseRequest,
+  birthDateForAge,
+  deepMerge,
+  PROPOSED_FILE,
+  CONFIRMED_FILE,
+} from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
 
@@ -58,7 +65,7 @@ const PROFILES = [
     label: '청년 · 공제율 경계 위 · 연금저축 기납입 (M1 형태)',
     patch: {
       profile: {
-        age_years: 30,
+        birth_date: birthDateForAge(30),
         current_year_total_salary_krw: 60_000_000,
         prior_year_total_salary_krw: 60_000_000,
         declared_youth: true,
@@ -70,7 +77,7 @@ const PROFILES = [
   {
     label: 'ISA 의무가입기간 경과 (M2·M3 형태)',
     patch: {
-      profile: { age_years: 56 },
+      profile: { birth_date: birthDateForAge(56) },
       accounts: { isa: { cumulative_contribution_krw: 20_000_000, years_since_opening: 3 } },
     },
   },
@@ -85,7 +92,7 @@ const PROFILES = [
   {
     label: 'ISA 배제 (연령)',
     patch: {
-      profile: { age_years: 14, prior_year_total_salary_krw: null },
+      profile: { birth_date: birthDateForAge(14), prior_year_total_salary_krw: null },
       accounts: { isa: { exists: false, account_type: null, years_since_opening: null } },
     },
   },
@@ -104,6 +111,57 @@ const PROFILES = [
     label: 'ISA 미보유 · 유형 미선언',
     patch: {
       accounts: { isa: { exists: false, account_type: null, years_since_opening: null } },
+    },
+  },
+  // ── 세액 한도가 실제로 걸리는 상태들 ────────────────────────────
+  // 한도를 넣기 전의 행렬은 전부 "한도가 넉넉하다"는 한 상태만 돌았다.
+  // 그 행렬에서는 I22~I26이 통과하면서도 아무것도 막지 못한다.
+  {
+    label: '세액 한도 0 (결정세액 0 신고)',
+    patch: { profile: { prior_year_tax: { state: 'zero', determined_tax_krw: null } } },
+  },
+  {
+    label: '세액 한도가 공제액을 자름',
+    patch: {
+      profile: {
+        prior_year_tax: { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+      },
+    },
+  },
+  {
+    label: '세액 한도 모름',
+    patch: { profile: { prior_year_tax: { state: 'unknown', determined_tax_krw: null } } },
+  },
+  {
+    label: '세액 한도 모름 (0은 아니라고 답함)',
+    patch: {
+      profile: { prior_year_tax: { state: 'nonzero_amount_unknown', determined_tax_krw: null } },
+    },
+  },
+  {
+    label: '연금 수령 개시 (퇴직연금)',
+    patch: { accounts: { retirement_pension: { annuity_start_status: 'started' } } },
+  },
+  {
+    label: '연금 수령 개시 여부 모름 (두 계좌)',
+    patch: {
+      accounts: {
+        retirement_pension: { annuity_start_status: 'unknown' },
+        annuity_savings: { annuity_start_status: 'unknown' },
+      },
+    },
+  },
+  {
+    label: '퇴직급여 IRP 입금 · 가입일 있음',
+    patch: {
+      accounts: {
+        retirement_pension: {
+          retirement_transfer_in_krw: 80_000_000,
+          has_deferred_retirement_income: true,
+          opened_on: '2020-05-01',
+        },
+        annuity_savings: { opened_on: '2015-01-02' },
+      },
     },
   },
 ];
@@ -435,6 +493,102 @@ function checkScenario(scenario, response, request, at) {
     }
   }
 
+  // ── 세액 한도 ────────────────────────────────────────────────
+  const cap = scenario.pension_credit_tax_liability_cap;
+
+  // I22 — **인정 공제액은 결코 한도를 넘지 않는다.**
+  // 이 불변식 하나가 §61 ②③의 "그 초과하는 금액은 없는 것으로 한다"를 기계로 고정한다.
+  for (const plan of plans) {
+    const benefit = plan.deterministic_benefit;
+    if (cap.known) {
+      assert.ok(
+        benefit.pension_credit_income_tax_krw <= cap.cap_krw,
+        `${at} I22: 인정 공제액(${benefit.pension_credit_income_tax_krw})이 한도(${cap.cap_krw})를 넘었다`,
+      );
+    } else {
+      // 한도를 모르면 자르지 않는다 — 지어낸 한도로 자르는 것이 더 나쁘다.
+      assert.equal(
+        benefit.pension_credit_income_tax_krw,
+        benefit.pension_credit_income_tax_before_cap_krw,
+        `${at} I22: 한도를 모르는데 값이 잘렸다`,
+      );
+      assert.equal(benefit.tax_liability_cap.applied, false, `${at} I22: 모르는 한도를 적용했다`);
+    }
+  }
+
+  // I23 — 자르기 전 금액과 자른 뒤 금액, 그리고 그 차이가 서로 어긋나지 않는다.
+  // 화면이 "계산된 공제액 중 얼마가 이번 과세연도에 들어 있지 않은지"를 이 셋으로 말한다.
+  for (const plan of plans) {
+    const b = plan.deterministic_benefit;
+    const c = b.tax_liability_cap;
+    assert.ok(
+      b.pension_credit_income_tax_krw <= b.pension_credit_income_tax_before_cap_krw,
+      `${at} I23: 자른 뒤가 자르기 전보다 크다`,
+    );
+    assert.equal(
+      c.reduced_income_tax_krw,
+      b.pension_credit_income_tax_before_cap_krw - b.pension_credit_income_tax_krw,
+      `${at} I23: 잘린 소득세분이 두 값의 차이와 다르다`,
+    );
+    assert.equal(
+      c.reduced_total_krw,
+      b.pension_credit_total_before_cap_krw - b.pension_credit_total_krw,
+      `${at} I23: 잘린 합계가 두 값의 차이와 다르다`,
+    );
+    // 임계값은 "낼 세금이 얼마 아래면 결과가 달라지는가"다. 자르기 전 소득세분이 그 값이다.
+    assert.equal(
+      c.threshold_income_tax_krw,
+      b.pension_credit_income_tax_before_cap_krw,
+      `${at} I23: 임계값이 자르기 전 소득세분과 다르다`,
+    );
+    assert.equal(
+      c.applied,
+      cap.known && c.reduced_income_tax_krw > 0,
+      `${at} I23: 잘림 표시가 실제 잘린 금액과 어긋난다`,
+    );
+    // 잘린 것은 공제액이고 납입액이 아니다. 납입액은 전환 신청의 대상으로 살아남는다.
+    assert.equal(
+      c.contribution_carryover_available,
+      c.applied,
+      `${at} I23: 잘렸는데 납입액 전환 가능 표시가 따라오지 않았다`,
+    );
+  }
+
+  // I24 — 한도가 0이면 세액공제로는 배분안이 갈리지 않는다는 사실이 값으로 나간다.
+  // 조용히 아무 배분이나 고르고 `max_tax_credit`이라는 이름을 다는 것이 이 검사가 막는 것이다.
+  const axisFlat = cap.known && cap.cap_krw === 0;
+  assert.equal(
+    notes.includes(COMPARISON_NOTE.TAX_CREDIT_AXIS_FLAT),
+    axisFlat,
+    `${at} I24: 비교 축 상실 안내가 한도 0 여부와 어긋난다`,
+  );
+  for (const plan of plans) {
+    assert.equal(
+      plan.priority_basis.objective_degenerate,
+      axisFlat && plan.plan_id !== 'isa_first',
+      `${at} I24: ${plan.plan_id}의 목적함수 무력화 표시가 어긋난다`,
+    );
+    if (axisFlat) {
+      assert.equal(
+        plan.deterministic_benefit.pension_credit_total_krw,
+        0,
+        `${at} I24: 한도가 0인데 공제액이 남아 있다`,
+      );
+    }
+  }
+
+  // I25 — 연금수령을 개시했거나 개시 여부를 모르는 계좌에는 배분하지 않는다.
+  // **두 계좌를 구분하지 않는다** — 조문이 '연금계좌'를 대상으로 쓰기 때문이다.
+  for (const account of ['retirement_pension', 'annuity_savings']) {
+    const status = request.accounts[account].annuity_start_status;
+    const entry = scenario.account_eligibility.find((e) => e.account === account);
+    assert.equal(
+      entry.eligible,
+      status === 'not_started',
+      `${at} I25: ${account}의 자격이 연금수령 개시 상태와 어긋난다 (${status})`,
+    );
+  }
+
   // I17 — 코드가 계약 목록 안에 있다
   for (const code of noticeCodes) assert.ok(KNOWN_NOTICES.has(code), `${at} I17: 알 수 없는 안내 코드 ${code}`);
   for (const code of notes) {
@@ -575,6 +729,121 @@ test('I9 — fund_use_horizon 네 값에서 금액·한도가 동일하다', () 
           shapes[0],
           `${label} / [${scenarios}]: ${HORIZONS[i]}의 금액이 ${HORIZONS[0]}과 다르다`,
         );
+      }
+    }
+  }
+});
+
+// I26 — 세액 한도는 배분을 바꾸지 않는다.
+// 계약 4.2절의 `tax_liability_cap_affects` 선언과 실제 동작을 대조한다.
+//
+// **왜 이 선이 필요한가.** "공제를 늘리지 못하는 납입은 넣지 않는다"는 기존 규칙을
+// 한도에까지 밀면, 한도가 0인 사용자의 연금계좌 배분이 0이 된다. 그것은 세법이 정한
+// 결론이 아니다 — 시행령 §118의3이 그 납입액을 이후 과세기간으로 넘길 수 있게 하므로
+// "넣지 마라"는 제품 판단이지 조문의 결론이 아니다. 그래서 한도는 **공제액만** 자른다.
+test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', () => {
+  const CAPS = [
+    { state: 'unknown', determined_tax_krw: null },
+    { state: 'nonzero_amount_unknown', determined_tax_krw: null },
+    { state: 'zero', determined_tax_krw: null },
+    { state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: 0 },
+    { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+    { state: 'amount', determined_tax_krw: 100_000_000, pension_credit_applied_krw: 0 },
+  ];
+
+  const shape = (scenario) => ({
+    limits: scenario.limits,
+    plans: scenario.plans.map((plan) => ({
+      plan_id: plan.plan_id,
+      is_baseline: plan.is_baseline,
+      allocations: plan.allocations.map((a) => [a.account, a.annual_krw, a.limited_by, a.fill_order]),
+      warnings: plan.warnings.map((w) => [w.code, w.account, w.severity]),
+      credit_eligible_krw: plan.deterministic_benefit.credit_eligible_contribution_krw,
+      // 자르기 **전** 금액은 한도의 함수가 아니다. 자른 뒤 금액만 달라져야 한다.
+      before_cap: plan.deterministic_benefit.pension_credit_total_before_cap_krw,
+    })),
+  });
+
+  for (const { label, patch } of PROFILES) {
+    // 한도를 이미 지정한 프로필군은 이 검사의 대상이 아니다 — 여기서 덮어쓰면 같은 것을 두 번 본다.
+    if (JSON.stringify(patch).includes('prior_year_tax')) continue;
+    for (const horizon of HORIZONS) {
+      const shapes = CAPS.map((prior) =>
+        compute(
+          baseRequest(
+            deepMerge(patch, {
+              scenarios: ['current', 'proposed'],
+              profile: { fund_use_horizon: horizon, prior_year_tax: prior },
+            }),
+          ),
+          rulesets,
+        ),
+      );
+
+      for (const response of shapes) {
+        assert.equal(response.ok, true, `${label}: 계산이 실패했다`);
+        assert.deepStrictEqual(response.echo.tax_liability_cap_affects, {
+          allocation_amounts: false,
+          tax_credit_amounts: true,
+          limits: false,
+          plan_ordering: false,
+          baseline_selection: false,
+          warnings: false,
+        });
+      }
+
+      const first = shapes[0].scenarios.map(shape);
+      for (let i = 1; i < shapes.length; i += 1) {
+        assert.deepStrictEqual(
+          shapes[i].scenarios.map(shape),
+          first,
+          `${label} / ${horizon}: 한도 ${CAPS[i].state}에서 배분이 달라졌다`,
+        );
+      }
+    }
+  }
+});
+
+// I27 — **한도를 모를 때의 값은 아는 경우의 값보다 작지 않다.**
+// 룰셋이 확정한 오차 방향(과대이거나 같고 결코 과소일 수 없다)을 기계로 고정한다.
+// 이것이 무너지면 "최대 이만큼"이라는 화면 문구가 근거를 잃는다.
+test('I27 — 한도 미확인의 결과는 언제나 상한이다', () => {
+  const KNOWN = [0, 1, 300_000, 989_999, 990_000, 100_000_000];
+
+  for (const { label, patch } of PROFILES) {
+    if (JSON.stringify(patch).includes('prior_year_tax')) continue;
+    for (const scenarios of SCENARIO_SETS) {
+      const run = (prior) =>
+        compute(
+          baseRequest(deepMerge(patch, { scenarios, profile: { prior_year_tax: prior } })),
+          rulesets,
+        );
+
+      const unknown = run({ state: 'unknown', determined_tax_krw: null });
+      assert.equal(unknown.ok, true);
+
+      for (const determined of KNOWN) {
+        const known = run({
+          state: 'amount',
+          determined_tax_krw: determined,
+          pension_credit_applied_krw: 0,
+        });
+        assert.equal(known.ok, true);
+
+        for (let s = 0; s < known.scenarios.length; s += 1) {
+          const knownPlans = known.scenarios[s].plans;
+          const unknownPlans = unknown.scenarios[s].plans;
+          assert.equal(knownPlans.length, unknownPlans.length, `${label}: 배분안 수가 달라졌다`);
+
+          for (let i = 0; i < knownPlans.length; i += 1) {
+            assert.equal(knownPlans[i].plan_id, unknownPlans[i].plan_id);
+            assert.ok(
+              unknownPlans[i].deterministic_benefit.pension_credit_total_krw >=
+                knownPlans[i].deterministic_benefit.pension_credit_total_krw,
+              `${label} / ${knownPlans[i].plan_id}: 한도를 모를 때의 값이 아는 경우(${determined})보다 작다`,
+            );
+          }
+        }
       }
     }
   }

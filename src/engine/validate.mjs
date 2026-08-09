@@ -4,15 +4,19 @@
 
 import {
   ACCOUNT,
+  ANNUITY_START_VALUES,
   ERROR,
   HORIZONS,
   ISA_ACCOUNT_TYPES,
   MONTHS_IN_TAX_YEAR,
   PLAN_ORDER,
+  PRIOR_TAX_STATE,
+  PRIOR_TAX_STATES,
   SCENARIO_ORDER,
   SUPPORTED_MAJOR,
   TRANSFER_DESTINATIONS,
 } from './constants.mjs';
+import { parseIsoDate } from './dates.mjs';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -70,6 +74,22 @@ class Collector {
   optionalBoolean(value, field) {
     if (value === undefined || value === null) return null;
     return this.requiredBoolean(value, field);
+  }
+
+  /** `YYYY-MM-DD`만 받는다. 달력에 없는 날짜는 `invalid_date`다. */
+  date(value, field, { required }) {
+    if (value === undefined || value === null) {
+      if (required) this.add(ERROR.MISSING_REQUIRED, field);
+      return null;
+    }
+    const parsed = parseIsoDate(value);
+    if (parsed === null) {
+      // 오류 params에 입력값을 되풀이하지 않는다 — 생년월일은 designer가 박은 못 중
+      // "오류 문구에 입력값 되풀이 금지"의 대상이다(D21에서 유지된 여섯 못).
+      this.add(ERROR.INVALID_DATE, field, { format: 'YYYY-MM-DD' });
+      return null;
+    }
+    return parsed;
   }
 
   enumValue(value, field, allowed, { required }) {
@@ -184,7 +204,9 @@ function validateProfile(c, profile) {
   }
 
   return {
-    age_years: c.requiredInt(profile.age_years, 'profile.age_years'),
+    // 만 나이가 아니라 생년월일을 받는다(D21). 환산은 엔진이 하고 기준일은 계산 층에서 정한다.
+    birth_date: c.date(profile.birth_date, 'profile.birth_date', { required: true }),
+    prior_year_tax: validatePriorYearTax(c, profile.prior_year_tax),
     current_year_total_salary_krw: c.requiredInt(
       profile.current_year_total_salary_krw,
       'profile.current_year_total_salary_krw',
@@ -207,6 +229,55 @@ function validateProfile(c, profile) {
   };
 }
 
+/**
+ * 세액 한도의 재료. **결정세액과 연금계좌 세액공제액을 짝으로 받는다.**
+ *
+ * 하나만 받으면 등식이 성립하지 않는다 — 결정세액만 받으면 이미 받은 공제만큼 한도가
+ * 줄어 보이는 순환이 생기고(과소), 공제액만 받으면 한도를 계산할 수조차 없다.
+ * 그래서 두 값을 **한 객체 안에** 두고, 되더하기의 출발점인 결정세액을 그 객체의
+ * 필수 항목으로 만들었다. 짝이라는 사실이 규약이 아니라 자료형으로 강제된다.
+ *
+ * `state`를 따로 두는 이유는 "빈 칸"과 "모르겠습니다"를 가르기 위해서다(D14).
+ * 비어 있는 것을 모름으로 간주하면 사용자의 침묵에서 답을 추론하는 것이 된다.
+ */
+function validatePriorYearTax(c, node) {
+  const field = 'profile.prior_year_tax';
+  if (!isObject(node)) {
+    c.add(ERROR.MISSING_REQUIRED, field);
+    return null;
+  }
+
+  const state = c.enumValue(node.state, `${field}.state`, PRIOR_TAX_STATES, { required: true });
+
+  // 되더하기의 가산항. 미입력이면 0으로 보되 그 사실을 가정으로 낸다 —
+  // 0으로 두면 한도가 과소로 나오고, 과소는 절세액을 과대로 만들지 않는 방향이다.
+  const creditProvided =
+    node.pension_credit_applied_krw !== undefined && node.pension_credit_applied_krw !== null;
+  const pensionCredit = c.optionalInt(
+    node.pension_credit_applied_krw,
+    `${field}.pension_credit_applied_krw`,
+  );
+
+  let determined = null;
+  if (state === PRIOR_TAX_STATE.AMOUNT) {
+    determined = c.requiredInt(node.determined_tax_krw, `${field}.determined_tax_krw`);
+  } else if (node.determined_tax_krw !== undefined && node.determined_tax_krw !== null) {
+    // 금액을 실었는데 state가 금액을 뜻하지 않는다. 둘 중 무엇이 사용자의 답인지
+    // 엔진이 고르면 그것이 추론이다. 고르지 않고 되돌려준다.
+    c.add(ERROR.INVALID_ENUM, `${field}.state`, {
+      value: String(state),
+      reason: 'determined_tax_krw_present',
+    });
+  }
+
+  return {
+    state,
+    determined_tax_krw: determined,
+    pension_credit_applied_krw: pensionCredit ?? 0,
+    pension_credit_provided: creditProvided,
+  };
+}
+
 function validateAccounts(c, accounts) {
   if (!isObject(accounts)) {
     c.add(ERROR.MISSING_REQUIRED, 'accounts');
@@ -224,6 +295,26 @@ function validateAccounts(c, accounts) {
         node.ytd_contribution_krw,
         `accounts.${key}.ytd_contribution_krw`,
       ),
+      // 기본값을 두지 않는다. 이 항목의 기본값 실수는 연금 수령 중인 사용자에게
+      // 납입 가능액을 주는 방향, 즉 **과대** 방향으로 틀린다.
+      annuity_start_status: c.enumValue(
+        node.annuity_start_status,
+        `accounts.${key}.annuity_start_status`,
+        ANNUITY_START_VALUES,
+        { required: true },
+      ),
+      opened_on: c.date(node.opened_on, `accounts.${key}.opened_on`, { required: false }),
+      opened_on_provided: node.opened_on !== undefined && node.opened_on !== null,
+      has_deferred_retirement_income: c.optionalBoolean(
+        node.has_deferred_retirement_income,
+        `accounts.${key}.has_deferred_retirement_income`,
+      ),
+      // 퇴직급여 입금액·계약이전액. **납입 여력과 분리해서 받는다** —
+      // 여력에 섞여 들어오면 세액공제액이 과대 계산된다.
+      retirement_transfer_in_krw: c.optionalInt(
+        node.retirement_transfer_in_krw,
+        `accounts.${key}.retirement_transfer_in_krw`,
+      ) ?? 0,
     };
   };
 
@@ -349,7 +440,8 @@ export function validateBoundariesRequest(request) {
 
   validateSchemaVersion(c, request.schema_version);
   const taxYear = c.requiredInt(request.tax_year, 'tax_year');
-  const ageYears = c.requiredInt(request.age_years, 'age_years');
+  // compute와 같은 이유로 만 나이가 아니라 생년월일을 받는다(D21).
+  const birthDate = c.date(request.birth_date, 'birth_date', { required: true });
   const isaExists = c.requiredBoolean(request.isa_exists, 'isa_exists');
   const yearsSinceOpening = c.optionalInt(request.isa_years_since_opening, 'isa_years_since_opening');
   const scenario =
@@ -362,7 +454,7 @@ export function validateBoundariesRequest(request) {
     normalized: {
       schema_version: request.schema_version,
       taxYear,
-      ageYears,
+      birthDate,
       isaExists,
       isaYearsSinceOpening: yearsSinceOpening,
       isaTenureProvided:

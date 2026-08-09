@@ -13,6 +13,7 @@ import {
   noticeCodes,
   CONFIRMED_FILE,
   PROPOSED_FILE,
+  birthDateForAge,
 } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
@@ -141,7 +142,7 @@ test('ISA 연령 요건 미달이면 ISA만 빠지고 연금계좌 계산은 계
   const scenario = scenarioOf(
     compute(
       baseRequest({
-        profile: { age_years: 14, prior_year_total_salary_krw: null, monthly_capacity_krw: 500_000 },
+        profile: { birth_date: birthDateForAge(14), prior_year_total_salary_krw: null, monthly_capacity_krw: 500_000 },
       }),
       rulesets,
     ),
@@ -238,14 +239,14 @@ test('개정안의 ISA 이월 폐지가 잔여 한도를 줄인다', () => {
 
 test('청년 여부는 엔진이 판정하지 않는다', () => {
   const notDeclared = scenarioOf(
-    compute(baseRequest({ scenarios: ['proposed'], profile: { age_years: 25 } }), rulesets),
+    compute(baseRequest({ scenarios: ['proposed'], profile: { birth_date: birthDateForAge(25) } }), rulesets),
     'proposed',
   );
   assert.ok(noticeCodes(notDeclared).includes('youth_status_not_declared'));
 
   const declared = scenarioOf(
     compute(
-      baseRequest({ scenarios: ['proposed'], profile: { age_years: 25, declared_youth: true } }),
+      baseRequest({ scenarios: ['proposed'], profile: { birth_date: birthDateForAge(25), declared_youth: true } }),
       rulesets,
     ),
     'proposed',
@@ -261,7 +262,7 @@ test('청년 우대는 소득 경계 위에서 IRP 절세액을 실제로 올린
     profile: {
       current_year_total_salary_krw: overBoundary,
       monthly_capacity_krw: 5_000_000,
-      age_years: 25,
+      birth_date: birthDateForAge(25),
     },
   };
 

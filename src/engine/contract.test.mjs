@@ -42,7 +42,7 @@ test('major가 다른 schema_version은 거부한다. minor 차이는 받는다'
 
 test('오류는 첫 번째에서 멈추지 않고 전부 담는다', () => {
   const request = baseRequest();
-  request.profile.age_years = -1;
+  request.profile.current_year_total_salary_krw = -1;
   request.profile.monthly_capacity_krw = -1;
   request.accounts.retirement_pension.ytd_contribution_krw = -1;
 
@@ -63,7 +63,11 @@ test('필수 필드 누락은 missing_required다 — 기본값을 만들지 않
 });
 
 test('자료형 위반의 코드가 구분된다', () => {
-  assert.ok(errorCodes(compute(baseRequest({ profile: { age_years: 40.5 } }), rulesets)).includes('not_integer'));
+  assert.ok(
+    errorCodes(compute(baseRequest({ profile: { current_year_total_salary_krw: 40.5 } }), rulesets)).includes(
+      'not_integer',
+    ),
+  );
   assert.ok(errorCodes(compute(baseRequest({ profile: { fund_use_horizon: 'someday' } }), rulesets)).includes('invalid_enum'));
   assert.ok(errorCodes(compute(baseRequest({ profile: { months_remaining_in_tax_year: 13 } }), rulesets)).includes('out_of_range'));
   assert.ok(errorCodes(compute(baseRequest({ profile: { months_remaining_in_tax_year: 0 } }), rulesets)).includes('out_of_range'));

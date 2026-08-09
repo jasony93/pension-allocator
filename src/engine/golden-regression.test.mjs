@@ -18,6 +18,7 @@ import {
   planOf,
   allocationOf,
   noticeCodes,
+  birthDateForAge,
 } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
@@ -35,7 +36,7 @@ function youthRequest(overrides = {}) {
   return baseRequest(deepMerge({
     scenarios: ['proposed'],
     profile: {
-      age_years: 30,
+      birth_date: birthDateForAge(30),
       current_year_total_salary_krw: 60_000_000,
       prior_year_total_salary_krw: 60_000_000,
       declared_youth: true,
@@ -254,7 +255,7 @@ test('M3 / 모든 안이 실제로 불이익을 지면 그 안내는 그대로 �
 function elapsedLockInRequest(overrides = {}) {
   return baseRequest(deepMerge({
     profile: {
-      age_years: 56,
+      birth_date: birthDateForAge(56),
       current_year_total_salary_krw: 45_000_000,
       prior_year_total_salary_krw: 45_000_000,
       monthly_capacity_krw: 1_000_000,

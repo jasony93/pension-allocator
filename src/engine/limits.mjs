@@ -5,11 +5,26 @@
 import {
   ACCOUNT,
   ACCOUNT_TYPE_IN_RULESET,
+  ANNUITY_START,
+  CAP_ERROR_DIRECTION,
+  CAP_SOURCE,
   ERROR,
   NOTICE,
+  PENSION_ACCOUNT_KEYS,
+  PRIOR_TAX_STATE,
   RULE,
   SCENARIO,
+  START_DATE_REASON,
 } from './constants.mjs';
+import {
+  addYears,
+  ageOn,
+  compareDates,
+  endOfTaxYear,
+  formatIsoDate,
+  maxDate,
+  yearsUntil,
+} from './dates.mjs';
 import { applyRate, clampToZero, effectiveRate } from './ratio.mjs';
 
 /** 룰셋 산식에서 경과연수 상한을 읽는다. 숫자를 코드에 박지 않기 위한 것이다. */
@@ -120,6 +135,159 @@ export function resolveWithdrawalOrder(access) {
   );
 }
 
+/**
+ * 연금계좌 세액공제의 세액 한도.
+ *
+ * **한도 = 결정세액 + 연금계좌 세액공제액.** 이것이 근사가 아니라 등식인 이유는
+ * 소득세법 제61조 제3항이 초과분의 흡수 대상으로 연금계좌세액공제를 이름으로 지목하기
+ * 때문이다 — 밀려난 금액만큼이 정확히 "받지 아니한 것"이 되므로 되더하면 잔여값이 나온다.
+ * 결정세액이 0인 경우에도 성립한다.
+ *
+ * **모를 때 지어내지 않는다.** 대신 오차의 방향을 낸다. 한도는 공제액을 늘리는 경로가
+ * 조문에 없으므로, 한도를 무시한 값은 언제나 과대이거나 같고 결코 과소일 수 없다.
+ */
+export function resolveTaxLiabilityCap(access, { priorYearTax }) {
+  const notices = [];
+  const appliedTo = 'pension_credit_tax_liability_cap.cap_krw';
+
+  // 한도를 모를 때에도 읽는다 — "이 값은 상한이다"라는 진술의 근거가 이 조문 자체다.
+  const creditCarryforward = access.value(
+    RULE.CREDIT_TAX_CAP,
+    ['value', 'excess_treatment', 'credit_carryforward'],
+    appliedTo,
+  );
+  // 사용자가 어느 서식 칸을 보고 답했는지, 그리고 모를 때의 정책이 실린 규칙.
+  access.use(RULE.CREDIT_TAX_CAP_SOURCE, appliedTo);
+
+  if (creditCarryforward === undefined) return { cap: null, notices };
+
+  const priorCredit = priorYearTax.pension_credit_applied_krw;
+  const basisRuleIds = [RULE.CREDIT_TAX_CAP, RULE.CREDIT_TAX_CAP_SOURCE].sort();
+
+  let capKrw = null;
+  let source = null;
+  if (priorYearTax.state === PRIOR_TAX_STATE.AMOUNT) {
+    capKrw = priorYearTax.determined_tax_krw + priorCredit;
+    source = CAP_SOURCE.ADD_BACK;
+  } else if (priorYearTax.state === PRIOR_TAX_STATE.ZERO) {
+    // 결정세액이 0이어도 되더하기는 그대로다. 0 + 이미 받은 연금계좌 세액공제가 잔여값이다.
+    capKrw = priorCredit;
+    source = CAP_SOURCE.DECLARED_ZERO;
+  }
+
+  const known = capKrw !== null;
+  const declaredNonzero =
+    priorYearTax.state === PRIOR_TAX_STATE.NONZERO_AMOUNT_UNKNOWN ||
+    (known && capKrw > 0);
+
+  if (!known) {
+    notices.push(
+      notice(NOTICE.TAX_CAP_UNKNOWN, 'warning', 'profile.prior_year_tax', {
+        error_direction: CAP_ERROR_DIRECTION,
+        declared_nonzero: declaredNonzero,
+      }, basisRuleIds),
+    );
+  } else if (capKrw === 0) {
+    // 오류가 아니라 결과다. 이 사용자에게는 0이 정확한 답이다.
+    notices.push(notice(NOTICE.TAX_CAP_ZERO, 'info', 'profile.prior_year_tax', {}, basisRuleIds));
+  }
+
+  return {
+    notices,
+    cap: {
+      known,
+      cap_krw: capKrw,
+      determined_tax_krw: priorYearTax.determined_tax_krw,
+      prior_pension_credit_krw: known ? priorCredit : null,
+      source_code: source,
+      declared_nonzero: declaredNonzero,
+      // 한도를 모른 채 낸 값은 "이만큼"이 아니라 "최대 이만큼"이다.
+      error_direction_code: known ? null : CAP_ERROR_DIRECTION,
+      // 초과분의 세액공제액은 이월되지 않는다. 룰셋에서 읽은 사실이다.
+      credit_carryforward: creditCarryforward,
+      basis_rule_ids: basisRuleIds,
+    },
+  };
+}
+
+/**
+ * 연금으로 꺼낼 수 있는 가장 이른 시점 = max(만 55세가 되는 날, 가입일부터 5년이 되는 날).
+ * 이연퇴직소득이 있는 계좌는 5년 요건이 면제되므로 나이 요건만으로 정해진다.
+ *
+ * **남은 기간을 배분 비율로 옮기지 않는다.** 세법이 정하는 것은 시점과 그 전에 꺼낼 때의
+ * 세율뿐이고, 그 둘을 비율로 옮기는 것은 제품의 설계 결정이라고 규칙이 명시한다.
+ * 엔진은 시점만 낸다.
+ */
+export function resolvePensionStartDates(access, { birthDate, taxYear, accounts }) {
+  const notices = [];
+  const appliedTo = 'pension_withdrawal_start[].earliest_start_date';
+
+  const requirements = access.value(
+    RULE.PENSION_WITHDRAWAL_ELIGIBILITY,
+    ['value', 'requirements'],
+    appliedTo,
+  );
+  // 두 요건 중 늦은 쪽이 시점을 정한다는 것 자체가 규칙이다. 엔진이 세운 해석이 아니다.
+  const formula = access.value(RULE.PENSION_EARLIEST_START, ['value', 'formula'], appliedTo);
+  if (requirements === undefined || formula === undefined) return { entries: null, notices };
+
+  const ageRequirement = requirements.find((r) => r?.id === 'age');
+  const holdingRequirement = requirements.find((r) => r?.id === 'holding_period');
+  if (typeof ageRequirement?.min_age !== 'number' || typeof holdingRequirement?.min_years !== 'number') {
+    access.value(
+      RULE.PENSION_WITHDRAWAL_ELIGIBILITY,
+      ['value', 'requirements', 'holding_period', 'min_years'],
+      appliedTo,
+    );
+    return { entries: null, notices };
+  }
+
+  const referenceDate = endOfTaxYear(taxYear);
+  const ageDate = addYears(birthDate, ageRequirement.min_age);
+  const basisRuleIds = [RULE.PENSION_EARLIEST_START, RULE.PENSION_WITHDRAWAL_ELIGIBILITY].sort();
+
+  const entries = PENSION_ACCOUNT_KEYS.map((account) => {
+    const state = accounts[account];
+    const waived = state.has_deferred_retirement_income === true;
+    const holdingDate = state.opened_on === null ? null : addYears(state.opened_on, holdingRequirement.min_years);
+
+    let earliest = null;
+    let reasonCode = null;
+    if (waived) {
+      earliest = ageDate;
+    } else if (holdingDate !== null) {
+      earliest = maxDate(ageDate, holdingDate);
+    } else {
+      // 가입일을 모르면 시점을 계산할 수 없다. 남은 기간을 추정하지 않는다.
+      reasonCode = START_DATE_REASON.OPENED_ON_MISSING;
+    }
+
+    return {
+      account,
+      computable: earliest !== null,
+      earliest_start_date: formatIsoDate(earliest),
+      years_until_earliest_start: earliest === null ? null : yearsUntil(referenceDate, earliest),
+      age_requirement_date: formatIsoDate(ageDate),
+      holding_requirement_date: formatIsoDate(holdingDate),
+      holding_requirement_waived: waived,
+      // 나이 요건은 이미 충족했는데 5년 요건이 시점을 늦추는 상태. 55세에 가까운 사람이
+      // 계좌를 처음 열 때 실질 잠금기간이 5년이 되는 것이 이 값으로 드러난다.
+      bound_by_holding_period:
+        earliest !== null && holdingDate !== null && compareDates(holdingDate, ageDate) > 0,
+      reason_code: reasonCode,
+      basis_rule_ids: basisRuleIds,
+    };
+  });
+
+  if (entries.some((entry) => !entry.computable)) {
+    notices.push(
+      notice(NOTICE.PENSION_START_DATE_NOT_COMPUTABLE, 'info', 'accounts.*.opened_on', {}, basisRuleIds),
+    );
+  }
+
+  return { entries, notices };
+}
+
 export function resolveTransfer(access, { request, scenarioId }) {
   const transfer = request.isa_transfer;
   if (transfer === null) return { transfer: null, notices: [] };
@@ -178,8 +346,10 @@ export function resolveTransfer(access, { request, scenarioId }) {
   };
 }
 
-export function resolveEligibility(access, { profile, accounts }) {
+export function resolveEligibility(access, { profile, accounts, taxYear }) {
   const notices = [];
+  // 만 나이는 생년월일에서 여기서 만든다. 화면이 환산하지 않는다(D21).
+  const ageYears = ageOn(profile.birth_date, endOfTaxYear(taxYear));
   const isaReasons = [];
   const isaBasis = [];
 
@@ -192,7 +362,7 @@ export function resolveEligibility(access, { profile, accounts }) {
 
     const qualifies = anyOf.some((option) => {
       if (typeof option?.min_age !== 'number') return false;
-      if (profile.age_years < option.min_age) return false;
+      if (ageYears < option.min_age) return false;
       // `requires`가 있는 선택지는 직전 과세기간 근로소득을 함께 요구한다.
       if (option.requires) return hasPriorEmploymentIncome;
       return true;
@@ -200,7 +370,7 @@ export function resolveEligibility(access, { profile, accounts }) {
 
     if (!qualifies) {
       isaReasons.push(NOTICE.ISA_EXCLUDED_AGE);
-      notices.push(notice(NOTICE.ISA_EXCLUDED_AGE, 'warning', 'profile.age_years', {}, [RULE.ISA_ELIGIBILITY]));
+      notices.push(notice(NOTICE.ISA_EXCLUDED_AGE, 'warning', 'profile.birth_date', {}, [RULE.ISA_ELIGIBILITY]));
     }
   }
 
@@ -223,9 +393,39 @@ export function resolveEligibility(access, { profile, accounts }) {
   // 연금계좌의 최소 가입 연령 규칙은 룰셋에 없다. 없으면 없는 것이므로 판정하지 않는다.
   notices.push(notice(NOTICE.PENSION_AGE_NOT_EVALUATED, 'info', null, {}, []));
 
+  // 연금수령 개시를 신청한 계좌에는 납입할 수 없다. **두 계좌를 구분하지 않는다** —
+  // 조문이 대상을 '연금계좌'로 쓰고 연금저축과 퇴직연금을 가르지 않는다.
+  // 중도인출이 비대칭이었다고 이 항목도 그럴 것이라 보아서는 안 된다(규칙의 asymmetry_finding).
+  const pensionEligibility = PENSION_ACCOUNT_KEYS.map((account) => {
+    const status = accounts[account].annuity_start_status;
+    if (status === ANNUITY_START.NOT_STARTED) {
+      return { account, eligible: true, reason_codes: [], basis_rule_ids: [] };
+    }
+
+    const appliedToAccount = `account_eligibility[${account}]`;
+    access.use(RULE.CONTRIBUTION_AFTER_ANNUITY_START, appliedToAccount);
+
+    // 모름은 아니오가 아니다. 수령 중인 사람에게 납입 가능액을 주는 방향이 과대이므로
+    // 모르는 동안에는 이 계좌의 배분을 보류한다.
+    const code =
+      status === ANNUITY_START.STARTED ? NOTICE.ANNUITY_STARTED : NOTICE.ANNUITY_START_UNKNOWN;
+    notices.push(
+      notice(code, 'warning', `accounts.${account}.annuity_start_status`, { account }, [
+        RULE.CONTRIBUTION_AFTER_ANNUITY_START,
+      ]),
+    );
+
+    return {
+      account,
+      eligible: false,
+      reason_codes: [code],
+      basis_rule_ids: [RULE.CONTRIBUTION_AFTER_ANNUITY_START],
+    };
+  });
+
+  // PENSION_ACCOUNT_KEYS가 계약 6.1절의 계좌 순서 앞 두 칸과 같으므로 순서가 그대로 유지된다.
   const eligibility = [
-    { account: ACCOUNT.PENSION, eligible: true, reason_codes: [], basis_rule_ids: [] },
-    { account: ACCOUNT.ANNUITY, eligible: true, reason_codes: [], basis_rule_ids: [] },
+    ...pensionEligibility,
     {
       account: ACCOUNT.ISA,
       eligible: isaReasons.length === 0,
@@ -234,7 +434,7 @@ export function resolveEligibility(access, { profile, accounts }) {
     },
   ];
 
-  return { eligibility, notices, accountsUnused: accounts };
+  return { eligibility, notices };
 }
 
 export function resolveLimits(access, { request, scenarioId, transfer, isaEligible }) {
@@ -274,6 +474,24 @@ export function resolveLimits(access, { request, scenarioId, transfer, isaEligib
   const transferToPension =
     transfer && transfer.destination === ACCOUNT.PENSION ? transfer.amount_krw : 0;
 
+  // 퇴직급여 입금액·계약이전액은 **세액공제 대상 납입액이 아니다**(소득세법 §59의3 ①1·2).
+  // 그러므로 아래 두 합계에 섞지 않는다 — 섞으면 세액공제액이 과대 계산된다.
+  const retirementTransferIn =
+    accounts.annuity_savings.retirement_transfer_in_krw +
+    accounts.retirement_pension.retirement_transfer_in_krw;
+  if (retirementTransferIn > 0) {
+    access.use(RULE.CREDIT_EXCLUDED_CONTRIBUTIONS, 'limits.retirement_transfer_in_krw');
+    notices.push(
+      notice(
+        NOTICE.RETIREMENT_TRANSFER_EXCLUDED,
+        'info',
+        'accounts.*.retirement_transfer_in_krw',
+        { amount_krw: retirementTransferIn },
+        [RULE.CREDIT_EXCLUDED_CONTRIBUTIONS],
+      ),
+    );
+  }
+
   const annuityTotal = accounts.annuity_savings.ytd_contribution_krw + transferToAnnuity;
   const pensionTotal = accounts.retirement_pension.ytd_contribution_krw + transferToPension;
 
@@ -284,8 +502,16 @@ export function resolveLimits(access, { request, scenarioId, transfer, isaEligib
   const combinedRemainingRaw = combinedLimit - (annuityCounted + pensionTotal);
 
   // 전환금액은 납입 자체의 한도와 별개다(규칙의 excluded_from_limit).
+  //
+  // 퇴직급여 입금액은 다르다. 룰셋이 정한 것은 그 금액이 **세액공제 대상에서** 빠진다는 것뿐이고,
+  // 연간 납입한도(pension.contribution.annual_limit)를 쓰는지는 규칙이 말하지 않는다.
+  // 지어내지 않되 한쪽을 골라야 하므로 **한도를 쓰는 쪽**으로 본다 — 이쪽으로 틀리면 배분이
+  // 작아져 절세액이 과소로 나오고, 반대로 골라 틀리면 실제로 넣을 수 없는 금액을 권하게 된다.
+  // 이 선택은 assumptions에 실려 나가고 engine-interface.md의 open_questions로 tax-domain에 넘겼다.
   const pensionContributionUsed =
-    accounts.annuity_savings.ytd_contribution_krw + accounts.retirement_pension.ytd_contribution_krw;
+    accounts.annuity_savings.ytd_contribution_krw +
+    accounts.retirement_pension.ytd_contribution_krw +
+    retirementTransferIn;
   const pensionContributionRemainingRaw = pensionContributionLimit - pensionContributionUsed;
 
   const overLimit =
@@ -348,6 +574,8 @@ export function resolveLimits(access, { request, scenarioId, transfer, isaEligib
     pension_combined_credit_limit_krw: combinedLimit,
     pension_combined_credit_remaining_krw: combinedRemaining,
     pension_contribution_limit_remaining_krw: pensionContributionRemaining,
+    // 세액공제 대상이 아닌 입금액. 납입 여력과 분리해 받은 값을 분리한 채로 되돌려준다.
+    retirement_transfer_in_krw: retirementTransferIn,
     basis_rule_ids: [
       RULE.CREDIT_LIMIT_ANNUITY,
       RULE.CREDIT_LIMIT_COMBINED,

@@ -543,9 +543,61 @@ function checkScenario(scenario, expected, label) {
   }
 }
 
+/**
+ * 골든 블록에 없는 새 필수 입력을 채운다. **이 함수는 골든 케이스가 지금까지 무엇을
+ * 암묵적으로 전제하고 있었는지를 코드로 적어 둔 것이다.**
+ *
+ * 36건은 프로필에 결정세액이 없는 채로 산출됐고, 그것은 "세액 한도가 절세액을 자르지
+ * 않을 만큼 충분하다"는 전제 위에서만 성립한다. 계약 4.0.0이 그 값을 필수로 만들었으므로
+ * 실행기가 어떤 값이든 넣어야 하는데, **아무 값이나 넣으면 전제가 다시 보이지 않는 곳으로
+ * 숨는다.** 그래서 (a) 한도를 자르지 않는 값을 명시적으로 넣고, (b) 그것이 문서가 아니라
+ * 실행기가 세운 전제임을 여기에 적는다.
+ *
+ * **기대값을 다시 세우는 것은 이 유닛의 일이 아니다.** 세액공제액이 0이 아닌 케이스의
+ * 기대값 재산출과 한도 경계 케이스 추가는 `tax-domain`이 한다(tax-rules-report.md 13.11절).
+ * 그때 블록이 `profile.prior_year_tax`를 직접 실으면 아래 기본값은 덮어써지고 이 함수는
+ * 아무 일도 하지 않는다.
+ *
+ * 생년월일도 같다. 블록은 `age_years`로 나이를 적었고 계약은 이제 생년월일을 받는다.
+ * 나이를 생년월일로 되옮기는 것은 이 실행기가 하며, 기준일은 엔진이 정한다.
+ */
+function fillContractDefaults(raw, taxYear) {
+  const profile = { ...raw.profile };
+  const accounts = { ...raw.accounts };
+
+  if (profile.birth_date === undefined && typeof profile.age_years === 'number') {
+    profile.birth_date = `${taxYear - profile.age_years}-03-02`;
+  }
+  delete profile.age_years;
+
+  if (profile.prior_year_tax === undefined) {
+    profile.prior_year_tax = {
+      state: 'amount',
+      // 어떤 케이스의 공제액보다도 큰 값. 한도가 걸리지 않는 상태를 뜻한다.
+      determined_tax_krw: 100_000_000,
+      pension_credit_applied_krw: 0,
+    };
+  }
+
+  for (const key of ['annuity_savings', 'retirement_pension']) {
+    if (accounts[key] === undefined) continue;
+    accounts[key] = {
+      annuity_start_status: 'not_started',
+      ...accounts[key],
+    };
+  }
+
+  return { ...raw, profile, accounts };
+}
+
 for (const [caseId, { parsed, line }] of cases) {
   test(`골든 케이스 ${caseId} (${DOC_RELATIVE}:${line})`, () => {
-    const request = { schema_version: SCHEMA_VERSION, tax_year: 2026, ...parsed.request };
+    const taxYear = parsed.request.tax_year ?? 2026;
+    const request = {
+      schema_version: SCHEMA_VERSION,
+      tax_year: taxYear,
+      ...fillContractDefaults(parsed.request, taxYear),
+    };
     const response = compute(request, rulesets);
 
     assert.ok(
