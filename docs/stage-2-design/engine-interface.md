@@ -26,7 +26,7 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `3.1.0`.**
+**현재 계약 버전: `3.2.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
@@ -35,6 +35,7 @@ open_questions:
 | `2.1.0` | **게이트 2 마감 판단.** 경계값 전용 진입점 `computeFundUseHorizonBoundaries` 추가(9절). 기존 진입점과 타입은 그대로이므로 minor다 — `2.0.0`에 맞춘 목은 계속 동작한다 |
 | `3.0.0` | **3단계 구현 중 발견된 계약 오류의 정정.** `Plan.delta_vs_baseline_krw`의 "0 이하" 제약을 제거했다(0.1절). `AccountLimit`에 `contribution_limit_shared_with`·`credit_limit_shared_with`를 추가해 계좌 간 공유 한도를 구조로 드러냈다(5.3절) |
 | `3.1.0` | **4단계 교차검증 M2의 정정.** `early_termination_clawback_isa` 경고 조건에 "의무가입기간이 남아 있을 것"을 추가했다(0.2절, 8.4절). 안내 코드 `isa_lock_in_already_elapsed`를 추가했다(8.2절). 필드 추가·제거가 없고 **없어야 할 경고가 사라지는 방향**이라 기존 소비자가 깨지지 않으므로 minor다 |
+| `3.2.0` | **4단계 2차 교차검증 M3의 정정.** `all_accounts_have_early_exit_penalty`의 발생 조건을 8.4절의 경고와 맞췄다(0.3절, 8.5절). `3.1.0`과 같은 이유로 minor다 — **없어야 할 안내가 사라지는 방향**이다 |
 
 ### 0.1 `delta_vs_baseline_krw` 제약을 제거한 경위
 
@@ -61,6 +62,14 @@ open_questions:
 **관리자 판정: 계약을 고친다.** 사실과 다른 경고는 하지 않아도 될 걱정을 시켜 옳은 행동을 막는다. 조건에 `fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0`을 추가했다.
 
 **모순되는 입력을 어떻게 볼 것인가.** 사용자가 `within_isa_lock_in`을 골랐는데 잔여 기간이 0이면 그 선택의 ISA 쪽 절반은 공허해진다. 경고를 끄는 것만으로는 화면이 이 사실을 알 수 없으므로 안내 코드 `isa_lock_in_already_elapsed`(info)를 함께 낸다. **경고가 아니라 사실 통지다** — 법적 불이익이 아니라 입력과 현실이 어긋난다는 정보이고, 다시 물을지 문구를 바꿀지는 화면이 정한다. 연금 쪽 경고는 그대로 유효하다(자금이 곧 필요하다는 사용자의 진술은 연금계좌에 대해서는 여전히 성립한다).
+
+### 0.3 비교 안내를 경고와 묶은 경위 (4단계 M3)
+
+`3.1.0`이 ISA 추징 경고 조건을 좁히자 `isa_first` 배분안의 `warnings`가 빈 배열이 됐다. 그런데 `all_accounts_have_early_exit_penalty`는 `fund_use_horizon` 값만 보고 나가고 있어 **"어느 배분안도 불이익을 피하지 못한다"고 말하면서 실제로는 피하는 안이 목록에 있었다.** 계약이 이 안내를 배분 비교보다 앞세우라고 지시하므로, 사용자가 그것을 보고 비교를 포기하면 더 나은 선택을 놓친다.
+
+**고친 방식:** 조건을 `fund_use_horizon` 값이 아니라 **결과의 사실**에 걸었다 — 모든 배분안이 실제로 경고를 지고 있을 때만 낸다(8.5절).
+
+**이것이 M1과 같은 형태다.** 어떤 전제가 조건부로 바뀌었는데 그 전제를 공유하던 다른 출력이 따라오지 못했다. M1은 D17의 파급을 배분 탐색이 놓쳤고, M3은 M2의 파급을 비교 안내가 놓쳤다. 개별 수정만으로는 세 번째가 나온다. 그래서 **출력 필드 사이의 사실 일관성을 기계적으로 강제하는 불변식 테스트**를 세웠다 — `src/engine/invariants.test.mjs`. 목록과 각 항목이 막는 것은 `engine-design.md` 7.1절에 있다.
 
 **버전 규약 (이 문서가 확정한다).**
 
@@ -602,7 +611,7 @@ accounts.isa               : IsaAccountState
 | 코드 | 언제 |
 |---|---|
 | `plans_collapsed_single` | 배분 벡터가 같아 배분안이 하나로 합쳐짐 |
-| `all_accounts_have_early_exit_penalty` | `fund_use_horizon`이 `within_isa_lock_in`. 세 계좌 전부에 중도 불이익이 걸려 **어느 배분안도 이를 피하지 못한다**. 화면은 배분 비교보다 이 사실을 앞세워야 한다 |
+| `all_accounts_have_early_exit_penalty` | `fund_use_horizon`이 `within_isa_lock_in` **이고 반환된 배분안이 하나도 빠짐없이 `warnings`를 갖고 있을 때**. 뜻은 "어느 배분안도 중도 불이익을 피하지 못한다"이고, 화면은 배분 비교보다 이 사실을 앞세워야 한다. **경고를 지지 않는 안이 하나라도 있으면 나가지 않는다** — 피할 수 있는 선택지가 있는데 없다고 말하지 않기 위해서다(0.3절) |
 | `baseline_reordered_by_fund_use_horizon` | 기본안이 `max_tax_credit`이 아닌 다른 안으로 바뀜 |
 | `alternatives_have_equal_tax_credit` | 둘 이상의 안이 같은 세액공제액을 냄(`delta_vs_baseline_krw`가 0) |
 

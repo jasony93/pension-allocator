@@ -289,8 +289,18 @@ export function buildPlans(ctx) {
 
   const comparisonNotes = [];
   if (plans.length === 1) comparisonNotes.push(COMPARISON_NOTE.PLANS_COLLAPSED_SINGLE);
-  if (horizon === HORIZON.WITHIN_ISA_LOCK_IN) {
-    // 세 계좌 모두 걸리므로 어느 안도 피하지 못한다. 화면이 이 사실을 앞세워야 한다.
+  // 이 안내의 뜻은 "어느 배분안도 불이익을 피하지 못한다"이고, 계약은 이것을
+  // 배분 비교보다 앞세우라고 지시한다. 그러므로 **실제로 모든 안이 경고를 지고 있을 때만**
+  // 낸다. horizon 값만 보고 내면 피할 수 있는 선택지가 있는데 없다고 말하게 된다.
+  //
+  // ⚠ 이 조건은 8.4절 경고 조건과 같은 사실에 의존한다(M2가 ISA 경고에 잔여
+  //   의무가입기간 조건을 붙이자 이 안내가 그 파급을 놓쳐 M3이 됐다).
+  //   경고 조건을 건드리면 여기도 함께 본다 — 불변식 테스트가 그 연결을 강제한다.
+  if (
+    horizon === HORIZON.WITHIN_ISA_LOCK_IN &&
+    plans.length > 0 &&
+    plans.every((plan) => plan.warnings.length > 0)
+  ) {
     comparisonNotes.push(COMPARISON_NOTE.ALL_ACCOUNTS_PENALTY);
   }
   if (plans[0].plan_id !== PLAN.MAX_CREDIT) comparisonNotes.push(COMPARISON_NOTE.BASELINE_REORDERED);
