@@ -4,6 +4,7 @@ import { validateAgents } from './validate-agents.mjs';
 import { validateCharter } from './validate-charter.mjs';
 import { validateRulesDir } from './validate-rules.mjs';
 import { validateArtifactDirs } from './validate-artifact.mjs';
+import { validateCodeDefinitions } from './validate-code-definitions.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -12,6 +13,7 @@ const checks = [
   ['조직 헌장', () => validateCharter(join(ROOT, 'docs', 'org', 'charter.md'))],
   ['세법 룰셋', () => validateRulesDir(join(ROOT, 'data', 'tax-rules'))],
   ['산출물 머리말', () => validateArtifactDirs(ROOT)],
+  ['엔진 코드 정의 자리', () => validateCodeDefinitions(ROOT)],
 ];
 
 let failed = 0;

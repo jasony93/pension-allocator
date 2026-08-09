@@ -26,10 +26,11 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `3.3.0`.**
+**현재 계약 버전: `3.3.1`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
+| `3.3.1` | **D18 — 조건이 두 곳에 적혀 어긋난 것의 정정, 그리고 재발 구조를 없앤 개정.** 8.4절 맺음 문장이 `isa_lock_in_already_elapsed`의 조건을 8.2절과 다르게 적고 있어 좁혀서 8.2절에 맞췄다. 조건을 **한 곳에만** 적게 하는 규약을 8.0절로 세우고 `engine-design.md` 3.2·3.3절의 중복 서술을 참조로 바꿨다. 확정 시나리오의 `tie_break` 값을 5.6절에 명시했다. **엔진 동작은 한 줄도 바뀌지 않았다** — 서술만 정리했으므로 patch다 |
 | `1.0.0` | 최초 계약 (게이트 2 제출본) |
 | `2.0.0` | **게이트 2 D10.** 입력 `profile.risk_profile`을 제거하고 `profile.fund_use_horizon`으로 대체. `Plan.warnings`, `ScenarioResult.fund_use_horizon_boundaries` 추가. `echo.risk_profile*`을 `echo.fund_use_horizon*`으로 교체 |
 | `2.1.0` | **게이트 2 마감 판단.** 경계값 전용 진입점 `computeFundUseHorizonBoundaries` 추가(9절). 기존 진입점과 타입은 그대로이므로 minor다 — `2.0.0`에 맞춘 목은 계속 동작한다 |
@@ -167,7 +168,7 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 
 | 필드 | 자료형 | 단위 | 필수 | 설명 / null일 때 |
 |---|---|---|---|---|
-| `schema_version` | string | — | 필수 | `"3.3.0"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
+| `schema_version` | string | — | 필수 | `"3.3.1"`. major가 다르면 `schema_version_mismatch` 오류(0절) |
 | `tax_year` | integer | 년 | 필수 | 기준 과세연도. 확정 시나리오가 읽을 룰셋을 고른다 |
 | `scenarios` | string[] | — | 필수 | 비어 있지 않은 배열. 값은 `"current"` / `"proposed"`. 중복은 제거된다. 순서는 응답 순서를 정하지 않는다(6.1절) |
 | `profile` | Profile | — | 필수 | 3.1절 |
@@ -439,6 +440,12 @@ accounts.isa               : IsaAccountState
 | `code` | string | `"withdrawal_flexibility_first"` — 두 연금계좌의 한계 공제율이 같아 인출이 자유로운 쪽을 먼저 채웠다. `"not_applicable"` — 공제율이 갈려 세액공제 최대화가 순서를 정했거나, 이름이 이미 순서를 고정한 안이다 |
 | `basis_rule_ids` | string[] | `withdrawal_flexibility_first`일 때 근거 규칙(`pension.withdrawal.midterm_restriction`). 아니면 빈 배열 |
 
+**이 표가 `tie_break.code`의 정의 자리다**(8.0절). 다른 절과 `engine-design.md`는 조건을 다시 적지 않고 여기를 가리킨다.
+
+**확정 시나리오에서는 언제나 `withdrawal_flexibility_first`다.** 확정 룰셋에는 계좌에 따라 공제율이 갈리는 규칙이 없어 두 연금계좌의 한계 공제율이 **언제나** 같다. 따라서 `pension.withdrawal.midterm_restriction`이 룰셋에 있는 한(확정 룰셋에 있다) 확정 시나리오의 `max_tax_credit`·`isa_first`는 소득 구간·나이·`fund_use_horizon`과 무관하게 `tie_break.code`가 `withdrawal_flexibility_first`다. 공제율이 갈리는 것은 개정안 시나리오의 청년 우대뿐이고, 그때만 `not_applicable`이 된다.
+
+**이 문장이 여기 있는 이유.** 계약이 확정 시나리오의 값을 적은 적이 없어 `tax-domain`이 골든 블록의 그 자리를 비워 둘 수밖에 없었다(`golden-cases.md` 6.4절, `verification-report.md` 5차). **값을 지어내지 않고 멈춘 판단이 옳았고, 빈 자리를 메우는 것은 계약의 몫이다.** 이제 확정 시나리오의 `tie_break`를 기대값으로 고정할 수 있다. 엔진 동작은 이 문장 이전과 이후가 같다 — 새로 적은 것이지 새로 정한 것이 아니다.
+
 **`max_tax_credit`이라는 이름이 뜻하는 것.** 이 안은 **언제나 세액공제액을 최대화한다** — 그 보장은 바뀌지 않았다. `tie_break`가 말하는 것은 최대화하는 배분이 여럿일 때 그중 무엇을 골랐는가다. 세액이 갈리는 구간에서는 공제가 큰 쪽이 이기고, 동점 구간에서만 인출 유연성이 순서를 정한다. 경위는 0.4절.
 
 **동점 구간에서는 `max_tax_credit`과 `annuity_savings_first`의 배분이 같아져 하나로 합쳐진다**(6.2절). 남는 비교 대상은 `isa_first`다. 화면은 `plans.length`를 읽어 대응한다.
@@ -578,6 +585,36 @@ accounts.isa               : IsaAccountState
 
 이 목록이 계약의 일부다. 코드를 추가·변경하려면 관리자 승인이 필요하다.
 
+### 8.0 조건은 한 곳에만 적는다 (D18)
+
+**규약.** 코드마다 **정의 자리**가 하나 정해져 있다. 그 코드가 **언제 나가는지는 정의 자리에만 적는다.** 문서의 다른 곳은 조건을 다시 서술하지 않고 **코드 이름으로 가리킨다** — "8.2절의 조건과 같다"로 충분하다.
+
+| 코드 종류 | 정의 자리 |
+|---|---|
+| 오류 코드 | 8.1절 |
+| 안내 코드 | 8.2절 |
+| 가정 코드 | 8.3절 |
+| 경고 코드 | 8.4절 |
+| 비교 안내 코드 | 8.5절 |
+| `tie_break.code` | 5.6절 |
+
+**정의 자리의 형태가 정해져 있다.** 첫 열 머리가 `코드`인 표, 또는 `조건`·`언제`·`무엇을 가정했는가` 열을 가진 표는 **코드 조건 표**로 본다. 그런 표는 8.1~8.5절에만 둔다. 이 문서와 `engine-design.md`를 통틀어 한 코드의 정의 행은 **하나뿐이어야 한다.**
+
+**예외 — 두 표에 함께 실리는 코드.** 같은 사실이 서로 다른 배열로 나가는 경우다. 아래 표에 적힌 것만 예외이고, **예외를 늘리려면 여기에 적어야 한다.** 검사기는 양방향으로 본다 — 여기 없는 이중 등재도, 이중 등재가 아닌데 여기 적힌 것도 실패다.
+
+| 이중 등재 코드 | 실리는 표 | 나가는 배열 |
+|---|---|---|
+| `plans_collapsed_single` | 8.2절 · 8.5절 | `notices` · `comparison_note_codes` |
+| `pension_holding_period_not_evaluated` | 8.2절 · 8.3절 | `notices` · `assumptions` |
+
+**0절은 경위이지 정본이 아니다.** 0절의 서술과 정의 자리가 어긋나면 **정의 자리가 이긴다.** 0절은 왜 그렇게 정해졌는지를 남기는 자리이고, 그 서술은 적힌 시점의 사정을 담는다.
+
+**기계 검사.** `scripts/org/validate-code-definitions.mjs`가 (a) 코드 조건 표가 8.1~8.5절 밖에 생기지 않았는지, (b) 정의 행이 유일한지와 위 예외 목록이 양방향으로 맞는지, (c) 정의 표와 `src/engine/constants.mjs`의 코드 집합이 같은지, (d) 위 "현재 계약 버전"과 `SCHEMA_VERSION`이 같은지를 본다.
+
+**이 검사가 못 보는 것을 분명히 해 둔다.** 검사기는 **표만** 본다. **산문이 조건을 옮겨 적은 것은 잡지 못하며, D18의 결함 자체도 잡지 못했을 것이다** — 그것은 8.4절의 산문 한 문장이었다. 표를 벗어나면 어디까지가 조건 서술이고 어디부터가 정상 참조인지 기계가 가릴 수 없고, 억지로 가리면 "없으면 `missing_required` 오류" 같은 정상 참조 수십 건이 오탐으로 걸린다. **오탐이 잦은 검사는 곧 무시당하고 없는 것만 못하다.** 그래서 검사기는 **조건을 두 번 적을 수 있는 그릇(표)이 생기는 것**을 막고, 산문은 위 규약과 사람이 지킨다. 5.6절의 `tie_break.code`도 표 형태가 달라 검사 밖이다.
+
+**왜 이 규약이 생겼나.** M2·M3·D18이 전부 같은 형태의 결함이었다 — **하나의 사실을 계약 두 곳에 적고 한쪽만 갱신했다.** D18에서는 8.2절과 8.4절이 `isa_lock_in_already_elapsed`에 대해 정반대 답을 내, `tax-domain`이 GC-28의 기대값을 채우다 멈췄다. 개별 수정으로는 네 번째가 나온다. **조건을 두 번 적을 자리를 없애는 것이 고침이다.**
+
 ### 8.1 오류 코드
 
 | 코드 | 언제 |
@@ -607,7 +644,7 @@ accounts.isa               : IsaAccountState
 | `isa_type_conflicts_with_prior_income` | warning | 사용자가 선언한 ISA 유형이 직전 과세기간 소득 기준 판정과 다름. **계산은 사용자 선언을 따른다** |
 | `isa_type_not_declared` | info | ISA 유형 미선언으로 비과세 한도 표시 생략 |
 | `isa_tenure_missing` | warning | ISA 가입경과연수 미입력으로 가장 보수적인 값으로 계산 |
-| `isa_lock_in_already_elapsed` | info | `fund_use_horizon`이 `within_isa_lock_in`인데 의무가입기간이 이미 경과했다. ISA 추징 경고는 성립하지 않아 나가지 않는다(0.2절). 입력과 현실이 어긋난다는 **사실 통지**이며 법적 불이익 고지가 아니다 |
+| `isa_lock_in_already_elapsed` | info | `fund_use_horizon`이 **`within_isa_lock_in`일 때만**이고, 그때 `fund_use_horizon_boundaries.isa_lock_in_years_remaining`이 0이다. 입력과 현실이 어긋난다는 **사실 통지**이며 법적 불이익 고지가 아니다. `fund_use_horizon`이 `"unknown"`이면 나가지 않는다 — `unknown`을 고른 사용자는 어긋날 주장을 한 적이 없다(D18). 이 조건은 **여기에만 적는다**(8.0절) |
 | `financial_income_status_unknown` | info | 금융소득종합과세 대상 여부 미입력으로 배제 규칙 미적용 |
 | `isa_excluded_financial_income_taxpayer` | warning | 금융소득종합과세 대상자로 ISA 배제 |
 | `isa_excluded_age` | warning | 연령 요건 미달로 ISA 배제 |
@@ -646,7 +683,9 @@ accounts.isa               : IsaAccountState
 
 `fund_use_horizon`이 `"unknown"`이면 위 둘을 배분액 > 0인 계좌 전부에 대해 `severity: "info"` · `trigger: "horizon_unknown"`으로 낸다. **ISA 쪽은 이때도 잔여 의무가입기간 조건이 함께 걸린다.** `"at_or_after_pension_age"`면 경고를 내지 않는다.
 
-**잔여 의무가입기간 조건의 근거.** 추징 규칙은 의무가입기간이 되는 날 **전** 해지에만 걸린다. 기간이 지난 계좌에는 추징 위험이 없으므로 경고도 성립하지 않는다. 경위는 0.2절. 이 조건 때문에 경고가 꺼진 경우에는 안내 코드 `isa_lock_in_already_elapsed`가 대신 나간다.
+**잔여 의무가입기간 조건의 근거.** 추징 규칙은 의무가입기간이 되는 날 **전** 해지에만 걸린다. 기간이 지난 계좌에는 추징 위험이 없으므로 경고도 성립하지 않는다. 경위는 0.2절.
+
+**이 조건 때문에 경고가 꺼졌을 때 안내 코드 `isa_lock_in_already_elapsed`가 함께 나가는지는 8.2절이 정한다.** 그 조건은 여기에 다시 적지 않는다 — 두 곳에 적힌 것이 어긋난 것이 D18의 결함이었다(8.0절).
 
 ### 8.5 배분안 비교 안내 코드 (`comparison_note_codes`)
 

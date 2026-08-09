@@ -154,10 +154,12 @@ C7은 **상수가 아니라 산식이다.** `isa.contribution.annual_limit.value
 
 **원칙:** 세제상 동점이면 인출이 자유로운 계좌를 먼저 채운다. 비용이 0이고 이득이 양수인 선택은 기본값이어야 한다.
 
-| 국면 | 순서를 정하는 것 | `tie_break.code` |
-|---|---|---|
-| 두 계좌의 한계 공제율이 다르다 (개정안 청년 우대) | **세액공제 최대화.** 6.4절의 치환이 걸린다 | `not_applicable` |
-| 한계 공제율이 같다 (확정 기준 전부) | 인출 유연성 | `withdrawal_flexibility_first` |
+| 국면 | 순서를 정하는 것 |
+|---|---|
+| 두 계좌의 한계 공제율이 다르다 (개정안 청년 우대) | **세액공제 최대화.** 6.4절의 치환이 걸린다 |
+| 한계 공제율이 같다 (확정 기준 전부) | 인출 유연성 |
+
+**각 국면에서 `tie_break.code`가 무엇이 되는지는 `engine-interface.md` 5.6절이 정한다.** 여기에는 적지 않는다 — 계약 8.0절의 규약이다.
 
 **엔진이 룰셋에서 읽는 것은 사실뿐이다.** 규칙의 `product_note`가 "어느 계좌를 먼저 채울지는 이 규칙이 정하지 않는다"고 명시한다. 엔진은 `partial_withdrawal_without_statutory_cause`라는 불리언을 읽어 계좌를 정렬하고, "동점이면 덜 묶이는 쪽"이라는 판단은 제품 결정으로 남는다. **사유 목록은 미확정이므로 목록에 의존하는 로직을 만들지 않았다** — 쓰는 것은 열거주의라는 구조뿐이다.
 
@@ -171,14 +173,16 @@ C7은 **상수가 아니라 산식이다.** `isa.contribution.annual_limit.value
 
 경고는 **배분안별·계좌별**로 나간다(`Plan.warnings`). 배분액이 0인 계좌에는 경고를 붙이지 않는다 — 넣지 않은 돈에 중도 불이익은 없다.
 
-| 코드 | 조건 | 근거 규칙 |
+**경고 두 코드가 언제 나가는지는 `engine-interface.md` 8.4절이 정한다. 이 절은 그 조건을 다시 적지 않는다**(계약 8.0절). 여기 적는 것은 **왜 그렇게 정했는가**와 **어느 규칙을 근거로 읽는가**다.
+
+| 경고 코드 | 근거로 읽는 규칙 | 그 규칙이 정하는 것 |
 |---|---|---|
-| `early_withdrawal_penalty_pension` | 연금저축 또는 IRP 배분액 > 0 **이고** `fund_use_horizon`이 `within_isa_lock_in` 또는 `before_pension_age` | `pension.withdrawal.eligibility`(연령 요건), `pension.early_withdrawal.other_income_rate`(요건 미충족 인출 시 기타소득 과세) |
-| `early_termination_clawback_isa` | ISA 배분액 > 0 **이고** `fund_use_horizon`이 `within_isa_lock_in` | `isa.early_termination.clawback`(의무가입기간 전 해지 시 감면세액 추징), `isa.account.requirements`(의무가입기간) |
+| `early_withdrawal_penalty_pension` | `pension.withdrawal.eligibility` · `pension.early_withdrawal.other_income_rate` | 연령 요건 / 요건 미충족 인출 시 기타소득 과세 |
+| `early_termination_clawback_isa` | `isa.early_termination.clawback` · `isa.account.requirements` | 의무가입기간 전 해지 시 감면세액 추징 / 의무가입기간 |
 
-`fund_use_horizon`이 `unknown`이면 위 두 경고를 **조건을 판정하지 않은 상태로** 낸다. `severity`는 `warning`이 아니라 `info`이고 `trigger`가 `horizon_unknown`이다. 숨기지 않는 이유는 두 규칙이 조건부 사실이 아니라 확정 규칙이기 때문이고, `warning`으로 올리지 않는 이유는 사용자가 밝히지 않은 사정을 엔진이 단정하는 것이 되기 때문이다.
+**이 표에 조건 열이 없는 것은 의도다.** 4단계 M2가 ISA 경고에 "의무가입기간이 남아 있을 것"을 붙였을 때 이 표는 따라오지 못했고, D18까지 그 상태로 남아 있었다. **읽는 사람에게 두 개의 조건 서술을 주면 둘 중 하나는 언젠가 틀린다.**
 
-`at_or_after_pension_age`면 경고를 내지 않는다. 이 경우 두 규칙의 구성요건이 충족되지 않는다.
+`fund_use_horizon`이 `unknown`일 때 경고를 **숨기지 않는** 이유는 두 규칙이 조건부 사실이 아니라 확정 규칙이기 때문이고, `warning`이 아니라 `info`로 내리는 이유는 사용자가 밝히지 않은 사정을 엔진이 단정하는 것이 되기 때문이다. `at_or_after_pension_age`에서 경고가 없는 이유는 두 규칙의 구성요건이 충족되지 않기 때문이다. **어느 값에서 무엇이 나가는지는 계약 8.4절을 본다.**
 
 **금액은 내지 않는다.** 중도 인출 시 얼마를 물게 되는지는 인출 시점의 운용수익과 세액공제 수령분에 달려 있고, 인출 단계는 v2로 연기됐다(게이트 1 D3). 엔진은 "이 규칙이 걸린다"는 사실과 근거 조항만 내고 금액은 내지 않는다.
 
@@ -453,7 +457,7 @@ C7은 **상수가 아니라 산식이다.** `isa.contribution.annual_limit.value
 |---|---|---|
 | I1 | `all_accounts_have_early_exit_penalty` ∈ 안내 ⟺ 모든 배분안의 `warnings`가 비어 있지 않다 | **M3 재발.** 사실이 아닌 안내가 배분 비교보다 앞서는 것 |
 | I2 | ISA 추징 경고가 있다 ⟹ `isa_lock_in_years_remaining > 0` | **M2 재발.** 성립할 수 없는 법적 불이익 고지 |
-| I3 | `isa_lock_in_already_elapsed` ∈ 안내 ⟺ horizon이 `within_isa_lock_in`이고 잔여가 0 | 경고를 끄면서 그 사실을 알리지 않는 것 |
+| I3 | `isa_lock_in_already_elapsed` ∈ 안내 ⟺ **계약 8.2절의 조건**이 성립 (D18이 좁힌 조건이다 — `unknown`은 포함하지 않는다) | 경고를 끄면서 그 사실을 알리지 않는 것 |
 | I4 | 경고는 배분액 > 0인 계좌에만 붙고, severity·trigger가 horizon과 일치하며, `at_or_after_pension_age`면 하나도 없다 | 넣지 않은 돈에 대한 경고, 밝히지 않은 사정의 단정 |
 | I5 | `baseline_reordered_by_fund_use_horizon` ∈ 안내 ⟺ `plans[0].plan_id !== max_tax_credit` | 기본안이 옮겨 갔는데 화면이 모르는 것 |
 | I6 | `is_baseline`은 정확히 하나이고 `plans[0]`이며 그 안의 `delta_vs_baseline_krw`가 0. 모든 안의 delta = 자기 공제액 − 기본안 공제액 | 기준점과 차이값이 어긋나는 것 |
@@ -474,6 +478,8 @@ C7은 **상수가 아니라 산식이다.** `isa.contribution.annual_limit.value
 | I21 | 배분액 > 0인 **두 연금계좌 모두**에 인출 경고가 붙는다 | 중도인출 제약을 과세 차이로 오해해 경고를 한쪽에만 붙이는 것 |
 
 행렬 테스트는 `tie_break`의 두 값이 **모두 등장했는지**도 확인한다. 한쪽만 도는 행렬에서는 I19가 통과하면서도 아무것도 막지 못한다.
+
+**이 표는 코드의 정의 자리가 아니다**(계약 8.0절). 여기 적힌 것은 **출력 필드 사이의 관계**이고, 어떤 코드가 언제 나가는지의 정본은 계약 8절이다. 관계를 적다 보면 조건을 옮겨 적게 되는데 — I3이 그 예다 — 그런 자리는 계약을 가리키게 두었다. **이 표의 서술은 테스트 코드가 곧바로 강제하므로 어긋나면 `node --test`가 즉시 실패한다.** 산문에만 적힌 서술과 다른 점이 그것이고, D18의 결함이 오래 살아남은 이유도 그것이다.
 
 **금액만 비교하는 회귀 테스트의 함정.** `tax-domain`이 GC-25·GC-26으로 짚었다 — 두 케이스의 개정안 공제액이 우연히 같은데 배분이 정반대다. 금액만 보는 테스트는 조건이 뒤집혀도 통과한다. 회귀 테스트는 **금액·배분·`limited_by`를 함께** 고정한다.
 
