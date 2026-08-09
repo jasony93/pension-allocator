@@ -19,7 +19,8 @@ open_questions:
   - "오류·경고·안내의 사용자 표시 문구를 엔진이 만들지 않고 코드와 파라미터만 낸다(7절). 코드에 대응하는 문구 사전을 designer가 만들어야 한다. 게이트 2 D10으로 경고 코드 두 건이 새로 생겼고(8.4절) screens.md는 아직 그 반영 전이므로, 후속 2차 작업에서 대조가 필요하다."
   - "fund_use_horizon 선택지 캡션의 연수는 사용자의 나이와 ISA 가입경과연수에 따라 달라지므로, 그 둘이 아직 비어 있는 동안에는 캡션을 띄울 수 없다. 경계값 전용 진입점(9절)을 넣어 조회 자체는 가볍게 만들었으나, 캡션이 없는 상태에서 선택지를 어떻게 보일지는 화면의 문제로 남는다. designer와 조율이 필요하다."
   - "연금계좌 가입 경과연수 입력이 없어 pension.withdrawal.eligibility의 보유기간 요건을 반영하지 못한다. 경고가 실제보다 약하게 나갈 수 있고, 입력 항목을 늘릴지는 product-planner·관리자 판정이다. 현재는 assumptions에 담아 드러내는 것으로 처리했다."
-  - "**만 나이의 기준일을 정하는 규칙이 룰셋에 없다.** D21이 '기준일 규칙이 룰셋에 없으면 tax-domain이 만들고, 만들 수 없으면 그 사실이 assumptions에 실려야 한다'고 정했다. 엔진은 규칙을 만들지 않았고, 과세기간 종료일(`{tax_year}-12-31`)로 환산한 뒤 그 사실을 `age_reference_date_not_in_ruleset` 가정으로 낸다. 규칙마다 기준일이 다를 수 있는지(ISA 연령 요건과 연금 55세가 같은 기준일인지)를 tax-domain이 판정해야 한다."
+  - "**만 나이의 기준일은 여전히 엔진이 고른다 — 다만 이제 그 사실에 룰셋 근거가 있다.** `tax-domain`이 `age.reckoning.reference_date`를 만들었고 그 결론이 **'단일 기준일은 존재하지 않는다'**이므로, 엔진이 쓰는 과세기간 종료일(`{tax_year}-12-31`)은 규칙이 생긴 뒤에도 룰셋에서 나온 값이 아니다. 엔진은 그 규칙을 읽어 `age_reference_date_not_in_ruleset` 가정의 근거로 싣고, **어느 요건이 기준일을 필요로 하는지**(`params.requires_reference_date_rule_ids`)를 룰셋에서 읽어 함께 낸다. **가정 코드의 이름이 낡았다** — 뜻은 8.3절이 정의하며, 개명은 계약 변경이라 `web-dev`의 `4.0.0` 구현이 들어온 뒤 계산 기준일 입력과 함께 처리한다(D22)."
+  - "**가정 `age_reference_date_not_in_ruleset`의 `params`에 `requires_reference_date_rule_ids`가 추가됐고 `basis_rule_ids`가 더는 비어 있지 않다.** 더한 것뿐이라 기존 소비자는 깨지지 않으나 계약 표면이 넓어진 것은 사실이고, D22가 이번 회차의 버전 상향을 금지했으므로 `4.0.0`을 유지한 채 여기 적어 둔다. `src/web`의 목이 내는 같은 가정과 어긋나므로 web-dev의 동기화가 필요하다."
   - "**퇴직급여 입금액이 연간 납입한도(1,800만원)를 쓰는지 룰셋이 정하지 않는다.** pension.credit.excluded_contributions가 정한 것은 그 금액이 **세액공제 대상에서** 빠진다는 것뿐이다. 엔진은 납입한도를 쓰는 쪽(배분이 작아지는 = 과소 방향)으로 보고 `retirement_transfer_counted_in_contribution_limit` 가정을 낸다. tax-domain 판정이 필요하다."
   - "**개인지방소득세에 같은 세액 한도 구조가 있는지 미확인이다**(pension.credit.tax_liability_cap의 local_income_tax_note). 엔진은 인정된 소득세분에 부가율을 다시 적용해 지방세분을 낸다 — 인정되지 않은 공제에 붙는 지방세를 남기지 않기 위해서다. `local_tax_follows_income_tax_cap` 가정으로 나간다."
   - "**골든 케이스 36건이 세액 한도 전제 위에서 산출됐다.** 실행기(`src/engine/golden-cases.test.mjs`)가 블록에 없는 `profile.prior_year_tax`를 '한도가 자르지 않는 값'으로 채워 넣고 있고, 그 사실을 함수 주석에 적었다. 기대값 재산출과 한도 경계 케이스 추가는 tax-domain의 몫이다(tax-rules-report.md 13.11절)."
@@ -367,8 +368,12 @@ accounts.isa               : IsaAccountState
 | `fund_use_horizon` | string | — | 요청값 그대로 |
 | `fund_use_horizon_affects` | FundUseHorizonEffect | — | 이 입력이 무엇을 바꾸고 무엇을 바꾸지 않는지. 아래 |
 | `credit_rate_bracket` | CreditRateBracket | — | 어떤 공제율 구간으로 판정됐는지. `{ income_tax_rate, local_tax_rate, effective_rate, basis_rule_ids }`. 세 비율은 룰셋에서 산출된 값이며 숫자는 런타임에 정해진다 |
-| `derived_age` | DerivedAge | — | 생년월일에서 엔진이 만든 만 나이와 **그 기준일.** `{ age_years, reference_date, reference_date_from_ruleset }`. `reference_date_from_ruleset`은 항상 `false`다 — 기준일 규칙이 룰셋에 없다는 사실을 값으로 낸다. **화면은 이 나이를 사용자에게 되비추지 않는다**(designer가 박은 프라이버시 못) |
+| `derived_age` | DerivedAge | — | 생년월일에서 엔진이 만든 만 나이와 **그 기준일.** `{ age_years, reference_date, reference_date_from_ruleset }`. `reference_date_from_ruleset`은 항상 `false`이고, **그 `false`의 뿌리가 규칙의 부재가 아니라 규칙의 내용이다** — 아래 참고. **화면은 이 나이를 사용자에게 되비추지 않는다**(designer가 박은 프라이버시 못) |
 | `tax_liability_cap_affects` | TaxLiabilityCapEffect | — | 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지. 아래 |
+
+**`reference_date_from_ruleset`이 `false`인 이유 (7차에 다시 씀).** 룰셋에 `age.reckoning.reference_date`가 생겼고 **그 규칙의 결론이 "단일 기준일은 존재하지 않는다"이다.** 세법이 정하는 것은 (1) 나이를 세는 방법과 (2) 각 요건이 언제 성립해야 하는가뿐이고, 요건마다 판정 시점이 다르므로 기준일을 하나의 날짜로 만들 수 없다 — 만드는 것이 오히려 틀린다. 그러므로 이 값은 규칙이 생긴 뒤에도 `false`이고, **달라진 것은 그 `false`가 이제 근거를 갖는다는 점이다.** 엔진은 그 규칙을 읽고(`legal_basis`의 `applied_to`가 `echo.derived_age.reference_date`를 가리킨다) 어느 요건이 기준일을 필요로 하는지를 8.3절의 가정에 싣는다.
+
+**요건마다 판정 시점이 다르다는 사실은 이미 두 곳에 값으로 나가 있다.** 기준일을 필요로 하지 않는 쪽(`pension.withdrawal.earliest_start`)은 나이가 아니라 **날짜**로 환원되므로 `pension_withdrawal_start`가 날짜 그 자체를 낸다. 기준일을 필요로 하는 쪽(`isa.eligibility`)은 가정의 `params.requires_reference_date_rule_ids`에 이름으로 실린다. **그 구분이 값으로 나가야 하는 이유**는, 나가지 않으면 화면이 이 가정을 계산 **전체**에 걸린 것으로 읽고 실제로는 ISA 자격 판정 하나에만 걸리기 때문이다. 남은 오차(그 해에 19세가 되는 사람에게 **과대** 방향)는 요청에 계산 시점이 없어 지금 고칠 수 없고, D22가 다음 회차로 미뤘다.
 
 **`FundUseHorizonEffect`** — 값이 고정이다. 계약이 스스로 "이 입력은 금액을 바꾸지 않는다"를 선언하고, `qa`가 게이트 4에서 이 선언과 실제 동작을 대조할 수 있다.
 
@@ -854,7 +859,7 @@ accounts.isa               : IsaAccountState
 | `fund_use_horizon_excluded_from_amounts` | 자금 사용 시점은 배분 금액·세액공제액에 반영하지 않음. 순서와 경고에만 쓰임 |
 | `early_exit_penalty_not_quantified` | 중도 인출·해지 시의 세부담은 금액으로 내지 않음. 인출 단계가 v2로 연기됐고 필요한 수치가 룰셋에 없음 |
 | `pension_holding_period_not_evaluated` | 연금계좌 보유기간 요건은 입력 부재로 판정하지 않음 |
-| `age_reference_date_not_in_ruleset` | **만 나이의 기준일을 정하는 규칙이 룰셋에 없어** 엔진이 과세기간 종료일로 환산함. `params.reference_date` 포함. 룰셋 근거가 아니므로 `basis_rule_ids`가 비어 있다 |
+| `age_reference_date_not_in_ruleset` | **이름이 낡았다. 뜻은 이 칸이 정의한다** — 룰셋 규칙 `age.reckoning.reference_date`가 **단일 기준일은 존재하지 않는다**고 정하므로, 엔진이 만 나이를 환산할 기준일은 여전히 룰셋에서 나오지 않고 엔진이 과세기간 종료일을 골랐다는 뜻이다. `params.reference_date`와 **이 가정이 걸리는 요건의 목록** `params.requires_reference_date_rule_ids`(룰셋의 `no_single_reference_date.per_rule`에서 `needs_reference_date`인 것) 포함. `basis_rule_ids`에 그 규칙이 실린다. **코드 문자열을 바꾸면 계약이 깨지므로** 개명은 계산 기준일 입력과 함께 다음 회차에 처리한다(D22) |
 | `prior_pension_credit_zero_assumed` | 직전 과세연도 연금계좌 세액공제액 미입력으로 0으로 봄. 한도가 과소로 나오는 방향이고 과소한 한도는 절세액을 과대로 만들지 않음 |
 | `retirement_transfer_counted_in_contribution_limit` | 퇴직급여 입금액·계약이전액이 연간 납입한도를 쓰는지 룰셋이 정하지 않아 **쓰는 쪽**(배분이 작아지는 방향)으로 봄. `params.amount_krw` 포함 |
 | `deferred_retirement_income_absent_assumed` | 이연퇴직소득 유무 미입력으로 없는 것으로 봄. 5년 요건이 살아 있어 잠금기간을 길게 보는 방향 |

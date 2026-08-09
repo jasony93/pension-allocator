@@ -9,7 +9,11 @@
 // 옮겨 적을 자리 자체를 두지 않았다. `golden-regression.test.mjs` 머리말이 주석으로
 // 부탁하던 것("엔진에 맞춰 고치지 않는다")을 이 구조가 대신 강제한다.
 //
-// 세 가지가 실패 사유다.
+// 형식과 대조 절차는 `golden-block.mjs`에 있다. 그 파일이 실제로 무는지는
+// `golden-block-format.test.mjs`가 합성 블록으로 시험한다 — 값을 이 파일에 들이지
+// 않으면서 형식을 시험하려고 갈라 둔 것이다.
+//
+// 네 가지가 실패 사유다.
 //   1. 대조 불일치 — 어느 케이스가 깨졌는지 이름이 나온다.
 //   2. **커버리지** — 문서에 `GC-XX`로 등장하는데 블록이 없으면 실패한다.
 //      이 검사가 이 장치의 핵심이다. 없으면 다음에 케이스를 추가한 사람이
@@ -17,6 +21,8 @@
 //   3. **파싱·형식 오류** — 블록이 있는데 읽히지 않으면 조용히 건너뛰지 않고 실패한다.
 //      조용히 건너뛰면 커버리지 검사가 통과하면서 케이스는 안 돌아가는,
 //      가장 나쁜 상태가 된다.
+//   4. **어휘 사용량** — 허용 키가 있는데 47건 어느 블록도 쓰지 않으면 그 축은
+//      아무도 보지 않는다. 검사 4가 그 목록을 고정한다.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +31,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { compute } from './index.mjs';
-import { ACCOUNT_ORDER, PLAN_ORDER, SCENARIO_ORDER, SCHEMA_VERSION } from './constants.mjs';
+import {
+  VOCABULARY,
+  buildRequest,
+  caseIdsIn,
+  checkCase,
+  extractBlocks,
+  validateBlock,
+  vocabularyUsedBy,
+} from './golden-block.mjs';
 import { loadRulesets } from './test-helpers.mjs';
 
 const DOC_RELATIVE = 'docs/stage-4-verification/golden-cases.md';
@@ -33,295 +47,6 @@ const DOC_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', ...DO
 
 const rulesets = loadRulesets();
 const markdown = readFileSync(DOC_PATH, 'utf8');
-
-// ── 블록 형식 ────────────────────────────────────────────────────────────────
-//
-// 허용 키를 전부 열거한다. 오타 난 키를 조용히 무시하면 그 항목은 검사되지 않는데도
-// 검사된 것처럼 보인다 — 지금 문제와 같은 형태의 침묵이다.
-
-const ACCOUNTS = [...ACCOUNT_ORDER];
-const CASE_KEYS = ['case', 'request', 'credit_rate', 'expect'];
-const CREDIT_RATE_KEYS = ['income_tax', 'local_tax', 'effective'];
-const SCENARIO_KEYS = [
-  'plans',
-  'plan_count',
-  'baseline_plan',
-  'isa_eligible',
-  'isa_reason_codes',
-  'limits',
-  'boundaries',
-  'notice_codes',
-  'notice_codes_absent',
-  'comparison_note_codes',
-  'comparison_note_codes_absent',
-];
-const PLAN_KEYS = [
-  'allocation',
-  'tax_credit',
-  'warning_count',
-  'warning_codes',
-  'limited_by',
-  'fill_order',
-  'monthly_krw',
-  'unallocated_krw',
-  'monthly_rounding_residual_krw',
-  'delta_vs_baseline_krw',
-  'credit_eligible_krw',
-  'tie_break',
-  'is_baseline',
-];
-const TAX_CREDIT_KEYS = ['income_tax', 'local_tax', 'total'];
-const LIMIT_KEYS = [
-  'pension_combined_credit_limit_krw',
-  'pension_combined_credit_remaining_krw',
-  'pension_contribution_limit_remaining_krw',
-  'annuity_savings_credit_remaining_krw',
-  'isa_contribution_remaining_krw',
-  'isa_tax_free_limit_krw',
-  'isa_transfer_extra_credit_limit_krw',
-];
-const BOUNDARY_KEYS = [
-  'isa_lock_in_years',
-  'isa_lock_in_years_remaining',
-  'pension_min_age_years',
-  'pension_years_remaining',
-  'pension_holding_period_evaluated',
-];
-
-const CASE_ID = /^GC-\d{2}[a-z]?(-oracle)?$/;
-
-// ── 문서 파싱 ────────────────────────────────────────────────────────────────
-
-/** ```golden 펜스 블록을 본문에서 떼어낸다. 줄 번호는 오류 메시지용이다. */
-function extractBlocks(text) {
-  // 정보 문자열이 정확히 `golden`인 블록만 잡는다. 형식을 설명하는 예시 블록이
-  // 실제 케이스로 오인되면 안 된다.
-  const fence = /^```golden[ \t]*\n([\s\S]*?)^```[ \t]*$/gm;
-  const blocks = [];
-  let stripped = '';
-  let cursor = 0;
-
-  for (let match = fence.exec(text); match !== null; match = fence.exec(text)) {
-    blocks.push({
-      body: match[1],
-      line: text.slice(0, match.index).split('\n').length,
-    });
-    stripped += text.slice(cursor, match.index);
-    cursor = match.index + match[0].length;
-  }
-  stripped += text.slice(cursor);
-
-  return { blocks, prose: stripped };
-}
-
-/**
- * 산문에 등장하는 케이스 ID를 전부 모은다. `GC-15~17`·`GC-18a~d` 같은 범위 표기를
- * 펼치므로, 표에 범위로만 적힌 케이스도 블록을 요구받는다.
- */
-function caseIdsIn(text) {
-  const token = /GC-(\d{2})([a-z]?)(-oracle)?(?:~(\d{2})?([a-z])?)?/g;
-  const ids = new Set();
-  const problems = [];
-
-  for (let match = token.exec(text); match !== null; match = token.exec(text)) {
-    const [raw, num, suffix, oracle, tailNum, tailSuffix] = match;
-
-    if (tailNum === undefined && tailSuffix === undefined) {
-      ids.add(`GC-${num}${suffix}${oracle ?? ''}`);
-      continue;
-    }
-    if (oracle) {
-      problems.push(`범위 표기를 읽을 수 없다: ${raw}`);
-      continue;
-    }
-    if (tailNum === undefined) {
-      // `GC-18a~d` — 같은 번호 안에서 접미사가 이어진다.
-      if (!suffix || tailSuffix < suffix) {
-        problems.push(`범위 표기를 읽을 수 없다: ${raw}`);
-        continue;
-      }
-      for (let c = suffix.charCodeAt(0); c <= tailSuffix.charCodeAt(0); c += 1) {
-        ids.add(`GC-${num}${String.fromCharCode(c)}`);
-      }
-      continue;
-    }
-    // `GC-15~17` — 번호가 이어진다.
-    if (suffix || tailSuffix || Number(tailNum) < Number(num)) {
-      problems.push(`범위 표기를 읽을 수 없다: ${raw}`);
-      continue;
-    }
-    for (let n = Number(num); n <= Number(tailNum); n += 1) {
-      ids.add(`GC-${String(n).padStart(2, '0')}`);
-    }
-  }
-
-  return { ids, problems };
-}
-
-// ── 블록 검증 ────────────────────────────────────────────────────────────────
-
-const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
-
-function unknownKeys(object, allowed, where, errors) {
-  for (const key of Object.keys(object)) {
-    if (!allowed.includes(key)) {
-      errors.push(`${where}: 모르는 키 "${key}" (허용: ${allowed.join(', ')})`);
-    }
-  }
-}
-
-function requireObject(value, where, errors) {
-  if (!isPlainObject(value)) {
-    errors.push(`${where}: 객체여야 한다`);
-    return false;
-  }
-  return true;
-}
-
-function requireInt(value, where, errors) {
-  if (!Number.isInteger(value)) errors.push(`${where}: 정수여야 한다 (받은 값: ${JSON.stringify(value)})`);
-}
-
-function requireStringArray(value, where, errors) {
-  if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
-    errors.push(`${where}: 문자열 배열이어야 한다`);
-  }
-}
-
-function validateAmountMap(value, where, allowed, errors, { exact = false } = {}) {
-  if (!requireObject(value, where, errors)) return;
-  unknownKeys(value, allowed, where, errors);
-  if (exact) {
-    for (const key of allowed) {
-      if (!(key in value)) errors.push(`${where}: "${key}"가 빠졌다 — 세 계좌를 모두 적는다`);
-    }
-  }
-  for (const [key, amount] of Object.entries(value)) {
-    if (allowed.includes(key)) requireInt(amount, `${where}.${key}`, errors);
-  }
-}
-
-function validatePlan(plan, where, errors) {
-  if (!requireObject(plan, where, errors)) return;
-  unknownKeys(plan, PLAN_KEYS, where, errors);
-
-  for (const key of ['allocation', 'tax_credit', 'warning_count']) {
-    if (!(key in plan)) errors.push(`${where}: 필수 항목 "${key}"가 없다`);
-  }
-
-  if ('allocation' in plan) {
-    validateAmountMap(plan.allocation, `${where}.allocation`, ACCOUNTS, errors, { exact: true });
-  }
-  if ('monthly_krw' in plan) {
-    validateAmountMap(plan.monthly_krw, `${where}.monthly_krw`, ACCOUNTS, errors);
-  }
-  if ('tax_credit' in plan) {
-    validateAmountMap(plan.tax_credit, `${where}.tax_credit`, TAX_CREDIT_KEYS, errors, { exact: true });
-    const { income_tax: income, local_tax: local, total } = plan.tax_credit;
-    if ([income, local, total].every(Number.isInteger) && income + local !== total) {
-      errors.push(
-        `${where}.tax_credit: 소득세 ${income} + 지방세 ${local} ≠ 합계 ${total} — 옮겨 적으면서 어긋났다`,
-      );
-    }
-  }
-  if ('warning_count' in plan) requireInt(plan.warning_count, `${where}.warning_count`, errors);
-  if ('warning_codes' in plan) requireStringArray(plan.warning_codes, `${where}.warning_codes`, errors);
-  if ('limited_by' in plan) {
-    if (requireObject(plan.limited_by, `${where}.limited_by`, errors)) {
-      unknownKeys(plan.limited_by, ACCOUNTS, `${where}.limited_by`, errors);
-    }
-  }
-  if ('fill_order' in plan) {
-    if (requireObject(plan.fill_order, `${where}.fill_order`, errors)) {
-      unknownKeys(plan.fill_order, ACCOUNTS, `${where}.fill_order`, errors);
-    }
-  }
-  for (const key of [
-    'unallocated_krw',
-    'monthly_rounding_residual_krw',
-    'delta_vs_baseline_krw',
-    'credit_eligible_krw',
-  ]) {
-    if (key in plan) requireInt(plan[key], `${where}.${key}`, errors);
-  }
-  if ('tie_break' in plan && typeof plan.tie_break !== 'string') {
-    errors.push(`${where}.tie_break: 문자열이어야 한다`);
-  }
-  if ('is_baseline' in plan && typeof plan.is_baseline !== 'boolean') {
-    errors.push(`${where}.is_baseline: 참/거짓이어야 한다`);
-  }
-}
-
-function validateScenario(expectation, where, errors) {
-  if (!requireObject(expectation, where, errors)) return;
-  unknownKeys(expectation, SCENARIO_KEYS, where, errors);
-
-  if (!isPlainObject(expectation.plans) || Object.keys(expectation.plans).length === 0) {
-    errors.push(`${where}.plans: 배분안을 최소 하나 적어야 한다`);
-  } else {
-    for (const [planId, plan] of Object.entries(expectation.plans)) {
-      if (!PLAN_ORDER.includes(planId)) {
-        errors.push(`${where}.plans: 모르는 배분안 "${planId}" (허용: ${PLAN_ORDER.join(', ')})`);
-        continue;
-      }
-      validatePlan(plan, `${where}.plans.${planId}`, errors);
-    }
-  }
-
-  if ('plan_count' in expectation) requireInt(expectation.plan_count, `${where}.plan_count`, errors);
-  if ('baseline_plan' in expectation && !PLAN_ORDER.includes(expectation.baseline_plan)) {
-    errors.push(`${where}.baseline_plan: 모르는 배분안 "${expectation.baseline_plan}"`);
-  }
-  if ('isa_eligible' in expectation && typeof expectation.isa_eligible !== 'boolean') {
-    errors.push(`${where}.isa_eligible: 참/거짓이어야 한다`);
-  }
-  for (const key of [
-    'isa_reason_codes',
-    'notice_codes',
-    'notice_codes_absent',
-    'comparison_note_codes',
-    'comparison_note_codes_absent',
-  ]) {
-    if (key in expectation) requireStringArray(expectation[key], `${where}.${key}`, errors);
-  }
-  if ('limits' in expectation && requireObject(expectation.limits, `${where}.limits`, errors)) {
-    unknownKeys(expectation.limits, LIMIT_KEYS, `${where}.limits`, errors);
-  }
-  if ('boundaries' in expectation && requireObject(expectation.boundaries, `${where}.boundaries`, errors)) {
-    unknownKeys(expectation.boundaries, BOUNDARY_KEYS, `${where}.boundaries`, errors);
-  }
-}
-
-function validateBlock(parsed, where) {
-  const errors = [];
-  if (!requireObject(parsed, where, errors)) return errors;
-
-  unknownKeys(parsed, CASE_KEYS, where, errors);
-
-  if (typeof parsed.case !== 'string' || !CASE_ID.test(parsed.case)) {
-    errors.push(`${where}: "case"가 GC-XX 형태의 케이스 ID여야 한다 (받은 값: ${JSON.stringify(parsed.case)})`);
-  }
-  if (!isPlainObject(parsed.request)) {
-    errors.push(`${where}: "request"가 없다 — compute()에 그대로 넘길 요청이다`);
-  }
-  if ('credit_rate' in parsed && requireObject(parsed.credit_rate, `${where}.credit_rate`, errors)) {
-    unknownKeys(parsed.credit_rate, CREDIT_RATE_KEYS, `${where}.credit_rate`, errors);
-  }
-
-  if (!isPlainObject(parsed.expect) || Object.keys(parsed.expect).length === 0) {
-    errors.push(`${where}: "expect"에 시나리오를 최소 하나 적어야 한다`);
-  } else {
-    for (const [scenarioId, expectation] of Object.entries(parsed.expect)) {
-      if (!SCENARIO_ORDER.includes(scenarioId)) {
-        errors.push(`${where}.expect: 모르는 시나리오 "${scenarioId}" (허용: ${SCENARIO_ORDER.join(', ')})`);
-        continue;
-      }
-      validateScenario(expectation, `${where}.expect.${scenarioId}`, errors);
-    }
-  }
-
-  return errors;
-}
 
 // ── 읽기 ─────────────────────────────────────────────────────────────────────
 
@@ -397,228 +122,101 @@ test('문서의 모든 골든 케이스에 기계가 읽는 블록이 있다', (
 
 // ── 검사 3. 전건 대조 ────────────────────────────────────────────────────────
 
-function planOf(scenario, planId, label) {
-  const plan = scenario.plans.find((p) => p.plan_id === planId);
-  assert.ok(plan, `${label}: 배분안 "${planId}"이 응답에 없다 (있는 것: ${scenario.plans.map((p) => p.plan_id).join(', ')})`);
-  return plan;
-}
-
-function allocationOf(plan, account) {
-  return plan.allocations.find((a) => a.account === account);
-}
-
-function limitValue(scenario, key) {
-  const byAccount = (account) => scenario.limits.by_account.find((l) => l.account === account);
-  switch (key) {
-    case 'annuity_savings_credit_remaining_krw':
-      return byAccount('annuity_savings').credit_eligible_limit_remaining_krw;
-    case 'isa_contribution_remaining_krw':
-      return byAccount('isa').contribution_limit_remaining_krw;
-    case 'isa_tax_free_limit_krw':
-      return byAccount('isa').tax_free_limit_krw;
-    case 'isa_transfer_extra_credit_limit_krw':
-      return scenario.isa_transfer_extra_limit === null
-        ? null
-        : scenario.isa_transfer_extra_limit.extra_credit_limit_krw;
-    default:
-      return scenario.limits[key];
-  }
-}
-
-function checkPlan(plan, expected, label) {
-  for (const account of ACCOUNTS) {
-    assert.equal(
-      allocationOf(plan, account).annual_krw,
-      expected.allocation[account],
-      `${label} 배분(${account})`,
-    );
-  }
-  if (expected.monthly_krw) {
-    for (const [account, amount] of Object.entries(expected.monthly_krw)) {
-      assert.equal(allocationOf(plan, account).monthly_krw, amount, `${label} 월 배분(${account})`);
-    }
-  }
-
-  const benefit = plan.deterministic_benefit;
-  assert.deepStrictEqual(
-    {
-      income_tax: benefit.pension_credit_income_tax_krw,
-      local_tax: benefit.pension_credit_local_tax_krw,
-      total: benefit.pension_credit_total_krw,
-    },
-    expected.tax_credit,
-    `${label} 세액공제`,
-  );
-
-  assert.equal(plan.warnings.length, expected.warning_count, `${label} 경고 건수`);
-  if (expected.warning_codes) {
-    assert.deepStrictEqual(
-      [...new Set(plan.warnings.map((w) => w.code))].sort(),
-      [...expected.warning_codes].sort(),
-      `${label} 경고 코드`,
-    );
-  }
-  if (expected.limited_by) {
-    for (const [account, value] of Object.entries(expected.limited_by)) {
-      assert.equal(allocationOf(plan, account).limited_by, value, `${label} limited_by(${account})`);
-    }
-  }
-  if (expected.fill_order) {
-    for (const [account, value] of Object.entries(expected.fill_order)) {
-      assert.equal(allocationOf(plan, account).fill_order, value, `${label} 충당 순서(${account})`);
-    }
-  }
-  if ('unallocated_krw' in expected) {
-    assert.equal(plan.unallocated_annual_krw, expected.unallocated_krw, `${label} 미배분`);
-  }
-  if ('monthly_rounding_residual_krw' in expected) {
-    assert.equal(
-      plan.monthly_rounding_residual_krw,
-      expected.monthly_rounding_residual_krw,
-      `${label} 월 반올림 잔차`,
-    );
-  }
-  if ('delta_vs_baseline_krw' in expected) {
-    assert.equal(plan.delta_vs_baseline_krw, expected.delta_vs_baseline_krw, `${label} 기본안 대비 차이`);
-  }
-  if ('credit_eligible_krw' in expected) {
-    assert.equal(benefit.credit_eligible_contribution_krw, expected.credit_eligible_krw, `${label} 인정액`);
-  }
-  if ('tie_break' in expected) {
-    assert.equal(plan.priority_basis.tie_break.code, expected.tie_break, `${label} 동점 처리`);
-  }
-  if ('is_baseline' in expected) {
-    assert.equal(plan.is_baseline, expected.is_baseline, `${label} 기본안 여부`);
-  }
-}
-
-function checkScenario(scenario, expected, label) {
-  if ('plan_count' in expected) {
-    assert.equal(
-      scenario.plans.length,
-      expected.plan_count,
-      `${label} 배분안 수 (나온 것: ${scenario.plans.map((p) => p.plan_id).join(', ')})`,
-    );
-  }
-  if ('baseline_plan' in expected) {
-    assert.equal(scenario.plans.find((p) => p.is_baseline).plan_id, expected.baseline_plan, `${label} 기본안`);
-  }
-
-  const isa = scenario.account_eligibility.find((e) => e.account === 'isa');
-  if ('isa_eligible' in expected) assert.equal(isa.eligible, expected.isa_eligible, `${label} ISA 자격`);
-  if (expected.isa_reason_codes) {
-    assert.deepStrictEqual([...isa.reason_codes].sort(), [...expected.isa_reason_codes].sort(), `${label} ISA 자격 사유`);
-  }
-
-  for (const [key, value] of Object.entries(expected.limits ?? {})) {
-    assert.equal(limitValue(scenario, key), value, `${label} 한도(${key})`);
-  }
-  for (const [key, value] of Object.entries(expected.boundaries ?? {})) {
-    assert.equal(scenario.fund_use_horizon_boundaries[key], value, `${label} 경계값(${key})`);
-  }
-
-  const notices = scenario.notices.map((n) => n.code);
-  for (const code of expected.notice_codes ?? []) {
-    assert.ok(notices.includes(code), `${label} 안내 "${code}"가 나와야 한다 (나온 것: ${notices.join(', ')})`);
-  }
-  for (const code of expected.notice_codes_absent ?? []) {
-    assert.equal(notices.includes(code), false, `${label} 안내 "${code}"는 나오면 안 된다`);
-  }
-  for (const code of expected.comparison_note_codes ?? []) {
-    assert.ok(
-      scenario.comparison_note_codes.includes(code),
-      `${label} 비교 안내 "${code}"가 나와야 한다 (나온 것: ${scenario.comparison_note_codes.join(', ')})`,
-    );
-  }
-  for (const code of expected.comparison_note_codes_absent ?? []) {
-    assert.equal(
-      scenario.comparison_note_codes.includes(code),
-      false,
-      `${label} 비교 안내 "${code}"는 나오면 안 된다`,
-    );
-  }
-
-  for (const [planId, plan] of Object.entries(expected.plans)) {
-    checkPlan(planOf(scenario, planId, label), plan, `${label} [${planId}]`);
-  }
-}
-
-/**
- * 골든 블록에 없는 새 필수 입력을 채운다. **이 함수는 골든 케이스가 지금까지 무엇을
- * 암묵적으로 전제하고 있었는지를 코드로 적어 둔 것이다.**
- *
- * 36건은 프로필에 결정세액이 없는 채로 산출됐고, 그것은 "세액 한도가 절세액을 자르지
- * 않을 만큼 충분하다"는 전제 위에서만 성립한다. 계약 4.0.0이 그 값을 필수로 만들었으므로
- * 실행기가 어떤 값이든 넣어야 하는데, **아무 값이나 넣으면 전제가 다시 보이지 않는 곳으로
- * 숨는다.** 그래서 (a) 한도를 자르지 않는 값을 명시적으로 넣고, (b) 그것이 문서가 아니라
- * 실행기가 세운 전제임을 여기에 적는다.
- *
- * **기대값을 다시 세우는 것은 이 유닛의 일이 아니다.** 세액공제액이 0이 아닌 케이스의
- * 기대값 재산출과 한도 경계 케이스 추가는 `tax-domain`이 한다(tax-rules-report.md 13.11절).
- * 그때 블록이 `profile.prior_year_tax`를 직접 실으면 아래 기본값은 덮어써지고 이 함수는
- * 아무 일도 하지 않는다.
- *
- * 생년월일도 같다. 블록은 `age_years`로 나이를 적었고 계약은 이제 생년월일을 받는다.
- * 나이를 생년월일로 되옮기는 것은 이 실행기가 하며, 기준일은 엔진이 정한다.
- */
-function fillContractDefaults(raw, taxYear) {
-  const profile = { ...raw.profile };
-  const accounts = { ...raw.accounts };
-
-  if (profile.birth_date === undefined && typeof profile.age_years === 'number') {
-    profile.birth_date = `${taxYear - profile.age_years}-03-02`;
-  }
-  delete profile.age_years;
-
-  if (profile.prior_year_tax === undefined) {
-    profile.prior_year_tax = {
-      state: 'amount',
-      // 어떤 케이스의 공제액보다도 큰 값. 한도가 걸리지 않는 상태를 뜻한다.
-      determined_tax_krw: 100_000_000,
-      pension_credit_applied_krw: 0,
-    };
-  }
-
-  for (const key of ['annuity_savings', 'retirement_pension']) {
-    if (accounts[key] === undefined) continue;
-    accounts[key] = {
-      annuity_start_status: 'not_started',
-      ...accounts[key],
-    };
-  }
-
-  return { ...raw, profile, accounts };
-}
-
 for (const [caseId, { parsed, line }] of cases) {
   test(`골든 케이스 ${caseId} (${DOC_RELATIVE}:${line})`, () => {
-    const taxYear = parsed.request.tax_year ?? 2026;
-    const request = {
-      schema_version: SCHEMA_VERSION,
-      tax_year: taxYear,
-      ...fillContractDefaults(parsed.request, taxYear),
-    };
-    const response = compute(request, rulesets);
-
-    assert.ok(
-      response.ok,
-      `${caseId}: 계산이 실패했다 — ${JSON.stringify(response.errors)}`,
-    );
-
-    if (parsed.credit_rate) {
-      const bracket = response.echo.credit_rate_bracket;
-      for (const [key, value] of Object.entries(parsed.credit_rate)) {
-        assert.equal(bracket[`${key}_rate`], value, `${caseId} 공제율(${key})`);
-      }
-    }
-
-    for (const [scenarioId, expectation] of Object.entries(parsed.expect)) {
-      const scenario = response.scenarios.find((s) => s.scenario_id === scenarioId);
-      assert.ok(
-        scenario,
-        `${caseId}: 시나리오 "${scenarioId}"가 응답에 없다 — request.scenarios에 넣었는지 본다`,
-      );
-      checkScenario(scenario, expectation, `${caseId}/${scenarioId}`);
-    }
+    checkCase(parsed, compute(buildRequest(parsed), rulesets));
   });
 }
+
+// ── 검사 4. 어휘 사용량 — `qa`가 지적한 "블록이 얼마나 주장하는가" ───────────
+//
+// **커버리지 검사(2)는 블록이 있는지만 본다.** 블록이 있어도 그 안에 아무것도 안 적으면
+// 필수 세 항목만 검사된다. 그러면 어떤 축이 움직여도 정답지가 그 축을 잡지 못하는데,
+// 그것이 6차에 실제로 일어난 일이다(D22).
+//
+// **세는 단위를 허용 키로 잡은 이유 — 다른 형태를 재 보고 버렸다.** `qa`가 말한 것을
+// 글자 그대로 옮기면 "응답의 어떤 필드가 47건 어느 블록에서도 주장되지 않는가"를 세는
+// 형태가 된다. 실측했다: 두 시나리오·근거 포함 응답의 잎 경로가 **155개**인데 넓힌
+// 어휘가 닿는 것은 **50개**다. 나머지 105개의 갈래는 `basis_rule_ids` 18 · `legal_basis`의
+// 법령 문자열·URL 12 · `echo`의 자기 선언 15 · 그 밖(안내의 severity·field·params, 룰셋
+// 메타, 미적용 규칙, 한도의 공유 표시 등) 60이다. **그 105개는 정답지가 다룰 대상이
+// 아니다** — 매 회차 105줄을 내는 검사는 예외 목록만 자라다가 아무도 안 읽는다.
+// 지난번에 산문 검사를 기각한 것과 같은 기준이다.
+//
+// **어휘를 세면 예외가 없다.** 어휘는 블록이 주장할 수 있는 것의 전부이므로, 쓰이지 않은
+// 어휘는 언제나 "그 축을 아무도 보지 않는다"를 뜻한다. 지금 실측치도 그것을 뒷받침한다 —
+// 넓히기 전 어휘 38개 중 34개가 이미 쓰이고 있었고 빈 것은 4개뿐이었다(오탐이 없다).
+//
+// **이 검사가 D22의 결함 자체를 잡지는 못한다.** 이번 결함은 "어휘에 키가 없었다"이지
+// "키가 있는데 안 썼다"가 아니다. 어휘와 계약을 기계로 대조하려면 계약이 기계가 읽는
+// 형태여야 하고 지금은 아니다. 그래서 이 검사가 막는 것은 **다음 회차의 절반** — 키를
+// 넓혀 놓고 아무도 채우지 않는 경우다. 나머지 절반(어휘에 없는 축이 움직이는 경우)은
+// 여전히 사람이 계약과 대조해야 하며, 그 사실을 여기 적어 둔다.
+//
+// 목록이 비어 있지 않은 것은 정상이 아니라 **빚**이다. 갚으면 이 목록에서 지운다.
+
+const UNUSED_VOCABULARY = [
+  // D22가 넓히라고 한 넷. `tax-domain`이 7차에 값을 채우면 아래에서 지운다.
+  // 지우지 않으면 검사가 "이제 쓰이는데 목록에 남아 있다"고 실패한다 — 목록이 스스로
+  // 낡지 않게 하는 장치다.
+  'plan.tax_credit_before_cap',
+  'plan.tax_liability_cap',
+  'plan.objective_degenerate',
+  'scenario.pension_withdrawal_start',
+  'tax_liability_cap.known',
+  'tax_liability_cap.cap_krw',
+  'tax_liability_cap.applied',
+  'tax_liability_cap.threshold_income_tax_krw',
+  'pension_withdrawal_start.computable',
+  'pension_withdrawal_start.earliest_start_date',
+  'pension_withdrawal_start.years_until_earliest_start',
+  'pension_withdrawal_start.age_requirement_date',
+  'pension_withdrawal_start.holding_requirement_date',
+  'pension_withdrawal_start.holding_requirement_waived',
+  'pension_withdrawal_start.bound_by_holding_period',
+  'pension_withdrawal_start.reason_code',
+
+  // 넓히기 이전부터 비어 있던 넷. 6차 이전에는 아무도 세지 않아 드러나지 않았다.
+  //
+  // 경계 연수의 **원값** 둘. 블록은 잔여 연수(`..._remaining`)만 적어 왔고, 그 잔여를
+  // 만들어 낸 룰셋 원값(ISA 의무가입기간·연금 개시연령)은 한 번도 주장하지 않았다.
+  // 잔여가 맞으면 원값도 맞다고 보아 온 셈인데, 나이·가입경과연수가 0인 케이스에서는
+  // 그 함의가 성립하지 않는다. 채울 값이 있는 자리이므로 `tax-domain`에 넘긴다.
+  'boundaries.isa_lock_in_years',
+  'boundaries.pension_min_age_years',
+
+  // 공제율의 지방세분과 실효율은 소득세율에서 산출되는 값이라 블록이 소득세율만
+  // 적어 왔다. 산출식이 맞는지는 `ruleset-driven.test.mjs`가 룰셋에서 직접 보지만,
+  // **정답지는 그 축을 한 번도 주장하지 않았다**는 사실은 남는다.
+  'credit_rate.local_tax',
+  'credit_rate.effective',
+].sort();
+
+test('블록이 쓰지 않는 허용 키가 기록된 목록과 정확히 같다', () => {
+  const used = new Set();
+  for (const [, { parsed }] of cases) {
+    for (const key of vocabularyUsedBy(parsed)) used.add(key);
+  }
+  const unused = VOCABULARY.filter((key) => !used.has(key)).sort();
+
+  const newlyUnused = unused.filter((key) => !UNUSED_VOCABULARY.includes(key));
+  const nowUsed = UNUSED_VOCABULARY.filter((key) => used.has(key));
+
+  const report = [];
+  if (newlyUnused.length > 0) {
+    report.push(
+      `${cases.size}건 어느 블록도 쓰지 않는 허용 키가 새로 ${newlyUnused.length}건 생겼다:`,
+      ...newlyUnused.map((key) => `  - ${key}`),
+      '',
+      '값을 채우거나(권장), 채울 수 없는 이유와 함께 UNUSED_VOCABULARY에 적는다.',
+    );
+  }
+  if (nowUsed.length > 0) {
+    report.push(
+      `UNUSED_VOCABULARY에 적혀 있는데 이제 쓰이는 키 ${nowUsed.length}건 — 목록에서 지운다:`,
+      ...nowUsed.map((key) => `  - ${key}`),
+    );
+  }
+
+  assert.equal(report.length, 0, report.join('\n'));
+});

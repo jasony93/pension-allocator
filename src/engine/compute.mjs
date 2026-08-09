@@ -19,6 +19,7 @@ import { buildLegalBasis, createAccess, selectRulesets } from './ruleset.mjs';
 import { effectiveRate } from './ratio.mjs';
 import {
   notice,
+  resolveAgeReckoning,
   resolveEligibility,
   resolveLimits,
   resolvePensionStartDates,
@@ -38,6 +39,7 @@ export function compute(request, rulesets) {
   const scenarioResults = [];
   const errors = [];
   let creditRateBracket = null;
+  let ageReckoning = null;
 
   for (const scenarioId of normalized.scenarios) {
     const outcome = computeScenario(scenarioId, normalized, rulesets);
@@ -47,6 +49,8 @@ export function compute(request, rulesets) {
     }
     scenarioResults.push(outcome.scenario);
     creditRateBracket ??= outcome.creditRateBracket;
+    // 나이 계산 규칙은 개정 대상이 아니므로 두 시나리오에서 같다.
+    ageReckoning ??= outcome.ageReckoning;
   }
 
   if (errors.length > 0) return failure(request, dedupeErrors(errors));
@@ -77,8 +81,10 @@ export function compute(request, rulesets) {
       derived_age: {
         age_years: ageOn(normalized.profile.birth_date, referenceDate),
         reference_date: formatIsoDate(referenceDate),
-        // 기준일을 정하는 규칙이 룰셋에 없다. 엔진이 만들지 않았다는 사실을 값으로 낸다.
-        reference_date_from_ruleset: false,
+        // 룰셋 규칙 `age.reckoning.reference_date`가 **단일 기준일은 존재하지 않는다**고
+        // 정한다. 그래서 이 값은 여전히 `false`이고, 그 `false`는 이제 규칙의 부재가
+        // 아니라 규칙의 내용이다. 값은 그 규칙에서 읽는다.
+        reference_date_from_ruleset: ageReckoning.reference_date_from_ruleset,
       },
       // 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지. fund_use_horizon과 같은 형태의
       // 자기 선언이고, 값이 고정이라 qa가 실제 동작과 대조할 수 있다.
@@ -92,7 +98,7 @@ export function compute(request, rulesets) {
       },
     },
     scenarios: scenarioResults,
-    assumptions: buildAssumptions(normalized),
+    assumptions: buildAssumptions(normalized, ageReckoning),
   };
 }
 
@@ -103,6 +109,10 @@ function computeScenario(scenarioId, request, rulesets) {
 
   const access = createAccess(selection);
   const notices = [];
+
+  // 2.5. 나이·기간 계산 규칙. 값이 아니라 판정 시점을 주는 규칙이고,
+  //      그 결론이 "단일 기준일은 없다"이므로 기준일은 여전히 엔진이 고른다.
+  const ageReckoning = resolveAgeReckoning(access);
 
   // 3. 파생 비율
   const { rates, notices: rateNotices } = resolveRates(access, { profile: request.profile, scenarioId });
@@ -155,7 +165,8 @@ function computeScenario(scenarioId, request, rulesets) {
     limitResult.limits === null ||
     rates.incomeTaxRate === null ||
     capResult.cap === null ||
-    startDateResult.entries === null
+    startDateResult.entries === null ||
+    ageReckoning === null
   ) {
     return { errors: dedupeErrors(missing.length > 0 ? missing : [ruleMissingFallback()]) };
   }
@@ -232,6 +243,7 @@ function computeScenario(scenarioId, request, rulesets) {
   const legalBasis = request.options.include_legal_basis ? buildLegalBasis(access) : [];
 
   return {
+    ageReckoning,
     creditRateBracket: {
       income_tax_rate: rates.incomeTaxRate,
       local_tax_rate: rates.surtaxRate,
@@ -308,7 +320,7 @@ function unappliedReason(ruleId, request) {
   return UNAPPLIED_REASON[ruleId] ?? DEFAULT_UNAPPLIED_REASON;
 }
 
-function buildAssumptions(request) {
+function buildAssumptions(request, ageReckoning) {
   const scenarios = request.scenarios;
   const out = [];
   const add = (code, params = {}, basisRuleIds = []) =>
@@ -318,12 +330,21 @@ function buildAssumptions(request) {
     add(ASSUMPTION.MONTHS_DEFAULTED, { months: request.profile.months_remaining_in_tax_year });
   }
 
-  // 만 나이의 기준일을 정하는 규칙이 룰셋에 없다. **엔진이 규칙을 만들지 않는다** —
-  // 쓴 값과 그것이 룰셋 근거가 아니라는 사실을 가정으로 내보내고 tax-domain에 넘긴다.
-  // 근거 규칙이 비어 있는 것은 rounding_floor_to_won과 같은 이유다.
-  add(ASSUMPTION.AGE_REFERENCE_DATE, {
-    reference_date: formatIsoDate(endOfTaxYear(request.tax_year)),
-  });
+  // 만 나이의 **기준일**은 여전히 엔진이 고른다. 룰셋 규칙이 생겼지만 그 규칙의 결론이
+  // "단일 기준일은 존재하지 않는다"이기 때문이다 — 규칙이 생겼다고 이 가정을 지우면
+  // 그것이 거짓이 된다. 코드 문자열은 낡았고(constants.mjs) 뜻은 계약 8.3절이 정의한다.
+  //
+  // **어느 요건에 이 가정이 걸리는지를 함께 낸다.** 나이를 정수로 환산해 비교하는 경로만
+  // 이 가정 위에 서 있고, 연금 쪽은 날짜 대 날짜로 비교해 걸리지 않는다. 그 구분이
+  // 값으로 나가지 않으면 화면은 계산 전체가 이 가정 위에 있다고 읽는다.
+  add(
+    ASSUMPTION.AGE_REFERENCE_DATE,
+    {
+      reference_date: formatIsoDate(endOfTaxYear(request.tax_year)),
+      requires_reference_date_rule_ids: ageReckoning.requires_reference_date_rule_ids,
+    },
+    ageReckoning.basis_rule_ids,
+  );
 
   if (!request.profile.prior_year_tax.pension_credit_provided) {
     // 되더하기의 가산항을 0으로 두었다. 한도가 과소로 나오는 방향이고,

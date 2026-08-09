@@ -476,17 +476,46 @@ test('퇴직급여 입금액을 납입한도 소진으로 본 사실이 가정�
 
 // ── 생년월일 ─────────────────────────────────────────────────────
 
-test('만 나이 환산은 엔진이 하고, 기준일이 룰셋 근거가 아니라는 사실을 함께 낸다', () => {
+test('만 나이 환산은 엔진이 하고, 기준일이 룰셋에서 나온 값이 아니라는 사실을 함께 낸다', () => {
   const response = compute(baseRequest({ profile: { birth_date: '1986-03-02' } }), rulesets);
 
   assert.equal(response.echo.derived_age.age_years, 40);
   assert.equal(response.echo.derived_age.reference_date, '2026-12-31');
+  // 규칙은 생겼지만 그 결론이 "단일 기준일은 존재하지 않는다"이므로 값은 그대로 false다.
+  // 달라진 것은 false의 뿌리다 — 규칙의 부재가 아니라 규칙의 내용이다.
   assert.equal(response.echo.derived_age.reference_date_from_ruleset, false);
 
   const assumption = response.assumptions.find((a) => a.code === 'age_reference_date_not_in_ruleset');
-  assert.ok(assumption, '기준일 규칙이 룰셋에 없다는 사실이 가정에 실려야 한다');
+  assert.ok(assumption, '기준일을 엔진이 골랐다는 사실이 가정에 실려야 한다');
   assert.equal(assumption.params.reference_date, '2026-12-31');
-  assert.deepStrictEqual(assumption.basis_rule_ids, [], '룰셋 근거가 없으므로 근거 규칙도 없다');
+  assert.deepStrictEqual(
+    assumption.basis_rule_ids,
+    ['age.reckoning.reference_date'],
+    '이제 근거 규칙이 있다 — 그 규칙이 "기준일을 하나로 정할 수 없다"고 말한다',
+  );
+});
+
+test('이 가정이 어느 요건에 걸리는지가 값으로 나간다 — 룰셋에서 읽는다', () => {
+  const response = compute(baseRequest(), rulesets);
+  const assumption = response.assumptions.find((a) => a.code === 'age_reference_date_not_in_ruleset');
+
+  // 목록을 엔진이 세어 두지 않는다. 룰셋의 per_rule에서 needs_reference_date인 것만 낸다.
+  const expected = confirmedRule('age.reckoning.reference_date')
+    .value.no_single_reference_date.per_rule.filter((entry) => entry.needs_reference_date === true)
+    .map((entry) => entry.rule_id)
+    .sort();
+
+  assert.deepStrictEqual(assumption.params.requires_reference_date_rule_ids, expected);
+  assert.ok(expected.length > 0, '기준일이 필요한 요건이 하나도 없으면 이 가정 자체가 필요 없다');
+
+  // 연금 쪽은 날짜 대 날짜로 비교하므로 이 목록에 없어야 한다 — 그 사실은
+  // pension_withdrawal_start가 이미 날짜로 말하고 있다.
+  assert.equal(assumption.params.requires_reference_date_rule_ids.includes('pension.withdrawal.earliest_start'), false);
+
+  // 근거로 실었으면 legal_basis에서도 찾을 수 있어야 한다. 읽지 않은 규칙을 근거로 대지 않는다.
+  const entry = scenarioOf(response).legal_basis.find((e) => e.rule_id === 'age.reckoning.reference_date');
+  assert.ok(entry, '가정이 근거로 든 규칙이 근거 목록에 없다');
+  assert.ok(entry.applied_to.includes('echo.derived_age.reference_date'));
 });
 
 test('생년월일 하루 차이가 실제로 판정을 바꾼다', () => {

@@ -75,15 +75,28 @@ open_questions:
 
 `expect`의 키는 시나리오 id(`current` / `proposed`)이고, 요청한 시나리오만 적는다. `plans`의 키는 배분안 id(`max_tax_credit` / `annuity_savings_first` / `isa_first`)이고, **값을 아는 배분안만** 적으면 된다.
 
-**시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent`. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
+**시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · `pension_withdrawal_start` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent`. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
 
-**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `is_baseline`. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
+**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline`. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
 
 **`limits`에 쓸 수 있는 키** — `pension_combined_credit_limit_krw` · `pension_combined_credit_remaining_krw` · `pension_contribution_limit_remaining_krw` · `annuity_savings_credit_remaining_krw` · `isa_contribution_remaining_krw` · `isa_tax_free_limit_krw` · `isa_transfer_extra_credit_limit_krw`.
 
 **`boundaries`에 쓸 수 있는 키** — `isa_lock_in_years` · `isa_lock_in_years_remaining` · `pension_min_age_years` · `pension_years_remaining` · `pension_holding_period_evaluated`.
 
-모르는 키는 오타로 보고 실패시킨다. `tax_credit`의 세 값은 소득세 + 지방세 = 합계가 맞는지도 함께 본다 — 옮겨 적다 어긋나는 자리이기 때문이다. 4차에 움직인 값(분할 · 배분안 수 · 경고 건수)은 위 표에 적었으면 블록에도 적는다. 그것이 이번 회차가 실제로 검사받는 부분이다.
+**`tax_credit_before_cap`** — `tax_credit`과 형태가 같다(`income_tax` · `local_tax` · `total`, 셋 다 적는다). 계약 `4.0.0`에서 `tax_credit`이 **세액 한도를 적용한 뒤**의 인정액이 됐으므로, 자르기 전 금액은 이 키로 따로 적는다. 둘 다 적어야 "얼마가 잘렸는가"가 블록의 주장이 된다.
+
+**`tax_liability_cap`에 쓸 수 있는 키** — `known` · `cap_krw` · `applied` · `threshold_income_tax_krw`. **배분안 단위다** — 같은 케이스라도 안마다 잘리는지가 다를 수 있다. `cap_krw`의 `0`은 유효한 값이고 `null`(모름)과 다르다. 아는 키만 적으면 되고, 적은 키는 전부 검사한다.
+
+**`pension_withdrawal_start`에 쓸 수 있는 키** — 연금계좌 id(`retirement_pension` / `annuity_savings`)를 키로 두고, 그 아래에 `computable` · `earliest_start_date` · `years_until_earliest_start` · `age_requirement_date` · `holding_requirement_date` · `holding_requirement_waived` · `bound_by_holding_period` · `reason_code`. 날짜는 `YYYY-MM-DD` 또는 `null`이다. 적은 계좌·적은 항목만 검사한다.
+
+모르는 키는 오타로 보고 실패시킨다. `tax_credit`·`tax_credit_before_cap`의 세 값은 소득세 + 지방세 = 합계가 맞는지도 함께 본다 — 옮겨 적다 어긋나는 자리이기 때문이다. 4차에 움직인 값(분할 · 배분안 수 · 경고 건수)은 위 표에 적었으면 블록에도 적는다. 그것이 이번 회차가 실제로 검사받는 부분이다.
+
+**두 가지가 더 실패 사유다(6차 이후 추가).**
+
+1. **빈 객체는 거절한다.** `tax_liability_cap: {}`처럼 적으면 키는 있는데 주장이 없어 "적었으니 검사됐다"로 보이면서 실제로는 아무것도 보지 않는다. 적을 것이 없으면 키째로 뺀다. `limits` · `boundaries` · `credit_rate` · `pension_withdrawal_start`에도 같이 걸린다.
+2. **값끼리 어긋나면 대조 전에 거절한다.** `known: false`인데 `applied: true`이거나 `cap_krw`가 `null`이 아닌 경우, `computable: false`인데 `earliest_start_date`가 있는 경우다. 둘을 옮겨 적다 한쪽만 고친 자리를 잡는다.
+
+**허용 키가 있는데 47건 어느 블록도 쓰지 않으면 실행기가 그 목록을 대며 실패한다**(`golden-cases.test.mjs` 검사 4). 지금 비어 있는 것은 위의 네 축과 `boundaries.isa_lock_in_years` · `boundaries.pension_min_age_years` · `credit_rate.local_tax` · `credit_rate.effective`이고, 실행기에 빚으로 적혀 있다. 값을 채우면 그 목록에서 지운다 — 지우지 않으면 이번에는 "이제 쓰이는데 목록에 남아 있다"로 실패한다.
 
 > ⚠ **산문에 케이스 이름의 범위 표기(`~`)를 쓸 때 조심하라.** 실행기는 커버리지 검사를 위해 **블록 밖 산문의 케이스 이름까지** 읽고 범위를 펼친다. 읽을 수 있는 것은 두 형태뿐이다 — **번호끼리** 이어지는 것(`GC-NN~NN`, 접미사 없이)과 **같은 번호 안에서 접미사끼리** 이어지는 것(`GC-NNa~d`). 번호와 접미사를 섞은 표기(`GC-NN~NNd` 꼴)는 **형식 오류로 실패한다.** 4차에서 실제로 밟은 지뢰다. 섞어 가리켜야 하면 **쉼표로 나열하라.**
 

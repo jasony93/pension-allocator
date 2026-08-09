@@ -323,6 +323,7 @@ C7은 **상수가 아니라 산식이다.** `isa.contribution.annual_limit.value
 
 1. **입력 검증** — 자료형, 정수 여부, 음수 여부, 범위, 상호 제약(전환금액 ≤ ISA 누적 납입액). 하나라도 위반이면 `ok: false`와 오류 목록을 반환하고 계산을 시작하지 않는다.
 2. **룰셋 로드와 규칙 존재 확인** — 이 시나리오가 쓰는 규칙 id가 전부 있는지 먼저 확인한다. 하나라도 없으면 `rule_missing` 오류로 중단한다. **없는 규칙을 기본값으로 메우지 않는다.** 메우는 순간 룰셋이 단일 진실 원천이라는 전제가 깨지고 검증 장치 전체가 무력해진다.
+2.5. **나이·기간 계산 규칙 읽기** — `age.reckoning.reference_date`. **이 규칙은 값을 주지 않고 판정 시점을 준다.** 그 결론이 "단일 기준일은 존재하지 않는다"이므로 만 나이의 기준일은 규칙이 생긴 뒤에도 엔진이 고른다(과세기간 종료일). 규칙에서 읽는 것은 **어느 요건이 기준일을 필요로 하는가**(`no_single_reference_date.per_rule`)이고, 그 목록이 가정의 `params`로 나간다. 나이를 정수로 환산해 비교하는 경로는 4단계의 ISA 연령 요건 하나뿐이고, 연금 쪽(4.6단계)은 날짜 대 날짜 비교라 이 가정에 걸리지 않는다.
 3. **파생 비율 산출** — `pension.credit.rate`의 구간을 `current_year_total_salary_krw`로 판정하고, `tax.local.personal_income_surtax`의 부가율을 적용해 실효 절세율을 만든다. 개정안 시나리오에서 `declared_youth`가 true면 퇴직연금 납입분에 대해 `proposed.pension.credit.youth_irp_rate`의 비율로 대체한다.
 4. **계좌 자격 판정** — `isa.eligibility`(연령 요건), `isa.exclusion.financial_income_taxpayer`, 그리고 `pension.contribution.after_annuity_start`. 자격이 없는 계좌는 배분 대상에서 빠지고 사유가 출력에 실린다. **연금계좌의 가입 연령 자격은 판정하지 않는다** — 룰셋에 규칙이 없다. 연령이 걸리는 자리는 가입이 아니라 인출이다(4.5절).
 4.5. **세액 한도 산출** — `pension.credit.tax_liability_cap`. **마지막에 걸리는 상한이 아니라 계산 전체의 전제다**(규칙의 `engine_note`). 한도를 모르면 지어내지 않고 그 사실과 오차의 방향을 출력에 싣는다.

@@ -136,6 +136,39 @@ export function resolveWithdrawalOrder(access) {
 }
 
 /**
+ * 만 나이의 계산 방법과 그 기준일 — 규칙이 주는 것은 **날짜가 아니라 판정 시점**이다.
+ *
+ * **규칙이 생겼다고 가정이 사라지지 않는다.** 규칙의 결론은 "단일 기준일이 존재하지
+ * 않는다"이고, 그러므로 엔진이 쓰는 과세기간 종료일은 여전히 룰셋에서 나온 값이 아니다.
+ * 달라진 것은 `false`의 뿌리다 — 전에는 규칙의 **부재**였고 지금은 규칙의 **내용**이다.
+ *
+ * **어느 요건이 기준일을 필요로 하는지는 응답에 싣는다.** 나이를 정수로 환산해 비교하는
+ * 경로에만 이 가정이 걸리고, 연금 쪽은 날짜 대 날짜로 비교하므로 걸리지 않는다 —
+ * 그 사실은 `pension_withdrawal_start`가 이미 날짜로 말하고 있다. 가정이 전체 계산에
+ * 걸리는 것처럼 보이지 않게 하려면 **걸리는 요건의 이름**이 값으로 나가야 한다.
+ * 목록은 룰셋에서 읽는다 — 엔진이 세어 두면 요건이 늘 때 조용히 낡는다.
+ */
+export function resolveAgeReckoning(access) {
+  const appliedTo = 'echo.derived_age.reference_date';
+  const perRule = access.value(
+    RULE.AGE_RECKONING,
+    ['value', 'no_single_reference_date', 'per_rule'],
+    appliedTo,
+  );
+  if (perRule === undefined) return null;
+
+  return {
+    // 규칙은 있고, 그 규칙이 기준일을 하나로 정해 주지 않는다.
+    reference_date_from_ruleset: false,
+    requires_reference_date_rule_ids: perRule
+      .filter((entry) => entry?.needs_reference_date === true)
+      .map((entry) => entry.rule_id)
+      .sort(),
+    basis_rule_ids: [RULE.AGE_RECKONING],
+  };
+}
+
+/**
  * 연금계좌 세액공제의 세액 한도.
  *
  * **한도 = 결정세액 + 연금계좌 세액공제액.** 이것이 근사가 아니라 등식인 이유는

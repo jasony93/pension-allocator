@@ -136,6 +136,12 @@ export const RULE = {
   CONTRIBUTION_AFTER_ANNUITY_START: 'pension.contribution.after_annuity_start',
   PENSION_EARLIEST_START: 'pension.withdrawal.earliest_start',
 
+  // 7차 조사로 들어온 규칙. **값이 아니라 판정 시점을 주는 규칙이고, 그 내용은
+  // "단일 기준일은 존재하지 않는다"이다.** 엔진은 이 규칙을 읽어 (a) 기준일이
+  // 룰셋에서 나오지 않는다는 사실의 근거로 삼고, (b) 어느 요건이 실제로 기준일을
+  // 필요로 하는지를 응답에 싣는다.
+  AGE_RECKONING: 'age.reckoning.reference_date',
+
   PROPOSED_ISA_ANNUAL_LIMIT: 'proposed.isa.annual_contribution_limit',
   PROPOSED_YOUTH_IRP_RATE: 'proposed.pension.credit.youth_irp_rate',
   PROPOSED_TRANSFER_EXTRA: 'proposed.productive_isa.pension_transfer.credit_extra_limit',
@@ -265,6 +271,13 @@ export const ASSUMPTION = {
   HORIZON_EXCLUDED_FROM_AMOUNTS: 'fund_use_horizon_excluded_from_amounts',
   EARLY_EXIT_NOT_QUANTIFIED: 'early_exit_penalty_not_quantified',
   PENSION_HOLDING_NOT_EVALUATED: 'pension_holding_period_not_evaluated',
+  // **이름이 낡았다.** 7차에 룰셋 규칙 `age.reckoning.reference_date`가 생겼으므로
+  // "룰셋에 규칙이 없다"는 더는 사실이 아니다. 사실인 것은 **그 규칙이 기준일을
+  // 하나로 정해 주지 않는다**는 것이고(단일 기준일은 존재하지 않는다), 그래서 엔진이
+  // 고른 과세기간 종료일은 여전히 룰셋에서 나온 값이 아니다. 뜻은 계약 8.3절이
+  // 정의하며 코드 문자열은 그대로 둔다 — 코드를 바꾸면 계약이 깨지고
+  // `web-dev`가 `4.0.0`에 맞춰 구현 중인 화면이 낡는다(D22). 개명은 다음 회차에
+  // 계산 기준일 입력과 함께 처리한다.
   AGE_REFERENCE_DATE: 'age_reference_date_not_in_ruleset',
   PRIOR_PENSION_CREDIT_ZERO: 'prior_pension_credit_zero_assumed',
   RETIREMENT_TRANSFER_IN_CONTRIBUTION_LIMIT: 'retirement_transfer_counted_in_contribution_limit',
