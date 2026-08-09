@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeTrackScalePercent, allocationSegments, annulusSlicePath } from './charts.js';
+import { computeTrackScalePercent, allocationSegments, annulusSlicePath, sliceAngles, MIN_SLICE_DEG } from './charts.js';
 
 test('the account with the largest remaining limit always scales to exactly 100%', () => {
   assert.equal(computeTrackScalePercent(18000000, 18000000), 100);
@@ -106,6 +106,44 @@ test('the full-ring path spans both sides of the centre, so its bounding box can
     .map((m) => Number(m[1] ?? m[3]))
     .filter((n) => Number.isFinite(n));
   assert.ok(Math.max(...xs) - Math.min(...xs) > 0, '좌우로 벌어진 점이 없으면 폭 0으로 렌더된다');
+});
+
+// --- 조각 각도 (design-system 5.20절 확정 규약) ------------------------------
+
+const seg = (account, amount) => ({ account, amount, isUnallocated: false });
+
+test('a slice with a nonzero amount is never smaller than the minimum visible angle', () => {
+  const arcs = sliceAngles([seg('retirement_pension', 100000000), seg('isa', 1)]);
+  const isa = arcs.find((a) => a.account === 'isa');
+  assert.ok(isa.end - isa.start >= MIN_SLICE_DEG, '보이지 않는 조각보다 약간 부정확한 조각이 낫다');
+});
+
+test('widening the tiny slice still leaves the ring closed at exactly 360°', () => {
+  const arcs = sliceAngles([seg('retirement_pension', 100000000), seg('annuity_savings', 1), seg('isa', 1)]);
+  assert.ok(Math.abs(arcs[arcs.length - 1].end - 360) < 1e-9);
+});
+
+test('a zero-amount account gets no arc at all', () => {
+  const arcs = sliceAngles([seg('retirement_pension', 9000000), seg('annuity_savings', 0), seg('isa', 0)]);
+  assert.deepEqual(arcs.map((a) => a.account), ['retirement_pension']);
+});
+
+test('a single account fills the whole ring — 0° to 360°', () => {
+  const arcs = sliceAngles([seg('isa', 9600000)]);
+  assert.equal(arcs.length, 1);
+  assert.equal(arcs[0].start, 0);
+  assert.equal(arcs[0].end, 360);
+});
+
+test('slices stay contiguous and in the fixed account order (A3)', () => {
+  const arcs = sliceAngles([seg('annuity_savings', 3000000), seg('retirement_pension', 6000000), seg('isa', 1000000)]);
+  assert.deepEqual(arcs.map((a) => a.account), ['annuity_savings', 'retirement_pension', 'isa']);
+  for (let i = 1; i < arcs.length; i++) assert.equal(arcs[i].start, arcs[i - 1].end);
+});
+
+test('proportions are untouched when every slice is already above the minimum', () => {
+  const arcs = sliceAngles([seg('annuity_savings', 1), seg('retirement_pension', 1)]);
+  assert.equal(arcs[0].end - arcs[0].start, 180);
 });
 
 test('never exceeds 100% even if remaining somehow equals maxRemaining exactly at the boundary', () => {

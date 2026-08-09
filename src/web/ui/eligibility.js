@@ -71,6 +71,31 @@ export function excludedAccounts(scenario) {
   return (scenario?.account_eligibility ?? []).filter((e) => e.eligible === false).map((e) => e.account);
 }
 
+/** 연금계좌 두 개 — 납입 한도도 세액공제 한도도 같은 풀을 본다(계약 5.3절). */
+export const PENSION_ACCOUNTS = ['annuity_savings', 'retirement_pension'];
+
+/**
+ * 연금계좌 묶음의 **세액공제 인정 여지**. 계약 5.3절이 이 값을 "추가로 인정될
+ * 여지"로 정의하고 **배분 상한이 아니라고** 못박았다 — 개정안 청년 IRP 우대에서는
+ * 추가 IRP 납입이 이미 인정된 연금저축 기납입분을 공제 풀에서 밀어내므로
+ * **배분액이 이 값을 넘을 수 있다**(4단계가 잡은 M1과 같은 뿌리).
+ *
+ * 그래서 이 값은 트랙(넘을 수 없는 상한)에 쓰지 않고, `exceeded`를 함께 내서
+ * 화면이 넘는 경우를 감추지 않게 한다(`screens.md` 5.10절).
+ * 계좌별로 두 번 적지 않기 위해 **묶음 단위 합산값**만 낸다.
+ */
+export function pensionCreditHeadroomView(scenario, plan) {
+  const remainingKrw = scenario?.limits?.pension_combined_credit_remaining_krw ?? null;
+  const allocatedKrw = (plan?.allocations ?? [])
+    .filter((a) => PENSION_ACCOUNTS.includes(a.account))
+    .reduce((sum, a) => sum + a.annual_krw, 0);
+  return {
+    remainingKrw,
+    allocatedKrw,
+    exceeded: remainingKrw !== null && allocatedKrw > remainingKrw,
+  };
+}
+
 /**
  * 규칙 id 목록에 해당하는 `legal_basis` 항목들. 배제 사유 옆에 붙일 `LawChip`의
  * 출처다 — 헌장 "계산에 쓴 법령 조항을 결과 화면에 노출한다"와 `screens.md`
@@ -86,4 +111,13 @@ export function lawEntriesFor(scenario, ruleIds) {
     seen.add(entry.rule_id);
     return true;
   });
+}
+
+/**
+ * 특정 출력 필드에 실제로 쓰인 규칙들. 계약 5.7절의 `applied_to`가 "화면이 값
+ * 옆에 근거를 붙일 수 있게" 두 방향 연결을 보장한다. 값마다 어떤 규칙이 쓰였는지
+ * 화면이 추측하지 않고 엔진이 적어 준 것을 읽는다.
+ */
+export function lawEntriesForPath(scenario, path) {
+  return (scenario?.legal_basis ?? []).filter((entry) => (entry.applied_to ?? []).includes(path));
 }

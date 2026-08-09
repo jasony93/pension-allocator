@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accountExclusion, accountLimitView, excludedAccounts, lawEntriesFor } from './eligibility.js';
+import {
+  accountExclusion,
+  accountLimitView,
+  excludedAccounts,
+  lawEntriesFor,
+  lawEntriesForPath,
+  pensionCreditHeadroomView,
+} from './eligibility.js';
 import { exclusionReasonMessage, EXCLUDED_ACCOUNT_FALLBACK_REASON } from '../copy.js';
 
 /**
@@ -147,4 +154,55 @@ test('the exclusion reason comes with its law chips, in legal_basis order and de
 test('unknown rule ids never invent a law chip', () => {
   assert.deepEqual(lawEntriesFor(scenarioWithExcludedIsa(), ['not.a.rule']), []);
   assert.deepEqual(lawEntriesFor(scenarioWithExcludedIsa(), []), []);
+});
+
+test('law chips can be looked up by the output field the engine says the rule was applied to', () => {
+  const scenario = {
+    legal_basis: [
+      { rule_id: 'isa.tax_free_limit', law: '조세특례제한법 제91조의18 제2항', applied_to: ['limits.by_account[isa].tax_free_limit_krw'] },
+      { rule_id: 'pension.credit.limit.combined', law: '소득세법 제59조의3 제1항 단서', applied_to: ['limits.pension_combined_credit_limit_krw'] },
+    ],
+  };
+  assert.deepEqual(
+    lawEntriesForPath(scenario, 'limits.by_account[isa].tax_free_limit_krw').map((e) => e.rule_id),
+    ['isa.tax_free_limit'],
+  );
+  assert.deepEqual(lawEntriesForPath(scenario, 'limits.by_account[isa].contribution_limit_remaining_krw'), []);
+});
+
+// --- 세액공제 인정 여지 (screens.md 5.10절) ---------------------------------
+
+function scenarioWithCreditHeadroom(remaining) {
+  return { limits: { pension_combined_credit_remaining_krw: remaining, by_account: [] }, account_eligibility: [], legal_basis: [] };
+}
+const planWithPension = (annuity, pension) => ({
+  allocations: [
+    { account: 'retirement_pension', annual_krw: pension },
+    { account: 'annuity_savings', annual_krw: annuity },
+    { account: 'isa', annual_krw: 5000000 },
+  ],
+});
+
+test('the credit headroom is reported for the pension pair as one number, not per account', () => {
+  const view = pensionCreditHeadroomView(scenarioWithCreditHeadroom(9000000), planWithPension(3000000, 3000000));
+  assert.equal(view.remainingKrw, 9000000, '합산값을 그대로 쓴다 — 계좌별 값을 더하지 않는다(계약 5.3절)');
+  assert.equal(view.allocatedKrw, 6000000, 'ISA 배분은 이 축에 들어가지 않는다');
+  assert.equal(view.exceeded, false);
+});
+
+test('an allocation above the credit headroom is reported as exceeded, not clamped or hidden', () => {
+  // GC-23 형태 — 개정안 청년 우대에서 IRP 9,000,000이 잔여 인정 여지 3,000,000을 넘는다.
+  const view = pensionCreditHeadroomView(scenarioWithCreditHeadroom(3000000), planWithPension(0, 9000000));
+  assert.equal(view.exceeded, true, '이 값은 상한이 아니므로 넘는 것이 정상이다 — 화면은 그 사실을 말해야 한다');
+  assert.equal(view.allocatedKrw, 9000000);
+});
+
+test('exactly meeting the headroom is not "exceeded"', () => {
+  assert.equal(pensionCreditHeadroomView(scenarioWithCreditHeadroom(9000000), planWithPension(0, 9000000)).exceeded, false);
+});
+
+test('a missing headroom value yields null and never a phantom zero', () => {
+  const view = pensionCreditHeadroomView({ limits: {} }, planWithPension(0, 0));
+  assert.equal(view.remainingKrw, null);
+  assert.equal(view.exceeded, false);
 });

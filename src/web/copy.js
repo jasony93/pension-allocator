@@ -9,7 +9,7 @@
  * 채운다(엔진의 `fund_use_horizon_boundaries`, `legal_basis`, 각 필드의 실제 값).
  */
 
-import { formatKrw, formatYears } from './format.js';
+import { formatKrw, formatPercent, formatYears } from './format.js';
 
 export const SERVICE_NAME = '[가칭] 납입배분 계산기';
 
@@ -74,8 +74,8 @@ export function errorMessage(error) {
 
 const NOTICE_MESSAGE = {
   zero_capacity: () => '월 납입 여력이 0원으로 입력되어 배분할 금액이 없습니다.',
-  budget_exceeds_all_limits: () => '입력한 월 납입 여력이 세 계좌의 잔여 한도 합계보다 많습니다.',
-  existing_contribution_over_limit: () => '이미 입력한 기납입액이 연금계좌 납입 한도를 넘어 잔여 한도를 0으로 계산했습니다.',
+  budget_exceeds_all_limits: () => '입력한 월 납입 여력이 세 계좌의 납입 잔여 한도 합계보다 많습니다.',
+  existing_contribution_over_limit: () => '이미 입력한 기납입액이 연금계좌 납입 한도를 넘어 납입 잔여 한도를 0으로 계산했습니다.',
   prior_year_income_missing: () => '직전 과세기간 총급여액을 받지 않아 ISA 비과세 한도 구간의 교차확인을 하지 않았습니다.',
   isa_type_conflicts_with_prior_income: () => '입력한 ISA 계좌 유형이 직전 과세기간 소득 기준 판정과 다릅니다. 계산은 입력한 유형을 그대로 따랐습니다.',
   isa_type_not_declared: () => 'ISA 계좌 유형을 입력하지 않아 비과세 한도 표시를 생략했습니다.',
@@ -105,7 +105,7 @@ export function noticeMessage(notice) {
 
 const ASSUMPTION_MESSAGE = {
   months_remaining_defaulted: () => '과세연도 전체를 납입한다고 보고 연간 예산을 계산했습니다. 연중에 시작하면 실제 납입액은 이보다 적습니다.',
-  isa_new_account_assumed: () => 'ISA 계좌가 없다고 하셔서 신규 가입을 전제로 잔여 한도를 계산했습니다.',
+  isa_new_account_assumed: () => 'ISA 계좌가 없다고 하셔서 신규 가입을 전제로 납입 잔여 한도를 계산했습니다.',
   isa_tenure_zero_assumed: () => 'ISA 가입 시기를 받지 않아, 남은 의무가입기간을 가장 길게 잡았습니다. 실제로는 이보다 짧을 수 있습니다.',
   other_savings_zero_assumed: () => '재형저축·장기집합투자증권저축을 보유하지 않은 것으로 보고 ISA 총 납입한도를 계산했습니다.',
   prior_transfer_credit_zero_assumed: () => '직전 과세기간에 받은 전환 추가공제를 0으로 보았습니다. 실제로 받은 금액이 있으면 추가 한도가 결과보다 줄어듭니다.',
@@ -121,7 +121,7 @@ const ASSUMPTION_MESSAGE = {
   isa_account_type_defaulted: () => 'ISA 계좌 유형을 일반형으로 두고 계산했습니다. 서민형이면 비과세 한도가 달라집니다.',
   isa_not_held_excluded: () => 'ISA 계좌가 없다고 하셔서 ISA를 배분 대상에서 제외하고 계산했습니다.',
   transfer_destination_defaulted: () => '전환한 자금을 받을 계좌를 IRP로 두고 계산했습니다. 연금저축으로 받으면 적용되는 단독 한도가 달라 결과가 바뀝니다.',
-  existing_contribution_untouched: () => '올해 이 계좌들에 이미 넣은 금액을 0으로 두고 계산했습니다. 이미 납입한 금액이 있으면 잔여 한도가 줄어 배분이 결과와 달라집니다.',
+  existing_contribution_untouched: () => '올해 이 계좌들에 이미 넣은 금액을 0으로 두고 계산했습니다. 이미 납입한 금액이 있으면 납입 잔여 한도가 줄어 배분이 결과와 달라집니다.',
 };
 
 export function assumptionMessage(code, params) {
@@ -165,10 +165,9 @@ export function warningMessage(warning, boundaries) {
 // ---------------------------------------------------------------------------
 
 const EXCLUSION_REASON_MESSAGE = {
-  isa_excluded_age: () =>
-    '입력한 나이가 이 계좌의 가입 대상 연령 요건을 충족하는 것으로 확인되지 않아, 이 계산에서 배분 대상이 아닙니다.',
+  isa_excluded_age: () => 'ISA 가입에 필요한 연령 요건에 해당하지 않아 이번 계산의 배분 대상이 아닙니다.',
   isa_excluded_financial_income_taxpayer: () =>
-    '직전 3개 과세기간 중 금융소득종합과세 대상에 해당해 과세특례가 적용되지 않으므로, 이 계산에서 배분 대상이 아닙니다.',
+    '직전 3개 과세기간 중 금융소득종합과세 대상이었던 경우 ISA 과세특례가 적용되지 않습니다. 그래서 이번 계산의 배분 대상이 아닙니다.',
 };
 
 export function exclusionReasonMessage(code) {
@@ -182,9 +181,45 @@ export const EXCLUDED_ACCOUNT_FALLBACK_REASON = '이 계좌는 입력한 조건�
 /** 한도·혜택 금액이 있어야 할 자리에 대신 들어가는 문장. */
 export const EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER = '배분 대상 아님';
 
-/** 왜 금액을 비웠는지 — 빈칸을 설명 없이 두지 않는다. */
-export const EXCLUDED_ACCOUNT_LIMIT_CAPTION =
-  '배분 대상이 아니어서 이 계좌의 한도와 비과세 한도 금액을 표시하지 않습니다.';
+/** C-3 스택바 영역 위 한 줄 — 배제는 배분안마다 달라지지 않고 시나리오 전체에 걸린다(5.9절). */
+export function excludedFromComparisonMessage(accounts) {
+  const names = accounts.map((a) => ACCOUNT_LABEL[a] ?? a).join(' · ');
+  return `${names}는 이번 계산에서 배분 대상이 아니어서 아래 비교에 나타나지 않습니다.`;
+}
+
+// ---------------------------------------------------------------------------
+// 두 종류의 한도 (screens.md 5.10절 · design-system 7.1절)
+//
+// **"잔여 한도"를 수식어 없이 쓰지 않는다.** 성격이 다른 한도가 둘이다 —
+// 넘을 수 없는 `납입 잔여 한도`(`contribution_limit_remaining_krw`)와, 넘을 수
+// 있는 `세액공제 인정 여지`(`credit_eligible_limit_remaining_krw` ·
+// `pension_combined_credit_remaining_krw`)다. 후자에 "한도"를 붙이면 사실과
+// 어긋난다 — 개정안 청년 우대에서 배분액이 그 값을 넘을 수 있다.
+// ---------------------------------------------------------------------------
+
+export function contributionRemainingCaption(remainingKrw, usedRatio) {
+  return `납입 잔여 한도 ${formatKrw(remainingKrw)} · 이 중 ${formatPercent(usedRatio)} 사용`;
+}
+
+export function creditHeadroomCaption(amountKrw) {
+  return `세액공제가 더 인정될 수 있는 금액 ${formatKrw(amountKrw)} (연금저축·IRP 합산)`;
+}
+
+/** 배분액이 위 금액을 넘을 때 — 감추지 않고 왜 그런지 적는다(5.10절 (3)). */
+export const CREDIT_HEADROOM_EXCEEDED_CAPTION =
+  '이 배분은 그 금액을 넘습니다 — 추가 납입이 이미 인정된 다른 계좌의 납입분을 공제 대상에서 밀어내고, 밀려난 만큼에 더 높은 공제율이 적용되기 때문입니다.';
+
+/** ISA 비과세 한도 (5.11절) — 한도이지 절감액이 아니다. 헤드라인 절세액에 더하지 않는다. */
+export function isaTaxFreeCaption(limitKrw) {
+  return `이 계좌의 비과세 한도 ${formatKrw(limitKrw)} — 계좌에서 생긴 수익에 적용됩니다. 수익은 계산하지 않으므로 위 절세액에 들어 있지 않습니다.`;
+}
+
+/** 조각이 하나뿐인 도넛의 캡션 (5.12절). */
+export function donutSingleSliceCaption(account) {
+  return `이번 배분은 전액이 ${ACCOUNT_LABEL[account] ?? account}로 갑니다. 계좌별 한도와 남은 여력은 아래에서 볼 수 있습니다.`;
+}
+
+export const PROPOSED_BADGE_LABEL = '정부안 · 국회 통과 전';
 
 // ---------------------------------------------------------------------------
 // 배분안 비교 안내 (8.5)

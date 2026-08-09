@@ -17,14 +17,27 @@ import {
   comparisonNoteMessage,
   errorMessage,
   exclusionReasonMessage,
+  excludedFromComparisonMessage,
+  contributionRemainingCaption,
+  creditHeadroomCaption,
+  isaTaxFreeCaption,
+  donutSingleSliceCaption,
   EXCLUDED_ACCOUNT_FALLBACK_REASON,
   EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
-  EXCLUDED_ACCOUNT_LIMIT_CAPTION,
+  CREDIT_HEADROOM_EXCEEDED_CAPTION,
+  PROPOSED_BADGE_LABEL,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
 import { donutChart, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
-import { accountLimitView, excludedAccounts, lawEntriesFor } from './eligibility.js';
+import {
+  accountLimitView,
+  excludedAccounts,
+  lawEntriesFor,
+  lawEntriesForPath,
+  pensionCreditHeadroomView,
+  PENSION_ACCOUNTS,
+} from './eligibility.js';
 import { openShareModal } from './share.js';
 
 const CORE_FIELD_LABEL = {
@@ -195,25 +208,35 @@ function allExitPenaltyBanner() {
   ]);
 }
 
-/**
- * 배제 사유 블록 — 금액이 있어야 할 자리에 대신 들어간다. 사유 문장과 그 사유의
- * 근거 조항(`LawChip`)을 함께 낸다. `screens.md` 8.4(b)가 계산 불가 상태에
- * 요구한 "사유 + 근거 LawChip"을 계좌 단위로 적용한 것이다.
- */
-function exclusionNote(view, scenario) {
-  const text = view.reasonCodes.length
+function lawChipRow(laws, className = 'note-laws') {
+  if (!laws.length) return null;
+  return el(
+    'p',
+    { class: className },
+    laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
+  );
+}
+
+function exclusionReasonText(view) {
+  return view.reasonCodes.length
     ? view.reasonCodes.map(exclusionReasonMessage).join(' ')
     : EXCLUDED_ACCOUNT_FALLBACK_REASON;
-  const laws = lawEntriesFor(scenario, view.basisRuleIds);
-  return el('div', { class: 'excluded-note' }, [
-    el('p', {}, [text]),
-    laws.length
-      ? el(
-          'p',
-          { class: 'excluded-note-laws' },
-          laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
-        )
-      : null,
+}
+
+/**
+ * `EligibilityNote`(design-system 5.24절) — 계좌가 법령 요건 때문에 배분 대상에서
+ * 빠졌다는 **사실 통지**.
+ *
+ * **`state-info`를 쓰고 `state-warning`을 쓰지 않는다.** 엔진은 이 사유를
+ * `severity: "warning"` notice로도 내지만, 계약에서 `warning`은 "결과의 정확도에
+ * 영향을 준다"는 뜻이지 사용자에게 주의하라는 뜻이 아니다. 자격 미달은 사용자가
+ * 잘못해서 생긴 상태가 아니고 대개 바꿀 수도 없다 — 주의 색을 칠하면 사용자가
+ * 자기 상황을 결함으로 읽는다. **화면의 색은 화면이 정한다.**
+ */
+function eligibilityNote(view, scenario) {
+  return el('div', { class: 'eligibility-note' }, [
+    el('p', { class: 'type-body-s' }, [exclusionReasonText(view)]),
+    lawChipRow(lawEntriesFor(scenario, view.basisRuleIds), 'note-laws'),
   ]);
 }
 
@@ -227,8 +250,8 @@ function chartArea(plan, scenario, months) {
     excludedAccounts: excluded,
   });
 
-  // D16 — 공통 배율. 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
-  // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 잔여 한도를 먼저 다
+  // D16 — 공통 배율. 납입 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
+  // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 납입 잔여 한도를 먼저 다
   // 모아야 계좌별 트랙 하나를 그릴 때 "셋 중 최댓값"을 알 수 있다.
   //
   // 한도는 `limits.by_account`를 직접 읽지 않고 `accountLimitView`를 지난다 —
@@ -236,6 +259,9 @@ function chartArea(plan, scenario, months) {
   // 들어가지 않는다(4단계 관찰 O1).
   const limitViews = Object.fromEntries(CHART_ACCOUNT_ORDER.map((account) => [account, accountLimitView(scenario, account)]));
   const maxRemaining = Math.max(0, ...CHART_ACCOUNT_ORDER.map((account) => limitViews[account].remainingLimitKrw ?? 0));
+  // 세액공제 인정 여지를 적을 자리 — 연금계좌 묶음의 마지막 행 하나뿐이다.
+  const creditCaptionAccount =
+    CHART_ACCOUNT_ORDER.filter((account) => PENSION_ACCOUNTS.includes(account) && !limitViews[account].excluded).pop() ?? null;
 
   const barSection = el(
     'div',
@@ -256,10 +282,9 @@ function chartArea(plan, scenario, months) {
             remainingLimitKrw: null,
             percentOfLimit: 0,
             unavailable: true,
-            unavailableLabel: EXCLUDED_ACCOUNT_LIMIT_CAPTION,
+            unavailableLabel: EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
           }),
-          el('p', { class: 'field-help' }, [EXCLUDED_ACCOUNT_LIMIT_CAPTION]),
-          exclusionNote(view, scenario),
+          eligibilityNote(view, scenario),
         ]);
       }
 
@@ -274,26 +299,80 @@ function chartArea(plan, scenario, months) {
         ]),
         allocationBar({ account, monthlyKrw: alloc.monthly_krw, remainingLimitKrw: remaining, percentOfLimit, trackScalePercent }),
         // 바닥값으로 트랙이 눌린 계좌라도 정확한 숫자는 항상 원 단위로 보인다 —
-        // 배율이 "거짓말"하지 않게 하는 장치(D16 지시사항).
-        el('p', { class: 'field-help' }, [`잔여 한도 ${formatKrw(remaining)} · 이 중 ${formatPercent(Math.min(1, percentOfLimit))} 사용`]),
+        // 배율이 "거짓말"하지 않게 하는 장치(D16 지시사항). **트랙은 납입 쪽
+        // 한도만 쓴다**(screens.md 5.10절 (1)) — 세액공제 인정 여지는 넘을 수
+        // 있는 값이라 트랙-채움 관계가 성립하지 않는다.
+        el('p', { class: 'field-help' }, [contributionRemainingCaption(remaining, Math.min(1, percentOfLimit))]),
+        // 연금계좌 묶음의 세액공제 인정 여지는 **마지막 연금계좌 행에 한 번만**
+        // 적는다(5.10절 (4)). 계좌마다 적으면 사용자가 둘을 더한다.
+        account === creditCaptionAccount ? creditHeadroomBlock(scenario, plan) : null,
+        // ISA 비과세 한도 (5.11절). 배제된 계좌는 위 분기에서 이미 빠졌고,
+        // 유형 미확정이면 값이 null이라 줄 자체를 그리지 않는다.
+        account === 'isa' ? isaTaxFreeBlock(scenario, view) : null,
         warning ? el('div', { class: `warning-note warning-note-${warning.severity}` }, [el('p', {}, [warningMessage(warning, scenario.fund_use_horizon_boundaries)])]) : null,
       ]);
     }),
   );
 
+  const singleSlice = donutSingleSliceAccount(plan, excluded);
+
   return el('div', { class: 'chart-area' }, [
     el('div', { class: 'donut-wrap' }, [donut]),
-    el('p', { class: 'field-help chart-note' }, ['같은 값을 잔여 한도와 함께 —']),
+    singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
+    el('p', { class: 'field-help chart-note' }, ['같은 값을 납입 잔여 한도와 함께 —']),
     barSection,
+  ]);
+}
+
+/** 조각이 하나뿐이면 그 계좌 id, 아니면 null (screens.md 5.12절 캡션 조건). */
+function donutSingleSliceAccount(plan, excluded) {
+  if (plan.unallocated_annual_krw > 0) return null;
+  const drawn = plan.allocations.filter((a) => !excluded.includes(a.account) && a.annual_krw > 0);
+  return drawn.length === 1 ? drawn[0].account : null;
+}
+
+/**
+ * 세액공제 인정 여지 — 연금계좌 묶음에 한 번, `(연금저축·IRP 합산)`을 붙여
+ * 적는다. 배분액이 이 값을 넘으면 그 사실과 이유를 함께 적는다(5.10절 (3)).
+ * 넘는 현상은 개정안 시나리오에서만 나타나므로 그때 `ProposedBadge`가 붙는다.
+ */
+function creditHeadroomBlock(scenario, plan) {
+  const view = pensionCreditHeadroomView(scenario, plan);
+  if (view.remainingKrw === null) return null;
+  const laws = lawEntriesForPath(scenario, 'limits.pension_combined_credit_limit_krw');
+  return el('div', { class: 'headroom-note' }, [
+    el('p', { class: 'type-body-s' }, [creditHeadroomCaption(view.remainingKrw)]),
+    view.exceeded ? el('p', { class: 'type-body-s' }, [CREDIT_HEADROOM_EXCEEDED_CAPTION]) : null,
+    view.exceeded || laws.length
+      ? el('p', { class: 'note-laws' }, [
+          view.exceeded && !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
+          ...laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
+        ])
+      : null,
+  ]);
+}
+
+/** ISA 비과세 한도 — 한도이지 절감액이 아니다. 헤드라인 절세액에 더하지 않는다. */
+function isaTaxFreeBlock(scenario, view) {
+  if (view.taxFreeLimitKrw === null) return null;
+  return el('div', { class: 'headroom-note' }, [
+    el('p', { class: 'type-body-s' }, [isaTaxFreeCaption(view.taxFreeLimitKrw)]),
+    lawChipRow(lawEntriesForPath(scenario, 'limits.by_account[isa].tax_free_limit_krw'), 'note-laws'),
   ]);
 }
 
 function stackBarComparison(scenario, activePlanId, onSelect) {
   const budget = scenario.plans[0]?.total_allocated_annual_krw + scenario.plans[0]?.unallocated_annual_krw || 1;
-  if (scenario.plans.length < 2) {
-    return el('p', { class: 'field-help' }, ['입력한 조건에서는 비교할 다른 배분이 나오지 않았습니다.']);
-  }
   const excluded = excludedAccounts(scenario);
+  // 배제는 배분안마다 달라지지 않고 시나리오 전체에 걸린다 — 행마다 반복하면
+  // 소음이므로 영역 위 한 줄로 세 행 모두에 적용된다는 것을 보인다(5.9절).
+  const excludedLine = excluded.length ? el('p', { class: 'field-help' }, [excludedFromComparisonMessage(excluded)]) : null;
+  if (scenario.plans.length < 2) {
+    return el('div', { class: 'stackbar' }, [
+      el('p', { class: 'field-help' }, ['입력한 조건에서는 비교할 다른 배분이 나오지 않았습니다.']),
+      excludedLine,
+    ]);
+  }
   const rows = scenario.plans.map((plan) => {
     const selected = plan.plan_id === activePlanId;
     return el(
@@ -318,6 +397,7 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
   });
   return el('div', { class: 'stackbar' }, [
     el('h3', { class: 'type-title-m' }, ['다른 배분과 나란히 보기']),
+    excludedLine,
     ...rows,
     el('p', { class: 'field-help' }, ['▸ 표시가 지금 위에 그려진 배분입니다. 행을 누르면 도넛과 막대가 그 배분으로 바뀝니다.']),
   ]);
@@ -325,12 +405,18 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
 
 function accountTable(plan, scenario) {
   const rows = [];
+  // 세액공제 인정 여지의 보조 줄은 연금계좌 묶음 아래 **한 번만** 붙는다(5.10절 (4)).
+  const lastPensionAccount = plan.allocations
+    .map((a) => a.account)
+    .filter((account) => PENSION_ACCOUNTS.includes(account) && !accountLimitView(scenario, account).excluded)
+    .pop();
+
   for (const a of plan.allocations) {
     const view = accountLimitView(scenario, a.account);
 
     // 배제된 계좌 — 금액 칸을 비우고(0원도 쓰지 않는다: 배분하지 않았다는 뜻이
     // 아니라 배분 대상이 아니라는 뜻이다) 바로 아래 줄에 사유와 근거 조항을
-    // 붙인다. 잔여 한도 대비 비율도 한도에서 나온 값이므로 표시하지 않는다.
+    // 붙인다. 납입 잔여 한도 대비 비율도 한도에서 나온 값이므로 표시하지 않는다.
     if (view.excluded) {
       const laws = lawEntriesFor(scenario, view.basisRuleIds);
       rows.push(
@@ -343,13 +429,7 @@ function accountTable(plan, scenario) {
         ]),
       );
       rows.push(
-        el('tr', { class: 'table-row-excluded' }, [
-          el('td', { colspan: 5 }, [
-            view.reasonCodes.length
-              ? view.reasonCodes.map(exclusionReasonMessage).join(' ')
-              : EXCLUDED_ACCOUNT_FALLBACK_REASON,
-          ]),
-        ]),
+        el('tr', { class: 'table-row-excluded' }, [el('td', { colspan: 5 }, [exclusionReasonText(view)])]),
       );
       continue;
     }
@@ -367,6 +447,36 @@ function accountTable(plan, scenario) {
         el('td', {}, [lawEntry ? el('span', { class: 'law-chip' }, [lawEntry.law]) : '']),
       ]),
     );
+
+    // 보조 줄 — 배분액과 나란한 열에 놓지 않는다(5.10·5.11절). 나란히 놓는 순간
+    // "이만큼까지 넣을 수 있다"로 읽힌다.
+    if (a.account === lastPensionAccount) {
+      const headroom = pensionCreditHeadroomView(scenario, plan);
+      if (headroom.remainingKrw !== null) {
+        rows.push(
+          el('tr', { class: 'table-row-note' }, [
+            el('td', { colspan: 5 }, [
+              creditHeadroomCaption(headroom.remainingKrw),
+              headroom.exceeded ? ` ${CREDIT_HEADROOM_EXCEEDED_CAPTION} ` : null,
+              headroom.exceeded && !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
+            ]),
+          ]),
+        );
+      }
+    }
+    if (a.account === 'isa' && view.taxFreeLimitKrw !== null) {
+      rows.push(
+        el('tr', { class: 'table-row-note' }, [
+          el('td', { colspan: 5 }, [
+            isaTaxFreeCaption(view.taxFreeLimitKrw),
+            ...lawEntriesForPath(scenario, 'limits.by_account[isa].tax_free_limit_krw').flatMap((entry) => [
+              ' ',
+              el('span', { class: 'law-chip' }, [entry.law]),
+            ]),
+          ]),
+        ]),
+      );
+    }
   }
   if (plan.unallocated_annual_krw > 0) {
     rows.push(
@@ -375,7 +485,7 @@ function accountTable(plan, scenario) {
         el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_monthly_krw)]),
         el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_annual_krw)]),
         el('td', {}, ['—']),
-        el('td', {}, ['세 계좌의 잔여 한도를 모두 채우고 남은 금액입니다.']),
+        el('td', {}, ['세 계좌의 납입 잔여 한도를 모두 채우고 남은 금액입니다.']),
       ]),
     );
   }
@@ -390,7 +500,7 @@ function accountTable(plan, scenario) {
     );
   }
   return el('table', { class: 'account-table' }, [
-    el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '잔여 한도 대비', '적용 조항'].map((h) => el('th', {}, [h])))]),
+    el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '납입 잔여 한도 대비', '적용 조항'].map((h) => el('th', {}, [h])))]),
     el('tbody', {}, rows),
   ]);
 }

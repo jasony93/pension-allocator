@@ -101,6 +101,38 @@ export function allocationSegments({ allocations, unallocatedAnnualKrw = 0, excl
   return segments;
 }
 
+export const MIN_SLICE_DEG = 2;
+
+/**
+ * 조각의 시작·끝 각도를 낸다. **금액이 0보다 크면 최소 `MIN_SLICE_DEG`를
+ * 보장한다**(design-system 5.20절 확정 규약: "보이지 않는 조각보다 약간 부정확한
+ * 조각이 낫고, 그 왜곡은 조각 라벨의 금액이 바로잡는다"). 늘린 만큼은 최소각보다
+ * 큰 조각들에서 비례로 덜어내므로 합은 언제나 360°다.
+ *
+ * 순수 함수다 — 각도 규약을 DOM 없이 테스트로 고정하기 위해서다.
+ */
+export function sliceAngles(segments, { minDeg = MIN_SLICE_DEG } = {}) {
+  const drawable = (segments ?? []).filter((s) => s.amount > 0);
+  const total = drawable.reduce((sum, s) => sum + s.amount, 0);
+  if (total <= 0) return [];
+
+  const raw = drawable.map((s) => ({ ...s, sweep: (s.amount / total) * 360 }));
+  const deficit = raw.reduce((sum, s) => sum + Math.max(0, minDeg - s.sweep), 0);
+  const donorTotal = raw.filter((s) => s.sweep > minDeg).reduce((sum, s) => sum + s.sweep, 0);
+  const adjusted = raw.map((s) => {
+    if (s.sweep < minDeg) return { ...s, sweep: minDeg };
+    if (deficit === 0 || donorTotal <= 0) return s;
+    return { ...s, sweep: s.sweep - deficit * (s.sweep / donorTotal) };
+  });
+
+  let angle = 0;
+  return adjusted.map((s) => {
+    const arc = { ...s, start: angle, end: angle + s.sweep };
+    angle += s.sweep;
+    return arc;
+  });
+}
+
 /**
  * C-1 입체 도넛. `allocations`는 `{account, annual_krw}[]`, `unallocatedAnnualKrw`는
  * 이번 배분에서 남는 금액(없으면 0), `isProposed`는 개정예고 시나리오 여부
@@ -116,15 +148,7 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
 
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
   const total = segments.reduce((s, seg) => s + seg.amount, 0);
-
-  let angle = 0;
-  const arcs = [];
-  for (const seg of segments) {
-    if (total <= 0 || seg.amount <= 0) continue;
-    const sweep = (seg.amount / total) * 360;
-    arcs.push({ ...seg, start: angle, end: angle + sweep });
-    angle += sweep;
-  }
+  const arcs = sliceAngles(segments);
 
   const sides = arcs.map((a) =>
     svgEl('path', {
@@ -183,15 +207,15 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
 }
 
 // D16 — 트랙 길이의 공통 배율. screens.md 5.4절: "세 막대는 공통 배율을 쓴다.
-// 잔여 한도가 가장 큰 계좌의 트랙이 화면 폭을 채우고, 나머지는 그 비율만큼
-// 짧아진다." 잔여 한도가 가장 큰 계좌를 100%로 잡는다 — 그 계좌가 이 회차에
+// 납입 잔여 한도가 가장 큰 계좌의 트랙이 화면 폭을 채우고, 나머지는 그 비율만큼
+// 짧아진다." 납입 잔여 한도가 가장 큰 계좌를 100%로 잡는다 — 그 계좌가 이 회차에
 // 실제로 더 채울 수 있는 최대치이므로, "이 배분 시점에 계좌들이 서로 얼마나
 // 여유로운가"를 그대로 반영하는 자연스러운 기준이다. 총 납입한도(ISA 1억원 등
 // 세법 상수) 같은 고정값을 100%로 잡지 않은 이유: 그 값은 여기 화면에 안
 // 나온다(세법 수치를 코드에 두지 않는다는 원칙과도 맞지 않는다), 계좌마다
 // 성격이 달라(연금계좌는 매년 리셋되는 공유 풀, ISA는 누적 총액) 공통 분모가
 // 없다.
-const MIN_TRACK_PERCENT = 8; // 잔여 한도가 있지만 최댓값 대비 작은 계좌가 안 보이지 않게 하는 바닥값
+const MIN_TRACK_PERCENT = 8; // 납입 잔여 한도가 있지만 최댓값 대비 작은 계좌가 안 보이지 않게 하는 바닥값
 const ZERO_TRACK_PERCENT = 3; // "완전히 소진"을 "작지만 남음"과 구분하는, 그보다 더 낮은 바닥값
 // 배제된 계좌의 트랙 폭. 한도에서 계산하지 않는 고정값이다 — 이 계좌에 대해
 // 화면이 말할 수 있는 한도가 없다는 사실 자체를 길이가 아니라 형태(빗금 · 채움
@@ -199,7 +223,7 @@ const ZERO_TRACK_PERCENT = 3; // "완전히 소진"을 "작지만 남음"과 구
 const UNAVAILABLE_TRACK_PERCENT = 12;
 
 /**
- * `remaining`(이 계좌의 잔여 한도)을 `maxRemaining`(세 계좌 중 최댓값) 대비
+ * `remaining`(이 계좌의 납입 잔여 한도)을 `maxRemaining`(세 계좌 중 최댓값) 대비
  * 트랙 길이(%)로 바꾼다. 순서(0 < 작음 < … < 최댓값=100)는 어떤 입력에서도
  * 뒤집히지 않는다 — 바닥값은 "안 보일 정도로 작은 값"만 끌어올릴 뿐, 상대
  * 크기 비교 자체를 왜곡하지 않는다. 정확한 값은 트랙 옆 캡션에 원 단위로
@@ -242,6 +266,10 @@ export function allocationBar({
   // 끌어오지 않는다 — 길이가 곧 금액인 그림이므로, 표시하지 않기로 한 금액이
   // 길이로 새어 나가면 같은 결함이 형태만 바꿔 남는다. 계좌를 지우지는 않는다
   // (`screens.md` 5.4절: "계좌를 화면에서 지우면 왜 빠졌는지를 알 수 없다").
+  //
+  // **트랙은 점선 윤곽으로 그린다**(`screens.md` 5.9절 확정). 채움 없는 실선
+  // 트랙은 "한도는 있는데 이번에 안 채웠다"와 "대상이 아니다"를 같은 그림으로
+  // 만든다 — 두 사실을 가르는 것은 색이나 길이가 아니라 선의 형태다.
   const track = el(
     'div',
     {
@@ -263,7 +291,7 @@ export function allocationBar({
     'aria-label',
     unavailable
       ? `${ACCOUNT_LABEL[account]}, ${unavailableLabel}`
-      : `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 잔여 한도 ${formatKrw(remainingLimitKrw)} 중 ${formatPercent(percentOfLimit)} 사용`,
+      : `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 납입 잔여 한도 ${formatKrw(remainingLimitKrw)} 중 ${formatPercent(percentOfLimit)} 사용`,
   );
   return track;
 }
