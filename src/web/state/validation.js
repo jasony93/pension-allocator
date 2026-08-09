@@ -117,4 +117,31 @@ export function validateForm(form) {
   };
 }
 
+/**
+ * `[4-E]`에 들어갈 **화면 파생 가정 코드**. 엔진 notice가 아니라 입력 상태에서
+ * 나오는 항목들이며 `screens.md` 4.5절 표의 나머지 행이다.
+ *
+ * 왜 여기 있나 — 문구 사전에는 이 넷이 있는데 **화면이 한 번도 목록에 넣지
+ * 않고 있었다.** 그래서 입력 부족 화면의 `기납입액은 … 그 사실을 아래 가정에
+ * 적습니다`가 지키지 못할 약속이 되어 있었다. `qa`가 잡은 Q1과 같은 부류다 —
+ * 조건부 사실을 말하는 표현이 그 조건을 읽지 않은 자리.
+ *
+ * 판정하지 않는다. 폼에 무엇이 들어 있는지만 본다. 각 문장은 "무엇을 그대로
+ * 두고 계산했는가"를 말하므로 사용자가 그 값을 직접 골랐더라도 참이다.
+ */
+export function formDerivedAssumptionCodes(form) {
+  const codes = [];
+  const zero = (v) => isBlank(v) || parseIntStrict(v) === 0;
+
+  if (zero(form.annuitySavingsYtd) && zero(form.retirementPensionYtd) && (!form.isaExists || zero(form.isaYtd))) {
+    codes.push('existing_contribution_untouched');
+  }
+  if (!form.isaExists) codes.push('isa_not_held_excluded');
+  if (form.isaExists && form.isaAccountType === 'general') codes.push('isa_account_type_defaulted');
+  if (form.isaExists && form.isaTransferEnabled && form.isaTransferDestination === 'retirement_pension') {
+    codes.push('transfer_destination_defaulted');
+  }
+  return codes;
+}
+
 export { parseIntStrict };

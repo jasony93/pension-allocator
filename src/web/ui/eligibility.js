@@ -75,6 +75,49 @@ export function excludedAccounts(scenario) {
 export const PENSION_ACCOUNTS = ['annuity_savings', 'retirement_pension'];
 
 /**
+ * 화면에서 계좌를 나열하는 순서. `charts.js`의 `CHART_ACCOUNT_ORDER`와 같아야
+ * 한다(도넛·막대·표·문장이 서로 다른 순서로 계좌를 부르면 대조가 깨진다).
+ * 여기서 다시 적는 이유는 이 모듈을 DOM 없이 유지하기 위해서이고, 두 목록이
+ * 어긋나지 않는다는 것은 테스트가 고정한다.
+ */
+const ACCOUNT_DISPLAY_ORDER = ['annuity_savings', 'retirement_pension', 'isa'];
+
+/**
+ * 계약 5.5절 `Allocation.limited_by`가 취할 수 있는 값. 미배분 금액을 설명하는
+ * 문장은 **이 값마다 달라야 한다.**
+ *
+ * `budget`은 목록에 있지만 미배분 사유가 될 수 없다 — 예산이 모자라 멈춘 것과
+ * 예산이 남은 것은 동시에 성립하지 않는다. 그래서 문장에서 뺀다.
+ */
+export const UNALLOCATED_REASON_ORDER = ['contribution_limit', 'credit_limit', 'not_eligible'];
+
+/**
+ * 미배분 금액이 **왜** 남았는지를 엔진의 `limited_by`에서 읽어 사유별로 묶는다.
+ *
+ * 4단계 `qa`가 잡은 Q1의 자리다. 화면은 "세 계좌의 납입 잔여 한도를 모두 채우고
+ * 남은 금액"이라는 문장을 **무조건** 냈는데, 배분이 `credit_limit`이나
+ * `not_eligible`로 멈춘 경우 그것은 거짓이다 — 납입 잔여 한도가 그대로 남아
+ * 있는데 다 채웠다고 말하게 된다. 엔진 응답은 자기모순이 아니었고
+ * (`limited_by`가 정확히 실려 있었다) **화면이 그것을 읽지 않은 것**이 결함이었다.
+ *
+ * 판정하지 않는다. 엔진이 각 배분에 적어 보낸 값을 묶기만 한다.
+ */
+export function unallocatedBlockers(plan) {
+  const byReason = new Map();
+  for (const account of ACCOUNT_DISPLAY_ORDER) {
+    const allocation = (plan?.allocations ?? []).find((a) => a.account === account);
+    const reason = allocation?.limited_by;
+    if (!reason || !UNALLOCATED_REASON_ORDER.includes(reason)) continue;
+    if (!byReason.has(reason)) byReason.set(reason, []);
+    byReason.get(reason).push(account);
+  }
+  return UNALLOCATED_REASON_ORDER.filter((reason) => byReason.has(reason)).map((reason) => ({
+    reason,
+    accounts: byReason.get(reason),
+  }));
+}
+
+/**
  * 연금계좌 묶음의 **세액공제 인정 여지**. 계약 5.3절이 이 값을 "추가로 인정될
  * 여지"로 정의하고 **배분 상한이 아니라고** 못박았다 — 개정안 청년 IRP 우대에서는
  * 추가 IRP 납입이 이미 인정된 연금저축 기납입분을 공제 풀에서 밀어내므로

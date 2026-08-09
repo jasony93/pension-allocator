@@ -9,14 +9,23 @@ import { el } from './dom.js';
 import { FUND_USE_HORIZON_LABEL, FUND_USE_HORIZON_DESCRIPTION, HORIZON_EFFECT_CAPTION } from '../copy.js';
 import { formatYears } from '../format.js';
 
-function fieldError(errors, key) {
+/**
+ * `showMissing`는 **조건부 필수 항목에만** 켠다.
+ *
+ * 'missing'(단순히 비어 있음)은 기본적으로 여기서 빨간 오류로 보여주지 않는다 —
+ * 그건 `RequirementChecklist`의 역할이고, 그렇지 않으면 첫 진입부터 아직 손대지
+ * 않은 빈 필드가 전부 빨갛게 보인다.
+ *
+ * **그런데 그 위임이 성립하지 않는 자리가 하나 있다**(4단계 `qa` 결함 Q2).
+ * 체크리스트의 조건부 행은 입력 부족 패널 안에만 있어서, 결과가 이미 나온 뒤에
+ * 조건부 필수 항목을 비우면 위임처가 사라진다 — 결과는 갱신되지 않는데 화면
+ * 어디에도 단서가 없다(AC 8 실패). 이 항목은 사용자가 방금 `예`를 눌러 스스로
+ * 불러낸 필드이므로, 비어 있다는 사실을 필드 옆에서 바로 말하는 것이 맞다.
+ */
+function fieldError(errors, key, { showMissing = false } = {}) {
   const e = errors[key];
   if (!e) return null;
-  // 'missing'(단순히 비어 있음)은 여기서 빨간 오류로 보여주지 않는다 — 그건
-  // RequirementChecklist의 역할이다. 여기서 보여주는 건 실제로 잘못된 값
-  // (정수가 아님, 음수, 누적액 초과 등)뿐이다. 그렇지 않으면 첫 진입부터
-  // 아직 손대지 않은 빈 필드가 전부 빨갛게 보인다.
-  if (e.code === 'missing') return null;
+  if (e.code === 'missing' && !showMissing) return null;
   return e.message;
 }
 
@@ -287,7 +296,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
       id: 'isaTransferAmount',
       label: '전환 금액',
       value: form.isaTransferAmount,
-      error: fieldError(errors, 'isaTransferAmount'),
+      // 조건부 필수 — 비어 있으면 계산이 멈추므로 그 사실을 필드 옆에서 말한다(Q2).
+      error: fieldError(errors, 'isaTransferAmount', { showMissing: true }),
       onInput: (v) => store.setField('isaTransferAmount', v),
       onBlur: () => store.flush(),
       renderGuard,

@@ -7,8 +7,10 @@ import {
   lawEntriesFor,
   lawEntriesForPath,
   pensionCreditHeadroomView,
+  unallocatedBlockers,
 } from './eligibility.js';
-import { exclusionReasonMessage, EXCLUDED_ACCOUNT_FALLBACK_REASON } from '../copy.js';
+import { CHART_ACCOUNT_ORDER } from './charts.js';
+import { exclusionReasonMessage, unallocatedReasonMessage, EXCLUDED_ACCOUNT_FALLBACK_REASON } from '../copy.js';
 
 /**
  * 4단계 검증 관찰 O1의 회귀 테스트 — **ISA가 배제된 사용자에게 비과세 한도가
@@ -199,6 +201,78 @@ test('an allocation above the credit headroom is reported as exceeded, not clamp
 
 test('exactly meeting the headroom is not "exceeded"', () => {
   assert.equal(pensionCreditHeadroomView(scenarioWithCreditHeadroom(9000000), planWithPension(0, 9000000)).exceeded, false);
+});
+
+// --- Q1: 미배분 금액의 사유는 `limited_by` 값마다 달라야 한다 -----------------
+//
+// 4단계 qa가 잡은 결함. 화면이 "세 계좌의 납입 잔여 한도를 모두 채우고 남은
+// 금액"을 무조건 출력해, 배분이 공제한도·배제로 멈춘 경우 거짓을 말했다.
+// `limited_by`의 값마다 문장을 고정해 같은 부류가 네 번째로 나오지 않게 한다.
+
+const planLimitedBy = (pension, annuity, isa) => ({
+  allocations: [
+    { account: 'retirement_pension', annual_krw: 0, limited_by: pension },
+    { account: 'annuity_savings', annual_krw: 0, limited_by: annuity },
+    { account: 'isa', annual_krw: 0, limited_by: isa },
+  ],
+});
+const FALSE_CLAIM = '모두 채우고';
+
+test('limited_by=contribution_limit — the sentence may say the contribution room is full', () => {
+  const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy('contribution_limit', 'contribution_limit', 'contribution_limit')));
+  assert.match(text, /납입 잔여 한도를 모두 채웠습니다/);
+  assert.match(text, /연금저축·IRP·ISA/);
+});
+
+test('limited_by=credit_limit — the sentence says contribution room is LEFT, never that it is full', () => {
+  // qa 재현 케이스: 연금 납입 잔여 한도 9,000,000이 그대로 남아 있는데 멈춘 상태.
+  const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy('credit_limit', 'credit_limit', 'not_eligible')));
+  assert.match(text, /세액공제 대상 납입액을 모두 채웠습니다\(납입 잔여 한도는 남아 있습니다\)/);
+  assert.ok(!text.includes(FALSE_CLAIM), `사실이 아닌 문장이 남아 있다: ${text}`);
+});
+
+test('limited_by=not_eligible — the sentence names exclusion, not a limit', () => {
+  const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy('not_eligible', 'not_eligible', 'not_eligible')));
+  assert.match(text, /이번 계산의 배분 대상이 아닙니다/);
+  assert.ok(!text.includes('한도'), text);
+});
+
+test('mixed reasons are reported side by side with the right accounts under each', () => {
+  const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy('credit_limit', 'contribution_limit', 'not_eligible')));
+  assert.match(text, /연금저축는 납입 잔여 한도를 모두 채웠습니다/);
+  assert.match(text, /IRP는 세액공제 대상 납입액을 모두 채웠습니다/);
+  assert.match(text, /ISA는 이번 계산의 배분 대상이 아닙니다/);
+});
+
+test('limited_by=budget or null never claims a limit was reached — leftover money contradicts it', () => {
+  for (const reason of ['budget', null]) {
+    const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy(reason, reason, reason)));
+    assert.equal(text, '이 배분에 들어가지 않은 금액입니다.');
+    assert.ok(!text.includes(FALSE_CLAIM));
+  }
+});
+
+test('no limited_by value can produce the old unconditional claim unless every account really is contribution-limited', () => {
+  const values = ['budget', 'contribution_limit', 'credit_limit', 'not_eligible', null];
+  for (const a of values) {
+    for (const b of values) {
+      for (const c of values) {
+        const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy(a, b, c)));
+        const allContribution = [a, b, c].every((v) => v === 'contribution_limit');
+        if (!allContribution) {
+          assert.ok(
+            !/연금저축·IRP·ISA는 납입 잔여 한도를 모두 채웠습니다/.test(text),
+            `세 계좌가 전부 납입 한도로 멈춘 것이 아닌데 그렇게 말한다: ${a}/${b}/${c} → ${text}`,
+          );
+        }
+      }
+    }
+  }
+});
+
+test('accounts are named in the fixed screen order, matching the charts', () => {
+  const groups = unallocatedBlockers(planLimitedBy('contribution_limit', 'contribution_limit', 'contribution_limit'));
+  assert.deepEqual(groups[0].accounts, CHART_ACCOUNT_ORDER, '문장과 차트가 계좌를 다른 순서로 부르면 대조가 깨진다');
 });
 
 test('a missing headroom value yields null and never a phantom zero', () => {

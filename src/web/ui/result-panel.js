@@ -22,13 +22,16 @@ import {
   creditHeadroomCaption,
   isaTaxFreeCaption,
   donutSingleSliceCaption,
+  unallocatedReasonMessage,
+  CONDITIONAL_PENDING_ALERT,
+  CONDITIONAL_PENDING_STALE_CAPTION,
   EXCLUDED_ACCOUNT_FALLBACK_REASON,
   EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
   CREDIT_HEADROOM_EXCEEDED_CAPTION,
   PROPOSED_BADGE_LABEL,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
-import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
+import { CORE_REQUIRED_FIELDS, formDerivedAssumptionCodes } from '../state/validation.js';
 import { donutChart, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
 import {
   accountLimitView,
@@ -36,6 +39,7 @@ import {
   lawEntriesFor,
   lawEntriesForPath,
   pensionCreditHeadroomView,
+  unallocatedBlockers,
   PENSION_ACCOUNTS,
 } from './eligibility.js';
 import { openShareModal } from './share.js';
@@ -485,7 +489,10 @@ function accountTable(plan, scenario) {
         el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_monthly_krw)]),
         el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_annual_krw)]),
         el('td', {}, ['—']),
-        el('td', {}, ['세 계좌의 납입 잔여 한도를 모두 채우고 남은 금액입니다.']),
+        // Q1 — 문장을 고정하지 않고 엔진의 `limited_by`를 읽어 사유별로 가른다.
+        // 납입 한도를 다 채워 멈춘 것과 세액공제가 더 붙지 않아 멈춘 것은
+        // 사용자에게 전혀 다른 사실이다.
+        el('td', {}, [unallocatedReasonMessage(unallocatedBlockers(plan))]),
       ]),
     );
   }
@@ -505,9 +512,13 @@ function accountTable(plan, scenario) {
   ]);
 }
 
-function assumptionBlock(response, scenario) {
+function assumptionBlock(response, scenario, form) {
   const items = [];
   for (const a of response.assumptions) items.push(assumptionMessage(a.code, a.params));
+  // 화면 파생 항목(screens.md 4.5절) — 엔진 notice가 아니라 폼 상태에서 나온다.
+  // 이 넷이 빠져 있어서 입력 부족 화면의 "그 사실을 아래 가정에 적습니다"가
+  // 지켜지지 않고 있었다.
+  for (const code of formDerivedAssumptionCodes(form ?? {})) items.push(assumptionMessage(code, {}));
   for (const n of scenario.notices.filter((n) => n.severity === 'info' || n.severity === 'warning')) {
     if (n.code === 'proposed_not_enacted') continue; // 고지 ⑥에서 별도 표시
     items.push(noticeMessage(n));
@@ -581,20 +592,23 @@ function proposedScenarioCaption(scenario) {
   ]);
 }
 
-function resultPanelForScenario(response, scenario, activePlanId, store, onSelectPlan) {
+function resultPanelForScenario(response, scenario, activePlanId, store, onSelectPlan, { conditionalPending = false, form = {} } = {}) {
   const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
   const showAllExitBanner = scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty');
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
 
   return el('div', { class: 'result-body' }, [
     amountCard(plan, scenario),
+    // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
+    // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
+    conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year),
     reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),
-    assumptionBlock(response, scenario),
+    assumptionBlock(response, scenario, form),
     basisBlock(scenario),
     limitNote(),
     saveShareBlock(store, plan, scenario),
@@ -658,7 +672,13 @@ export function renderResultPanel({ state, store }) {
     rerenderHook();
   };
 
-  const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan);
+  // Q2 — 조건부 필수 항목(전환 금액)이 비면 결과는 갱신되지 않는데 화면에 단서가
+  // 하나도 없었다. `screens.md` 3.5절이 정한 처리: **직전 결과를 지우지 않고**
+  // 상단에 `InlineAlert(info)`를 띄우고, 아래 결과가 아직 그 입력을 반영하지
+  // 않았다는 표시를 함께 둔다. 오류 색이 아니라 info다 — 사용자가 무언가를
+  // 망가뜨린 것이 아니라 아직 덜 채운 것이다.
+  const conditionalPending = Boolean(state.validation?.conditionalPending);
+  const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, { conditionalPending, form: state.form });
 
   const wrapperClass =
     status === 'loading' ? 'result-panel-inner result-loading-overlay' : status === 'field_error' ? 'result-panel-inner' : 'result-panel-inner';
@@ -666,8 +686,16 @@ export function renderResultPanel({ state, store }) {
   return el('div', { class: wrapperClass }, [
     disclosureBanner(),
     status === 'field_error' ? fieldErrorBanner(store) : null,
+    conditionalPending ? conditionalPendingAlert() : null,
     scenarioTabs(result, scenarioId, onSelectScenario),
     body,
+  ]);
+}
+
+function conditionalPendingAlert() {
+  return el('div', { class: 'inline-alert inline-alert-info', role: 'status' }, [
+    el('p', { class: 'type-body-strong' }, [CONDITIONAL_PENDING_ALERT]),
+    el('button', { type: 'button', class: 'btn btn-text', onclick: () => focusField('isaTransferAmount') }, ['→ 입력하기']),
   ]);
 }
 

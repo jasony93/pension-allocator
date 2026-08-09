@@ -206,6 +206,9 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
 .inline-alert { border-radius: var(--radius-m); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
 .inline-alert-error { background: var(--state-error-subtle); border-left: 3px solid var(--state-error); }
+/* 조건부 필수 항목이 아직 비어 있는 상태 — 오류가 아니라 덜 채운 것이다(3.5절). */
+.inline-alert-info { background: var(--state-info-subtle); border-left: 3px solid var(--state-info); }
+.stale-caption { font-size: 12.5px; color: var(--state-info); margin: 0; }
 
 .amount-card { display: flex; flex-direction: column; gap: var(--space-1); }
 .amount-card-label { font-size: 14px; color: var(--text-secondary); margin: 0; }

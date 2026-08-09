@@ -74,15 +74,17 @@ export function errorMessage(error) {
 
 const NOTICE_MESSAGE = {
   zero_capacity: () => '월 납입 여력이 0원으로 입력되어 배분할 금액이 없습니다.',
-  budget_exceeds_all_limits: () => '입력한 월 납입 여력이 세 계좌의 납입 잔여 한도 합계보다 많습니다.',
-  existing_contribution_over_limit: () => '이미 입력한 기납입액이 연금계좌 납입 한도를 넘어 납입 잔여 한도를 0으로 계산했습니다.',
+  budget_exceeds_all_limits: () =>
+    '입력한 월 납입 여력이 이번 계산에서 배분할 수 있는 금액보다 많습니다. 남는 금액은 어느 계좌에도 배분되지 않았습니다.',
+  existing_contribution_over_limit: () =>
+    '이미 입력한 기납입액이 관련 한도를 넘어, 그 항목의 남은 금액을 0으로 계산했습니다.',
   prior_year_income_missing: () => '직전 과세기간 총급여액을 받지 않아 ISA 비과세 한도 구간의 교차확인을 하지 않았습니다.',
   isa_type_conflicts_with_prior_income: () => '입력한 ISA 계좌 유형이 직전 과세기간 소득 기준 판정과 다릅니다. 계산은 입력한 유형을 그대로 따랐습니다.',
   isa_type_not_declared: () => 'ISA 계좌 유형을 입력하지 않아 비과세 한도 표시를 생략했습니다.',
   isa_tenure_missing: () => 'ISA 가입 시기를 받지 않아 남은 의무가입기간을 가장 길게 잡았습니다.',
   financial_income_status_unknown: () => '금융소득종합과세 대상 여부를 받지 않아 ISA 배제 규칙을 적용하지 않았습니다.',
   isa_excluded_financial_income_taxpayer: () => '금융소득종합과세 대상자에 해당해 ISA를 배분 대상에서 제외했습니다.',
-  isa_excluded_age: () => 'ISA 가입 연령 요건을 확인할 수 없어 ISA를 배분 대상에서 제외했습니다.',
+  isa_excluded_age: () => 'ISA 가입에 필요한 연령 요건에 해당하지 않아 ISA를 배분 대상에서 제외했습니다.',
   pension_age_not_evaluated: () => '연금계좌의 최소 가입 연령 요건은 판정 대상 규칙이 없어 확인하지 않았습니다.',
   youth_status_not_declared: () => '청년 우대 대상 여부를 받지 않아 개정안 시나리오의 청년 우대를 적용하지 않았습니다.',
   youth_age_range_undetermined: () => '청년 우대 연령 범위가 시행령 미공개로 확정되지 않았습니다.',
@@ -213,6 +215,50 @@ export const CREDIT_HEADROOM_EXCEEDED_CAPTION =
 export function isaTaxFreeCaption(limitKrw) {
   return `이 계좌의 비과세 한도 ${formatKrw(limitKrw)} — 계좌에서 생긴 수익에 적용됩니다. 수익은 계산하지 않으므로 위 절세액에 들어 있지 않습니다.`;
 }
+
+// ---------------------------------------------------------------------------
+// 미배분 금액의 사유 (4단계 qa 결함 Q1)
+//
+// **왜 멈췄는지에 따라 문장이 달라야 한다.** 납입 잔여 한도를 다 채워 멈춘 것과
+// 세액공제가 더 붙지 않아 멈춘 것은 사용자에게 전혀 다른 사실이다 — 전자는 더
+// 넣을 곳이 없다는 뜻이고, 후자는 넣을 수는 있으나 이번 계산 기준으로 공제
+// 이득이 없다는 뜻이다. 한 문장으로 뭉뚱그리면 후자의 사용자는 **더 넣을 수
+// 있는데 못 넣는다.**
+//
+// 문구는 잠정안이다 — 문구 소유권은 `designer`에게 있고 `qa`가 그 사실을
+// 리포트에 적었다. 대체 문구가 확정되면 이 사전만 바꾸면 된다.
+// ---------------------------------------------------------------------------
+
+const UNALLOCATED_REASON_CLAUSE = {
+  contribution_limit: (names) => `${names}는 납입 잔여 한도를 모두 채웠습니다`,
+  // 이 절이 Q1의 핵심 — 납입 여지가 남아 있다는 사실을 같은 문장 안에서 말한다.
+  credit_limit: (names) => `${names}는 세액공제 대상 납입액을 모두 채웠습니다(납입 잔여 한도는 남아 있습니다)`,
+  not_eligible: (names) => `${names}는 이번 계산의 배분 대상이 아닙니다`,
+};
+
+const UNALLOCATED_LEAD = '이 배분에 들어가지 않은 금액입니다.';
+
+/** `groups`는 `unallocatedBlockers()`가 낸 `{ reason, accounts }[]`. */
+export function unallocatedReasonMessage(groups) {
+  const clauses = (groups ?? [])
+    .map(({ reason, accounts }) => {
+      const clause = UNALLOCATED_REASON_CLAUSE[reason];
+      if (!clause || !accounts?.length) return null;
+      return clause(accounts.map((a) => ACCOUNT_LABEL[a] ?? a).join('·'));
+    })
+    .filter(Boolean);
+  return clauses.length ? `${UNALLOCATED_LEAD} ${clauses.join(', ')}.` : UNALLOCATED_LEAD;
+}
+
+// ---------------------------------------------------------------------------
+// 조건부 필수 항목이 비어 있을 때 (4단계 qa 결함 Q2 · screens.md 3.5절)
+// ---------------------------------------------------------------------------
+
+export const CONDITIONAL_PENDING_ALERT =
+  'ISA 만기 전환을 선택하셨습니다. 전환 금액을 입력하면 추가 공제 한도를 반영해 다시 계산합니다.';
+
+/** 아래 결과가 아직 전환을 반영하지 않았다는 표시(3.5절) — 금액 바로 옆에 둔다. */
+export const CONDITIONAL_PENDING_STALE_CAPTION = '아래 결과에는 ISA 만기 전환이 아직 반영되지 않았습니다.';
 
 /** 조각이 하나뿐인 도넛의 캡션 (5.12절). */
 export function donutSingleSliceCaption(account) {
