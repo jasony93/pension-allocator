@@ -154,6 +154,39 @@ export function warningMessage(warning, boundaries) {
 }
 
 // ---------------------------------------------------------------------------
+// 계좌 배제 사유 (`AccountEligibility.reason_codes`)
+//
+// 4단계 검증 관찰 O1의 화면 처리. 배제된 계좌에는 한도·혜택 금액 대신 이 문장이
+// 들어간다. 문구 규약은 `screens.md` 4.7절의 중도 불이익 안내와 같다 —
+// **주어는 사용자가 아니라 법령이고, 사실 서술로 끝낸다.** "가입하세요"·"다른
+// 계좌를 고려하세요" 같은 지시형, "손해"·"위험"·느낌표를 쓰지 않는다.
+// 사유 옆에는 호출부가 `basis_rule_ids`의 `LawChip`을 붙인다(헌장 고지 요소 3,
+// `screens.md` 8.4(b) "차단 사유에 반드시 LawChip을 붙인다").
+// ---------------------------------------------------------------------------
+
+const EXCLUSION_REASON_MESSAGE = {
+  isa_excluded_age: () =>
+    '입력한 나이가 이 계좌의 가입 대상 연령 요건을 충족하는 것으로 확인되지 않아, 이 계산에서 배분 대상이 아닙니다.',
+  isa_excluded_financial_income_taxpayer: () =>
+    '직전 3개 과세기간 중 금융소득종합과세 대상에 해당해 과세특례가 적용되지 않으므로, 이 계산에서 배분 대상이 아닙니다.',
+};
+
+export function exclusionReasonMessage(code) {
+  const fn = EXCLUSION_REASON_MESSAGE[code];
+  return fn ? fn() : code;
+}
+
+/** 배제 사유 코드가 하나도 없을 때의 대체 문장(계약상 있어야 하지만 비어 올 수 있다). */
+export const EXCLUDED_ACCOUNT_FALLBACK_REASON = '이 계좌는 입력한 조건에서 배분 대상이 아닙니다.';
+
+/** 한도·혜택 금액이 있어야 할 자리에 대신 들어가는 문장. */
+export const EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER = '배분 대상 아님';
+
+/** 왜 금액을 비웠는지 — 빈칸을 설명 없이 두지 않는다. */
+export const EXCLUDED_ACCOUNT_LIMIT_CAPTION =
+  '배분 대상이 아니어서 이 계좌의 한도와 비과세 한도 금액을 표시하지 않습니다.';
+
+// ---------------------------------------------------------------------------
 // 배분안 비교 안내 (8.5)
 // ---------------------------------------------------------------------------
 

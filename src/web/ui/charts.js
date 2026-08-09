@@ -33,7 +33,34 @@ function polar(cx, cy, rx, ry, angleDeg) {
   return [cx + rx * Math.sin(rad), cy - ry * Math.cos(rad)];
 }
 
-function annulusSlicePath(cx, cy, rOuter, rInner, ry, startDeg, endDeg) {
+/**
+ * 링 하나의 패스. 조각이 원 전체(360°)를 차지하면 시작점과 끝점이 같은 좌표가
+ * 되고, **끝점이 시작점과 같은 SVG 호는 아무것도 그리지 않는다.** 그러면 패스가
+ * 세로 선분으로 붕괴해 도넛이 폭 0으로 렌더된다 — 배분이 한 계좌에 전부 들어간
+ * 사용자(배제된 계좌가 있으면 더 흔해진다)에게 도넛이 통째로 사라지는 것이고,
+ * 관리자가 경고한 "0×0은 여백처럼 보인다"의 또 다른 사례다. 브라우저
+ * `getBoundingClientRect()`로 폭 0을 실측해 확인했다. 360°는 반원 두 개로
+ * 나눠 그린다.
+ */
+export function annulusSlicePath(cx, cy, rOuter, rInner, ry, startDeg, endDeg) {
+  if (endDeg - startDeg >= 360) {
+    const midDeg = startDeg + 180;
+    const [ox1, oy1] = polar(cx, cy, rOuter, rOuter * ry, startDeg);
+    const [ox2, oy2] = polar(cx, cy, rOuter, rOuter * ry, midDeg);
+    const [ix1, iy1] = polar(cx, cy, rInner, rInner * ry, startDeg);
+    const [ix2, iy2] = polar(cx, cy, rInner, rInner * ry, midDeg);
+    // 바깥 링은 시계방향, 안쪽 링은 반시계방향 — nonzero 채우기 규칙이 가운데를
+    // 구멍으로 남긴다(도넛의 표준 작도).
+    return [
+      `M ${ox1} ${oy1}`,
+      `A ${rOuter} ${rOuter * ry} 0 0 1 ${ox2} ${oy2}`,
+      `A ${rOuter} ${rOuter * ry} 0 0 1 ${ox1} ${oy1}`,
+      `M ${ix1} ${iy1}`,
+      `A ${rInner} ${rInner * ry} 0 0 0 ${ix2} ${iy2}`,
+      `A ${rInner} ${rInner * ry} 0 0 0 ${ix1} ${iy1}`,
+      'Z',
+    ].join(' ');
+  }
   const large = endDeg - startDeg > 180 ? 1 : 0;
   const [x1, y1] = polar(cx, cy, rOuter, rOuter * ry, startDeg);
   const [x2, y2] = polar(cx, cy, rOuter, rOuter * ry, endDeg);
@@ -49,24 +76,46 @@ function annulusSlicePath(cx, cy, rOuter, rInner, ry, startDeg, endDeg) {
 }
 
 /**
+ * 조각으로 그릴 대상을 정하는 **순수 함수**. C-1 도넛과 C-3 스택바가 같은 것을
+ * 쓴다 — 두 차트가 각자 판단하면 한쪽만 고쳐지는 사고가 난다(실제로 그랬다).
+ *
+ * `excludedAccounts`(엔진의 `account_eligibility`에서 온 배제 계좌)는 조각을
+ * 아예 만들지 않는다. 계약상 배제된 계좌의 배분액은 항상 0이고
+ * (`limited_by: "not_eligible"`), 따라서 이 필터가 실제 금액을 감추는 일은
+ * 없다. 그럼에도 명시적으로 거르는 이유는 **0원 조각이 조용히 사라지는 것과
+ * 배제를 이유로 그리지 않는 것이 다른 사실**이기 때문이다 — 후자는 테스트로
+ * 고정할 수 있고, 배제 계좌에 금액이 실려 오는 계약 위반 상황에서도 받을 수
+ * 없는 계좌에 돈을 넣은 그림을 그리지 않는다.
+ */
+export function allocationSegments({ allocations, unallocatedAnnualKrw = 0, excludedAccounts = [] }) {
+  const excluded = new Set(excludedAccounts);
+  const byAccount = Object.fromEntries((allocations ?? []).map((a) => [a.account, a.annual_krw]));
+  const segments = CHART_ACCOUNT_ORDER.filter((account) => !excluded.has(account)).map((account) => ({
+    account,
+    amount: byAccount[account] || 0,
+    isUnallocated: false,
+  }));
+  if (unallocatedAnnualKrw > 0) {
+    segments.push({ account: 'unallocated', amount: unallocatedAnnualKrw, isUnallocated: true });
+  }
+  return segments;
+}
+
+/**
  * C-1 입체 도넛. `allocations`는 `{account, annual_krw}[]`, `unallocatedAnnualKrw`는
  * 이번 배분에서 남는 금액(없으면 0), `isProposed`는 개정예고 시나리오 여부
- * (상단면에만 사선 해칭, design-system 3.5절 규약 3).
+ * (상단면에만 사선 해칭, design-system 3.5절 규약 3), `excludedAccounts`는
+ * 배분 대상에서 배제된 계좌(조각도 라벨도 그리지 않는다).
  */
-export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isProposed = false }) {
+export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isProposed = false, excludedAccounts = [] }) {
   const R = size / 2 - 8;
   const rInner = R * 0.55;
   const cx = size / 2;
   const cy = size / 2 + R * EXTRUDE_RATIO; // 압출 두께만큼 아래로 여유
   const depth = R * EXTRUDE_RATIO;
 
-  const byAccount = Object.fromEntries(allocations.map((a) => [a.account, a.annual_krw]));
-  const total = CHART_ACCOUNT_ORDER.reduce((s, a) => s + (byAccount[a] || 0), 0) + unallocatedAnnualKrw;
-
-  const segments = [
-    ...CHART_ACCOUNT_ORDER.map((account) => ({ account, amount: byAccount[account] || 0, isUnallocated: false })),
-    ...(unallocatedAnnualKrw > 0 ? [{ account: 'unallocated', amount: unallocatedAnnualKrw, isUnallocated: true }] : []),
-  ];
+  const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
+  const total = segments.reduce((s, seg) => s + seg.amount, 0);
 
   let angle = 0;
   const arcs = [];
@@ -144,6 +193,10 @@ export function donutChart({ allocations, unallocatedAnnualKrw, size = 240, isPr
 // 없다.
 const MIN_TRACK_PERCENT = 8; // 잔여 한도가 있지만 최댓값 대비 작은 계좌가 안 보이지 않게 하는 바닥값
 const ZERO_TRACK_PERCENT = 3; // "완전히 소진"을 "작지만 남음"과 구분하는, 그보다 더 낮은 바닥값
+// 배제된 계좌의 트랙 폭. 한도에서 계산하지 않는 고정값이다 — 이 계좌에 대해
+// 화면이 말할 수 있는 한도가 없다는 사실 자체를 길이가 아니라 형태(빗금 · 채움
+// 없음)로 보인다. 0으로 두면 요소가 여백처럼 사라진다.
+const UNAVAILABLE_TRACK_PERCENT = 12;
 
 /**
  * `remaining`(이 계좌의 잔여 한도)을 `maxRemaining`(세 계좌 중 최댓값) 대비
@@ -176,44 +229,61 @@ export function computeTrackScalePercent(remaining, maxRemaining) {
  * 그 계좌의 한도가 세 계좌 중 얼마나 큰지다 — 서로 다른 두 사실이라 같은
  * 요소의 서로 다른 치수(트랙 폭 vs 채움 폭)로 나눠 표현한다.
  */
-export function allocationBar({ account, monthlyKrw, remainingLimitKrw, percentOfLimit, trackScalePercent = 100, unavailable = false }) {
+export function allocationBar({
+  account,
+  monthlyKrw,
+  remainingLimitKrw,
+  percentOfLimit,
+  trackScalePercent = 100,
+  unavailable = false,
+  unavailableLabel = '',
+}) {
+  // 배제된 계좌(`unavailable`)에는 채움을 그리지 않고 트랙 길이도 한도에서
+  // 끌어오지 않는다 — 길이가 곧 금액인 그림이므로, 표시하지 않기로 한 금액이
+  // 길이로 새어 나가면 같은 결함이 형태만 바꿔 남는다. 계좌를 지우지는 않는다
+  // (`screens.md` 5.4절: "계좌를 화면에서 지우면 왜 빠졌는지를 알 수 없다").
   const track = el(
     'div',
-    { class: 'alloc-bar-track', role: 'img', tabindex: '0', style: { width: `${trackScalePercent}%` } },
-    [
-      el('div', {
-        class: 'alloc-bar-fill',
-        style: { width: `${Math.min(100, percentOfLimit * 100)}%`, background: unavailable ? UNALLOCATED_COLOR : ACCOUNT_COLOR[account] },
-      }),
-    ],
+    {
+      class: `alloc-bar-track${unavailable ? ' alloc-bar-track-unavailable' : ''}`,
+      role: 'img',
+      tabindex: '0',
+      style: { width: `${unavailable ? UNAVAILABLE_TRACK_PERCENT : trackScalePercent}%` },
+    },
+    unavailable
+      ? []
+      : [
+          el('div', {
+            class: 'alloc-bar-fill',
+            style: { width: `${Math.min(100, percentOfLimit * 100)}%`, background: ACCOUNT_COLOR[account] },
+          }),
+        ],
   );
   track.setAttribute(
     'aria-label',
-    `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 잔여 한도 ${formatKrw(remainingLimitKrw)} 중 ${formatPercent(percentOfLimit)} 사용`,
+    unavailable
+      ? `${ACCOUNT_LABEL[account]}, ${unavailableLabel}`
+      : `${ACCOUNT_LABEL[account]}, 월 ${formatKrw(monthlyKrw)}, 잔여 한도 ${formatKrw(remainingLimitKrw)} 중 ${formatPercent(percentOfLimit)} 사용`,
   );
   return track;
 }
 
-/** C-3 스택바 한 행의 조각들(계좌색 + 미배분). */
-export function stackBarSegments({ allocations, unallocatedAnnualKrw, totalBudgetKrw }) {
-  const byAccount = Object.fromEntries(allocations.map((a) => [a.account, a.annual_krw]));
+/** C-3 스택바 한 행의 조각들(계좌색 + 미배분). 배제된 계좌는 조각을 만들지 않는다. */
+export function stackBarSegments({ allocations, unallocatedAnnualKrw, totalBudgetKrw, excludedAccounts = [] }) {
   const denom = totalBudgetKrw > 0 ? totalBudgetKrw : 1;
   const wrapper = el('div', { class: 'stackbar-row-fill' });
-  for (const account of CHART_ACCOUNT_ORDER) {
-    const amount = byAccount[account] || 0;
-    if (amount <= 0) continue;
-    const seg = el('div', {
+  for (const seg of allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts })) {
+    if (seg.amount <= 0) continue;
+    const node = el('div', {
       class: 'stackbar-seg',
       style: {
-        width: `${(amount / denom) * 100}%`,
-        background: `var(--data-${account === 'annuity_savings' ? 'pension' : account === 'retirement_pension' ? 'irp' : 'isa'})`,
+        width: `${(seg.amount / denom) * 100}%`,
+        background: seg.isUnallocated
+          ? UNALLOCATED_COLOR
+          : `var(--data-${seg.account === 'annuity_savings' ? 'pension' : seg.account === 'retirement_pension' ? 'irp' : 'isa'})`,
       },
     });
-    wrapper.append(seg);
-  }
-  if (unallocatedAnnualKrw > 0) {
-    const seg = el('div', { class: 'stackbar-seg', style: { width: `${(unallocatedAnnualKrw / denom) * 100}%`, background: UNALLOCATED_COLOR } });
-    wrapper.append(seg);
+    wrapper.append(node);
   }
   return wrapper;
 }

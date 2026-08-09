@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeTrackScalePercent } from './charts.js';
+import { computeTrackScalePercent, allocationSegments, annulusSlicePath } from './charts.js';
 
 test('the account with the largest remaining limit always scales to exactly 100%', () => {
   assert.equal(computeTrackScalePercent(18000000, 18000000), 100);
@@ -35,6 +35,77 @@ test('all three accounts exhausted (maxRemaining = 0) renders all tracks at the 
   const pct = computeTrackScalePercent(0, 0);
   assert.ok(Number.isFinite(pct));
   assert.ok(pct > 0 && pct < 8);
+});
+
+// --- 배제된 계좌의 조각 (4단계 관찰 O1) ------------------------------------
+
+const ALLOCATIONS = [
+  { account: 'retirement_pension', annual_krw: 9000000 },
+  { account: 'annuity_savings', annual_krw: 0 },
+  { account: 'isa', annual_krw: 0 },
+];
+
+test('C-1 and C-3 draw no slice for an account the engine excluded', () => {
+  const segments = allocationSegments({ allocations: ALLOCATIONS, unallocatedAnnualKrw: 0, excludedAccounts: ['isa'] });
+  assert.equal(
+    segments.some((s) => s.account === 'isa'),
+    false,
+    '배제된 계좌는 조각 후보에도 오르지 않는다',
+  );
+});
+
+test('excluding one account never removes the others', () => {
+  const segments = allocationSegments({ allocations: ALLOCATIONS, unallocatedAnnualKrw: 0, excludedAccounts: ['isa'] });
+  assert.deepEqual(
+    segments.map((s) => s.account),
+    ['annuity_savings', 'retirement_pension'],
+    '조각 순서(연금저축 → IRP)는 A3 규약대로 고정이다',
+  );
+});
+
+test('an excluded account carrying a nonzero amount is still not drawn — the amount cannot be spent there', () => {
+  const contradictory = [
+    { account: 'retirement_pension', annual_krw: 9000000 },
+    { account: 'annuity_savings', annual_krw: 0 },
+    { account: 'isa', annual_krw: 3000000 }, // 계약 위반(배제 계좌는 limited_by: not_eligible로 0이다)
+  ];
+  const segments = allocationSegments({ allocations: contradictory, unallocatedAnnualKrw: 0, excludedAccounts: ['isa'] });
+  assert.equal(segments.some((s) => s.account === 'isa'), false);
+});
+
+test('with nothing excluded every account keeps its segment, including zero-amount ones', () => {
+  const segments = allocationSegments({ allocations: ALLOCATIONS, unallocatedAnnualKrw: 600000 });
+  assert.deepEqual(
+    segments.map((s) => s.account),
+    ['annuity_savings', 'retirement_pension', 'isa', 'unallocated'],
+  );
+});
+
+test('the unallocated segment appears only when there is an unallocated amount', () => {
+  const none = allocationSegments({ allocations: ALLOCATIONS, unallocatedAnnualKrw: 0 });
+  assert.equal(none.some((s) => s.isUnallocated), false);
+});
+
+// --- 조각 하나가 원 전체를 차지할 때 (브라우저 실측으로 잡은 폭 0 렌더) -------
+
+test('a slice covering the whole circle is drawn as two arcs, not one that collapses to a line', () => {
+  const full = annulusSlicePath(120, 120, 112, 61.6, 0.966, 0, 360);
+  const arcs = full.match(/A /g) ?? [];
+  assert.equal(arcs.length, 4, '반원 두 개 × 안팎 두 링. 호 하나로 그리면 시작점=끝점이라 아무것도 안 그려진다');
+});
+
+test('a partial slice keeps the original single-arc form', () => {
+  const partial = annulusSlicePath(120, 120, 112, 61.6, 0.966, 0, 90);
+  assert.equal((partial.match(/A /g) ?? []).length, 2);
+});
+
+test('the full-ring path spans both sides of the centre, so its bounding box cannot be zero-width', () => {
+  const cx = 120;
+  const full = annulusSlicePath(cx, 120, 112, 61.6, 0.966, 0, 360);
+  const xs = [...full.matchAll(/[ML] (-?[\d.]+) (-?[\d.]+)|A [\d.]+ [\d.]+ 0 [01] [01] (-?[\d.]+) (-?[\d.]+)/g)]
+    .map((m) => Number(m[1] ?? m[3]))
+    .filter((n) => Number.isFinite(n));
+  assert.ok(Math.max(...xs) - Math.min(...xs) > 0, '좌우로 벌어진 점이 없으면 폭 0으로 렌더된다');
 });
 
 test('never exceeds 100% even if remaining somehow equals maxRemaining exactly at the boundary', () => {

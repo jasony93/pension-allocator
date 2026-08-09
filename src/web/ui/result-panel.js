@@ -16,10 +16,15 @@ import {
   warningMessage,
   comparisonNoteMessage,
   errorMessage,
+  exclusionReasonMessage,
+  EXCLUDED_ACCOUNT_FALLBACK_REASON,
+  EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
+  EXCLUDED_ACCOUNT_LIMIT_CAPTION,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIRED_FIELDS } from '../state/validation.js';
 import { donutChart, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
+import { accountLimitView, excludedAccounts, lawEntriesFor } from './eligibility.js';
 import { openShareModal } from './share.js';
 
 const CORE_FIELD_LABEL = {
@@ -190,27 +195,75 @@ function allExitPenaltyBanner() {
   ]);
 }
 
+/**
+ * 배제 사유 블록 — 금액이 있어야 할 자리에 대신 들어간다. 사유 문장과 그 사유의
+ * 근거 조항(`LawChip`)을 함께 낸다. `screens.md` 8.4(b)가 계산 불가 상태에
+ * 요구한 "사유 + 근거 LawChip"을 계좌 단위로 적용한 것이다.
+ */
+function exclusionNote(view, scenario) {
+  const text = view.reasonCodes.length
+    ? view.reasonCodes.map(exclusionReasonMessage).join(' ')
+    : EXCLUDED_ACCOUNT_FALLBACK_REASON;
+  const laws = lawEntriesFor(scenario, view.basisRuleIds);
+  return el('div', { class: 'excluded-note' }, [
+    el('p', {}, [text]),
+    laws.length
+      ? el(
+          'p',
+          { class: 'excluded-note-laws' },
+          laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
+        )
+      : null,
+  ]);
+}
+
 function chartArea(plan, scenario, months) {
   const unallocated = plan.unallocated_annual_krw;
-  const donut = donutChart({ allocations: plan.allocations, unallocatedAnnualKrw: unallocated, isProposed: !scenario.is_enacted });
+  const excluded = excludedAccounts(scenario);
+  const donut = donutChart({
+    allocations: plan.allocations,
+    unallocatedAnnualKrw: unallocated,
+    isProposed: !scenario.is_enacted,
+    excludedAccounts: excluded,
+  });
 
   // D16 — 공통 배율. 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
   // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 잔여 한도를 먼저 다
   // 모아야 계좌별 트랙 하나를 그릴 때 "셋 중 최댓값"을 알 수 있다.
-  const remainingByAccount = Object.fromEntries(
-    CHART_ACCOUNT_ORDER.map((account) => {
-      const limit = scenario.limits.by_account.find((l) => l.account === account);
-      return [account, limit ? limit.contribution_limit_remaining_krw : 0];
-    }),
-  );
-  const maxRemaining = Math.max(...Object.values(remainingByAccount));
+  //
+  // 한도는 `limits.by_account`를 직접 읽지 않고 `accountLimitView`를 지난다 —
+  // 배제된 계좌는 `remainingLimitKrw: null`로 와서 배율 계산에도, 캡션에도
+  // 들어가지 않는다(4단계 관찰 O1).
+  const limitViews = Object.fromEntries(CHART_ACCOUNT_ORDER.map((account) => [account, accountLimitView(scenario, account)]));
+  const maxRemaining = Math.max(0, ...CHART_ACCOUNT_ORDER.map((account) => limitViews[account].remainingLimitKrw ?? 0));
 
   const barSection = el(
     'div',
     { class: 'allocation-bars' },
     CHART_ACCOUNT_ORDER.map((account) => {
       const alloc = plan.allocations.find((a) => a.account === account);
-      const remaining = remainingByAccount[account];
+      const view = limitViews[account];
+
+      if (view.excluded) {
+        return el('div', { class: 'allocation-bar-row' }, [
+          el('div', { class: 'allocation-bar-labels' }, [
+            el('span', { class: 'type-body-strong' }, [ACCOUNT_LABEL[account]]),
+            el('span', { class: 'field-help' }, [EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER]),
+          ]),
+          allocationBar({
+            account,
+            monthlyKrw: null,
+            remainingLimitKrw: null,
+            percentOfLimit: 0,
+            unavailable: true,
+            unavailableLabel: EXCLUDED_ACCOUNT_LIMIT_CAPTION,
+          }),
+          el('p', { class: 'field-help' }, [EXCLUDED_ACCOUNT_LIMIT_CAPTION]),
+          exclusionNote(view, scenario),
+        ]);
+      }
+
+      const remaining = view.remainingLimitKrw;
       const percentOfLimit = remaining > 0 ? alloc.annual_krw / remaining : alloc.annual_krw > 0 ? 1 : 0;
       const trackScalePercent = computeTrackScalePercent(remaining, maxRemaining);
       const warning = plan.warnings.find((w) => w.account === account);
@@ -240,6 +293,7 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
   if (scenario.plans.length < 2) {
     return el('p', { class: 'field-help' }, ['입력한 조건에서는 비교할 다른 배분이 나오지 않았습니다.']);
   }
+  const excluded = excludedAccounts(scenario);
   const rows = scenario.plans.map((plan) => {
     const selected = plan.plan_id === activePlanId;
     return el(
@@ -252,7 +306,12 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
       [
         el('span', { class: 'stackbar-row-marker' }, [selected ? '▸' : '']),
         el('span', { class: 'stackbar-row-label' }, [plan.is_baseline ? `${PLAN_LABEL[plan.plan_id]} (기본)` : PLAN_LABEL[plan.plan_id]]),
-        stackBarSegments({ allocations: plan.allocations, unallocatedAnnualKrw: plan.unallocated_annual_krw, totalBudgetKrw: budget }),
+        stackBarSegments({
+          allocations: plan.allocations,
+          unallocatedAnnualKrw: plan.unallocated_annual_krw,
+          totalBudgetKrw: budget,
+          excludedAccounts: excluded,
+        }),
         el('span', { class: 'type-num stackbar-row-amount' }, [formatPlanRowAmount(plan)]),
       ],
     );
@@ -265,19 +324,50 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
 }
 
 function accountTable(plan, scenario) {
-  const rows = plan.allocations.map((a) => {
-    const limit = scenario.limits.by_account.find((l) => l.account === a.account);
-    const pct = limit && limit.contribution_limit_remaining_krw > 0 ? a.annual_krw / limit.contribution_limit_remaining_krw : 0;
+  const rows = [];
+  for (const a of plan.allocations) {
+    const view = accountLimitView(scenario, a.account);
+
+    // 배제된 계좌 — 금액 칸을 비우고(0원도 쓰지 않는다: 배분하지 않았다는 뜻이
+    // 아니라 배분 대상이 아니라는 뜻이다) 바로 아래 줄에 사유와 근거 조항을
+    // 붙인다. 잔여 한도 대비 비율도 한도에서 나온 값이므로 표시하지 않는다.
+    if (view.excluded) {
+      const laws = lawEntriesFor(scenario, view.basisRuleIds);
+      rows.push(
+        el('tr', { class: 'table-row-excluded' }, [
+          el('td', {}, [ACCOUNT_LABEL[a.account]]),
+          el('td', {}, [EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER]),
+          el('td', {}, ['—']),
+          el('td', {}, ['—']),
+          el('td', {}, laws.length ? laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])) : ['—']),
+        ]),
+      );
+      rows.push(
+        el('tr', { class: 'table-row-excluded' }, [
+          el('td', { colspan: 5 }, [
+            view.reasonCodes.length
+              ? view.reasonCodes.map(exclusionReasonMessage).join(' ')
+              : EXCLUDED_ACCOUNT_FALLBACK_REASON,
+          ]),
+        ]),
+      );
+      continue;
+    }
+
+    const remaining = view.remainingLimitKrw;
+    const pct = remaining > 0 ? a.annual_krw / remaining : 0;
     const lawIds = a.basis_rule_ids;
     const lawEntry = scenario.legal_basis.find((l) => lawIds.includes(l.rule_id));
-    return el('tr', {}, [
-      el('td', {}, [ACCOUNT_LABEL[a.account]]),
-      el('td', { class: 'type-num' }, [formatKrw(a.monthly_krw)]),
-      el('td', { class: 'type-num' }, [formatKrw(a.annual_krw)]),
-      el('td', {}, [formatPercent(Math.min(1, pct))]),
-      el('td', {}, [lawEntry ? el('span', { class: 'law-chip' }, [lawEntry.law]) : '']),
-    ]);
-  });
+    rows.push(
+      el('tr', {}, [
+        el('td', {}, [ACCOUNT_LABEL[a.account]]),
+        el('td', { class: 'type-num' }, [formatKrw(a.monthly_krw)]),
+        el('td', { class: 'type-num' }, [formatKrw(a.annual_krw)]),
+        el('td', {}, [formatPercent(Math.min(1, pct))]),
+        el('td', {}, [lawEntry ? el('span', { class: 'law-chip' }, [lawEntry.law]) : '']),
+      ]),
+    );
+  }
   if (plan.unallocated_annual_krw > 0) {
     rows.push(
       el('tr', { class: 'table-row-warning' }, [

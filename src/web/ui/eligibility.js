@@ -1,0 +1,89 @@
+/**
+ * 계좌 자격(`ScenarioResult.account_eligibility`)을 화면 표시로 옮기는 단일 관문.
+ *
+ * **왜 별도 모듈인가.** 4단계 검증이 올린 관찰 O1(`verification-report.md` 4절):
+ * ISA가 배제된 사용자(`eligible: false`)에게도 엔진이 계약대로
+ * `limits.by_account[isa].tax_free_limit_krw`를 실어 보낸다. 계약 5.3절이 그
+ * 필드를 `account_type`이 null일 때만 null로 정하고 있어 **엔진은 계약대로**이고,
+ * 배제 여부를 함께 읽어 표시를 정하는 것은 화면의 몫이다. 그 판단이 도넛·한도
+ * 트랙 막대·스택바·계좌별 표 네 곳에 흩어져 있으면 한 곳만 고치고 나머지에
+ * 남는다 — 실제로 그렇게 남았다. 그래서 **네 곳이 전부 이 모듈을 통해서만**
+ * 계좌의 한도·혜택 금액에 접근한다.
+ *
+ * 판정은 하지 않는다. 배제 여부도, 사유도 전부 엔진 응답에서 온다(금지사항:
+ * 계산 로직을 구현하지 않는다). 이 모듈이 하는 일은 "배제된 계좌의 금액 필드를
+ * null로 막고 사유를 함께 내보내는 것"뿐이다.
+ */
+
+/**
+ * 배제된 계좌면 `{ reasonCodes, basisRuleIds }`, 아니면 `null`.
+ * `account_eligibility`에 없는 계좌도 `null`(= 배제 아님)로 본다 — 계약은 세
+ * 계좌 전부를 싣도록 정하지만, 없는 것을 배제로 읽으면 화면이 엔진보다 더 많이
+ * 아는 척하는 것이 된다.
+ */
+export function accountExclusion(scenario, account) {
+  const entry = scenario?.account_eligibility?.find((e) => e.account === account);
+  if (!entry || entry.eligible !== false) return null;
+  return {
+    reasonCodes: entry.reason_codes ?? [],
+    basisRuleIds: entry.basis_rule_ids ?? [],
+  };
+}
+
+/**
+ * 계좌 하나의 한도·혜택 금액을 화면이 읽는 형태로 낸다.
+ *
+ * **배제된 계좌는 금액 필드가 전부 `null`이다.** `null`은 "0원"이 아니라 "표시할
+ * 값이 없다"는 뜻이고(계약 2.1절과 같은 규약), 호출부는 `null`을 받으면 금액
+ * 대신 사유를 그린다. 받을 수 없는 혜택의 금액을 화면에 두면 사용자가 그 숫자를
+ * 근거로 판단하게 된다.
+ *
+ * `taxFreeLimitKrw`는 지금 어느 화면도 그리지 않는다(설계에 없는 표시를 늘리지
+ * 않는다). 그럼에도 이 뷰가 함께 내는 이유는, 나중에 이 값을 그리려는 코드가
+ * 생기더라도 **`limits.by_account`를 직접 읽는 경로가 아니라 이 관문을 지나게**
+ * 하기 위해서다. 배제 판정을 다시 잊는 것을 구조로 막는다.
+ */
+export function accountLimitView(scenario, account) {
+  const exclusion = accountExclusion(scenario, account);
+  if (exclusion) {
+    return {
+      account,
+      excluded: true,
+      reasonCodes: exclusion.reasonCodes,
+      basisRuleIds: exclusion.basisRuleIds,
+      remainingLimitKrw: null,
+      taxFreeLimitKrw: null,
+    };
+  }
+  const limit = scenario?.limits?.by_account?.find((l) => l.account === account) ?? null;
+  return {
+    account,
+    excluded: false,
+    reasonCodes: [],
+    basisRuleIds: limit?.basis_rule_ids ?? [],
+    remainingLimitKrw: limit ? limit.contribution_limit_remaining_krw : 0,
+    taxFreeLimitKrw: limit ? (limit.tax_free_limit_krw ?? null) : null,
+  };
+}
+
+/** 배제된 계좌 id 목록. 차트가 조각을 그릴 대상에서 빼는 데 쓴다. */
+export function excludedAccounts(scenario) {
+  return (scenario?.account_eligibility ?? []).filter((e) => e.eligible === false).map((e) => e.account);
+}
+
+/**
+ * 규칙 id 목록에 해당하는 `legal_basis` 항목들. 배제 사유 옆에 붙일 `LawChip`의
+ * 출처다 — 헌장 "계산에 쓴 법령 조항을 결과 화면에 노출한다"와 `screens.md`
+ * 8.4(b) "차단 사유에 반드시 LawChip을 붙인다"를 같은 방식으로 지킨다.
+ * `legal_basis`의 순서를 그대로 유지하고 중복을 제거한다.
+ */
+export function lawEntriesFor(scenario, ruleIds) {
+  const wanted = new Set(ruleIds ?? []);
+  if (wanted.size === 0) return [];
+  const seen = new Set();
+  return (scenario?.legal_basis ?? []).filter((entry) => {
+    if (!wanted.has(entry.rule_id) || seen.has(entry.rule_id)) return false;
+    seen.add(entry.rule_id);
+    return true;
+  });
+}

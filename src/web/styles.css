@@ -234,6 +234,21 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .allocation-bar-labels { display: flex; justify-content: space-between; margin-bottom: var(--space-1); }
 .alloc-bar-track { height: 20px; border-radius: var(--radius-full); background: var(--data-track); overflow: hidden; cursor: default; transition: width 240ms ease-out; }
 .alloc-bar-fill { height: 100%; border-radius: var(--radius-full); transition: width 240ms ease-out; }
+/* 배제된 계좌 — 채움이 없고 길이가 금액을 뜻하지 않는다는 것을 형태로 보인다. */
+.alloc-bar-track-unavailable {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--data-track),
+    var(--data-track) 4px,
+    var(--surface-raised) 4px,
+    var(--surface-raised) 8px
+  );
+  opacity: 0.8;
+}
+
+.excluded-note { margin-top: var(--space-2); padding: var(--space-3); border-left: 3px solid var(--border-strong); background: var(--surface-sunken); border-radius: var(--radius-m); font-size: 14px; }
+.excluded-note p { margin: 0; }
+.excluded-note-laws { margin-top: var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .stackbar { display: flex; flex-direction: column; gap: var(--space-2); }
 .stackbar-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; border: none; background: transparent; cursor: pointer; padding: var(--space-2); border-radius: var(--radius-m); }
@@ -248,6 +263,9 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .account-table th, .account-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .account-table td:nth-child(2), .account-table td:nth-child(3) { font-variant-numeric: tabular-nums; text-align: right; }
 .table-row-warning { background: var(--state-warning-subtle); }
+/* 배제된 계좌 행 — 오류 색을 쓰지 않는다(screens.md 8.5절: 부분 배제도 정상 상태다). */
+.table-row-excluded { background: var(--surface-sunken); color: var(--text-secondary); }
+.table-row-excluded td:nth-child(2), .table-row-excluded td:nth-child(3) { text-align: right; }
 
 .law-chip { display: inline-block; border: 1px solid var(--border-subtle); background: var(--surface-sunken); border-radius: var(--radius-s); padding: 1px 6px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
 .law-link { margin-left: var(--space-2); font-size: 12.5px; }
