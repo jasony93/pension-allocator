@@ -1,7 +1,7 @@
 ---
 unit: product-planner
 stage: 1
-status: draft
+status: approved
 inputs:
   - docs/org/charter.md
   - docs/superpowers/specs/2026-08-07-agent-org-design.md

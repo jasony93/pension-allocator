@@ -1,7 +1,7 @@
 ---
 unit: growth
 stage: 2
-status: draft
+status: approved
 inputs:
   - docs/org/charter.md
   - docs/org/gate-decisions.md
