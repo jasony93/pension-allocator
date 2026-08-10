@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import {
   ACCOUNT_ORDER,
   PENSION_ACCOUNT_KEYS,
+  PLAN,
   PLAN_ORDER,
   SCENARIO_ORDER,
   SCHEMA_VERSION,
@@ -30,7 +31,19 @@ import {
 
 const ACCOUNTS = [...ACCOUNT_ORDER];
 export const CASE_KEYS = ['case', 'request', 'credit_rate', 'expect'];
-export const CREDIT_RATE_KEYS = ['income_tax', 'local_tax', 'effective'];
+/**
+ * `basis`·`fallback_applied`는 계약 5.0.0의 새 축이다(D27). 비율만 주장하면 그 비율이
+ * **무엇으로** 판정됐는지는 아무도 보지 않는데, 이번에 고친 결함이 정확히 그 자리였다 —
+ * 총급여만 보고 15%를 준 값과 종합소득금액으로 판정한 12%가 **같은 비율 필드**에 실린다.
+ */
+export const CREDIT_RATE_KEYS = ['income_tax', 'local_tax', 'effective', 'basis', 'fallback_applied'];
+const CREDIT_RATE_FIELD = {
+  income_tax: 'income_tax_rate',
+  local_tax: 'local_tax_rate',
+  effective: 'effective_rate',
+  basis: 'basis_code',
+  fallback_applied: 'fallback_applied',
+};
 export const SCENARIO_KEYS = [
   'plans',
   'plan_count',
@@ -59,6 +72,13 @@ export const PLAN_KEYS = [
   'fill_order',
   'monthly_krw',
   'unallocated_krw',
+  // D26 — 미배분액의 갈래. `unallocated_krw` 하나만으로는 "갈 곳이 없다"와
+  // "갈 곳은 있으나 공제가 없다"가 구별되지 않는다.
+  'unallocated_breakdown',
+  // 이 배분을 실행한 **뒤** 남는 공제 대상 한도. 배분 전 잔여 한도와 다른 값이다.
+  'credit_remaining_after_plan_krw',
+  // 이 안이 어떤 비정량 효과를 달고 나가는가. 공제 없는 연금 납입이 그 자리다.
+  'non_quantified_codes',
   'monthly_rounding_residual_krw',
   'delta_vs_baseline_krw',
   'credit_eligible_krw',
@@ -84,8 +104,23 @@ export const BOUNDARY_KEYS = [
   'pension_years_remaining',
   'pension_holding_period_evaluated',
 ];
-/** 배분안 단위 세액 한도. D22가 이름으로 지목한 넷이다. */
-export const PLAN_TAX_CAP_KEYS = ['known', 'cap_krw', 'applied', 'threshold_income_tax_krw'];
+/** 배분안 단위 세액 한도. D22가 이름으로 지목한 넷 + D26이 드러내라고 한 조건 둘이다. */
+export const PLAN_TAX_CAP_KEYS = [
+  'known',
+  'cap_krw',
+  'applied',
+  'threshold_income_tax_krw',
+  'carryover_shares_future_year_credit_limit',
+  'carryover_requires_application',
+];
+/** 미배분 갈래(D26). `headrooms_overlap`이 true면 두 여력을 더하면 안 된다. */
+export const UNALLOCATED_KEYS = [
+  'total_annual_krw',
+  'pension_contribution_headroom_krw',
+  'isa_contribution_headroom_krw',
+  'no_headroom_krw',
+  'headrooms_overlap',
+];
 export const PENSION_START_KEYS = [
   'computable',
   'earliest_start_date',
@@ -280,6 +315,38 @@ function validatePlanTaxCap(value, where, errors) {
   }
 }
 
+/**
+ * 미배분 갈래. **합이 맞는지를 형식 단계에서 본다** — 갈래가 미배분 총액을 넘으면
+ * 옮겨 적다 어긋난 것이거나, 겹침을 표시하지 않은 것이다.
+ */
+function validateUnallocated(value, where, errors) {
+  if (!requireNonEmptyObject(value, where, errors)) return;
+  unknownKeys(value, UNALLOCATED_KEYS, where, errors);
+
+  for (const key of UNALLOCATED_KEYS) {
+    if (!(key in value)) continue;
+    if (key === 'headrooms_overlap') requireBoolean(value[key], `${where}.${key}`, errors);
+    else requireInt(value[key], `${where}.${key}`, errors);
+  }
+
+  const { total_annual_krw: total, pension_contribution_headroom_krw: pension } = value;
+  const { isa_contribution_headroom_krw: isa, headrooms_overlap: overlap } = value;
+  if ([total, pension, isa].every(Number.isInteger) && typeof overlap === 'boolean') {
+    if (pension + isa > total !== overlap) {
+      errors.push(
+        `${where}: 두 여력의 합(${pension + isa})과 미배분 총액(${total})의 관계가 ` +
+          `headrooms_overlap(${overlap})과 어긋난다`,
+      );
+    }
+  }
+  if ([total, pension].every(Number.isInteger) && pension > total) {
+    errors.push(`${where}: 연금 여력이 미배분 총액보다 크다`);
+  }
+  if ([total, isa].every(Number.isInteger) && isa > total) {
+    errors.push(`${where}: ISA 여력이 미배분 총액보다 크다`);
+  }
+}
+
 function validatePensionStart(value, where, errors) {
   if (!requireNonEmptyObject(value, where, errors)) return;
   unknownKeys(value, PENSION_ACCOUNT_KEYS, where, errors);
@@ -331,6 +398,15 @@ function validatePlan(plan, where, errors) {
   }
   if ('tax_liability_cap' in plan) {
     validatePlanTaxCap(plan.tax_liability_cap, `${where}.tax_liability_cap`, errors);
+  }
+  if ('unallocated_breakdown' in plan) {
+    validateUnallocated(plan.unallocated_breakdown, `${where}.unallocated_breakdown`, errors);
+  }
+  if ('credit_remaining_after_plan_krw' in plan) {
+    requireInt(plan.credit_remaining_after_plan_krw, `${where}.credit_remaining_after_plan_krw`, errors);
+  }
+  if ('non_quantified_codes' in plan) {
+    requireStringArray(plan.non_quantified_codes, `${where}.non_quantified_codes`, errors);
   }
   if ('warning_count' in plan) requireInt(plan.warning_count, `${where}.warning_count`, errors);
   if ('warning_codes' in plan) requireStringArray(plan.warning_codes, `${where}.warning_codes`, errors);
@@ -459,6 +535,7 @@ export const VOCABULARY = [
   ...PENSION_START_KEYS.map((k) => `pension_withdrawal_start.${k}`),
   ...PLAN_KEYS.map((k) => `plan.${k}`),
   ...PLAN_TAX_CAP_KEYS.map((k) => `tax_liability_cap.${k}`),
+  ...UNALLOCATED_KEYS.map((k) => `unallocated_breakdown.${k}`),
 ];
 
 /** 블록 하나가 실제로 주장한 어휘. 값이 아니라 **적혔는가**만 본다. */
@@ -479,6 +556,9 @@ export function vocabularyUsedBy(parsed) {
       for (const key of Object.keys(plan)) used.add(`plan.${key}`);
       for (const key of Object.keys(plan.tax_liability_cap ?? {})) {
         used.add(`tax_liability_cap.${key}`);
+      }
+      for (const key of Object.keys(plan.unallocated_breakdown ?? {})) {
+        used.add(`unallocated_breakdown.${key}`);
       }
     }
   }
@@ -508,11 +588,34 @@ export function vocabularyUsedBy(parsed) {
 export function fillContractDefaults(raw, taxYear) {
   const profile = { ...raw.profile };
   const accounts = { ...raw.accounts };
+  const options = { ...raw.options };
 
   if (profile.birth_date === undefined && typeof profile.age_years === 'number') {
     profile.birth_date = `${taxYear - profile.age_years}-03-02`;
   }
   delete profile.age_years;
+
+  // 계약 5.0.0이 공제율 판정 축을 두 물음으로 나눴다(D27). 47건은 **근로소득만 있는**
+  // 사용자를 전제로 산출됐고 — 1차 출시 대상이 근로소득자다(게이트 1 D2) — 그 전제에서
+  // 판정 축은 총급여액 그대로다. 그래서 기대값이 한 원도 움직이지 않는다.
+  // **종합소득이 있는 분기의 정답지는 아직 없다.** 그 케이스는 `tax-domain`이 산출한다.
+  if (profile.has_non_wage_global_income_current_year === undefined) {
+    profile.has_non_wage_global_income_current_year = false;
+  }
+
+  // 계약 5.0.0이 배분안을 넷으로 늘렸다(D26). 47건은 **세 안 체제**에서 산출됐고,
+  // 네 번째 안은 `plan_count`를 바꾼다. 블록이 스스로 요청하지 않는 한 실행기는 기존
+  // 세 안만 요청한다 — **기대값을 구현에 맞춰 고치지 않기 위한 조치다.**
+  //
+  // 이 조치가 감추지 않는 것과 감추는 것을 분명히 적는다.
+  //   감추지 않는다 — 세 안의 배분·공제액은 네 번째 안이 있든 없든 같다(각 안은 독립으로
+  //   충당하고 기본안 선택도 바뀌지 않는다). 47건이 지금까지 주장해 온 것은 그대로 검사된다.
+  //   감춘다 — 네 번째 안의 배분·공제액·`plan_count` 변화는 이 실행기가 보지 않는다.
+  //   그 축의 정답지는 `tax-domain`이 산출하고, 블록이 `options.plan_variants`에
+  //   `pension_contribution_limit_fill`을 실으면 이 기본값은 덮어써진다.
+  if (options.plan_variants === undefined || options.plan_variants === null) {
+    options.plan_variants = PLAN_ORDER.filter((id) => id !== PLAN.PENSION_LIMIT_FILL);
+  }
 
   if (profile.prior_year_tax === undefined) {
     profile.prior_year_tax = {
@@ -531,7 +634,7 @@ export function fillContractDefaults(raw, taxYear) {
     };
   }
 
-  return { ...raw, profile, accounts };
+  return { ...raw, profile, accounts, options };
 }
 
 /** 블록의 `request`를 compute()에 넘길 요청으로 만든다. */
@@ -645,6 +748,23 @@ function checkPlan(plan, expected, label) {
   if ('unallocated_krw' in expected) {
     assert.equal(plan.unallocated_annual_krw, expected.unallocated_krw, `${label} 미배분`);
   }
+  for (const [key, value] of Object.entries(expected.unallocated_breakdown ?? {})) {
+    assert.equal(plan.unallocated_breakdown[key], value, `${label} 미배분 갈래(${key})`);
+  }
+  if ('credit_remaining_after_plan_krw' in expected) {
+    assert.equal(
+      plan.pension_combined_credit_remaining_after_plan_krw,
+      expected.credit_remaining_after_plan_krw,
+      `${label} 배분 후 잔여 공제 한도`,
+    );
+  }
+  if (expected.non_quantified_codes) {
+    assert.deepStrictEqual(
+      [...new Set(plan.non_quantified_effects.map((e) => e.code))].sort(),
+      [...expected.non_quantified_codes].sort(),
+      `${label} 비정량 효과 코드`,
+    );
+  }
   if ('monthly_rounding_residual_krw' in expected) {
     assert.equal(
       plan.monthly_rounding_residual_krw,
@@ -749,7 +869,7 @@ export function checkCase(parsed, response) {
   if (parsed.credit_rate) {
     const bracket = response.echo.credit_rate_bracket;
     for (const [key, value] of Object.entries(parsed.credit_rate)) {
-      assert.equal(bracket[`${key}_rate`], value, `${caseId} 공제율(${key})`);
+      assert.equal(bracket[CREDIT_RATE_FIELD[key]], value, `${caseId} 공제율(${key})`);
     }
   }
 

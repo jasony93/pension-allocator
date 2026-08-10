@@ -190,6 +190,37 @@ const UNUSED_VOCABULARY = [
   // **정답지는 그 축을 한 번도 주장하지 않았다**는 사실은 남는다.
   'credit_rate.local_tax',
   'credit_rate.effective',
+
+  // ── 계약 5.0.0이 낸 축 (D26·D27). `tax-domain`이 채우면 아래에서 지운다. ──
+  //
+  // **왜 지금 비어 있는가.** 47건은 근로소득만 있는 사용자를 전제로 산출됐고, 실행기가
+  // 그 전제를 `has_non_wage_global_income_current_year: false`로 명시해 채운다
+  // (`golden-block.mjs`). 그 분기에서 판정 축은 총급여액이라 기대값이 움직이지 않았다.
+  // **움직이는 쪽 — 종합소득이 있는 사용자와 금액을 모르는 사용자 — 의 정답지가 없다.**
+  // 이 결함이 25% 과대였고 지금 정답지는 그 축을 한 번도 주장하지 않는다.
+  'credit_rate.basis',
+  'credit_rate.fallback_applied',
+
+  // 미배분 갈래. 소유자가 지적한 자리이고 47건 중 미배분이 0이 아닌 케이스가 있는데도
+  // 갈래는 아무도 주장하지 않는다.
+  'plan.unallocated_breakdown',
+  'unallocated_breakdown.total_annual_krw',
+  'unallocated_breakdown.pension_contribution_headroom_krw',
+  'unallocated_breakdown.isa_contribution_headroom_krw',
+  'unallocated_breakdown.no_headroom_krw',
+  'unallocated_breakdown.headrooms_overlap',
+
+  // 배분 **후** 잔여 공제 한도. 16.6절의 문구를 참으로 만드는 세 값 중 하나다.
+  'plan.credit_remaining_after_plan_krw',
+
+  // 비정량 효과의 코드 목록. 새 배분안의 `pension_contribution_without_credit`이
+  // 여기서만 주장될 수 있다.
+  'plan.non_quantified_codes',
+
+  // 전환 특례에 붙은 조건 둘. `contribution_carryover_available`이라는 이름이
+  // 감추고 있던 것이고, 정답지가 그 이름만 봐서는 이 조건들을 검사하지 못한다.
+  'tax_liability_cap.carryover_shares_future_year_credit_limit',
+  'tax_liability_cap.carryover_requires_application',
 ].sort();
 
 test('블록이 쓰지 않는 허용 키가 기록된 목록과 정확히 같다', () => {

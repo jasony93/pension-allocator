@@ -52,6 +52,10 @@ export function baseRequest(overrides = {}) {
         pension_credit_applied_krw: 0,
       },
       current_year_total_salary_krw: 50_000_000,
+      // 근로소득만 있는 사용자가 기본이다(게이트 1 D2). 이 값이 false인 동안
+      // 공제율 판정 축은 총급여액이고, 계약 5.0.0 이전과 결과가 같아야 한다.
+      has_non_wage_global_income_current_year: false,
+      current_year_global_income_krw: null,
       // 서민형 구간 상한 위로 둔다. 기본 요청에서 ISA 유형 교차확인 경고가
       // 늘 켜져 있으면 그 경고를 검증하는 테스트가 의미를 잃는다.
       prior_year_total_salary_krw: 52_000_000,

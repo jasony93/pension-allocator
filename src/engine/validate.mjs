@@ -203,6 +203,8 @@ function validateProfile(c, profile) {
     }
   }
 
+  const globalIncome = validateGlobalIncome(c, profile);
+
   return {
     // 만 나이가 아니라 생년월일을 받는다(D21). 환산은 엔진이 하고 기준일은 계산 층에서 정한다.
     birth_date: c.date(profile.birth_date, 'profile.birth_date', { required: true }),
@@ -211,6 +213,9 @@ function validateProfile(c, profile) {
       profile.current_year_total_salary_krw,
       'profile.current_year_total_salary_krw',
     ),
+    has_non_wage_global_income_current_year: globalIncome.hasNonWage,
+    current_year_global_income_krw: globalIncome.amount,
+    current_year_global_income_provided: globalIncome.provided,
     prior_year_total_salary_krw: c.optionalInt(
       profile.prior_year_total_salary_krw,
       'profile.prior_year_total_salary_krw',
@@ -227,6 +232,45 @@ function validateProfile(c, profile) {
     months_remaining_in_tax_year: normalizedMonths,
     months_defaulted: monthsDefaulted,
   };
+}
+
+/**
+ * 공제율 판정에 쓸 소득. **두 물음을 순서대로 받는다**(D27, 규칙의 `required_inputs`).
+ *
+ * 1. 해당 과세기간에 근로소득 외에 **종합소득과세표준에 합산되는** 소득이 있는가.
+ *    아니오면 총급여액으로 판정하고 끝난다 — 대다수 사용자에게 입력이 늘지 않는다.
+ * 2. 예일 때만 그 과세기간의 종합소득금액.
+ *
+ * **예/아니오만으로는 부족하고 금액만으로도 부족하다.** 예/아니오만 받으면 '예' 분기에
+ * 판정할 값이 없어 결함이 그대로 남고, 금액만 받으면 총급여 5,500만원 소괄호가
+ * 종합소득금액 4,500만원보다 **엄격한** 구간(순수 근로소득자)에서 15%를 잘못 준다.
+ *
+ * **1단계가 '아니오'인데 금액이 실려 오면 오류다.** 둘 중 무엇이 사용자의 답인지
+ * 엔진이 고르면 그것이 추론이고, 고르는 순간 "총급여를 환산해 판정"으로 미끄러진다.
+ * `prior_year_tax.state`와 `determined_tax_krw`에 이미 쓴 것과 같은 형태다.
+ */
+function validateGlobalIncome(c, profile) {
+  const hasNonWage = c.requiredBoolean(
+    profile.has_non_wage_global_income_current_year,
+    'profile.has_non_wage_global_income_current_year',
+  );
+  const provided =
+    profile.current_year_global_income_krw !== undefined &&
+    profile.current_year_global_income_krw !== null;
+
+  const amount = c.optionalInt(
+    profile.current_year_global_income_krw,
+    'profile.current_year_global_income_krw',
+  );
+
+  if (hasNonWage === false && provided) {
+    c.add(ERROR.INVALID_ENUM, 'profile.has_non_wage_global_income_current_year', {
+      value: String(hasNonWage),
+      reason: 'current_year_global_income_krw_present',
+    });
+  }
+
+  return { hasNonWage, amount, provided };
 }
 
 /**

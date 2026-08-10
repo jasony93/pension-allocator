@@ -3,6 +3,8 @@
 import {
   ACCOUNT,
   ASSUMPTION,
+  CREDIT_RATE_BASIS,
+  CREDIT_RATE_FALLBACK_DIRECTION,
   DEFAULT_UNAPPLIED_REASON,
   HORIZON,
   NOTICE,
@@ -23,6 +25,7 @@ import {
   resolveEligibility,
   resolveLimits,
   resolvePensionStartDates,
+  resolvePensionWithoutCreditFacts,
   resolveRates,
   resolveTaxLiabilityCap,
   resolveTransfer,
@@ -151,6 +154,11 @@ function computeScenario(scenarioId, request, rulesets) {
   });
   notices.push(...limitResult.notices);
 
+  // 6.5. 세액공제를 낳지 않는 연금계좌 납입에 붙는 사실 셋(D26). 금액을 바꾸지 않는다.
+  //      **읽기를 여기서 하는 것이 중요하다** — 아래 미확인 검사보다 뒤에서 읽으면
+  //      규칙이 없어도 그 사실이 조용히 빠진 채 계산이 끝난다.
+  const withoutCreditFacts = resolvePensionWithoutCreditFacts(access);
+
   const boundaries = boundariesFrom(access, {
     birthDate: request.profile.birth_date,
     taxYear: request.tax_year,
@@ -166,7 +174,8 @@ function computeScenario(scenarioId, request, rulesets) {
     rates.incomeTaxRate === null ||
     capResult.cap === null ||
     startDateResult.entries === null ||
-    ageReckoning === null
+    ageReckoning === null ||
+    withoutCreditFacts === null
   ) {
     return { errors: dedupeErrors(missing.length > 0 ? missing : [ruleMissingFallback()]) };
   }
@@ -185,6 +194,7 @@ function computeScenario(scenarioId, request, rulesets) {
   const { plans, comparisonNotes } = buildPlans({
     access,
     withdrawalOrder,
+    withoutCreditFacts,
     options: request.options,
     horizon: request.profile.fund_use_horizon,
     months,
@@ -248,7 +258,18 @@ function computeScenario(scenarioId, request, rulesets) {
       income_tax_rate: rates.incomeTaxRate,
       local_tax_rate: rates.surtaxRate,
       effective_rate: effectiveRate(rates.incomeTaxRate, rates.surtaxRate),
-      basis_rule_ids: [RULE.CREDIT_RATE, RULE.LOCAL_SURTAX].sort(),
+      // **무엇으로 판정했는가.** 비율만 되돌려주면 화면은 그 비율이 총급여에서 나왔는지
+      // 종합소득금액에서 나왔는지, 아니면 금액을 몰라 본문 구간으로 갔는지 알 수 없다.
+      // D27이 고친 결함이 정확히 그 구분의 부재였다.
+      basis_code: rates.basis.code,
+      measured_amount_krw: rates.basis.amount,
+      // 대체값을 적용했으면 그 사실과 오차 방향이 금액과 같은 화면에 붙어야 한다.
+      fallback_applied: rates.basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT,
+      fallback_direction_code:
+        rates.basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT
+          ? CREDIT_RATE_FALLBACK_DIRECTION
+          : null,
+      basis_rule_ids: [RULE.CREDIT_RATE, RULE.CREDIT_RATE_BASIS, RULE.LOCAL_SURTAX].sort(),
     },
     scenario: {
       scenario_id: scenarioId,
@@ -345,6 +366,14 @@ function buildAssumptions(request, ageReckoning) {
     },
     ageReckoning.basis_rule_ids,
   );
+
+  // 1단계 질문을 "근로소득 외에 **합산되는** 소득이 있는가"로 좁혀 물었으므로,
+  // 분리과세로 종결된 소득만 더 있는 사람은 '아니오'로 답해 총급여 기준으로 간다.
+  // 규칙의 `open_interpretation`이 그 쟁점을 **미확정**으로 남겼고, 좁혀 묻는 것은
+  // 그 두 해석 중 하나(reading_b)를 채택한 것이 된다. 조문이 정한 것처럼 표시하지 않는다.
+  if (request.profile.has_non_wage_global_income_current_year !== true) {
+    add(ASSUMPTION.CREDIT_RATE_WAGE_ONLY_READING, {}, [RULE.CREDIT_RATE_BASIS]);
+  }
 
   if (!request.profile.prior_year_tax.pension_credit_provided) {
     // 되더하기의 가산항을 0으로 두었다. 한도가 과소로 나오는 방향이고,

@@ -18,10 +18,14 @@ import {
   ACCOUNT_ORDER,
   ASSUMPTION,
   COMPARISON_NOTE,
+  CREDIT_BOUNDED_PLANS,
   HORIZONS,
   NOTICE,
+  NON_QUANTIFIED,
   PLAN,
+  PLAN_ORDER,
   RULESET_STATUS,
+  UNCERTAINTY_KIND,
   WARNING,
 } from './constants.mjs';
 import {
@@ -35,15 +39,29 @@ import {
 
 const rulesets = loadRulesets();
 
+const CREDIT_BRACKETS = rulesets[CONFIRMED_FILE].rules.find((r) => r.id === 'pension.credit.rate')
+  .value.brackets;
+
 /** 공제율 경계 위인가 — 룰셋에서 읽는다. 경계 위 + 청년 + 개정안이면 동점이 아니다. */
-const CREDIT_BOUNDARY = rulesets[CONFIRMED_FILE].rules.find((r) => r.id === 'pension.credit.rate')
-  .value.brackets[0].total_salary_only_max_krw;
+const CREDIT_BOUNDARY = CREDIT_BRACKETS[0].total_salary_only_max_krw;
 const overBoundary = (request) => request.profile.current_year_total_salary_krw > CREDIT_BOUNDARY;
+
+/**
+ * **총급여액만으로 고른 구간의 비율.** I28의 기대값이고, 종합소득 입력이 들어오기 전
+ * 엔진이 하던 판정 그대로다. 룰셋에서 직접 고르므로 엔진의 답을 엔진에게 되묻지 않는다.
+ */
+function rateByTotalSalaryOnly(totalSalary) {
+  const bracket = CREDIT_BRACKETS.find(
+    (b) => (b.total_salary_only_max_krw ?? null) === null || totalSalary <= b.total_salary_only_max_krw,
+  );
+  return bracket.rate;
+}
 
 const KNOWN_NOTICES = new Set(Object.values(NOTICE));
 const KNOWN_WARNINGS = new Set(Object.values(WARNING));
 const KNOWN_ASSUMPTIONS = new Set(Object.values(ASSUMPTION));
 const KNOWN_COMPARISON_NOTES = new Set(Object.values(COMPARISON_NOTE));
+const KNOWN_UNCERTAINTY_KINDS = new Set(Object.values(UNCERTAINTY_KIND));
 
 // ── 요청 행렬 ────────────────────────────────────────────────────
 // 조건부 분기를 하나씩 켜고 끄는 프로필군. 여기에 시나리오와 horizon 네 값을 곱한다.
@@ -151,6 +169,44 @@ const PROFILES = [
       },
     },
   },
+  // ── 공제율 판정 축이 갈리는 상태들 (D27) ────────────────────────
+  // 이 셋이 없으면 I28은 한 갈래만 돌면서 통과한다.
+  {
+    label: '종합소득 있음 · 금액이 우대 구간 위',
+    patch: {
+      profile: {
+        has_non_wage_global_income_current_year: true,
+        current_year_global_income_krw: 50_000_000,
+        monthly_capacity_krw: 1_000_000,
+      },
+    },
+  },
+  {
+    label: '종합소득 있음 · 금액이 우대 구간 안',
+    patch: {
+      profile: {
+        has_non_wage_global_income_current_year: true,
+        current_year_global_income_krw: 30_000_000,
+        monthly_capacity_krw: 1_000_000,
+      },
+    },
+  },
+  {
+    label: '종합소득 있음 · 금액 모름 (본문 구간 대체)',
+    patch: {
+      profile: {
+        has_non_wage_global_income_current_year: true,
+        current_year_global_income_krw: null,
+        monthly_capacity_krw: 1_000_000,
+      },
+    },
+  },
+  // ── 연금 공제한도를 넘기는 예산 (D26 소유자 재현) ────────────────
+  // 미배분 1,100만이 나오고 연금 납입 여력 900만이 남는 바로 그 상태다.
+  {
+    label: '공제한도 초과 예산 (미배분 갈래 재현)',
+    patch: { profile: { monthly_capacity_krw: 5_000_000 } },
+  },
   {
     label: '퇴직급여 IRP 입금 · 가입일 있음',
     patch: {
@@ -228,6 +284,8 @@ function checkScenario(scenario, response, request, at) {
   const plans = scenario.plans;
   const boundaries = scenario.fund_use_horizon_boundaries;
   const limitOf = (account) => scenario.limits.by_account.find((l) => l.account === account);
+  const eligibleOf = (account) =>
+    scenario.account_eligibility.find((e) => e.account === account).eligible;
   const allocOf = (plan, account) => plan.allocations.find((a) => a.account === account);
 
   // I1 — 사실이 아닌 안내가 배분 비교보다 앞서지 않는다 (M3)
@@ -296,7 +354,10 @@ function checkScenario(scenario, response, request, at) {
   // I7 — 합쳐졌으면 두 곳에서 같은 말을 한다
   assert.equal(notes.includes(COMPARISON_NOTE.PLANS_COLLAPSED_SINGLE), plans.length === 1, `${at} I7`);
   assert.equal(noticeCodes.includes(NOTICE.PLANS_COLLAPSED_SINGLE), plans.length === 1, `${at} I7 (notices)`);
-  assert.ok(plans.length >= 1 && plans.length <= 3, `${at} I7: 배분안 수가 범위 밖이다`);
+  assert.ok(
+    plans.length >= 1 && plans.length <= PLAN_ORDER.length,
+    `${at} I7: 배분안 수가 범위 밖이다`,
+  );
 
   // I8 — 동률 대안
   assert.equal(
@@ -446,8 +507,10 @@ function checkScenario(scenario, response, request, at) {
   const tied = !(request.profile.declared_youth === true && scenario.scenario_id === 'proposed' && overBoundary(request));
   for (const plan of plans) {
     const tieBreak = plan.priority_basis.tie_break;
-    if (plan.plan_id === PLAN.ANNUITY_FIRST) {
-      assert.equal(tieBreak.code, 'not_applicable', `${at} I19: 이름이 순서를 고정한 안에 동점 판정이 붙었다`);
+    // 순서가 고정된 안 둘. `annuity_savings_first`는 이름이 순서를 고정하고,
+    // `pension_contribution_limit_fill`은 단독 공제한도 때문에 순서의 비용이 0이 아니다.
+    if ([PLAN.ANNUITY_FIRST, PLAN.PENSION_LIMIT_FILL].includes(plan.plan_id)) {
+      assert.equal(tieBreak.code, 'not_applicable', `${at} I19: 순서가 고정된 안에 동점 판정이 붙었다`);
       continue;
     }
     assert.equal(
@@ -563,9 +626,13 @@ function checkScenario(scenario, response, request, at) {
     `${at} I24: 비교 축 상실 안내가 한도 0 여부와 어긋난다`,
   );
   for (const plan of plans) {
+    // 이름이 세액공제를 근거로 든 안만 "이 입력에서 내 근거가 아무것도 가르지 못한다"를
+    // 신고한다. `isa_first`(인출 가능성)와 `pension_contribution_limit_fill`(납입 한도)은
+    // 근거가 세액공제가 아니므로 한도가 0이어도 이름이 거짓말하지 않는다.
+    const creditNamed = [PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST].includes(plan.plan_id);
     assert.equal(
       plan.priority_basis.objective_degenerate,
-      axisFlat && plan.plan_id !== 'isa_first',
+      axisFlat && creditNamed,
       `${at} I24: ${plan.plan_id}의 목적함수 무력화 표시가 어긋난다`,
     );
     if (axisFlat) {
@@ -587,6 +654,145 @@ function checkScenario(scenario, response, request, at) {
       status === 'not_started',
       `${at} I25: ${account}의 자격이 연금수령 개시 상태와 어긋난다 (${status})`,
     );
+  }
+
+  // I28 — **근로소득만 있는 사용자의 공제율은 총급여액이 정한다.**
+  // 종합소득 입력이 계약에 들어오기 전과 같은 결과라는 뜻이고, 대다수 사용자에게
+  // 회귀가 없다는 것을 기계로 고정하는 자리다. 기대 비율은 룰셋에서 직접 고른다 —
+  // 엔진이 고른 값을 다시 엔진에게 물으면 아무것도 확인하지 못한다.
+  const bracket = response.echo.credit_rate_bracket;
+  if (request.profile.has_non_wage_global_income_current_year !== true) {
+    assert.equal(bracket.basis_code, 'total_salary', `${at} I28: 근로소득만 있는데 다른 축으로 판정했다`);
+    assert.equal(bracket.fallback_applied, false, `${at} I28: 근로소득만 있는데 대체값을 적용했다`);
+    assert.equal(
+      bracket.measured_amount_krw,
+      request.profile.current_year_total_salary_krw,
+      `${at} I28: 판정에 쓴 금액이 총급여액이 아니다`,
+    );
+    assert.equal(
+      bracket.income_tax_rate,
+      rateByTotalSalaryOnly(request.profile.current_year_total_salary_krw),
+      `${at} I28: 총급여액만으로 고른 구간과 다르다`,
+    );
+  }
+  assert.equal(
+    bracket.fallback_direction_code,
+    bracket.fallback_applied ? 'understated_or_equal' : null,
+    `${at} I28: 대체값 적용 표시와 오차 방향이 어긋난다`,
+  );
+
+  // I29 — **미배분 갈래가 미배분 총액과 맞물린다.**
+  // 갈래를 나눈 목적이 "갈 곳이 없다"와 "갈 곳은 있으나 공제가 없다"를 가르는 것이므로,
+  // 갈래가 총액과 어긋나면 그 구분 자체가 거짓이 된다.
+  for (const plan of plans) {
+    const b = plan.unallocated_breakdown;
+    const label = `${at} I29 [${plan.plan_id}]`;
+    assert.equal(b.total_annual_krw, plan.unallocated_annual_krw, `${label}: 총액이 미배분과 다르다`);
+    assert.ok(b.pension_contribution_headroom_krw <= b.total_annual_krw, `${label}: 연금 여력이 총액을 넘었다`);
+    assert.ok(b.isa_contribution_headroom_krw <= b.total_annual_krw, `${label}: ISA 여력이 총액을 넘었다`);
+    assert.equal(
+      Math.min(b.total_annual_krw, b.pension_contribution_headroom_krw + b.isa_contribution_headroom_krw) +
+        b.no_headroom_krw,
+      b.total_annual_krw,
+      `${label}: 갈래의 합이 총액과 맞지 않는다`,
+    );
+    assert.equal(
+      b.headrooms_overlap,
+      b.pension_contribution_headroom_krw + b.isa_contribution_headroom_krw > b.total_annual_krw,
+      `${label}: 겹침 표시가 실제와 어긋난다 — true인데 더하면 이중계상이다`,
+    );
+    // 자격이 없는 계좌에는 넣을 수 없다. 여력이라고 부르면 거짓이다.
+    if (!eligibleOf('isa')) {
+      assert.equal(b.isa_contribution_headroom_krw, 0, `${label}: 자격 없는 ISA에 여력이 있다고 말한다`);
+    }
+    if (!eligibleOf('retirement_pension') && !eligibleOf('annuity_savings')) {
+      assert.equal(b.pension_contribution_headroom_krw, 0, `${label}: 막힌 연금계좌에 여력이 있다고 말한다`);
+    }
+  }
+
+  // I30 — **공제를 낳지 않는 연금 납입에는 세 사실이 반드시 함께 붙는다.**
+  // 셋 중 하나라도 빠지면 화면 문장이 거짓이 된다(D26). 특히 확인 절차가 빠지면
+  // 화면은 "나중에 비과세로 돌아옵니다"를 쓰게 되고 그 문장은 거짓이다.
+  for (const plan of plans) {
+    for (const effect of plan.non_quantified_effects) {
+      assert.equal(effect.quantifiable, false, `${at} I30: 정량화 표시가 어긋난다`);
+      if (effect.code !== NON_QUANTIFIED.PENSION_WITHOUT_CREDIT) {
+        assert.equal(effect.facts, null, `${at} I30: 이 코드에는 facts가 붙지 않는다`);
+        continue;
+      }
+      assert.ok(
+        !CREDIT_BOUNDED_PLANS.has(plan.plan_id),
+        `${at} I30: 공제 한도까지만 채우는 ${plan.plan_id}에서 공제 없는 납입이 생겼다`,
+      );
+      assert.deepStrictEqual(
+        Object.keys(effect.facts).sort(),
+        [
+          'contribution_without_credit_krw',
+          'credit_this_year_krw',
+          'principal_tax_free_confirmation_prospective_only',
+          'principal_tax_free_requires_confirmation',
+          'principal_taxed_on_withdrawal',
+          'returns_taxed_on_withdrawal',
+        ],
+        `${at} I30: 함께 나가야 하는 사실이 빠졌다`,
+      );
+      assert.ok(effect.facts.contribution_without_credit_krw > 0, `${at} I30: 금액이 0인데 효과가 붙었다`);
+      assert.equal(effect.facts.credit_this_year_krw, 0, `${at} I30`);
+      assert.deepStrictEqual(
+        effect.headroom_shared_with,
+        [effect.account === 'retirement_pension' ? 'annuity_savings' : 'retirement_pension'],
+        `${at} I30: 연금 납입 여력은 두 계좌가 나눠 쓴다 — 더하면 이중계상이다`,
+      );
+    }
+  }
+
+  // I31 — **불확실성 표시는 유무가 아니라 목록으로 나간다.**
+  // 유무만 보는 구조로는 "일부 해소"를 표현할 수 없고, 표시 하나를 지우면 남은 것까지
+  // 조용히 사라진다(D27의 구조적 발견).
+  for (const entry of scenario.legal_basis) {
+    assert.equal(
+      entry.has_uncertainty_note,
+      entry.uncertainty_notes.length > 0,
+      `${at} I31: ${entry.rule_id}의 유무 표시와 목록이 어긋난다`,
+    );
+    for (const note of entry.uncertainty_notes) {
+      assert.ok(note.path.length > 0, `${at} I31: ${entry.rule_id}의 불확실 표시에 위치가 없다`);
+      assert.ok(KNOWN_UNCERTAINTY_KINDS.has(note.kind), `${at} I31: 알 수 없는 종류 ${note.kind}`);
+    }
+  }
+
+  // I32 — **배분 후 잔여 공제 한도가 배분 전 한도와 인정액에서 나온다.**
+  // 화면이 "한도 · 이 배분이 쓴 양 · 남은 양" 셋을 함께 적으려면 그 셋이 맞물려야 한다.
+  for (const plan of plans) {
+    assert.equal(
+      plan.pension_combined_credit_remaining_after_plan_krw,
+      Math.max(
+        0,
+        scenario.limits.pension_combined_credit_limit_krw -
+          plan.deterministic_benefit.credit_eligible_contribution_krw,
+      ),
+      `${at} I32: ${plan.plan_id}의 배분 후 잔여 한도가 한도−인정액과 다르다`,
+    );
+  }
+
+  // I33 — **납입한도 충당안은 기본안이 되지 않는다.** 세법이 유불리를 정하지 않으므로
+  // 엔진이 그것을 고르면 그것이 곧 자문이다(D26).
+  assert.notEqual(
+    plans[0].plan_id,
+    PLAN.PENSION_LIMIT_FILL,
+    `${at} I33: 세법이 정하지 않은 안을 엔진이 기본으로 골랐다`,
+  );
+
+  // I34 — `credit_limit`이 상한이었다는 보고는 공제 한도까지만 채우는 안에서만 나온다.
+  for (const plan of plans) {
+    if (CREDIT_BOUNDED_PLANS.has(plan.plan_id)) continue;
+    for (const allocation of plan.allocations) {
+      assert.notEqual(
+        allocation.limited_by,
+        'credit_limit',
+        `${at} I34: ${plan.plan_id}가 공제 한도에 막혔다고 보고한다 — 그 안의 상한이 아니다`,
+      );
+    }
   }
 
   // I17 — 코드가 계약 목록 안에 있다
@@ -653,9 +859,13 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
   // 조건부 분기가 양쪽 다 실제로 등장했는지 센다. 한쪽만 돌면 그 불변식은
   // 통과하면서도 아무것도 막지 못한다.
   const tieBreaksSeen = new Set();
+  const basisSeen = new Set();
+  const plansSeen = new Set();
+  const nonQuantifiedSeen = new Set();
   for (const { label, request } of matrix()) {
     const response = compute(request, rulesets);
     assert.equal(response.ok, true, `${label}: 계산이 실패했다 — ${JSON.stringify(response.errors)}`);
+    basisSeen.add(response.echo.credit_rate_bracket.basis_code);
 
     for (const code of response.assumptions.map((a) => a.code)) {
       assert.ok(KNOWN_ASSUMPTIONS.has(code), `${label} I17: 알 수 없는 가정 코드 ${code}`);
@@ -668,7 +878,11 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
 
     for (const scenario of response.scenarios) {
       checkScenario(scenario, response, request, `${label} / ${scenario.scenario_id}`);
-      for (const plan of scenario.plans) tieBreaksSeen.add(plan.priority_basis.tie_break.code);
+      for (const plan of scenario.plans) {
+        tieBreaksSeen.add(plan.priority_basis.tie_break.code);
+        plansSeen.add(plan.plan_id);
+        for (const effect of plan.non_quantified_effects) nonQuantifiedSeen.add(effect.code);
+      }
       assert.deepStrictEqual(
         scenario.account_eligibility.map((e) => e.account),
         ACCOUNT_ORDER,
@@ -683,6 +897,19 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
     [...tieBreaksSeen].sort(),
     ['not_applicable', 'withdrawal_flexibility_first'],
     '동점 판정의 양쪽이 모두 행렬에 등장해야 I19가 실제로 무언가를 막는다',
+  );
+  // 공제율 판정 축 세 갈래가 모두 돌아야 I28이 무언가를 막는다. 하나만 돌면
+  // "근로소득만 있는 사용자에게 회귀가 없다"는 진술이 공허해진다.
+  assert.deepStrictEqual(
+    [...basisSeen].sort(),
+    ['global_income', 'statutory_default', 'total_salary'],
+    '공제율 판정 축 세 갈래가 모두 행렬에 등장해야 한다',
+  );
+  // 새 배분안과 새 비정량 효과가 실제로 나온 적이 없으면 I30·I33·I34는 통과만 한다.
+  assert.ok(plansSeen.has(PLAN.PENSION_LIMIT_FILL), '납입한도 충당안이 행렬에 한 번도 등장하지 않았다');
+  assert.ok(
+    nonQuantifiedSeen.has(NON_QUANTIFIED.PENSION_WITHOUT_CREDIT),
+    '공제 없는 연금 납입 효과가 행렬에 한 번도 등장하지 않았다',
   );
 });
 

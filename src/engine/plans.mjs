@@ -9,6 +9,7 @@ import {
   ACCOUNT_ORDER,
   BASELINE_BY_HORIZON,
   COMPARISON_NOTE,
+  CREDIT_BOUNDED_PLANS,
   FILL_SEQUENCE,
   HORIZON,
   LIMITED_BY,
@@ -20,6 +21,7 @@ import {
   TIE_BREAK,
   WARNING,
 } from './constants.mjs';
+import { resolveCarryoverConditions } from './limits.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
 
 const PENSION_ACCOUNTS = new Set([ACCOUNT.PENSION, ACCOUNT.ANNUITY]);
@@ -34,15 +36,26 @@ function creditRatesAreTied(rates) {
 }
 
 /**
+ * 동점 판정을 적용하지 않는 안.
+ *
+ * - `annuity_savings_first` — 이름이 순서를 이미 고정한다.
+ * - `pension_contribution_limit_fill` — **동점의 전제가 이 안에서 무너진다.** 동점 규칙을
+ *   정당화한 근거는 "비용이 0"이었는데(계약 0.4절), 이 안은 연금계좌를 **납입** 한도까지
+ *   채우므로 배분액이 연금저축 단독 공제한도를 넘어선다. 그 구간에서 연금저축을 앞세우면
+ *   단독 한도에 막혀 **세액공제 대상 인정액이 실제로 줄어든다.** 한계 공제율이 같아도
+ *   비용이 0이 아니므로 동점이 아니고, 인출 편의를 위해 확정 세액을 깎지 않는다.
+ */
+const FIXED_ORDER_PLANS = new Set([PLAN.ANNUITY_FIRST, PLAN.PENSION_LIMIT_FILL]);
+
+/**
  * 이 배분안이 실제로 쓰는 충당 순서.
  *
- * `annuity_savings_first`는 이름이 순서를 이미 고정하므로 손대지 않는다.
- * 나머지 둘은 연금 쌍의 순서가 이름에 매여 있지 않으므로, **세제상 동점 구간에서만**
+ * 나머지 안은 연금 쌍의 순서가 이름에 매여 있지 않으므로, **세제상 동점 구간에서만**
  * 인출이 자유로운 계좌를 앞세운다(engine-design.md 3.3절).
  */
 function fillSequenceFor(planId, { rates, withdrawalOrder }) {
   const standard = FILL_SEQUENCE[planId];
-  if (planId === PLAN.ANNUITY_FIRST || withdrawalOrder === null) return standard;
+  if (FIXED_ORDER_PLANS.has(planId) || withdrawalOrder === null) return standard;
   if (!creditRatesAreTied(rates)) return standard;
 
   const pensionPart = [...withdrawalOrder];
@@ -53,7 +66,7 @@ function fillSequenceFor(planId, { rates, withdrawalOrder }) {
 
 function tieBreakOf(planId, ctx) {
   const applied =
-    planId !== PLAN.ANNUITY_FIRST &&
+    !FIXED_ORDER_PLANS.has(planId) &&
     ctx.withdrawalOrder !== null &&
     creditRatesAreTied(ctx.rates);
 
@@ -65,6 +78,10 @@ function tieBreakOf(planId, ctx) {
 /** 한 배분안의 금액. 자금 사용 시점을 읽지 않는다. */
 function allocate(planId, ctx) {
   const { state, budget, eligible, rates } = ctx;
+  // 이 안이 연금계좌를 **세액공제 대상 한도까지만** 채우는가, 아니면 **납입 한도까지**
+  // 채우는가. 후자(D26의 새 안)에서는 공제를 낳지 않는 납입분이 생기고, 그 몫은
+  // 인정액에 들어가지 않는다 — 아래 `counted`가 그 분리를 강제한다.
+  const creditBounded = CREDIT_BOUNDED_PLANS.has(planId);
   let remainingBudget = budget;
   let annuityCounted = state.annuityCounted;
   let pensionCounted = state.pensionCounted;
@@ -72,6 +89,8 @@ function allocate(planId, ctx) {
   let isaPool = state.isaRemaining;
 
   const amounts = { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0, [ACCOUNT.ISA]: 0 };
+  /** 계좌별로 **세액공제를 낳지 않은** 납입액. 공제 한도까지만 채우는 안에서는 전부 0이다. */
+  const withoutCredit = { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0 };
   const limitedBy = {};
   const fillOrder = {};
   let order = 0;
@@ -106,12 +125,16 @@ function allocate(planId, ctx) {
       continue;
     }
 
+    const isPension = PENSION_ACCOUNTS.has(account);
+    const creditRoom = isPension ? creditCapacity(account) : 0;
+
     // 순서가 곧 우선순위다. budget → credit_limit → contribution_limit 순으로
-    // 무엇이 막았는지를 판정한다.
-    const caps = PENSION_ACCOUNTS.has(account)
+    // 무엇이 막았는지를 판정한다. 납입한도 충당안에는 공제 한도가 상한이 아니므로
+    // 그 항이 빠진다 — `limited_by`가 `credit_limit`으로 나가면 그것이 거짓말이 된다.
+    const caps = isPension
       ? [
           [LIMITED_BY.BUDGET, remainingBudget],
-          [LIMITED_BY.CREDIT_LIMIT, creditCapacity(account)],
+          ...(creditBounded ? [[LIMITED_BY.CREDIT_LIMIT, creditRoom]] : []),
           [LIMITED_BY.CONTRIBUTION_LIMIT, pensionPool],
         ]
       : [
@@ -132,13 +155,28 @@ function allocate(planId, ctx) {
         isaPool -= amount;
       } else {
         pensionPool -= amount;
-        if (account === ACCOUNT.ANNUITY) annuityCounted += amount;
-        else pensionCounted += amount;
+        // **납입액과 인정액을 가른다.** 공제 한도를 넘겨 넣은 몫은 조문상 "없는 것으로"
+        // 되므로 인정액에 더하지 않는다. 공제 한도까지만 채우는 안에서는 두 값이 같아
+        // 기존 동작이 그대로 유지된다.
+        const counted = Math.min(amount, creditRoom);
+        if (account === ACCOUNT.ANNUITY) annuityCounted += counted;
+        else pensionCounted += counted;
+        withoutCredit[account] = amount - counted;
       }
     }
   }
 
-  return { amounts, limitedBy, fillOrder, annuityCounted, pensionCounted, remainingBudget };
+  return {
+    amounts,
+    limitedBy,
+    fillOrder,
+    annuityCounted,
+    pensionCounted,
+    remainingBudget,
+    withoutCredit,
+    pensionPoolRemaining: pensionPool,
+    isaPoolRemaining: isaPool,
+  };
 }
 
 /**
@@ -161,11 +199,13 @@ function applyCap(incomeTax, localTax, { cap, rates, access }) {
   const reducedIncomeTax = incomeTax - recognizedIncomeTax;
   const applied = known && reducedIncomeTax > 0;
 
-  if (applied) {
-    // 잘린 것은 공제액이고 납입액이 아니다. 그 납입액은 전환 신청의 대상이 된다 —
-    // "넣은 돈이 사라진다"가 아니라 "올해의 공제는 0이고 납입액은 넘길 수 있다"가 정확한 서술이다.
-    access.markUsed(RULE.CREDIT_UNUSED_CARRYOVER, 'plans[].deterministic_benefit.tax_liability_cap');
-  }
+  // 잘린 것은 공제액이고 납입액이 아니다. 그 납입액은 전환 신청의 대상이 된다 —
+  // "넣은 돈이 사라진다"가 아니라 "올해의 공제는 0이고 납입액은 넘길 수 있다"가 정확한 서술이다.
+  //
+  // **다만 그 서술에는 조건이 둘 붙는다**(D26). 이름 하나(`..._available`)가 그것을
+  // 감추고 있었으므로 조건을 값으로 함께 낸다. 전환이 걸리지 않는 안에서는 읽지 않는다 —
+  // 읽지 않은 규칙을 근거로 싣지 않는다는 규약 때문이다.
+  const carryover = applied ? resolveCarryoverConditions(access) : null;
 
   return {
     recognizedIncomeTax,
@@ -183,6 +223,11 @@ function applyCap(incomeTax, localTax, { cap, rates, access }) {
       // 초과분의 세액공제액은 이월되지 않는다. 다만 그 납입액은 신청으로 넘길 수 있다.
       credit_carryforward: cap.credit_carryforward,
       contribution_carryover_available: applied,
+      // 전환금액도 **전환한 해의** 600만·900만 한도를 그 해의 새 납입액과 나눠 쓴다.
+      // 매년 한도를 채우는 사용자에게는 전환할 자리가 생기지 않는다.
+      carryover_shares_future_year_credit_limit: carryover?.shares_future_year_credit_limit ?? null,
+      // 신청주의다. 자동이 아니다.
+      carryover_requires_application: carryover?.requires_application ?? null,
       error_direction_code: cap.error_direction_code,
       basis_rule_ids: [
         ...cap.basis_rule_ids,
@@ -301,19 +346,114 @@ function warningsOf(amounts, { horizon, boundaries, startDates }) {
   return out;
 }
 
-function nonQuantifiedOf(amounts, { state }) {
-  if (amounts[ACCOUNT.ISA] <= 0) return [];
-  return [
-    {
+/**
+ * 금액으로 낼 수 없는 효과.
+ *
+ * 두 번째 항목이 D26의 자리다 — **세액공제를 낳지 않는 연금계좌 납입.** 세법이 유불리를
+ * 정하지 않으므로(`not_determined_by_tax_law`) 엔진은 결론을 내지 않고, 대신 조문이
+ * 정하는 사실 셋을 `facts`로 낸다. **이월 전환특례를 근거로 쓰지 않는다** — 매년 한도를
+ * 채우는 사용자에게 전환할 자리가 없으므로 이 안의 근거가 될 수 없다.
+ */
+function nonQuantifiedOf(result, ctx) {
+  const { state, withoutCreditFacts } = ctx;
+  const amounts = result.amounts;
+  const out = [];
+
+  if (amounts[ACCOUNT.ISA] > 0) {
+    out.push({
       code: NON_QUANTIFIED.ISA_HEADROOM,
       account: ACCOUNT.ISA,
       headroom_krw: state.taxFreeLimit,
+      headroom_shared_with: [],
       quantifiable: false,
       // 수익률은 세법 값이 아니고 룰셋에 없다. 가정을 만들지 않는다.
       reason_code: NON_QUANTIFIED.REASON_RETURN_UNKNOWN,
+      facts: null,
       basis_rule_ids: [RULE.ISA_TAX_FREE_LIMIT, RULE.ISA_EXCESS_RATE, RULE.ISA_LOSS_OFFSET].sort(),
-    },
-  ];
+    });
+  }
+
+  if (withoutCreditFacts !== null) {
+    for (const account of [ACCOUNT.PENSION, ACCOUNT.ANNUITY]) {
+      const withoutCredit = result.withoutCredit[account] ?? 0;
+      if (withoutCredit <= 0) continue;
+      out.push({
+        code: NON_QUANTIFIED.PENSION_WITHOUT_CREDIT,
+        account,
+        // 연금 두 계좌의 납입 한도는 **같은 풀**이다. 더하면 이중계상이므로
+        // `LimitBreakdown.*_shared_with`와 같은 형태로 데이터가 스스로 말하게 한다.
+        headroom_krw: result.pensionPoolRemaining,
+        headroom_shared_with: [account === ACCOUNT.PENSION ? ACCOUNT.ANNUITY : ACCOUNT.PENSION],
+        quantifiable: false,
+        reason_code: NON_QUANTIFIED.REASON_DEFERRAL_UNKNOWN,
+        facts: {
+          credit_this_year_krw: withoutCreditFacts.credit_this_year_krw,
+          contribution_without_credit_krw: withoutCredit,
+          principal_taxed_on_withdrawal: withoutCreditFacts.principal_taxed_on_withdrawal,
+          principal_tax_free_requires_confirmation:
+            withoutCreditFacts.principal_tax_free_requires_confirmation,
+          principal_tax_free_confirmation_prospective_only:
+            withoutCreditFacts.principal_tax_free_confirmation_prospective_only,
+          returns_taxed_on_withdrawal: withoutCreditFacts.returns_taxed_on_withdrawal,
+        },
+        basis_rule_ids: withoutCreditFacts.basis_rule_ids,
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * 미배분 금액을 **갈래로 나눈다**(D26).
+ *
+ * 소유자가 지적한 것은 배분이 아니라 이름이었다. 사용자는 「미배분」을 "갈 곳이 없다"로
+ * 읽는데 세법상 사실은 **"갈 곳은 있고, 다만 올해 공제는 늘지 않는다"**이다.
+ *
+ * **두 여력을 더하면 안 되는 경우가 있다.** 미배분액이 두 여력의 합보다 작으면 같은 돈을
+ * 두 번 센 것이므로 `headrooms_overlap`이 그 사실을 값으로 말한다.
+ */
+function unallocatedBreakdownOf(result, unallocated, ctx) {
+  const { eligible, state } = ctx;
+  // 두 연금계좌가 모두 막혀 있으면 납입 여력이 남아 있어도 넣을 수 없다.
+  const pensionOpen = eligible[ACCOUNT.PENSION] || eligible[ACCOUNT.ANNUITY];
+
+  return {
+    ...splitUnallocated({
+      unallocated,
+      pensionRoom: pensionOpen ? clampToZero(result.pensionPoolRemaining) : 0,
+      isaRoom: clampToZero(result.isaPoolRemaining),
+    }),
+    basis_rule_ids: [
+      ...new Set([RULE.PENSION_CONTRIBUTION_LIMIT, RULE.PENSION_BEYOND_CREDIT_LIMIT, ...state.isaBasisRuleIds]),
+    ].sort(),
+  };
+}
+
+/**
+ * 미배분액을 두 여력과 나머지로 가르는 순수 산술. **밖으로 내보내 따로 시험한다.**
+ *
+ * 이유를 적어 둔다 — 지금의 네 충당 순서에서는 `headrooms_overlap`이 언제나 `false`다.
+ * 네 순서 모두 ISA를 채우므로, 예산이 남았다는 것은 ISA 한도가 이미 찼다는 뜻이고
+ * 그러면 ISA 여력이 0이라 겹칠 수가 없다. 그래서 **응답만 시험하면 이 갈래는 한 번도
+ * 돌지 않고**, 돌지 않는 분기는 통과하면서 아무것도 막지 못한다. 산술을 떼어내
+ * 겹치는 입력을 직접 넣어 본다.
+ *
+ * 필드를 지우지 않는 이유는 그것이 **화면에 대한 보증**이기 때문이다. 화면은 두 값을
+ * 더해도 되는지를 규약이 아니라 데이터로 알아야 하고, 충당 순서가 바뀌면(예: ISA를
+ * 끝까지 채우지 않는 안이 생기면) 이 값은 그날부터 참이 된다.
+ */
+export function splitUnallocated({ unallocated, pensionRoom, isaRoom }) {
+  const pensionHeadroom = Math.min(unallocated, pensionRoom);
+  const isaHeadroom = Math.min(unallocated, isaRoom);
+
+  return {
+    total_annual_krw: unallocated,
+    pension_contribution_headroom_krw: pensionHeadroom,
+    isa_contribution_headroom_krw: isaHeadroom,
+    no_headroom_krw: clampToZero(unallocated - (pensionRoom + isaRoom)),
+    headrooms_overlap: pensionHeadroom + isaHeadroom > unallocated,
+  };
 }
 
 /**
@@ -327,10 +467,13 @@ function nonQuantifiedOf(amounts, { state }) {
  *
  * `isa_first`는 해당하지 않는다. 그 안의 근거는 세액공제가 아니라 인출 가능성이고
  * (`pension.withdrawal.eligibility`·`early_withdrawal.other_income_rate`), 한도가 0이어도
- * 그 사실은 그대로 성립한다.
+ * 그 사실은 그대로 성립한다. `pension_contribution_limit_fill`도 같다 — 그 안이 채우는
+ * 것은 납입 한도이고 그 사실은 세액 한도와 무관하게 성립한다.
  */
+const CREDIT_NAMED_PLANS = new Set([PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST]);
+
 function objectiveDegenerate(planId, { cap }) {
-  return cap.known && cap.cap_krw === 0 && planId !== PLAN.ISA_FIRST;
+  return cap.known && cap.cap_krw === 0 && CREDIT_NAMED_PLANS.has(planId);
 }
 
 export function buildPlans(ctx) {
@@ -386,8 +529,12 @@ export function buildPlans(ctx) {
     const totalAnnual = allocations.reduce((sum, a) => sum + a.annual_krw, 0);
     const totalMonthly = allocations.reduce((sum, a) => sum + a.monthly_krw, 0);
     const unallocatedAnnual = clampToZero(budget - totalAnnual);
+    const unallocatedBreakdown = unallocatedBreakdownOf(result, unallocatedAnnual, ctx);
+    for (const ruleId of unallocatedBreakdown.basis_rule_ids) {
+      access.markUsed(ruleId, 'plans[].unallocated_breakdown');
+    }
 
-    const nonQuantified = nonQuantifiedOf(result.amounts, ctx);
+    const nonQuantified = nonQuantifiedOf(result, ctx);
     for (const effect of nonQuantified) {
       for (const ruleId of effect.basis_rule_ids) access.markUsed(ruleId, 'plans[].non_quantified_effects');
     }
@@ -413,6 +560,14 @@ export function buildPlans(ctx) {
       total_allocated_annual_krw: totalAnnual,
       unallocated_monthly_krw: Math.floor(unallocatedAnnual / months),
       unallocated_annual_krw: unallocatedAnnual,
+      // 「미배분」이 "갈 곳이 없다"로 읽히지 않게 갈래를 나눈다(D26).
+      unallocated_breakdown: unallocatedBreakdown,
+      // **배분 전 잔여 한도가 아니라 배분 후 잔여 한도다.** 화면이 "한도 · 이 배분이 쓴 양 ·
+      // 남은 양" 셋을 함께 적을 수 있어야 그 문장이 참이 된다. 뺄셈을 화면이 하게 두면
+      // 세법 판단이 화면 코드로 새어 들어간다.
+      pension_combined_credit_remaining_after_plan_krw: clampToZero(
+        ctx.state.combinedLimit - benefit.credit_eligible_contribution_krw,
+      ),
       // 월 환산에서 버려진 잔차를 삼키지 않는다.
       monthly_rounding_residual_krw: totalAnnual - totalMonthly * months,
       deterministic_benefit: benefit,

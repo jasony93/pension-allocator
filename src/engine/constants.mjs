@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '4.0.0';
-export const SUPPORTED_MAJOR = 4;
+export const SCHEMA_VERSION = '5.0.0';
+export const SUPPORTED_MAJOR = 5;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -21,16 +21,35 @@ export const PLAN = {
   MAX_CREDIT: 'max_tax_credit',
   ANNUITY_FIRST: 'annuity_savings_first',
   ISA_FIRST: 'isa_first',
+  /**
+   * D26 — 연금계좌 **납입** 한도를 채우는 안. 세액공제 한도가 아니라 납입 한도가 상한이다.
+   * 이름과 `priority_basis.code`가 세액공제를 말하지 않는 것은 의도다: 이 안의 근거는
+   * `pension.contribution.annual_limit`과 `pension.contribution.beyond_credit_limit`이고,
+   * 세법은 이 안이 유리한지 불리한지를 정하지 않는다. **기본안이 되지 않는다.**
+   */
+  PENSION_LIMIT_FILL: 'pension_contribution_limit_fill',
 };
 
-/** 기본안을 뺀 나머지가 따르는 표준 순서. */
-export const PLAN_ORDER = [PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST, PLAN.ISA_FIRST];
+/**
+ * 기본안을 뺀 나머지가 따르는 표준 순서.
+ * `PENSION_LIMIT_FILL`이 마지막인 것도 의도다 — `BASELINE_BY_HORIZON`이 어떤 값에서도
+ * 이 안을 가리키지 않고, 기본안 후보가 하나도 계산되지 않았을 때의 대체 선택에서도
+ * 마지막으로 밀린다.
+ */
+export const PLAN_ORDER = [PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST, PLAN.ISA_FIRST, PLAN.PENSION_LIMIT_FILL];
 
 export const FILL_SEQUENCE = {
   [PLAN.MAX_CREDIT]: [ACCOUNT.PENSION, ACCOUNT.ANNUITY, ACCOUNT.ISA],
   [PLAN.ANNUITY_FIRST]: [ACCOUNT.ANNUITY, ACCOUNT.PENSION, ACCOUNT.ISA],
   [PLAN.ISA_FIRST]: [ACCOUNT.ISA, ACCOUNT.PENSION, ACCOUNT.ANNUITY],
+  [PLAN.PENSION_LIMIT_FILL]: [ACCOUNT.PENSION, ACCOUNT.ANNUITY, ACCOUNT.ISA],
 };
+
+/**
+ * 연금계좌를 **세액공제 대상 한도까지만** 채우는 안의 집합.
+ * 여기 없는 안은 납입 한도까지 채우고, 공제를 낳지 않는 납입분이 생긴다.
+ */
+export const CREDIT_BOUNDED_PLANS = new Set([PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST, PLAN.ISA_FIRST]);
 
 export const HORIZON = {
   WITHIN_ISA_LOCK_IN: 'within_isa_lock_in',
@@ -86,6 +105,29 @@ export const CAP_SOURCE = {
 /** 한도를 모른 채 낸 값이 어느 쪽으로 틀리는가. 조문상 방향이 한쪽으로만 열려 있다. */
 export const CAP_ERROR_DIRECTION = 'overstated_or_equal';
 
+/**
+ * 공제율 구간을 **무엇으로** 판정했는가.
+ *
+ * `pension.credit.rate.basis_determination`이 정한다 — 본문 기준은 종합소득금액이고
+ * 총급여액은 '근로소득만 있는 경우'에만 쓰는 **조건부 대체 기준**이다. 두 기준은
+ * 유리한 쪽을 고를 수 있는 관계가 아니고, 총급여액을 종합소득금액으로 환산하는 것도
+ * 아니다(환산하면 소괄호가 더 엄격한 구간에서 틀린다).
+ */
+export const CREDIT_RATE_BASIS = {
+  /** 근로소득 외에 합산되는 소득이 없다고 답했다 → 총급여액으로 판정 */
+  TOTAL_SALARY: 'total_salary',
+  /** 합산되는 다른 소득이 있다고 답했고 금액도 받았다 → 종합소득금액으로 판정 */
+  GLOBAL_INCOME: 'global_income',
+  /** 금액을 모른다 → 대괄호 안의 예외를 적용하지 않고 본문 구간을 쓴다 */
+  STATUTORY_DEFAULT: 'statutory_default',
+};
+
+/**
+ * 본문 구간을 대체값으로 적용했을 때 결과가 어느 쪽으로 틀리는가.
+ * 예외(우대 구간)를 적용하지 않은 것이므로 공제액은 과소이거나 같다.
+ */
+export const CREDIT_RATE_FALLBACK_DIRECTION = 'understated_or_equal';
+
 /** 개시 가능 시점을 계산하지 못한 이유. */
 export const START_DATE_REASON = {
   OPENED_ON_MISSING: 'opened_on_missing',
@@ -111,6 +153,9 @@ export const ACCOUNT_TYPE_IN_RULESET = {
 /** 엔진이 참조하는 규칙 id. 문자열일 뿐 수치가 아니다. */
 export const RULE = {
   CREDIT_RATE: 'pension.credit.rate',
+  // 10차 조사(D27). 12%/15% 구간을 **무엇으로** 판정하는지를 정하는 규칙이다.
+  // 값(비율)은 CREDIT_RATE가 주고, 이 규칙은 그 값을 고르는 축과 순서를 준다.
+  CREDIT_RATE_BASIS: 'pension.credit.rate.basis_determination',
   CREDIT_LIMIT_ANNUITY: 'pension.credit.limit.annuity_savings',
   CREDIT_LIMIT_COMBINED: 'pension.credit.limit.combined',
   CREDIT_TRANSFER_EXTRA: 'pension.credit.isa_transfer.extra_limit',
@@ -132,6 +177,12 @@ export const RULE = {
   CREDIT_TAX_CAP: 'pension.credit.tax_liability_cap',
   CREDIT_TAX_CAP_SOURCE: 'pension.credit.tax_liability_cap.source_form',
   CREDIT_UNUSED_CARRYOVER: 'pension.credit.unused.contribution_carryover',
+
+  // 9차 조사(D26). 세액공제 한도를 넘는 연금계좌 납입의 세법상 취급과
+  // 그 원금이 인출될 때의 과세. 배분 금액을 바꾸지 않고 **사실**만 준다.
+  PENSION_BEYOND_CREDIT_LIMIT: 'pension.contribution.beyond_credit_limit',
+  PENSION_NON_DEDUCTED_PRINCIPAL: 'pension.withdrawal.non_deducted_principal',
+
   CREDIT_EXCLUDED_CONTRIBUTIONS: 'pension.credit.excluded_contributions',
   CONTRIBUTION_AFTER_ANNUITY_START: 'pension.contribution.after_annuity_start',
   PENSION_EARLIEST_START: 'pension.withdrawal.earliest_start',
@@ -188,6 +239,13 @@ export const PRIORITY_BASIS = {
     code: 'isa_liquidity_first',
     basis_rule_ids: [RULE.PENSION_WITHDRAWAL_ELIGIBILITY, RULE.PENSION_EARLY_WITHDRAWAL_RATE],
   },
+  // **이름이 세액공제를 말하지 않는다.** D17·tie_break 때 세운 "이름이 실제 근거를
+  // 말해야 한다"의 연장이다 — 이 안이 채우는 것은 납입 한도이고, 그 납입이 유리한지는
+  // 세법이 정하지 않는다(규칙의 not_determined_by_tax_law).
+  [PLAN.PENSION_LIMIT_FILL]: {
+    code: 'pension_contribution_limit_first',
+    basis_rule_ids: [RULE.PENSION_CONTRIBUTION_LIMIT, RULE.PENSION_BEYOND_CREDIT_LIMIT],
+  },
 };
 
 /** engine-design.md 3.1절 — 기본안은 자금 사용 시점이 정한다. */
@@ -222,6 +280,8 @@ export const NOTICE = {
   EXISTING_OVER_LIMIT: 'existing_contribution_over_limit',
   PRIOR_YEAR_INCOME_MISSING: 'prior_year_income_missing',
   ISA_TYPE_CONFLICT: 'isa_type_conflicts_with_prior_income',
+  ISA_TYPE_CROSS_CHECK_INCONCLUSIVE: 'isa_type_cross_check_inconclusive',
+  CREDIT_RATE_GLOBAL_INCOME_MISSING: 'credit_rate_global_income_missing',
   ISA_TYPE_NOT_DECLARED: 'isa_type_not_declared',
   ISA_TENURE_MISSING: 'isa_tenure_missing',
   ISA_LOCK_IN_ELAPSED: 'isa_lock_in_already_elapsed',
@@ -283,6 +343,10 @@ export const ASSUMPTION = {
   RETIREMENT_TRANSFER_IN_CONTRIBUTION_LIMIT: 'retirement_transfer_counted_in_contribution_limit',
   DEFERRED_RETIREMENT_INCOME_ABSENT: 'deferred_retirement_income_absent_assumed',
   LOCAL_TAX_FOLLOWS_CAP: 'local_tax_follows_income_tax_cap',
+  // 규칙의 open_interpretation이 미확정으로 남긴 쟁점. 1단계 질문을 "합산되는 소득이
+  // 있는가"로 좁혀 물으면 분리과세로 종결된 소득만 더 있는 사람이 총급여 기준으로
+  // 가게 되고, 그것은 reading_b를 채택한 것이 된다. 조문이 정한 것처럼 표시하지 않는다.
+  CREDIT_RATE_WAGE_ONLY_READING: 'credit_rate_wage_only_excludes_separately_taxed_income',
 };
 
 export const LIMITED_BY = {
@@ -304,4 +368,24 @@ export const TIE_BREAK = {
 export const NON_QUANTIFIED = {
   ISA_HEADROOM: 'isa_tax_free_headroom',
   REASON_RETURN_UNKNOWN: 'depends_on_investment_return_not_in_ruleset',
+  // D26 — 세액공제를 낳지 않는 연금계좌 납입. 이 효과에 딸린 사실들은 문구가 아니라
+  // `facts`로 나간다. 셋 중 하나라도 빠지면 화면 문장이 거짓이 된다.
+  PENSION_WITHOUT_CREDIT: 'pension_contribution_without_credit',
+  REASON_DEFERRAL_UNKNOWN: 'benefit_depends_on_return_horizon_and_withdrawal_form_not_in_ruleset',
+};
+
+/**
+ * 근거 안의 불확실성 표시가 어떤 형태인가. `LegalBasisEntry.uncertainty_notes[].kind`.
+ * **유무가 아니라 목록으로 내는 이유**는 계약 5.7절에 있다 — 불확실을 일부 해소하며
+ * 표시 하나를 지우면, 유무만 보는 구조에서는 남은 불확실까지 조용히 사라진다.
+ */
+export const UNCERTAINTY_KIND = {
+  /** 규칙이 `unverified` 키로 스스로 적어 둔 것 */
+  UNVERIFIED: 'unverified',
+  /** `confidence`가 `verified`가 아니다 */
+  CONFIDENCE_NOT_VERIFIED: 'confidence_not_verified',
+  /** 시행령 위임 등으로 값 자체가 비어 있다 */
+  VALUE_ABSENT: 'value_absent',
+  /** 본문에 '미확인'이라고 적혀 있다 */
+  TEXT_MARKER: 'text_marker',
 };

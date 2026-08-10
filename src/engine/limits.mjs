@@ -8,6 +8,8 @@ import {
   ANNUITY_START,
   CAP_ERROR_DIRECTION,
   CAP_SOURCE,
+  CREDIT_RATE_BASIS,
+  CREDIT_RATE_FALLBACK_DIRECTION,
   ERROR,
   NOTICE,
   PENSION_ACCOUNT_KEYS,
@@ -34,24 +36,100 @@ function readTenureCap(formula) {
   return Number.parseInt(match[1], 10);
 }
 
+/** 상한이 하나도 없는 구간 = 조문 본문의 구간. 대괄호 안의 예외가 아닌 쪽이다. */
+const isDefaultBracket = (b) =>
+  (b?.global_income_max_krw ?? null) === null && (b?.total_salary_only_max_krw ?? null) === null;
+
+/**
+ * 공제율 구간을 **무엇으로 판정할지**를 고른다.
+ *
+ * 이 함수가 하는 일은 값을 만드는 것이 아니라 **축을 고르는 것**이다. 축은
+ * `pension.credit.rate.basis_determination`이 정하고, 그 규칙의 `required_inputs.decision_order`가
+ * 두 단계임을 스스로 선언한다 — 선언이 없거나 형태가 다르면 계산을 멈춘다(대체값을 만들지 않는다).
+ *
+ * **총급여액을 종합소득금액으로 환산하지 않는다.** 소괄호의 총급여 기준은 환산 편의가
+ * 아니라 그 구간에서 더 엄격한 규정이고, 환산하면 순수 근로소득자에게 우대 구간을
+ * 잘못 준다(규칙의 `parenthetical_is_stricter_not_a_conversion`).
+ */
+function resolveCreditRateBasis(access, profile) {
+  const appliedTo = 'echo.credit_rate_bracket.basis_code';
+  const order = access.value(
+    RULE.CREDIT_RATE_BASIS,
+    ['value', 'required_inputs', 'decision_order'],
+    appliedTo,
+  );
+  if (order === undefined) return null;
+
+  // 규칙이 "두 물음이 모두 필요하다"고 선언한 그 구조에 엔진이 실제로 매여 있는지 본다.
+  const boolean = order.find((step) => step?.type === 'boolean');
+  const amount = order.find((step) => typeof step?.type === 'string' && step.type.startsWith('integer'));
+  if (boolean === undefined || amount === undefined) {
+    access.value(
+      RULE.CREDIT_RATE_BASIS,
+      ['value', 'required_inputs', 'decision_order', 'two_steps'],
+      appliedTo,
+    );
+    return null;
+  }
+
+  if (profile.has_non_wage_global_income_current_year !== true) {
+    return { code: CREDIT_RATE_BASIS.TOTAL_SALARY, amount: profile.current_year_total_salary_krw };
+  }
+  if (profile.current_year_global_income_krw !== null) {
+    return { code: CREDIT_RATE_BASIS.GLOBAL_INCOME, amount: profile.current_year_global_income_krw };
+  }
+
+  // 금액을 모른다. **지어내지 않는다.** 대괄호 안의 예외를 적용하지 않고 본문으로 간다.
+  // 규칙이 그 정책과 근거를 스스로 적고 있으므로 그 자리를 읽어 근거로 삼는다.
+  const policy = access.value(
+    RULE.CREDIT_RATE_BASIS,
+    ['value', 'unknown_value_policy', 'recommended_fallback'],
+    appliedTo,
+  );
+  if (policy === undefined) return null;
+  return { code: CREDIT_RATE_BASIS.STATUTORY_DEFAULT, amount: null };
+}
+
+/** 고른 축으로 구간을 고른다. 법문이 '이하'이므로 경계값은 그 구간에 든다. */
+function selectBracket(brackets, basis) {
+  if (basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT) {
+    return brackets.find(isDefaultBracket);
+  }
+  const ceiling =
+    basis.code === CREDIT_RATE_BASIS.TOTAL_SALARY
+      ? (b) => b?.total_salary_only_max_krw ?? null
+      : (b) => b?.global_income_max_krw ?? null;
+
+  return brackets.find((b) => ceiling(b) === null || basis.amount <= ceiling(b));
+}
+
 export function resolveRates(access, { profile, scenarioId }) {
   const notices = [];
 
   const brackets = access.value(RULE.CREDIT_RATE, ['value', 'brackets'], 'echo.credit_rate_bracket');
+  const basis = resolveCreditRateBasis(access, profile);
+
   let incomeTaxRate;
-  if (brackets !== undefined) {
-    // 근로소득자만 다룬다(게이트 1 D2). 법문이 '이하'이므로 경계값은 그 구간에 든다.
-    const bracket = brackets.find(
-      (b) =>
-        b.total_salary_only_max_krw === null ||
-        b.total_salary_only_max_krw === undefined ||
-        profile.current_year_total_salary_krw <= b.total_salary_only_max_krw,
-    );
+  if (brackets !== undefined && basis !== null) {
+    const bracket = selectBracket(brackets, basis);
     if (bracket === undefined || typeof bracket.rate !== 'number') {
       access.value(RULE.CREDIT_RATE, ['value', 'brackets', 'rate'], 'echo.credit_rate_bracket');
     } else {
       incomeTaxRate = bracket.rate;
     }
+  }
+
+  if (basis !== null && basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT) {
+    // 이 사실이 금액과 같은 화면에 붙어야 한다(규칙의 required_display).
+    notices.push(
+      notice(
+        NOTICE.CREDIT_RATE_GLOBAL_INCOME_MISSING,
+        'warning',
+        'profile.current_year_global_income_krw',
+        { error_direction: CREDIT_RATE_FALLBACK_DIRECTION },
+        [RULE.CREDIT_RATE, RULE.CREDIT_RATE_BASIS].sort(),
+      ),
+    );
   }
 
   const surtaxRate = access.value(
@@ -81,6 +159,7 @@ export function resolveRates(access, { profile, scenarioId }) {
   return {
     notices,
     rates: {
+      basis,
       incomeTaxRate: incomeTaxRate ?? null,
       surtaxRate: surtaxRate ?? null,
       youthIrpRate,
@@ -319,6 +398,81 @@ export function resolvePensionStartDates(access, { birthDate, taxYear, accounts 
   }
 
   return { entries, notices };
+}
+
+/**
+ * 세액공제를 낳지 않는 연금계좌 납입에 **반드시 함께 붙어야 하는 사실들**(D26).
+ *
+ * 셋 중 하나라도 빠지면 화면 문장이 거짓이 된다.
+ *   (1) 그 원금은 인출 시 과세되지 않는다 — 과세제외금액이다.
+ *   (2) 다만 합산한도에서 잘린 몫은 **세무서 확인서를 금융회사에 내야** 그 성격을
+ *       인정받고, **확인받은 날부터** 적용된다(소급하지 않는다).
+ *   (3) 그 원금이 번 **운용수익에는** 인출 시 세금이 붙는다.
+ *
+ * **값은 전부 룰셋에서 읽는다.** 참·거짓을 코드에 박으면 조문이 바뀌어도 화면이
+ * 같은 말을 계속하게 된다. 규칙이 열거한 `effects`의 id 유무와 확인 절차의
+ * `automatic`·`prospective_only`가 그 자리다.
+ */
+export function resolvePensionWithoutCreditFacts(access) {
+  const appliedTo = 'plans[].non_quantified_effects';
+
+  const effects = access.value(RULE.PENSION_BEYOND_CREDIT_LIMIT, ['value', 'effects'], appliedTo);
+  const procedure = access.value(
+    RULE.PENSION_NON_DEDUCTED_PRINCIPAL,
+    ['value', 'confirmation_procedure'],
+    appliedTo,
+  );
+  if (effects === undefined || procedure === undefined) return null;
+
+  const has = (id) => effects.some((effect) => effect?.id === id && effect.determined_by_law === true);
+  if (
+    !has('no_credit_this_year') ||
+    !has('principal_not_taxed_on_withdrawal') ||
+    !has('returns_taxed_on_withdrawal')
+  ) {
+    access.value(RULE.PENSION_BEYOND_CREDIT_LIMIT, ['value', 'effects', 'required_ids'], appliedTo);
+    return null;
+  }
+  if (typeof procedure.automatic !== 'boolean' || procedure.prospective_only === undefined) {
+    access.value(
+      RULE.PENSION_NON_DEDUCTED_PRINCIPAL,
+      ['value', 'confirmation_procedure', 'automatic'],
+      appliedTo,
+    );
+    return null;
+  }
+
+  return {
+    // 이 납입이 올해 낳는 공제액. 세법 수치가 아니라 "없다"는 사실의 표현이다.
+    credit_this_year_krw: 0,
+    principal_taxed_on_withdrawal: false,
+    principal_tax_free_requires_confirmation: !procedure.automatic,
+    // "나중에 비과세로 돌아옵니다"를 절차 없이 쓰지 못하게 하는 두 번째 못.
+    principal_tax_free_confirmation_prospective_only: procedure.prospective_only !== null,
+    returns_taxed_on_withdrawal: true,
+    basis_rule_ids: [RULE.PENSION_BEYOND_CREDIT_LIMIT, RULE.PENSION_NON_DEDUCTED_PRINCIPAL].sort(),
+  };
+}
+
+/**
+ * 전환 특례에 붙은 **조건 둘**. `contribution_carryover_available`이라는 이름 하나가
+ * 이 조건들을 감추고 있었다(D26) — 화면이 "다음 해에 이월해 받을 수 있다"로 읽으면
+ * 매년 한도를 채우는 사용자에게 거짓이 된다.
+ */
+export function resolveCarryoverConditions(access) {
+  const appliedTo = 'plans[].deterministic_benefit.tax_liability_cap';
+  const sharesLimit = access.value(
+    RULE.CREDIT_UNUSED_CARRYOVER,
+    ['value', 'subject_to_conversion_year_credit_limits', 'value'],
+    appliedTo,
+  );
+  const automatic = access.value(RULE.CREDIT_UNUSED_CARRYOVER, ['value', 'automatic'], appliedTo);
+  if (sharesLimit === undefined || typeof automatic !== 'boolean') return null;
+
+  return {
+    shares_future_year_credit_limit: sharesLimit,
+    requires_application: !automatic,
+  };
 }
 
 export function resolveTransfer(access, { request, scenarioId }) {
@@ -721,22 +875,88 @@ function resolveIsaTaxFreeLimit(access, { accounts, profile }) {
     return { limit: null, notices };
   }
 
-  // 선언과 소득 판정이 어긋나면 알리되, 계산은 사용자 선언을 따른다.
-  // 실제 유형은 가입·연장 시점에 금융회사가 심사해 확정한 것이다.
-  if (profile.prior_year_total_salary_krw !== null && qualifying) {
-    const qualifiesByIncome =
-      (qualifying.prev_total_salary_max_krw ?? null) !== null &&
-      profile.prior_year_total_salary_krw <= qualifying.prev_total_salary_max_krw;
-    if (qualifiesByIncome !== (isa.account_type === 'low_income')) {
-      notices.push(
-        notice(NOTICE.ISA_TYPE_CONFLICT, 'warning', 'accounts.isa.account_type', {}, [
-          RULE.ISA_TAX_FREE_LIMIT,
-        ]),
-      );
-    }
-  }
+  notices.push(...crossCheckIsaType(access, { isa, profile, qualifying }));
 
   return { limit: selected.limit_krw, notices };
+}
+
+/**
+ * 선언한 ISA 유형과 직전 과세기간 소득의 교차확인 — **`any_of`로 읽지 않는다**(D27).
+ *
+ * `brackets`의 `match: "any_of"`는 단순화이고, 규칙 스스로 그렇게 적어 두었다
+ * (`brackets_are_a_simplification`). 조문(조특법 §91조의18 ② 1호)의 가·나·다목은
+ * **서로를 막는 구조**다 — 가목은 근로소득만(또는 합산되지 않는 소득만) 있는 사람으로,
+ * 나목은 총급여 5,000만원 이하인 사람으로 한정되고, 다목은 농어민 여부가 시행령 위임이다.
+ *
+ * **그래서 두 방향의 결론이 성립하는 조건이 다르다.**
+ *
+ * - **"당신은 서민형이다"** — 어느 목도 엔진이 **확인할 수 없다.** 세 목 전부에
+ *   엔진이 입력을 갖지 못한 한정(`restriction`)이나 위임(`delegated`)이 붙어 있다.
+ *   그러므로 직전 총급여가 낮다는 이유만으로 **일반형 선언을 정정하지 않는다.**
+ *   이것이 D27이 지적한 "올바로 선언한 사용자를 잘못 정정한다"의 자리다.
+ * - **"당신은 서민형이 아니다"** — 직전 총급여가 가목의 금액 요건을 넘으면 가목이 닫히고,
+ *   같은 사실이 나목의 한정("총급여 5,000만원 초과자 제외")으로 나목도 닫는다. 규칙의
+ *   `reverse_direction`이 그 읽기를 적고 있다. 남는 것은 다목뿐이므로 **결론은 내되
+ *   확인하지 못한 목의 id를 함께 싣는다.**
+ *
+ * 어느 쪽이든 **계산은 사용자 선언을 따른다.** 실제 유형은 가입·연장 시점에 금융회사가
+ * 심사해 확정한 것이다.
+ */
+function crossCheckIsaType(access, { isa, profile, qualifying }) {
+  const appliedTo = 'limits.by_account[isa].tax_free_limit_krw';
+  if (profile.prior_year_total_salary_krw === null || !qualifying) return [];
+
+  const salaryCeiling = qualifying.prev_total_salary_max_krw ?? null;
+  if (salaryCeiling === null) return [];
+
+  // 조문 구조를 읽는다. 없으면 교차확인 자체를 하지 않는다 — `any_of`로 되돌아가지 않는다.
+  const items = access.value(
+    RULE.ISA_TAX_FREE_LIMIT,
+    ['value', 'brackets_statutory', 'items'],
+    appliedTo,
+  );
+  if (items === undefined) return [];
+
+  // 엔진이 입력을 갖지 못해 확인할 수 없는 목. 하나라도 있으면 "서민형이다"라고
+  // 결론지을 수 없다 — 그 목들이 열려 있는지 닫혀 있는지를 모르기 때문이다.
+  const unverifiable = items
+    .filter((item) => item?.restriction !== undefined || item?.delegated !== undefined)
+    .map((item) => item.id);
+
+  const declaredLowIncome = isa.account_type === 'low_income';
+  const aboveSalaryCeiling = profile.prior_year_total_salary_krw > salaryCeiling;
+
+  // **확인할 수 없는 한정이 하나도 없다면** 총급여만으로 두 방향 다 결론이 난다.
+  // 지금 룰셋에서는 성립하지 않지만 조건을 이렇게 적어 두어야, 조문이 정비되어
+  // 한정이 사라졌을 때 엔진이 저절로 결론을 회복한다 — 그리고 이 조건이 실제로
+  // 무는지를 결함 주입으로 확인할 수 있다.
+  const canConcludeQualifies = unverifiable.length === 0;
+
+  if (!aboveSalaryCeiling && !canConcludeQualifies) {
+    // 금액만으로는 아무 목도 확인되지 않는다. 결론을 내지 않고 그 사실을 낸다.
+    return [
+      notice(
+        NOTICE.ISA_TYPE_CROSS_CHECK_INCONCLUSIVE,
+        'info',
+        'accounts.isa.account_type',
+        { unverifiable_bracket_ids: unverifiable },
+        [RULE.ISA_TAX_FREE_LIMIT],
+      ),
+    ];
+  }
+
+  // 소득 기준 판정과 선언이 일치하면 할 말이 없다.
+  if (!aboveSalaryCeiling === declaredLowIncome) return [];
+
+  return [
+    notice(
+      NOTICE.ISA_TYPE_CONFLICT,
+      'warning',
+      'accounts.isa.account_type',
+      { unverifiable_bracket_ids: unverifiable },
+      [RULE.ISA_TAX_FREE_LIMIT],
+    ),
+  ];
 }
 
 export function notice(code, severity, field, params = {}, basisRuleIds = []) {

@@ -2,7 +2,7 @@
 // 없는 규칙·없는 값을 기본값으로 메우지 않는다 — 메우는 순간 룰셋이 단일 진실
 // 원천이라는 전제가 깨지고 4단계 교차검증이 무력해진다.
 
-import { ERROR, RULESET_STATUS, SCENARIO } from './constants.mjs';
+import { ERROR, RULESET_STATUS, SCENARIO, UNCERTAINTY_KIND } from './constants.mjs';
 
 /** 요청한 과세연도·시나리오에 맞는 룰셋 파일을 고른다. */
 export function selectRulesets(bundle, taxYear, scenarioId) {
@@ -110,48 +110,81 @@ export function createAccess({ base, proposed }) {
 }
 
 /**
- * 규칙 value 안에 불확실성 표시가 있는지 본다.
- * 화면이 "이 값은 아직 확정되지 않았다"를 붙일 단서를 만들기 위한 것이고,
- * 판단은 룰셋이 스스로 적어 둔 표시에만 근거한다.
+ * 규칙 value 안의 불확실성 표시를 **전부 모아 위치와 함께** 낸다.
+ *
+ * **왜 유무(boolean)가 아니라 목록인가.** 룰셋의 `unverified`는 문서가 아니라 사용자
+ * 고지의 트리거다. 그런데 유무만 보는 구조에서는 **불확실을 일부 해소하며 표시 하나를
+ * 지우면 남은 불확실까지 한꺼번에 사라진다.** 실제로 그럴 뻔했고 테스트가 잡았다
+ * (D27의 "구조적 발견"). 목록이면 3건 → 2건으로 줄어드는 것이 값에 나타나므로
+ * **"일부 해소"가 표현 가능해진다.**
+ *
+ * **이 함수가 막지 못하는 것을 분명히 해 둔다.** 룰셋 작성자가 지워서는 안 될 표시를
+ * 지운 경우는 여전히 잡지 못한다 — 엔진은 룰셋을 그대로 비출 뿐이다. 그 자리를 무는 것은
+ * `tax-domain`의 골든 블록과 룰셋 검증기이고, 엔진이 하는 일은 **세고 가리킬 수 있게
+ * 만드는 것**까지다(계약 5.7절).
  */
-export function hasUncertaintyNote(value) {
-  let found = false;
+export function uncertaintyNotesIn(value) {
+  const found = [];
 
-  const walk = (node, key) => {
-    if (found) return;
-    if (key === 'unverified') { found = true; return; }
-    if (key === 'age_range' && node === null) { found = true; return; }
-    if (key === 'confidence' && node !== 'verified') { found = true; return; }
-    if (typeof node === 'string' && node.includes('미확인')) { found = true; return; }
-    if (Array.isArray(node)) { node.forEach((item) => walk(item, key)); return; }
+  const walk = (node, key, path) => {
+    if (key === 'unverified') {
+      found.push({ path, kind: UNCERTAINTY_KIND.UNVERIFIED });
+      return;
+    }
+    // 시행령 위임 등으로 값 자체가 비어 있는 자리. `age_range: null`이 그 첫 사례였다.
+    if (key === 'age_range' && node === null) {
+      found.push({ path, kind: UNCERTAINTY_KIND.VALUE_ABSENT });
+      return;
+    }
+    if (key === 'confidence' && node !== 'verified') {
+      found.push({ path, kind: UNCERTAINTY_KIND.CONFIDENCE_NOT_VERIFIED });
+      return;
+    }
+    if (typeof node === 'string' && node.includes('미확인')) {
+      found.push({ path, kind: UNCERTAINTY_KIND.TEXT_MARKER });
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => walk(item, key, `${path}[${index}]`));
+      return;
+    }
     if (node && typeof node === 'object') {
-      for (const [childKey, child] of Object.entries(node)) walk(child, childKey);
+      for (const [childKey, child] of Object.entries(node)) {
+        walk(child, childKey, path === '' ? childKey : `${path}.${childKey}`);
+      }
     }
   };
 
-  walk(value, null);
-  return found;
+  walk(value, null, '');
+  // 같은 규칙 안에서 순서가 흔들리면 결정성이 깨진다. 경로 사전순으로 고정한다.
+  return found.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** 근거 목록. 확정 → 개정예고, 그 안에서 rule_id 사전순 (engine-interface.md 6.1절). */
 export function buildLegalBasis(access) {
   return access
     .usedEntries()
-    .map(([ruleId, { rule, applied }]) => ({
-      rule_id: ruleId,
-      title: rule.title,
-      // 룰셋 문자열을 한 글자도 바꾸지 않는다. 화면이 그대로 보여준다.
-      law: rule.source.law,
-      law_version: rule.source.law_version ?? null,
-      url: rule.source.url,
-      corroborating_url: rule.source.corroborating_url ?? null,
-      status: rule.status,
-      bill_stage: rule.bill_stage ?? null,
-      effective_from: rule.effective_from,
-      verified_on: rule.source.verified_on,
-      applied_to: [...applied].sort(),
-      has_uncertainty_note: hasUncertaintyNote(rule.value),
-    }))
+    .map(([ruleId, { rule, applied }]) => {
+      const uncertaintyNotes = uncertaintyNotesIn(rule.value);
+      return {
+        rule_id: ruleId,
+        title: rule.title,
+        // 룰셋 문자열을 한 글자도 바꾸지 않는다. 화면이 그대로 보여준다.
+        law: rule.source.law,
+        law_version: rule.source.law_version ?? null,
+        url: rule.source.url,
+        corroborating_url: rule.source.corroborating_url ?? null,
+        status: rule.status,
+        bill_stage: rule.bill_stage ?? null,
+        effective_from: rule.effective_from,
+        verified_on: rule.source.verified_on,
+        applied_to: [...applied].sort(),
+        // 유지되는 boolean. 언제나 `uncertainty_notes.length > 0`과 같다.
+        has_uncertainty_note: uncertaintyNotes.length > 0,
+        // 몇 건이 어디에 남아 있는가. 일부 해소가 값으로 드러나는 자리다.
+        uncertainty_notes: uncertaintyNotes,
+      };
+    })
     .sort((a, b) => {
       const rank = (entry) => (entry.status === RULESET_STATUS.CONFIRMED ? 0 : 1);
       if (rank(a) !== rank(b)) return rank(a) - rank(b);

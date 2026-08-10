@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { compute, SCHEMA_VERSION } from './index.mjs';
+import { PLAN_ORDER } from './constants.mjs';
 import {
   loadRulesets,
   baseRequest,
@@ -160,13 +161,16 @@ test('결정적이다 — 같은 입력이면 같은 출력', () => {
   assert.equal(JSON.stringify(a), JSON.stringify(b));
 });
 
-test('배분안은 언제나 세 계좌 전부를 담고 1~3개다', () => {
-  const scenario = scenarioOf(compute(baseRequest({ profile: { monthly_capacity_krw: 200_000 } }), rulesets));
-  assert.ok(scenario.plans.length >= 1 && scenario.plans.length <= 3);
-  for (const plan of scenario.plans) {
-    assert.equal(plan.allocations.length, 3);
-    assert.equal(plan.priority_basis.fill_sequence.length, 3);
-    assert.ok(plan.priority_basis.code.length > 0);
+test('배분안은 언제나 세 계좌 전부를 담고 1~4개다', () => {
+  for (const monthly of [200_000, 1_000_000, 5_000_000]) {
+    const scenario = scenarioOf(compute(baseRequest({ profile: { monthly_capacity_krw: monthly } }), rulesets));
+    assert.ok(scenario.plans.length >= 1 && scenario.plans.length <= PLAN_ORDER.length, `${monthly}`);
+    for (const plan of scenario.plans) {
+      assert.equal(plan.allocations.length, 3);
+      assert.equal(plan.priority_basis.fill_sequence.length, 3);
+      assert.ok(plan.priority_basis.code.length > 0);
+      assert.ok(PLAN_ORDER.includes(plan.plan_id));
+    }
   }
 });
 

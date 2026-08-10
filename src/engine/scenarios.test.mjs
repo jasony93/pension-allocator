@@ -154,10 +154,21 @@ test('ISA 연령 요건 미달이면 ISA만 빠지고 연금계좌 계산은 계
   assert.ok(noticeCodes(scenario).includes('pension_age_not_evaluated'));
 });
 
-test('ISA 유형 선언이 직전 과세기간 소득 판정과 어긋나면 경고하되 선언을 따른다', () => {
+// ── ISA 유형 교차확인 — D27이 "번지는 곳"으로 지목한 자리 ──────────
+//
+// 조특법 §91조의18 ② 1호의 가·나·다목은 **서로를 막는 구조**인데 엔진이 `any_of`로
+// 읽고 있었다. 틀리는 것은 비과세 한도금액이 아니라 **교차확인의 결론**이고,
+// 그 결론이 올바로 선언한 사용자를 잘못 정정한다.
+
+test('직전 총급여가 낮다는 이유만으로 일반형 선언을 정정하지 않는다 (D27)', () => {
   const brackets = confirmedRule('isa.tax_free_limit').value.brackets;
   const lowIncome = brackets.find((b) => b.id === '서민형');
 
+  // 직전 총급여가 서민형 상한과 정확히 같고 사용자는 **일반형**을 선언했다.
+  // 옛 동작은 여기서 "선언이 소득 판정과 어긋난다"고 경고했다. 그런데 가목에는
+  // "근로소득만 있거나 합산되지 않는 종합소득만 있는 자"라는 한정이 붙어 있어,
+  // 사업소득 등이 있는 사람은 총급여가 낮아도 서민형이 아니다. 엔진에는 그 사실을
+  // 확인할 입력이 없으므로 **결론을 내면 안 된다.**
   const scenario = scenarioOf(
     compute(
       baseRequest({
@@ -168,13 +179,73 @@ test('ISA 유형 선언이 직전 과세기간 소득 판정과 어긋나면 경
     ),
   );
 
-  assert.ok(noticeCodes(scenario).includes('isa_type_conflicts_with_prior_income'));
+  assert.equal(
+    noticeCodes(scenario).includes('isa_type_conflicts_with_prior_income'),
+    false,
+    '확인할 수 없는 한정 때문에 올바른 선언을 정정하면 안 된다',
+  );
+  const inconclusive = scenario.notices.find((n) => n.code === 'isa_type_cross_check_inconclusive');
+  assert.ok(inconclusive, '결론을 내지 못했다는 사실 자체는 값으로 나가야 한다');
+  assert.ok(
+    inconclusive.params.unverifiable_bracket_ids.length > 0,
+    '어느 목을 확인하지 못했는지가 함께 나가야 화면이 이유를 쓸 수 있다',
+  );
+
   const isa = scenario.limits.by_account.find((l) => l.account === 'isa');
   assert.equal(
     isa.tax_free_limit_krw,
     brackets.find((b) => b.id === '일반형').limit_krw,
     '계산은 사용자 선언을 따른다',
   );
+});
+
+test('직전 총급여가 상한을 넘으면 서민형 선언과의 불일치는 알린다', () => {
+  const brackets = confirmedRule('isa.tax_free_limit').value.brackets;
+  const lowIncome = brackets.find((b) => b.id === '서민형');
+
+  // 이 방향은 조문이 스스로 닫는다 — 가목은 금액 요건으로, 나목은 "총급여 5,000만원을
+  // 초과하지 아니하는 자로 한정한다"는 한정으로 닫힌다. 남는 것은 농어민(다목)뿐이고
+  // 그 입력은 수집되지 않으므로 **결론은 내되 확인하지 못한 목을 함께 싣는다.**
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: { prior_year_total_salary_krw: lowIncome.prev_total_salary_max_krw + 1 },
+        accounts: { isa: { account_type: 'low_income' } },
+      }),
+      rulesets,
+    ),
+  );
+
+  const conflict = scenario.notices.find((n) => n.code === 'isa_type_conflicts_with_prior_income');
+  assert.ok(conflict);
+  assert.ok(conflict.params.unverifiable_bracket_ids.length > 0);
+  assert.equal(
+    noticeCodes(scenario).includes('isa_type_cross_check_inconclusive'),
+    false,
+    '결론을 낸 자리에 "결론을 못 냈다"를 함께 내면 화면이 어느 쪽을 믿을지 모른다',
+  );
+
+  const isa = scenario.limits.by_account.find((l) => l.account === 'isa');
+  assert.equal(isa.tax_free_limit_krw, lowIncome.limit_krw, '계산은 여전히 사용자 선언을 따른다');
+});
+
+test('상한을 넘고 선언도 일반형이면 아무 말도 하지 않는다', () => {
+  const brackets = confirmedRule('isa.tax_free_limit').value.brackets;
+  const lowIncome = brackets.find((b) => b.id === '서민형');
+
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: { prior_year_total_salary_krw: lowIncome.prev_total_salary_max_krw + 1 },
+        accounts: { isa: { account_type: 'general' } },
+      }),
+      rulesets,
+    ),
+  );
+
+  for (const code of ['isa_type_conflicts_with_prior_income', 'isa_type_cross_check_inconclusive']) {
+    assert.equal(noticeCodes(scenario).includes(code), false, code);
+  }
 });
 
 test('직전 과세기간 소득이 없으면 교차확인을 건너뛰고 추정하지 않는다', () => {
