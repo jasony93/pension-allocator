@@ -316,10 +316,21 @@ export function donutChart({
   // 상단면 대비(1.57~1.62)와 인접 측면끼리의 적록 ΔE를 그 값으로 실측했다 —
   // 투명도를 얹으면 화면에 실제로 나오는 색이 그 값이 아니게 되어, 검증기가
   // 판정한 색과 사용자가 보는 색이 갈린다.
+  //
+  // **`d`는 언제나 최종 각도다.** 조각을 0°로 지웠다가 채우는 일은 이 함수
+  // 안에서 하지 않는다 — `class="chart-donut-slice"`와 `data-arc-*`만 남겨
+  // 두고, 진입 애니메이션은 마운트 뒤 `runDonutEntrance`가 실제 DOM 위에서
+  // 돈다(아래 주석 참고). 이 함수가 만드는 노드가 그대로 화면에 붙는다는
+  // 보장이 없기 때문이다 — `patch()`(dom.js)는 구조가 같으면 새 노드를 버리고
+  // 기존 노드에 속성만 복사한다.
   const sides = arcs.map((a) =>
     svgEl('path', {
       d: annulusSlicePath(cx, cy + depth, R, rInner, RY_RATIO, a.start, a.end),
       fill: a.isUnallocated ? UNALLOCATED_SIDE_COLOR : ACCOUNT_SIDE_COLOR[a.account],
+      class: 'chart-donut-slice',
+      'data-cy': cy + depth,
+      'data-arc-start': a.start,
+      'data-arc-end': a.end,
     }),
   );
 
@@ -327,6 +338,10 @@ export function donutChart({
     const path = svgEl('path', {
       d: annulusSlicePath(cx, cy, R, rInner, RY_RATIO, a.start, a.end),
       fill: a.isUnallocated ? UNALLOCATED_COLOR : ACCOUNT_COLOR[a.account],
+      class: 'chart-donut-slice',
+      'data-cy': cy,
+      'data-arc-start': a.start,
+      'data-arc-end': a.end,
       tabindex: '0',
       role: 'img',
       'aria-label': `${nameOf(a)}, 월 ${formatKrw(monthlyOf(a))}, 연 ${formatKrw(a.amount)}, 전체의 ${formatPercent(total > 0 ? a.amount / total : 0)}`,
@@ -342,6 +357,10 @@ export function donutChart({
             d: annulusSlicePath(cx, cy, R, rInner, RY_RATIO, a.start, a.end),
             fill: 'url(#donut-hatch)',
             opacity: 0.5,
+            class: 'chart-donut-slice',
+            'data-cy': cy,
+            'data-arc-start': a.start,
+            'data-arc-end': a.end,
           }),
         )
     : [];
@@ -399,9 +418,25 @@ export function donutChart({
 
   // viewBox가 도넛 크기 그대로였을 때 라벨이 그림 밖에 그려져 잘려 나갔다.
   // 이제 라벨 여백을 포함한 상자를 쓰고, 폭은 CSS가 반응형으로 줄인다.
+  //
+  // `chart-donut-entering`은 진입 애니메이션이 필요하다는 **표시일 뿐**이고
+  // 애니메이션 자체는 여기서 돌지 않는다(`runDonutEntrance` 참고). 조각의
+  // `d`는 위에서 이미 최종 각도로 그려졌으므로, 이 표시를 아무도 읽지 않아도
+  // (예: 호출자가 `runDonutEntrance`를 부르지 않는 컨텍스트) 도넛은 완성된
+  // 모양 그대로 화면에 남는다.
   const svg = svgEl(
     'svg',
-    { viewBox: `0 0 ${width} ${height}`, width, height, class: 'chart-donut', preserveAspectRatio: 'xMidYMid meet' },
+    {
+      viewBox: `0 0 ${width} ${height}`,
+      width,
+      height,
+      class: `chart-donut${animateFromZero && !prefersReducedMotion() ? ' chart-donut-entering' : ''}`,
+      preserveAspectRatio: 'xMidYMid meet',
+      'data-cx': cx,
+      'data-r-outer': R,
+      'data-r-inner': rInner,
+      'data-ry': RY_RATIO,
+    },
     [
       defs,
       ...sides,
@@ -412,15 +447,6 @@ export function donutChart({
       centerText,
     ].filter(Boolean),
   );
-
-  if (animateFromZero && !prefersReducedMotion()) {
-    const shapes = [
-      ...sides.map((node, i) => ({ node, cy: cy + depth, arc: arcs[i] })),
-      ...tops.map((node, i) => ({ node, cy, arc: arcs[i] })),
-      ...hatches.map((node, i) => ({ node, cy, arc: arcs.filter((a) => !a.isUnallocated)[i] })),
-    ];
-    animateSliceSweep(shapes, { cx, R, rInner, ry: RY_RATIO });
-  }
 
   return svg;
 }
@@ -441,17 +467,55 @@ export const DONUT_SWEEP_MS = 240;
  * 없다(design-system 5.20절: "뷰 각도 회전·확대 애니메이션 금지").
  *
  * 시작각은 처음부터 12시로 고정이고 각 조각은 자기 시작각에서 자란다.
+ *
+ * **`donutChart`가 만드는 노드가 아니라, 호출자가 마운트한 뒤 실제 DOM에서
+ * 다시 찾은 노드 위에서 돈다.** 회귀의 원인이 이것이었다 — `patch()`(dom.js)는
+ * 구조가 같은 트리를 다시 그릴 때 새로 만든 노드를 화면에 붙이지 않고,
+ * 기존(이미 화면에 붙어 있는) 노드에 속성값만 복사한 뒤 새 노드는 버린다.
+ * `donutChart` 안에서 애니메이션을 돌리면, 그 애니메이션이 붙잡고 있는 노드는
+ * `patch`가 속성을 한 번 복사하고 나면 버려지는 사본이다 — 애니메이션은 그
+ * 사본을 계속 갱신하지만 아무도 보지 않고, 화면에 실제로 붙어 있는 노드는
+ * **속성이 복사된 첫 프레임(0°)에서 멈춘 채로 남는다.** 실측(`getBBox()`)으로
+ * 모든 조각의 bbox가 0×N인 선분으로 붕괴한 것을 확인해 잡았다.
+ *
+ * 그래서 이 함수는 `donutChart` 호출 도중이 아니라 `patch` 이후, 실제로
+ * 마운트된 컨테이너를 받아 그 안의 노드를 다시 조회한다. **호출되지 않아도,
+ * `requestAnimationFrame`이 없어도, 도중에 다시 그려져 끊겨도 도넛은 이미
+ * 완성된 최종 모양이다** — `donutChart`가 만드는 `d`는 처음부터 최종
+ * 각도이고, 이 함수가 하는 일은 그 위에 0°에서 시작하는 시각 효과를 잠깐
+ * 얹는 것뿐이다.
  */
-function animateSliceSweep(shapes, { cx, R, rInner, ry }, durationMs = DONUT_SWEEP_MS) {
-  if (typeof requestAnimationFrame !== 'function') return;
+export function runDonutEntrance(root, durationMs = DONUT_SWEEP_MS) {
+  if (!root || typeof root.querySelector !== 'function') return;
+  const svg = root.querySelector('.chart-donut.chart-donut-entering');
+  if (!svg) return;
+  // 한 번만 돈다 — 다음에 이 svg가 다시 patch되어도(값이 바뀌어도) 이 표시가
+  // 남아 있으면 매번 처음부터 펼쳐진다. `donutChart`가 애초에 값이 바뀐
+  // 재렌더에는 이 클래스를 달지 않지만, 노드를 재사용하는 `patch`의 성질상
+  // 방어적으로 여기서도 지운다.
+  svg.classList.remove('chart-donut-entering');
+  if (typeof requestAnimationFrame !== 'function') return; // 애니메이션 없이 최종 모양 그대로
+
+  const cx = Number(svg.dataset.cx);
+  const rOuter = Number(svg.dataset.rOuter);
+  const rInner = Number(svg.dataset.rInner);
+  const ry = Number(svg.dataset.ry);
+  const specs = [...svg.querySelectorAll('.chart-donut-slice')].map((node) => ({
+    node,
+    cy: Number(node.dataset.cy),
+    start: Number(node.dataset.arcStart),
+    end: Number(node.dataset.arcEnd),
+  }));
+  if (specs.length === 0) return;
+
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  for (const { node, cy, arc } of shapes) node.setAttribute('d', annulusSlicePath(cx, cy, R, rInner, ry, arc.start, arc.start));
+  for (const s of specs) s.node.setAttribute('d', annulusSlicePath(cx, s.cy, rOuter, rInner, ry, s.start, s.start));
   const step = (now) => {
     const p = Math.min(1, (now - t0) / durationMs);
     const eased = 1 - (1 - p) ** 3; // ease-out
-    for (const { node, cy, arc } of shapes) {
-      if (!node.isConnected) return; // 다시 그려졌다 — 최종값은 새 노드가 갖고 있다
-      node.setAttribute('d', annulusSlicePath(cx, cy, R, rInner, ry, arc.start, arc.start + (arc.end - arc.start) * eased));
+    for (const s of specs) {
+      if (!s.node.isConnected) return; // 다시 그려졌다 — 최종값은 새 노드가 갖고 있다
+      s.node.setAttribute('d', annulusSlicePath(cx, s.cy, rOuter, rInner, ry, s.start, s.start + (s.end - s.start) * eased));
     }
     if (p < 1) requestAnimationFrame(step);
   };

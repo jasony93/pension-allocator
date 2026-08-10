@@ -42,7 +42,7 @@ import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { SERVICE_NAME } from '../copy.js';
 import { createStore } from '../state/store.js';
-import { COMPACT_MEDIA_QUERY } from './charts.js';
+import { COMPACT_MEDIA_QUERY, runDonutEntrance } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
 
 function captureFocus(container) {
@@ -147,6 +147,12 @@ export function mountApp(root, { engineClient, analytics }) {
     // 브라우저에서 `mousedown`·`mouseup`은 오는데 `click`이 오지 않는 것을
     // 확인했다(`browser/share-modal.browser.mjs`).
     patch(resultSlot, renderResultPanel({ state, store }));
+    // 도넛 진입 애니메이션은 여기, **patch가 끝난 뒤** 실제로 화면에 붙은
+    // 노드를 다시 찾아 돌린다. `patch`는 구조가 같으면 새로 만든 노드를 버리고
+    // 기존 노드에 속성만 복사하므로, `renderResultPanel`이 만드는 시점에
+    // 애니메이션을 걸면 아무도 보지 않는 사본 위에서 돈다 — 화면에 남는
+    // 조각은 첫 프레임(0°)에서 멈춘다(charts.js `runDonutEntrance` 머리말).
+    runDonutEntrance(resultSlot);
   };
 
   setRerenderHook(scheduleRender);

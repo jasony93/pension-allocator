@@ -448,6 +448,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .chart-area { display: flex; flex-direction: column; gap: var(--space-4); }
 .donut-wrap { display: flex; justify-content: center; }
 .chart-donut { max-width: 100%; height: auto; }
+/* `chart-donut-entering`은 진입 애니메이션이 필요하다는 표시로만 쓰인다
+   (charts.js `runDonutEntrance`) — 스타일은 없다. `chart-donut-slice`도
+   마찬가지로 조각 노드를 다시 찾기 위한 훅일 뿐, 시각 효과는 fill 속성이
+   낸다. 둘 다 여기 없으면 css-class-consistency 검사가 실패한다. */
+.chart-donut-entering,
+.chart-donut-slice { /* 스타일 없음 — 애니메이션 훅 클래스 */ }
 
 /* 도넛 라벨 — 계좌명 / 금액 / 비율의 위계를 크기와 굵기로 만든다
    (screens.md 5.6절: type-body-s + type-num + type-caption). */
