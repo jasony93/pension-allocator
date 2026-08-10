@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '5.1.0';
-export const SUPPORTED_MAJOR = 5;
+export const SCHEMA_VERSION = '6.0.0';
+export const SUPPORTED_MAJOR = 6;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -22,34 +22,46 @@ export const PLAN = {
   ANNUITY_FIRST: 'annuity_savings_first',
   ISA_FIRST: 'isa_first',
   /**
-   * D26 — 연금계좌 **납입** 한도를 채우는 안. 세액공제 한도가 아니라 납입 한도가 상한이다.
-   * 이름과 `priority_basis.code`가 세액공제를 말하지 않는 것은 의도다: 이 안의 근거는
-   * `pension.contribution.annual_limit`과 `pension.contribution.beyond_credit_limit`이고,
-   * 세법은 이 안이 유리한지 불리한지를 정하지 않는다. **기본안이 되지 않는다.**
+   * D32 — 연금계좌 납입 한도 몫을 **ISA보다 먼저** 채우는 안.
+   *
+   * D26의 `pension_contribution_limit_fill`이 이 이름으로 바뀌었다. 그 이름이 말하던
+   * "납입 한도를 채운다"는 이제 **모든 안이 한다**(소유자 지시, D32). 그래서 그 이름은
+   * 더 이상 이 안을 다른 안과 구별하지 못한다 — 남은 차이는 **ISA와의 선후**뿐이고,
+   * 이름이 실제 차이를 말해야 한다는 원칙(D17·`tie_break`)이 개명을 요구한다.
+   *
+   * 이름과 `priority_basis.code`가 세액공제를 말하지 않는 것은 그대로다. 이 안의 근거는
+   * `pension.contribution.annual_limit`·`pension.contribution.beyond_credit_limit`이고,
+   * 세법은 ISA와 이 몫의 선후를 정하지 않는다. **기본안이 되지 않는다.**
    */
-  PENSION_LIMIT_FILL: 'pension_contribution_limit_fill',
+  PENSION_BEFORE_ISA: 'pension_contribution_before_isa',
 };
 
 /**
  * 기본안을 뺀 나머지가 따르는 표준 순서.
- * `PENSION_LIMIT_FILL`이 마지막인 것도 의도다 — `BASELINE_BY_HORIZON`이 어떤 값에서도
+ * `PENSION_BEFORE_ISA`가 마지막인 것도 의도다 — `BASELINE_BY_HORIZON`이 어떤 값에서도
  * 이 안을 가리키지 않고, 기본안 후보가 하나도 계산되지 않았을 때의 대체 선택에서도
  * 마지막으로 밀린다.
  */
-export const PLAN_ORDER = [PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST, PLAN.ISA_FIRST, PLAN.PENSION_LIMIT_FILL];
+export const PLAN_ORDER = [PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST, PLAN.ISA_FIRST, PLAN.PENSION_BEFORE_ISA];
 
 export const FILL_SEQUENCE = {
   [PLAN.MAX_CREDIT]: [ACCOUNT.PENSION, ACCOUNT.ANNUITY, ACCOUNT.ISA],
   [PLAN.ANNUITY_FIRST]: [ACCOUNT.ANNUITY, ACCOUNT.PENSION, ACCOUNT.ISA],
   [PLAN.ISA_FIRST]: [ACCOUNT.ISA, ACCOUNT.PENSION, ACCOUNT.ANNUITY],
-  [PLAN.PENSION_LIMIT_FILL]: [ACCOUNT.PENSION, ACCOUNT.ANNUITY, ACCOUNT.ISA],
+  [PLAN.PENSION_BEFORE_ISA]: [ACCOUNT.PENSION, ACCOUNT.ANNUITY, ACCOUNT.ISA],
 };
 
 /**
- * 연금계좌를 **세액공제 대상 한도까지만** 채우는 안의 집합.
- * 여기 없는 안은 납입 한도까지 채우고, 공제를 낳지 않는 납입분이 생긴다.
+ * 연금 납입 한도 몫(3단계)을 **ISA보다 먼저** 채우는 안의 집합.
+ *
+ * **D32 전에는 이 자리에 `CREDIT_BOUNDED_PLANS`가 있었다** — 연금계좌를 세액공제 대상
+ * 한도까지만 채우는 안의 집합이고, 거기 없는 안만 납입 한도까지 채웠다. 소유자가 기본안도
+ * 납입 한도까지 채우도록 정했으므로 그 집합은 **공집합이 되어 뜻을 잃었다.** 지금 안들을
+ * 가르는 축은 상한이 아니라 **ISA와 3단계의 선후**이고, 이 상수가 그 축이다.
+ *
+ * 여기 없는 안은 ISA를 먼저 채운다 — 소유자가 못 박은 순서다.
  */
-export const CREDIT_BOUNDED_PLANS = new Set([PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST, PLAN.ISA_FIRST]);
+export const PENSION_EXTRA_BEFORE_ISA = new Set([PLAN.PENSION_BEFORE_ISA]);
 
 export const HORIZON = {
   WITHIN_ISA_LOCK_IN: 'within_isa_lock_in',
@@ -288,32 +300,45 @@ export const UNAPPLIED_REASON = {
 export const DEFAULT_UNAPPLIED_REASON = 'out_of_product_scope';
 export const REASON_INPUT_MISSING = 'requires_input_not_collected';
 
+/**
+ * **모든 안이 3단계(연금 납입 한도 몫)를 갖게 되면서 함께 실려야 하는 근거**(D32).
+ *
+ * 그 몫은 올해의 세액공제를 낳지 않으므로 **세액공제 규칙이 그 몫의 근거가 될 수 없다.**
+ * 근거로 서는 것은 셋이다 — 얼마까지 넣을 수 있는가(`annual_limit`), 넘겨 넣은 돈이
+ * 세법상 어떻게 되는가(`beyond_credit_limit`), 그리고 두 연금계좌 중 어디에 먼저 넣는가
+ * (`midterm_restriction`). **`priority_basis.code`는 이 몫을 말하지 않는다** — 코드는
+ * 그 안이 **첫째로** 무엇을 앞세우는지의 이름이고, 소유자가 배분을 정했다고 해서 그 이름이
+ * "유리하다"로 바뀌지 않는다(D32). 근거가 실제 근거를 말하는 자리는 이 목록이다.
+ */
+const PENSION_EXTRA_BASIS = [
+  RULE.PENSION_CONTRIBUTION_LIMIT,
+  RULE.PENSION_BEYOND_CREDIT_LIMIT,
+  RULE.PENSION_MIDTERM_RESTRICTION,
+];
+
 export const PRIORITY_BASIS = {
   [PLAN.MAX_CREDIT]: {
     code: 'tax_credit_maximization',
-    basis_rule_ids: [RULE.CREDIT_LIMIT_ANNUITY, RULE.CREDIT_LIMIT_COMBINED],
+    basis_rule_ids: [RULE.CREDIT_LIMIT_ANNUITY, RULE.CREDIT_LIMIT_COMBINED, ...PENSION_EXTRA_BASIS],
   },
   [PLAN.ANNUITY_FIRST]: {
     code: 'annuity_savings_limit_first',
-    basis_rule_ids: [RULE.CREDIT_LIMIT_ANNUITY],
+    basis_rule_ids: [RULE.CREDIT_LIMIT_ANNUITY, ...PENSION_EXTRA_BASIS],
   },
   [PLAN.ISA_FIRST]: {
     code: 'isa_liquidity_first',
-    basis_rule_ids: [RULE.PENSION_WITHDRAWAL_ELIGIBILITY, RULE.PENSION_EARLY_WITHDRAWAL_RATE],
+    basis_rule_ids: [
+      RULE.PENSION_WITHDRAWAL_ELIGIBILITY,
+      RULE.PENSION_EARLY_WITHDRAWAL_RATE,
+      ...PENSION_EXTRA_BASIS,
+    ],
   },
   // **이름이 세액공제를 말하지 않는다.** D17·tie_break 때 세운 "이름이 실제 근거를
-  // 말해야 한다"의 연장이다 — 이 안이 채우는 것은 납입 한도이고, 그 납입이 유리한지는
-  // 세법이 정하지 않는다(규칙의 not_determined_by_tax_law).
-  // 세 번째 규칙은 **무엇을 채우는가**가 아니라 **그 안에서 어느 계좌를 먼저 채우는가**의
-  // 근거다. 이 안은 연금 납입 총액이 순서와 무관하게 같아지는 구간을 갖고, 그 구간에서
-  // 세액이 순서를 정하지 못하므로 인출 가능성이 정한다. 세액공제와 무관한 근거다.
-  [PLAN.PENSION_LIMIT_FILL]: {
-    code: 'pension_contribution_limit_first',
-    basis_rule_ids: [
-      RULE.PENSION_CONTRIBUTION_LIMIT,
-      RULE.PENSION_BEYOND_CREDIT_LIMIT,
-      RULE.PENSION_MIDTERM_RESTRICTION,
-    ],
+  // 말해야 한다"의 연장이다 — 이 안이 앞세우는 것은 ISA보다 먼저 채우는 연금 납입이고,
+  // 그 선후가 유리한지는 세법이 정하지 않는다(규칙의 not_determined_by_tax_law).
+  [PLAN.PENSION_BEFORE_ISA]: {
+    code: 'pension_contribution_limit_before_isa',
+    basis_rule_ids: [...PENSION_EXTRA_BASIS],
   },
 };
 
@@ -440,10 +465,22 @@ export const ASSUMPTION = {
   ISA_RETURN_HELD_TO_SETTLEMENT: 'isa_return_assumes_contract_held_to_settlement',
 };
 
+/**
+ * 그 계좌의 배분을 **마지막에 실제로 막은 것**.
+ *
+ * **D32에서 `credit_limit`이 사라졌다.** 이제 어떤 안도 세액공제 대상 한도에서 멈추지
+ * 않고 납입 한도까지 간다 — 공제 한도는 어느 계좌의 상한도 아니게 되었고, 그런데도
+ * `credit_limit`을 남겨 두면 **아무 입력에서도 나오지 않는 값**이 계약에 남는다. 화면은
+ * 결코 실행되지 않는 갈래를 만들고, `qa`는 그 갈래가 설계상 죽은 것인지 결함으로 죽은
+ * 것인지 가릴 수 없다.
+ *
+ * **그 사실이 사라지는 것은 아니다.** "공제 한도를 넘겨 넣은 몫이 있다"는
+ * `pension_combined_credit_remaining_after_plan_krw`(배분 후 잔여 공제 한도)와
+ * `pension_contribution_without_credit` 효과가 말한다 — 자리를 옮긴 것이지 잃은 것이 아니다.
+ */
 export const LIMITED_BY = {
   BUDGET: 'budget',
   CONTRIBUTION_LIMIT: 'contribution_limit',
-  CREDIT_LIMIT: 'credit_limit',
   NOT_ELIGIBLE: 'not_eligible',
 };
 

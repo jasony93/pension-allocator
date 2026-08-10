@@ -36,15 +36,27 @@ test('연금저축 단독 한도를 바꾸면 연금저축 우선안의 배분�
   const halved = Math.floor(rule.value.amount_krw / 2);
   rule.value.amount_krw = halved;
 
-  const before = planOf(scenarioOf(compute(baseRequest(ANNUITY_FIRST_ONLY), rulesets)), 'annuity_savings_first');
-  const after = planOf(scenarioOf(compute(baseRequest(ANNUITY_FIRST_ONLY), patched)), 'annuity_savings_first');
+  const beforeScenario = scenarioOf(compute(baseRequest(ANNUITY_FIRST_ONLY), rulesets));
+  const afterScenario = scenarioOf(compute(baseRequest(ANNUITY_FIRST_ONLY), patched));
+  const before = planOf(beforeScenario, 'annuity_savings_first');
+  const after = planOf(afterScenario, 'annuity_savings_first');
 
   assert.notEqual(
     allocationOf(after, 'annuity_savings').annual_krw,
     allocationOf(before, 'annuity_savings').annual_krw,
   );
-  // 단독 한도를 먼저 적용한 뒤 합산 한도를 적용한다. 그래서 배분은 둘 중 작은 쪽이다.
-  assert.equal(allocationOf(after, 'annuity_savings').annual_krw, Math.min(halved, combined));
+
+  // **D32로 관측 지점이 바뀌었다.** 예전에는 이 안이 단독 한도에서 멈춰 배분액이 곧
+  // 그 한도였다. 지금은 납입 한도까지 가므로 단독 한도가 정하는 것은 **연금저축의
+  // 총 배분액이 아니라 두 계좌의 쪼개기**다 — IRP가 받는 몫이 정확히
+  // `합산한도 − 단독한도`이고, 나머지를 연금저축이 가져간다(D30의 경계).
+  const pool = afterScenario.limits.pension_contribution_limit_remaining_krw;
+  assert.equal(
+    allocationOf(after, 'retirement_pension').annual_krw,
+    combined - halved,
+    'IRP는 연금저축이 단독 한도 때문에 흡수하지 못하는 몫만 받는다',
+  );
+  assert.equal(allocationOf(after, 'annuity_savings').annual_krw, pool - (combined - halved));
 });
 
 test('합산 공제한도를 바꾸면 세액공제 대상액이 따라 바뀐다', () => {

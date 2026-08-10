@@ -586,5 +586,7 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   const response = compute(legacy, rulesets);
   assert.equal(response.ok, false);
   assert.ok(errorCodes(response).includes('schema_version_mismatch'));
-  assert.equal(SCHEMA_VERSION.split('.')[0], '5');
+  // D32에서 6으로 올렸다 — 기본안의 배분이 바뀌고 `plan_id` 열거형에서 값 하나가
+  // 사라졌으므로, 옛 소비자가 조용히 다른 숫자를 내보내는 상태를 만들지 않는다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '6');
 });

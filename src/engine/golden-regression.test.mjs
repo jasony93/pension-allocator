@@ -61,7 +61,10 @@ test('M1 / GC-23 — 최대 격차 케이스. IRP를 잔여 공제한도에서 �
   assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 9_000_000);
   assert.equal(allocationOf(plan, 'annuity_savings').annual_krw, 0);
   assert.equal(allocationOf(plan, 'isa').annual_krw, 3_000_000);
-  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'credit_limit');
+  // **D32 — `credit_limit`이 계약에서 사라졌다.** 어떤 안도 세액공제 대상 한도에서
+  // 멈추지 않으므로 그 값은 어느 계좌의 상한도 아니게 됐다. **금액은 한 원도 바뀌지
+  // 않았다** — 바뀐 것은 "무엇이 막았는가"의 이름뿐이고, 예산이 다 쓰인 것이 사실이다.
+  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'budget');
   assert.equal(allocationOf(plan, 'isa').limited_by, 'budget');
 
   assert.deepStrictEqual(
@@ -104,7 +107,8 @@ test('M1 / GC-19 — 확정 시나리오는 값이 바뀌지 않는다', () => {
   const current = planOf(scenarioOf(response, 'current'), 'max_tax_credit');
   assert.equal(current.deterministic_benefit.pension_credit_total_krw, 1_188_000);
   assert.equal(allocationOf(current, 'retirement_pension').annual_krw, 3_000_000);
-  assert.equal(allocationOf(current, 'retirement_pension').limited_by, 'credit_limit');
+  // D32에서 사라진 값이다. 금액은 그대로이고 이름만 사실을 따라간다(위 주석).
+  assert.equal(allocationOf(current, 'retirement_pension').limited_by, 'budget');
   assert.equal(allocationOf(current, 'isa').annual_krw, 3_000_000);
 
   const proposed = planOf(scenarioOf(response, 'proposed'), 'max_tax_credit');
@@ -169,7 +173,10 @@ test('M1 / 소득이 공제율 경계 아래면 치환 이득이 없다', () => 
 
   assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 3_000_000);
   assert.equal(allocationOf(plan, 'isa').annual_krw, 9_000_000);
-  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'credit_limit');
+  // **D32 — `credit_limit`이 계약에서 사라졌다.** 어떤 안도 세액공제 대상 한도에서
+  // 멈추지 않으므로 그 값은 어느 계좌의 상한도 아니게 됐다. **금액은 한 원도 바뀌지
+  // 않았다** — 바뀐 것은 "무엇이 막았는가"의 이름뿐이고, 예산이 다 쓰인 것이 사실이다.
+  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'budget');
   assert.equal(plan.deterministic_benefit.pension_credit_total_krw, 1_485_000);
 });
 
@@ -208,8 +215,10 @@ test('M1 / GC-25·GC-26 — 금액이 같아도 배분이 정반대인 경계 �
   assert.equal(boundary.credit, overBoundary.credit, '이 쌍의 요지는 금액이 같다는 것이다');
   assert.deepStrictEqual([boundary.irp, boundary.isa], [3_000_000, 9_000_000]);
   assert.deepStrictEqual([overBoundary.irp, overBoundary.isa], [9_000_000, 3_000_000]);
-  assert.equal(boundary.limitedBy, 'credit_limit');
-  assert.equal(overBoundary.limitedBy, 'credit_limit');
+  // D32에서 사라진 값이다. **두 배분 벡터는 그대로이고** 이름만 사실을 따라간다 —
+  // 이 쌍이 잡으려던 것(금액이 같아도 배분이 정반대)은 위 두 줄이 그대로 지킨다.
+  assert.equal(boundary.limitedBy, 'budget');
+  assert.equal(overBoundary.limitedBy, 'budget');
 });
 
 // ── M3 — 사실이 아닌 비교 안내가 배분 비교보다 앞섰다 ─────────────────────────

@@ -145,45 +145,49 @@ test('예산이 모든 한도를 넘으면 남는 금액을 명시한다', () =>
   }
   assert.ok(noticeCodes(scenario).includes('budget_exceeds_all_limits'));
 
-  // 세액공제 대상 한도를 넘겨도 납입 한도가 남아 있으면 그 초과분은 충당하지 않는다.
-  // 그래서 예산이 아무리 커도 연금계좌 배분은 공제 대상 한도에서 멈춘다.
+  // **D32 — 기본안이 연금 납입 한도까지 채운다.** 예전에는 세액공제 대상 한도에서
+  // 멈췄고 그때 `annuity_savings`의 `limited_by`가 `credit_limit`이었다. 소유자가
+  // 배분을 바꿨으므로 이제 공제 한도는 어느 계좌의 상한도 아니다.
   const maxCredit = planOf(scenario, 'max_tax_credit');
   assert.equal(
     allocationOf(maxCredit, 'retirement_pension').annual_krw +
       allocationOf(maxCredit, 'annuity_savings').annual_krw,
-    COMBINED_LIMIT,
-  );
-  assert.equal(allocationOf(maxCredit, 'annuity_savings').limited_by, 'credit_limit');
-
-  // 예산이 모든 한도를 넘으면 **세액공제 대상 한도까지만 채우는 세 안**은 같은 곳에
-  // 도달한다 — 그 셋에서는 순서가 결과를 바꾸지 못한다.
-  const creditBounded = scenario.plans.filter((p) =>
-    ['max_tax_credit', 'annuity_savings_first', 'isa_first'].includes(p.plan_id),
-  );
-  assert.equal(creditBounded.length, 1, '공제 한도까지만 채우는 세 안은 하나로 합쳐진다');
-
-  // **그런데 하나로 합쳐진다고 갈 곳이 없는 것은 아니다**(D26). 납입 잔여 한도가
-  // 남아 있고, 그 사실이 네 번째 안과 미배분 갈래 둘 다에 값으로 나온다.
-  const fill = planOf(scenario, 'pension_contribution_limit_fill');
-  assert.equal(
-    allocationOf(fill, 'retirement_pension').annual_krw + allocationOf(fill, 'annuity_savings').annual_krw,
     scenario.limits.pension_contribution_limit_remaining_krw,
-    '납입한도 충당안은 연금계좌 납입 잔여 한도를 끝까지 쓴다',
+    '기본안이 연금 납입 잔여 한도를 끝까지 쓴다',
   );
   assert.ok(
-    allocationOf(fill, 'retirement_pension').annual_krw +
-      allocationOf(fill, 'annuity_savings').annual_krw >
+    allocationOf(maxCredit, 'retirement_pension').annual_krw +
+      allocationOf(maxCredit, 'annuity_savings').annual_krw >
       COMBINED_LIMIT,
-    '납입한도는 세액공제 대상 한도보다 크므로 두 안의 배분이 갈린다',
+    '납입 한도는 세액공제 대상 한도보다 크다 — 그 차이가 3단계 몫이다',
   );
-  assert.equal(scenario.plans.length, 2);
-  assert.equal(scenario.comparison_note_codes.includes('plans_collapsed_single'), false);
+  assert.equal(
+    allocationOf(maxCredit, 'annuity_savings').limited_by,
+    'contribution_limit',
+    '막은 것은 납입 한도이지 공제 한도가 아니다',
+  );
 
-  // 「미배분」이 "갈 곳이 없다"로 읽히지 않게 갈래가 나뉜다.
+  // 예산이 연금 납입 한도와 ISA 한도를 모두 넘으면 **네 안이 전부 같은 곳에 도달한다** —
+  // 순서가 결과를 바꾸지 못하므로 하나로 합쳐진다. 선택지가 없는데 있는 척하지 않는다.
+  assert.equal(scenario.plans.length, 1, scenario.plans.map((p) => p.plan_id).join(', '));
+  assert.ok(scenario.comparison_note_codes.includes('plans_collapsed_single'));
+
+  // **그래도 미배분은 0이 아니고, 그것이 결함이 아니다**(D32). 연금 1,800만 + ISA 한도를
+  // 넘는 예산은 정말로 갈 곳이 없다. 갈래 나누기가 그 상태를 정직하게 말한다.
   const breakdown = maxCredit.unallocated_breakdown;
+  assert.ok(maxCredit.unallocated_annual_krw > 0, '한도를 다 채우고도 남는 예산이 있다');
   assert.equal(breakdown.total_annual_krw, maxCredit.unallocated_annual_krw);
-  assert.ok(breakdown.pension_contribution_headroom_krw > 0, '연금 납입 여력이 값으로 나온다');
-  assert.ok(breakdown.no_headroom_krw > 0, '정말 갈 곳 없는 몫도 값으로 나온다');
+  assert.equal(
+    breakdown.pension_contribution_headroom_krw,
+    0,
+    '연금 납입 여력을 남기지 않았으므로 여력이라고 부를 것이 없다',
+  );
+  assert.equal(breakdown.isa_contribution_headroom_krw, 0);
+  assert.equal(
+    breakdown.no_headroom_krw,
+    breakdown.total_annual_krw,
+    '남은 전액이 정말로 갈 곳 없는 몫이다 — 그 사실을 여력으로 포장하지 않는다',
+  );
 });
 
 test('납입 여력 0 — 오류가 아니다. 한도 정보는 그대로 나온다', () => {

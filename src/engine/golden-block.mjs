@@ -963,9 +963,14 @@ export function fillContractDefaults(raw, taxYear) {
   //   충당하고 기본안 선택도 바뀌지 않는다). 47건이 지금까지 주장해 온 것은 그대로 검사된다.
   //   감춘다 — 네 번째 안의 배분·공제액·`plan_count` 변화는 이 실행기가 보지 않는다.
   //   그 축의 정답지는 `tax-domain`이 산출하고, 블록이 `options.plan_variants`에
-  //   `pension_contribution_limit_fill`을 실으면 이 기본값은 덮어써진다.
+  //   그 안의 id를 실으면 이 기본값은 덮어써진다.
+  //
+  // **D32가 이 조치의 범위를 좁혔다.** 소유자가 기본안의 충당 순서를 바꿨으므로 세 안의
+  // 배분도 함께 움직인다 — 위의 "감추지 않는다"가 더는 참이 아니다. 네 번째 안을 빼는
+  // 것은 `plan_count`만 지킬 뿐이고, **47건의 배분·공제액 기대값은 `tax-domain`이 다시
+  // 산출해야 한다.** 실행기가 그 사실을 감추지 않도록 여기 적어 둔다.
   if (options.plan_variants === undefined || options.plan_variants === null) {
-    options.plan_variants = PLAN_ORDER.filter((id) => id !== PLAN.PENSION_LIMIT_FILL);
+    options.plan_variants = PLAN_ORDER.filter((id) => id !== PLAN.PENSION_BEFORE_ISA);
   }
 
   if (profile.prior_year_tax === undefined) {

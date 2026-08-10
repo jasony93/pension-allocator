@@ -27,6 +27,8 @@ import {
 
 const rulesets = loadRulesets();
 const FULL = { profile: { monthly_capacity_krw: 5_000_000 } };
+/** ISA보다 연금 납입을 먼저 채우는 안(D32). 옛 이름은 `pension_contribution_limit_fill`이었다. */
+const BEFORE_ISA = 'pension_contribution_before_isa';
 
 function withMutation(mutate) {
   const clone = cloneRulesets(rulesets);
@@ -141,7 +143,9 @@ test('한정 문구가 사라지면 결론을 회복한다 — 결론 보류가 
 
 test('확인 절차가 자동이라고 적힌 룰셋에서는 그 사실이 따라 바뀐다', () => {
   const factsOf = (bundle) => {
-    const plan = planOf(scenarioOf(compute(baseRequest(FULL), bundle)), 'pension_contribution_limit_fill');
+    // **D32 이후 이 효과는 기본안에서도 나온다.** 기본안으로 읽는다 — 대다수 사용자가
+    // 보는 것이 그쪽이고, 룰셋의 사실이 거기까지 실제로 흐르는지가 확인 대상이다.
+    const plan = scenarioOf(compute(baseRequest(FULL), bundle)).plans[0];
     return plan.non_quantified_effects.find((e) => e.code === 'pension_contribution_without_credit').facts;
   };
 
@@ -333,15 +337,12 @@ test('한 규칙 안의 여러 표시가 하나로 뭉개지지 않는다', () =
 
 // ── 배분안 자체 ──────────────────────────────────────────────────
 
-test('납입 한도를 줄이면 납입한도 충당안의 연금 배분이 따라 줄어든다', () => {
+test('납입 한도를 줄이면 기본안의 연금 배분이 따라 줄어든다', () => {
   // 줄어드는 쪽은 **연금 두 계좌의 합계**다. IRP의 몫은 `합산 공제한도 − 연금저축 단독
   // 한도`로 고정되고(그만큼만 연금저축이 흡수하지 못한다), 납입 한도의 변화는 전부
   // 인출이 자유로운 계좌가 흡수한다.
   const pensionTotalOf = (bundle) => {
-    const plan = planOf(
-      scenarioOf(compute(baseRequest(FULL), bundle)),
-      'pension_contribution_limit_fill',
-    );
+    const plan = scenarioOf(compute(baseRequest(FULL), bundle)).plans[0];
     return plan.allocations
       .filter((a) => a.account !== 'isa')
       .reduce((sum, a) => sum + a.annual_krw, 0);
@@ -357,21 +358,23 @@ test('납입 한도를 줄이면 납입한도 충당안의 연금 배분이 따�
 });
 
 test('납입 한도가 공제 대상 한도까지 좁아지면 이 안이 사라진다', () => {
-  // 두 한도가 같으면 "공제를 낳지 않는 납입"이라는 구간 자체가 없어지므로 배분 벡터가
-  // 최대공제안과 같아지고 하나로 합쳐진다. **선택지가 없는데 있는 척하지 않는다.**
+  // 두 한도가 같으면 3단계가 받을 몫 자체가 없어지므로 ISA와의 선후가 아무것도 바꾸지
+  // 못하고, 배분 벡터가 기본안과 같아져 하나로 합쳐진다.
+  // **선택지가 없는데 있는 척하지 않는다.**
   const combined = findRule(rulesets, CONFIRMED_FILE, 'pension.credit.limit.combined').value.amount_krw;
   const mutated = withMutation((clone) => {
     findRule(clone, CONFIRMED_FILE, 'pension.contribution.annual_limit').value.amount_krw = combined;
   });
 
   const planIds = scenarioOf(compute(baseRequest(FULL), mutated)).plans.map((p) => p.plan_id);
-  assert.equal(planIds.includes('pension_contribution_limit_fill'), false, planIds.join(', '));
+  assert.equal(planIds.includes(BEFORE_ISA), false, planIds.join(', '));
 });
 
 test('연금저축 단독 공제한도가 IRP의 몫을 정한다 — 비용 0 경계가 룰셋에서 온다', () => {
   const irpOf = (bundle) =>
-    planOf(scenarioOf(compute(baseRequest(FULL), bundle)), 'pension_contribution_limit_fill')
-      .allocations.find((a) => a.account === 'retirement_pension').annual_krw;
+    scenarioOf(compute(baseRequest(FULL), bundle)).plans[0].allocations.find(
+      (a) => a.account === 'retirement_pension',
+    ).annual_krw;
 
   const combined = findRule(rulesets, CONFIRMED_FILE, 'pension.credit.limit.combined').value.amount_krw;
   const annuity = findRule(rulesets, CONFIRMED_FILE, 'pension.credit.limit.annuity_savings').value

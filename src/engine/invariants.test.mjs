@@ -18,7 +18,7 @@ import {
   ACCOUNT_ORDER,
   ASSUMPTION,
   COMPARISON_NOTE,
-  CREDIT_BOUNDED_PLANS,
+  LIMITED_BY,
   HORIZONS,
   ISA_ESTIMATE_DISPLAY,
   ISA_INCOME_CHARACTERS,
@@ -533,17 +533,13 @@ function checkScenario(scenario, response, request, at) {
     );
     if (tieBreak.code === 'withdrawal_flexibility_first') {
       assert.ok(tieBreak.basis_rule_ids.length > 0, `${at} I19: 동점 판정에 근거 규칙이 없다`);
-      // **보고되는 순서는 실제로 돈이 들어간 순서다.** 연금 쌍을 두 단계로 도는
-      // 납입한도 충당안에서는 1차에 공제 여력이 0이던 계좌가 2차에 더 많이 받으면서도
-      // 순서상 뒤에 올 수 있다. 그 안에서 동점 규칙이 지켜졌는지는 순서가 아니라
-      // **공제를 낳지 않는 몫이 어느 계좌에 있는가**로 본다(I36).
-      if (CREDIT_BOUNDED_PLANS.has(plan.plan_id)) {
-        assert.deepStrictEqual(
-          plan.priority_basis.fill_sequence.filter((a) => a !== 'isa'),
-          ['annuity_savings', 'retirement_pension'],
-          `${at} I19: 동점인데 더 묶이는 계좌를 먼저 채운다`,
-        );
-      }
+      // **여기서 순서를 검사하지 않는다.** D32로 네 안이 전부 연금 쌍을 두 단계로 돌게
+      // 되었고, `fill_sequence`는 **실제로 돈이 들어간 순서**라서 1차에 공제 여력이 0이던
+      // 계좌가 3차에 더 많이 받으면서도 뒤에 올 수 있다. 그 배열을 여기서 고정하면
+      // **정상 동작을 위반으로 잡는다.**
+      //
+      // 동점 규칙이 실제로 지켜졌는지는 순서가 아니라 **공제를 낳지 않는 몫이 어느 계좌에
+      // 있는가**로 본다 — I36이 그 검사이고, D32에서 네 안 전부로 넓혔다.
     }
   }
 
@@ -645,7 +641,7 @@ function checkScenario(scenario, response, request, at) {
   );
   for (const plan of plans) {
     // 이름이 세액공제를 근거로 든 안만 "이 입력에서 내 근거가 아무것도 가르지 못한다"를
-    // 신고한다. `isa_first`(인출 가능성)와 `pension_contribution_limit_fill`(납입 한도)은
+    // 신고한다. `isa_first`(인출 가능성)와 `pension_contribution_before_isa`(ISA와의 선후)는
     // 근거가 세액공제가 아니므로 한도가 0이어도 이름이 거짓말하지 않는다.
     const creditNamed = [PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST].includes(plan.plan_id);
     assert.equal(
@@ -738,9 +734,14 @@ function checkScenario(scenario, response, request, at) {
         assert.equal(effect.facts, null, `${at} I30: 이 코드에는 facts가 붙지 않는다`);
         continue;
       }
+      // **D32로 이 효과가 네 안 전부에 붙을 수 있게 됐다.** 예전에는 "공제 한도까지만
+      // 채우는 안에는 붙지 않는다"가 검사였는데, 그런 안이 더는 없으므로 그 검사는
+      // 공허해졌다. 대신 **효과가 실제 배분 위에 서 있는지**를 본다 — 그 계좌가 받은
+      // 금액보다 큰 「공제 없는 납입」은 존재할 수 없다.
+      const allocated = plan.allocations.find((a) => a.account === effect.account);
       assert.ok(
-        !CREDIT_BOUNDED_PLANS.has(plan.plan_id),
-        `${at} I30: 공제 한도까지만 채우는 ${plan.plan_id}에서 공제 없는 납입이 생겼다`,
+        allocated && effect.facts.contribution_without_credit_krw <= allocated.annual_krw,
+        `${at} I30: 배분액보다 큰 공제 없는 납입을 주장한다`,
       );
       assert.deepStrictEqual(
         Object.keys(effect.facts).sort(),
@@ -793,57 +794,75 @@ function checkScenario(scenario, response, request, at) {
     );
   }
 
-  // I33 — **납입한도 충당안은 기본안이 되지 않는다.** 세법이 유불리를 정하지 않으므로
-  // 엔진이 그것을 고르면 그것이 곧 자문이다(D26).
+  // I33 — **ISA보다 연금 납입을 먼저 채우는 안은 기본안이 되지 않는다.**
+  // 소유자가 정한 순서는 ISA가 먼저다(D32). 그 반대 순서를 엔진이 기본으로 올리면
+  // 소유자가 정하지 않은 것을 엔진이 고른 것이 된다.
   assert.notEqual(
     plans[0].plan_id,
-    PLAN.PENSION_LIMIT_FILL,
-    `${at} I33: 세법이 정하지 않은 안을 엔진이 기본으로 골랐다`,
+    PLAN.PENSION_BEFORE_ISA,
+    `${at} I33: 소유자가 정한 순서와 반대인 안을 엔진이 기본으로 골랐다`,
   );
 
-  // I34 — `credit_limit`이 상한이었다는 보고는 공제 한도까지만 채우는 안에서만 나온다.
+  // I34 — **`limited_by`에 계약이 정의하지 않은 값이 나가지 않는다.**
+  // D32로 `credit_limit`이 사라졌다 — 어떤 안도 세액공제 대상 한도에서 멈추지 않으므로
+  // 그 값은 어느 계좌의 상한도 아니게 됐다. 남겨 두면 **아무 입력에서도 나오지 않는 값**이
+  // 계약에 남고, 화면은 결코 실행되지 않는 갈래를 만든다.
+  const KNOWN_LIMITED_BY = new Set(Object.values(LIMITED_BY));
   for (const plan of plans) {
-    if (CREDIT_BOUNDED_PLANS.has(plan.plan_id)) continue;
     for (const allocation of plan.allocations) {
-      assert.notEqual(
-        allocation.limited_by,
-        'credit_limit',
-        `${at} I34: ${plan.plan_id}가 공제 한도에 막혔다고 보고한다 — 그 안의 상한이 아니다`,
+      if (allocation.limited_by === null) continue;
+      assert.ok(
+        KNOWN_LIMITED_BY.has(allocation.limited_by),
+        `${at} I34: ${plan.plan_id}/${allocation.account}이 계약에 없는 ` +
+          `limited_by(${allocation.limited_by})를 보고한다`,
       );
     }
   }
 
-  // I35 — **납입한도 충당안은 확정 세액을 한 원도 깎지 않는다.**
+  // I35 — **연금 납입 한도까지 채우는 것이 확정 세액을 한 원도 깎지 않는다.**
   // 조문 산식상 연금 납입 총액을 두 계좌에 어떻게 쪼개든, 퇴직연금이 `합산한도 − 단독한도`
-  // 만큼만 받으면 인정액이 최대다. 그러므로 이 안의 인정액과 공제액은 최대공제안과
-  // **같아야 한다.** 같지 않다면 순서를 잘못 골라 세액을 버린 것이다.
-  const fillPlan = plans.find((p) => p.plan_id === PLAN.PENSION_LIMIT_FILL);
-  if (fillPlan && maxCreditPlan) {
-    assert.equal(
-      fillPlan.deterministic_benefit.credit_eligible_contribution_krw,
-      maxCreditPlan.deterministic_benefit.credit_eligible_contribution_krw,
-      `${at} I35: 납입한도 충당안이 인정 납입액을 잃었다`,
-    );
-    assert.equal(
-      fillPlan.deterministic_benefit.pension_credit_total_krw,
-      maxCreditPlan.deterministic_benefit.pension_credit_total_krw,
-      `${at} I35: 납입한도 충당안이 확정 세액을 깎았다 — 그 대가는 0이어야 한다`,
-    );
+  // 만큼만 받으면 인정액이 최대다. **D32로 이 진술의 대상이 한 안에서 네 안 전부로 넓어졌다** —
+  // 기본안도 이제 납입 한도까지 채우므로, 여기서 어긋나면 사용자의 절세액이 실제로 준다.
+  //
+  // ISA와의 선후는 세액을 바꾸지 못한다(둘 다 올해 공제를 낳지 않는다). 그러므로
+  // **네 안의 인정액과 공제액이 전부 같아야 한다.** 다만 예산이 모자라 ISA가 연금 몫을
+  // 먼저 가져가는 구간에서는 갈릴 수 있으므로, 연금 쌍의 순서만 다른 안들끼리 본다.
+  const beforeIsaPlan = plans.find((p) => p.plan_id === PLAN.PENSION_BEFORE_ISA);
+  if (beforeIsaPlan && maxCreditPlan) {
+    const pensionOf = (plan) =>
+      plan.allocations
+        .filter((a) => a.account !== 'isa')
+        .reduce((sum, a) => sum + a.annual_krw, 0);
+    // 연금에 같은 금액을 넣은 두 안이라면 인정액도 공제액도 같아야 한다.
+    if (pensionOf(beforeIsaPlan) === pensionOf(maxCreditPlan)) {
+      assert.equal(
+        beforeIsaPlan.deterministic_benefit.credit_eligible_contribution_krw,
+        maxCreditPlan.deterministic_benefit.credit_eligible_contribution_krw,
+        `${at} I35: 같은 연금 납입액인데 인정 납입액이 다르다 — 순서를 잘못 골라 세액을 버렸다`,
+      );
+      assert.equal(
+        beforeIsaPlan.deterministic_benefit.pension_credit_total_krw,
+        maxCreditPlan.deterministic_benefit.pension_credit_total_krw,
+        `${at} I35: 같은 연금 납입액인데 확정 세액이 다르다 — 그 대가는 0이어야 한다`,
+      );
+    }
   }
 
-  // I36 — **공제를 낳지 않는 몫은 인출이 자유로운 계좌에 있다.**
+  // I36 — **3단계 몫(공제를 낳지 않는 연금 납입)은 인출이 자유로운 계좌에 먼저 간다.**
   // 그 몫은 어느 계좌에 넣어도 세액이 같으므로 세금이 순서를 정하지 못하고,
   // 남는 축은 인출 가능성뿐이다(D18·계약 0.4절). 대가 없이 더 묶이는 쪽을 고르지 않는다.
-  if (fillPlan) {
-    const withoutCredit = fillPlan.non_quantified_effects.filter(
-      (e) => e.code === NON_QUANTIFIED.PENSION_WITHOUT_CREDIT,
-    );
-    for (const effect of withoutCredit) {
+  //
+  // **D32에서 네 안 전부로 넓혔다.** 예전에는 배분안 하나에만 걸리던 검사인데,
+  // 이제 대다수 사용자가 기본안에서 이 몫을 받으므로 기본안이 이 검사 밖에 있으면
+  // 관리자가 요구한 "3단계 몫이 인출 자유 계좌에 먼저 간다"가 기계로 고정되지 않는다.
+  for (const plan of plans) {
+    for (const effect of plan.non_quantified_effects) {
+      if (effect.code !== NON_QUANTIFIED.PENSION_WITHOUT_CREDIT) continue;
       if (!eligibleOf(FLEXIBLE_PENSION_ACCOUNT)) continue;
       assert.equal(
         effect.account,
         FLEXIBLE_PENSION_ACCOUNT,
-        `${at} I36: 공제를 낳지 않는 납입을 대가 없이 더 묶이는 계좌에 넣었다`,
+        `${at} I36: ${plan.plan_id}이 공제를 낳지 않는 납입을 대가 없이 더 묶이는 계좌에 넣었다`,
       );
     }
   }
@@ -959,7 +978,10 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
     '공제율 판정 축 세 갈래가 모두 행렬에 등장해야 한다',
   );
   // 새 배분안과 새 비정량 효과가 실제로 나온 적이 없으면 I30·I33·I34는 통과만 한다.
-  assert.ok(plansSeen.has(PLAN.PENSION_LIMIT_FILL), '납입한도 충당안이 행렬에 한 번도 등장하지 않았다');
+  assert.ok(
+    plansSeen.has(PLAN.PENSION_BEFORE_ISA),
+    'ISA보다 연금 납입을 먼저 채우는 안이 행렬에 한 번도 등장하지 않았다',
+  );
   assert.ok(
     nonQuantifiedSeen.has(NON_QUANTIFIED.PENSION_WITHOUT_CREDIT),
     '공제 없는 연금 납입 효과가 행렬에 한 번도 등장하지 않았다',

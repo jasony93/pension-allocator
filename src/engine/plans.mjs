@@ -9,7 +9,7 @@ import {
   ACCOUNT_ORDER,
   BASELINE_BY_HORIZON,
   COMPARISON_NOTE,
-  CREDIT_BOUNDED_PLANS,
+  PENSION_EXTRA_BEFORE_ISA,
   FILL_SEQUENCE,
   HORIZON,
   LIMITED_BY,
@@ -68,12 +68,12 @@ function tieBreakOf(planId, ctx) {
 /**
  * 충당 단계 목록. 계좌 하나가 두 번 나올 수 있으므로 순서 배열과 따로 만든다.
  *
- * **공제 한도까지만 채우는 세 안**은 단계가 곧 순서다 — 한 계좌씩 한 번.
+ * **D32 — 이제 네 안이 전부 연금 쌍을 두 번 돈다.** 예전에는 세 안이 세액공제 대상
+ * 한도에서 멈췄고 네 번째 안만 납입 한도까지 갔다. 소유자가 기본안도 납입 한도까지
+ * 채우도록 정했으므로(미배분을 최대한 남기지 않는다) 두 단계 구조가 전부에 걸린다.
  *
- * **납입한도 충당안은 연금 쌍을 두 번 돈다.** 왜 그래야 하는지가 이 함수의 요점이다.
- *
- * 그 안이 채우는 연금 납입 총액은 순서와 무관하게 같다(납입 한도까지 채운다). 달라지는
- * 것은 **그 총액을 두 계좌에 어떻게 쪼개는가**뿐이고, 조문 산식
+ * 왜 두 단계여야 하는가 — 연금 납입 총액은 순서와 무관하게 같지만(납입 한도까지 채운다)
+ * **그 총액을 두 계좌에 어떻게 쪼개는가**가 세액을 바꾼다. 조문 산식
  * `대상액 = min( min(연금저축, 단독한도) + 퇴직연금, 합산한도 )`에서 인정액은
  * **퇴직연금이 `합산한도 − 단독한도`만큼을 받는 한** 쪼개기와 무관하게 최대다.
  * 연금저축이 단독 한도 때문에 흡수하지 못하는 몫이 정확히 그만큼이기 때문이다.
@@ -82,43 +82,52 @@ function tieBreakOf(planId, ctx) {
  * 같으므로 D18·계약 0.4절이 세운 원칙이 그대로 선다 — **비용이 0이면 인출이 자유로운
  * 계좌를 먼저 채운다.** 그래서 단계를 이렇게 나눈다.
  *
- *   1차 — 연금 쌍을 **세액공제 대상 한도까지** 채운다. 순서는 다른 안과 같은 규칙
- *          (동점이면 인출 자유 우선, 갈리면 세액공제 최대화)을 따른다.
- *   2차 — 남은 **납입** 한도를 인출이 자유로운 계좌부터 채운다. 이 몫은 어느 계좌에
+ *   1차 — 연금 쌍을 **세액공제 대상 한도까지**. 순서는 그 안의 이름이 정하거나
+ *          (동점이면 인출 자유 우선, 갈리면 세액공제 최대화) 규칙이 정한다.
+ *   2차 — ISA를 **납입한도까지**.
+ *   3차 — 남은 **연금 납입** 한도를 인출이 자유로운 계좌부터. 이 몫은 어느 계좌에
  *          넣어도 공제를 낳지 않으므로 세액이 순서를 정하지 못하고, 인출 가능성만 남는다.
- *   3차 — ISA. **연금 납입 한도를 다 채운 뒤다** — 그것이 이 안의 이름이 말하는 바다.
  *
- * 1차를 빼고 2차만 돌리면(연금저축부터 납입 한도까지) 연금저축이 단독 한도를 넘겨
- * 채워져 인정액이 줄고 **확정 세액이 실제로 깎인다.** 그것이 이 두 단계 구조의 이유다.
+ * **2차와 3차의 선후가 소유자가 못 박은 지점이다.** ISA에는 자기 세제혜택이 있고
+ * 3단계 몫은 올해 공제를 낳지 않으므로, 뒤집으면 사용자가 실제로 잃는다.
+ * `PENSION_EXTRA_BEFORE_ISA`에 든 안만 뒤집힌 순서를 쓰고 **그 사실이 그 안의 이름이다.**
+ *
+ * 1차를 빼고 3차만 돌리면(연금저축부터 납입 한도까지) 연금저축이 단독 한도를 넘겨
+ * 채워져 인정액이 줄고 **확정 세액이 실제로 깎인다.** 그것이 이 단계 구조의 이유다.
  */
 function fillStepsFor(planId, ctx) {
   const sequence = fillSequenceFor(planId, ctx);
-  if (CREDIT_BOUNDED_PLANS.has(planId)) {
-    return sequence.map((account) => ({ account, creditBounded: true }));
-  }
-
   const pensionPart = sequence.filter((account) => PENSION_ACCOUNTS.has(account));
-  // 2차의 순서를 정하는 것은 세액이 아니라 인출 가능성이다. 규칙을 읽지 못했으면
+  // 3차의 순서를 정하는 것은 세액이 아니라 인출 가능성이다. 규칙을 읽지 못했으면
   // 1차와 같은 순서를 쓴다 — 없는 근거로 순서를 정하지 않는다.
   const flexibleFirst = ctx.withdrawalOrder ?? pensionPart;
+  const extraSteps = flexibleFirst.map((account) => ({ account, creditBounded: false }));
+  const extraBeforeIsa = PENSION_EXTRA_BEFORE_ISA.has(planId);
 
-  return [
-    ...pensionPart.map((account) => ({ account, creditBounded: true })),
-    ...flexibleFirst.map((account) => ({ account, creditBounded: false })),
-    ...sequence
-      .filter((account) => !PENSION_ACCOUNTS.has(account))
-      .map((account) => ({ account, creditBounded: false })),
-  ];
+  const steps = [];
+  for (const account of sequence) {
+    if (PENSION_ACCOUNTS.has(account)) {
+      steps.push({ account, creditBounded: true });
+      continue;
+    }
+    // ISA 자리. 3단계 몫을 ISA 앞에 두는 안은 여기서 갈린다.
+    if (extraBeforeIsa) steps.push(...extraSteps);
+    steps.push({ account, creditBounded: false });
+  }
+  if (!extraBeforeIsa) steps.push(...extraSteps);
+
+  return steps;
 }
 
 /**
  * 응답에 실을 충당 순서. 실제로 돈이 들어간 순서를 앞에 두고, 한 푼도 받지 못한 계좌를
  * 단계 목록의 순서대로 뒤에 붙여 길이 3을 채운다. 계좌 하나를 두 번 적지 않는다.
+ *
+ * **D32 이후로는 네 안 모두 이 경로를 쓴다.** 계좌 하나가 두 단계에 걸쳐 채워질 수 있게
+ * 되었으므로 단계 목록을 그대로 실을 수 없고, 1차에서 공제 여력이 0이라 아무것도 받지
+ * 못한 계좌를 "먼저 채웠다"고 적으면 그것이 거짓 보고다.
  */
 function observedSequence(fillOrder, planId, ctx) {
-  // 한 단계씩만 도는 안은 단계 목록이 곧 순서다. 기존 세 안의 보고를 바꾸지 않는다.
-  if (CREDIT_BOUNDED_PLANS.has(planId)) return fillSequenceFor(planId, ctx);
-
   const filled = ACCOUNT_ORDER.filter((account) => fillOrder[account] !== undefined).sort(
     (a, b) => fillOrder[a] - fillOrder[b],
   );
@@ -132,10 +141,9 @@ function observedSequence(fillOrder, planId, ctx) {
 /** 한 배분안의 금액. 자금 사용 시점을 읽지 않는다. */
 function allocate(planId, ctx) {
   const { state, budget, eligible, rates } = ctx;
-  // 이 안이 연금계좌를 **세액공제 대상 한도까지만** 채우는가, 아니면 **납입 한도까지**
-  // 채우는가. 후자(D26의 새 안)에서는 공제를 낳지 않는 납입분이 생기고, 그 몫은
-  // 인정액에 들어가지 않는다 — 아래 `counted`가 그 분리를 강제한다.
-  const creditBounded = CREDIT_BOUNDED_PLANS.has(planId);
+  // **D32 이후 모든 안이 납입 한도까지 채운다.** 그래서 어느 안에서든 공제를 낳지 않는
+  // 납입분이 생길 수 있고, 그 몫은 인정액에 들어가지 않는다 — 아래 `counted`가 그
+  // 분리를 강제한다. **그 분리가 기본안에서 무너지면 절세액이 조용히 과대가 된다.**
   let remainingBudget = budget;
   let annuityCounted = state.annuityCounted;
   let pensionCounted = state.pensionCounted;
@@ -143,7 +151,7 @@ function allocate(planId, ctx) {
   let isaPool = state.isaRemaining;
 
   const amounts = { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0, [ACCOUNT.ISA]: 0 };
-  /** 계좌별로 **세액공제를 낳지 않은** 납입액. 공제 한도까지만 채우는 안에서는 전부 0이다. */
+  /** 계좌별로 **세액공제를 낳지 않은** 납입액. 3단계가 받은 몫이 여기로 간다. */
   const withoutCredit = { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0 };
   const limitedBy = {};
   const fillOrder = {};
@@ -182,13 +190,12 @@ function allocate(planId, ctx) {
     const isPension = PENSION_ACCOUNTS.has(account);
     const creditRoom = isPension ? creditCapacity(account) : 0;
 
-    // 순서가 곧 우선순위다. budget → credit_limit → contribution_limit 순으로
-    // 무엇이 막았는지를 판정한다. **2차 단계에는 공제 한도 항이 빠진다** — 그 단계의
-    // 상한이 아니므로 `limited_by`가 `credit_limit`으로 나가면 그것이 거짓말이 된다.
-    const caps = isPension
+    // 이 단계의 상한들. **1차 단계에는 공제 여력 항이 하나 더 걸리지만 그것은
+    // `limited_by`로 보고되지 않는다** — 그 계좌는 3차에서 다시 채워지므로 공제 한도가
+    // 그 계좌를 막은 것이 아니고, `credit_limit`으로 보고하면 거짓말이 된다(D32).
+    const stepCaps = isPension
       ? [
           [LIMITED_BY.BUDGET, remainingBudget],
-          ...(stepIsCreditBounded ? [[LIMITED_BY.CREDIT_LIMIT, creditRoom]] : []),
           [LIMITED_BY.CONTRIBUTION_LIMIT, pensionPool],
         ]
       : [
@@ -196,10 +203,10 @@ function allocate(planId, ctx) {
           [LIMITED_BY.CONTRIBUTION_LIMIT, isaPool],
         ];
 
-    const amount = Math.min(...caps.map(([, value]) => value));
-    // 뒤 단계가 앞 단계의 판정을 덮는다. **마지막에 실제로 막은 것**이 사실이기 때문이고,
-    // 그래서 납입한도 충당안에는 `credit_limit`이 끝까지 남지 않는다.
-    limitedBy[account] = caps.find(([, value]) => value === amount)[0];
+    const reportedCap = Math.min(...stepCaps.map(([, value]) => value));
+    const amount = stepIsCreditBounded ? Math.min(reportedCap, creditRoom) : reportedCap;
+    // 뒤 단계가 앞 단계의 판정을 덮는다. **마지막에 실제로 막은 것**이 사실이기 때문이다.
+    limitedBy[account] = stepCaps.find(([, value]) => value === reportedCap)[0];
 
     if (amount > 0) {
       // 계좌가 두 단계에 걸쳐 채워질 수 있다. 순서는 **처음 받은 시점**이다 —
@@ -216,8 +223,13 @@ function allocate(planId, ctx) {
       } else {
         pensionPool -= amount;
         // **납입액과 인정액을 가른다.** 공제 한도를 넘겨 넣은 몫은 조문상 "없는 것으로"
-        // 되므로 인정액에 더하지 않는다. 공제 한도까지만 채우는 안에서는 두 값이 같아
-        // 기존 동작이 그대로 유지된다.
+        // 되므로 인정액에 더하지 않는다. 1차 단계에서는 두 값이 같아 D32 전의 공제액이
+        // 그대로 유지되고, 3차 단계에서는 `creditRoom`이 이미 0이라 전액이 갈라진다.
+        //
+        // ⚠ **이 한 줄이 기본안의 절세액을 지킨다.** 지난 회차에 별도 배분안에서
+        //   연금저축이 단독 공제한도를 넘겨 채워지며 공제액이 과대로 나온 결함을 이 clamp가
+        //   막았고, D32로 그 경로가 **기본안에** 들어왔다. `baseline-freeze.test.mjs`가
+        //   변경 전 값을 얼려 두고 있고 `mutation.test.mjs`가 이 줄을 지워 확인한다.
         const counted = Math.min(amount, creditRoom);
         if (account === ACCOUNT.ANNUITY) annuityCounted += counted;
         else pensionCounted += counted;
