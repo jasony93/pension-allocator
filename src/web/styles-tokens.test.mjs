@@ -240,14 +240,19 @@ function walk(dir, out = []) {
   return out;
 }
 
-test('JS가 색을 계산하지 않는다 — 공유 이미지(항상 라이트)만 예외다', () => {
+test('JS가 색을 계산하지 않는다', () => {
   // design-system 5.20절: 압출 측면 색은 **전용 토큰**이고 "구현은 산식을 다시
   // 돌리지 않는다". 초판처럼 "명도 −18%"를 코드가 계산하고 있으면 계좌 색이
   // 바뀌어도 측면이 따라오지 않아 화면에 두 세대의 색이 섞인다.
+  //
+  // **예전엔 `ui/share.js`(캔버스에 캡처용 PNG를 새로 그리던 코드)만 예외였다**
+  // — 캔버스 API가 CSS 커스텀 프로퍼티를 읽지 못해 hex를 직접 써야 했다.
+  // 2026-08-10, 공유 이미지를 PDF 내보내기(`ui/print.js` + 브라우저 인쇄)로
+  // 바꾸며 그 파일 자체가 사라졌다 — 인쇄는 `styles.css`를 그대로 쓰므로 이제
+  // 예외 없이 전 코드가 이 검사를 통과해야 한다.
   const offenders = [];
   for (const file of walk(here)) {
     const rel = path.relative(here, file).replace(/\\/g, '/');
-    if (rel === 'ui/share.js') continue; // 공유 이미지는 항상 라이트로 렌더한다(아래 검사가 따로 본다)
     const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     for (const hex of text.match(/['"`]#[0-9a-fA-F]{3,8}['"`]/g) ?? []) offenders.push(`${rel}: ${hex}`);
     for (const fn of text.match(/\b(?:brightness|saturate|hsl|oklch|color-mix)\s*\(/g) ?? []) offenders.push(`${rel}: ${fn}`);
@@ -255,13 +260,9 @@ test('JS가 색을 계산하지 않는다 — 공유 이미지(항상 라이트)
   assert.deepEqual(offenders, [], `UI 코드가 색을 직접 정하거나 계산합니다:\n${offenders.join('\n')}`);
 });
 
-test('공유 이미지는 테마를 읽지 않는다 — 항상 라이트로 렌더된다 (8.5절)', () => {
-  // 수신자의 환경을 알 수 없고, 이미지에 실린 고지가 반드시 읽혀야 한다.
-  // 발신자의 테마가 수신자의 가독성을 정하게 두지 않는다.
-  const share = readFileSync(path.join(here, 'ui/share.js'), 'utf8');
-  assert.ok(!/getComputedStyle|data-theme|prefers-color-scheme|var\(--/.test(share), '공유 이미지가 화면 테마를 참조합니다');
-  const light = new Set([...rootBlock.values()]);
-  const used = share.match(/ctx\.fillStyle = '(#[0-9a-f]{6})'/g)?.map((s) => s.slice(-8, -1)) ?? [];
-  assert.ok(used.length > 0, '공유 이미지가 색을 하나도 지정하지 않습니다');
-  for (const hex of used) assert.ok(light.has(hex), `공유 이미지의 ${hex}가 라이트 토큰이 아닙니다`);
-});
+// **"공유 이미지는 테마를 읽지 않는다" 검사는 여기 있었다.** 2026-08-10,
+// `ui/share.js`(캔버스 PNG)가 PDF 내보내기(`ui/print.js` + 브라우저 인쇄)로
+// 바뀌며 그 파일이 사라졌다. 인쇄가 항상 라이트인지는 이미 위의 두 검사
+// (`color-scheme`이 테마와 함께 바뀐다 / 인쇄는 테마와 무관하게 라이트
+// 팔레트를 강제한다)가 `printBlock` 대조로 대신 본다 — 같은 보장을 새
+// 파일이 아니라 `styles.css`의 `@media print` 블록 하나가 진다.

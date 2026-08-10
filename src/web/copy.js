@@ -614,6 +614,18 @@ export const DISCLOSURE = {
   ],
 };
 
+/**
+ * `[4-H]` 저장·공유 — 2026-08-10 소유자 지시로 "공유용 이미지 만들기"를 걷어내고
+ * PDF 내보내기(브라우저 인쇄)로 바꿨다(`ui/print.js`). 문구는 무엇이 실리고
+ * 실리지 않는지를 화면과 같은 자리에서 말한다(P2·9절의 원칙을 그대로 옮김).
+ */
+export const PDF_EXPORT_LABEL = 'PDF로 저장';
+export const PDF_EXPORT_NOTE =
+  '인쇄 대화상자가 열리면 "PDF로 저장"을 선택할 수 있습니다. 생년월일·총급여액·낼 세금·월 납입 여력 등 입력값은 포함되지 않습니다.';
+// **`window.print()`가 조용히 막히는 환경에서만 보인다** — `ui/print.js`가 판정한다.
+export const PDF_EXPORT_BLOCKED_NOTE =
+  '이 화면에서는 인쇄 대화상자가 자동으로 열리지 않았습니다. 이 페이지를 새 브라우저 탭에서 열어 다시 시도하거나, 키보드로 인쇄(Windows/Linux: Ctrl+P, macOS: Cmd+P)를 실행해 주세요.';
+
 export const ENTRY_COPY = [
   '왼쪽에 값을 넣으면 ISA · IRP · 연금저축에 각각 얼마씩 넣는 배분을 세법 규칙으로 계산해 오른쪽에 보여줍니다.',
   '계산은 이 브라우저 안에서만 이루어지고 입력값은 어디로도 전송되지 않습니다.',

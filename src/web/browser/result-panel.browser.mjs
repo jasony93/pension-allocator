@@ -13,13 +13,15 @@ import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harne
  * 않는다. 브라우저에서 `mousedown`·`mouseup`은 오는데 `click`이 오지 않는 것을
  * 직접 확인했다.
  *
- * 저장·공유 모달은 원래 자기 뼈대를 따로 갖고 있었고 design-system 5.18절이
- * 요구한 **포커스 트랩·배경 스크롤 잠금·트리거로 포커스 복귀**가 셋 다 빠져
- * 있었다. 뼈대를 `ui/modal.js` 하나로 모았으므로 그 과정에서 깨지지 않았는지도
- * 여기서 본다 — 이 모듈에는 그전까지 어떤 검사도 없었다.
+ * **저장·공유 모달 관련 검사는 이 파일에서 걷어냈다(2026-08-10).** 소유자
+ * 지시로 "공유용 이미지 만들기"(캔버스 PNG + 미리보기 모달)가 PDF 내보내기
+ * (`window.print()`)로 바뀌면서 모달 자체가 없어졌다 — 그 검사들은
+ * `browser/print.browser.mjs`가 인쇄 레이아웃(`@media print`) 검사로
+ * 대신한다. `ui/modal.js`는 여전히 초기화 확인 대화상자가 쓰므로
+ * `browser/sandboxed-frame.browser.mjs`가 계속 본다.
  */
 
-const SHARE_TRIGGER = `[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === '공유용 이미지 만들기')`;
+const PDF_TRIGGER = `[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === 'PDF로 저장')`;
 
 let app;
 
@@ -45,10 +47,12 @@ test('값을 친 직후 눌러도 결과 패널의 첫 클릭이 삼켜지지 �
     'INPUT',
     '이 검사는 입력 칸에 초점이 남아 있어야 뜻이 있다',
   );
-  await page.clickElement(SHARE_TRIGGER);
-  await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`, { timeoutMs: 2000 });
-  await page.pressKey('Escape', 'Escape', 27);
-  await sleep(250);
+  // 클릭이 실제로 버튼에 도달했는지는 `window.print()`가 불렸는지로 잰다 —
+  // 헤드리스·비샌드박스 최상위 프레임에서는 `window.print()`가 `beforeprint`를
+  // 동기로 낸다(`ui/print.js` 머리말이 실측해 둔 그대로).
+  await page.evaluate(`(() => { window.__printed = false; window.addEventListener('beforeprint', () => { window.__printed = true; }, { once: true }); })()`);
+  await page.clickElement(PDF_TRIGGER);
+  await page.waitFor(`window.__printed === true`, { timeoutMs: 2000 });
 });
 
 test('결과 패널의 도넛이 실제 크기를 갖고 그려진다', { skip: skipWithoutChrome }, async () => {
@@ -82,56 +86,8 @@ test('입력을 바꾸면 결과 숫자가 실제로 갱신된다 — 노드를 
   assert.equal(await page.evaluate(`!!document.querySelector('.result-slot svg path')`), true);
 });
 
-test('공유 미리보기가 열리고 Esc로 닫히며 트리거로 포커스가 돌아온다', { skip: skipWithoutChrome }, async () => {
+test('결과가 나와야 PDF로 저장 버튼이 있다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  assert.equal(await page.evaluate(`!!document.querySelector('.save-share')`), true, '결과가 나와야 공유 버튼이 있다');
-
-  await page.clickElement(SHARE_TRIGGER);
-  await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`);
-  const open = await page.evaluate(`(() => ({
-    dialog: !!document.querySelector('.modal-scrim [role="dialog"]'),
-    label: document.querySelector('.modal-scrim [role="dialog"]').getAttribute('aria-label'),
-    focus: document.activeElement ? document.activeElement.textContent.trim() : null,
-    bodyOverflow: document.body.style.overflow,
-  }))()`);
-  assert.equal(open.dialog, true);
-  assert.equal(open.label, '결과 저장·공유 미리보기');
-  assert.equal(open.focus, '이미지로 저장', '열리면 첫 동작 버튼에 포커스가 간다');
-  assert.equal(open.bodyOverflow, 'hidden', '배경 스크롤이 잠긴다');
-
-  await page.pressKey('Escape', 'Escape', 27);
-  await sleep(250);
-  const closed = await page.evaluate(`(() => ({
-    dialog: !!document.querySelector('.modal-scrim'),
-    focus: document.activeElement ? document.activeElement.textContent.trim() : null,
-    bodyOverflow: document.body.style.overflow,
-  }))()`);
-  assert.equal(closed.dialog, false);
-  assert.equal(closed.bodyOverflow, '');
-  assert.equal(closed.focus, '공유용 이미지 만들기', 'design-system 5.18절 — 트리거로 포커스 복귀');
-});
-
-test('미리보기에는 입력값이 실려 있지 않다', { skip: skipWithoutChrome }, async () => {
-  const { page } = app;
-  await page.clickElement(SHARE_TRIGGER);
-  await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`);
-  const text = await page.evaluate(`document.querySelector('.modal-scrim [role="dialog"]').textContent`);
-  // screens.md 9절 — 생년월일·총급여액·월 납입 여력은 이미지에도 미리보기에도 없다.
-  // 금액은 만원 단위 입력이 원으로 환산된 뒤의 표시 형태(천 단위 쉼표)로 찾는다
-  // — 그것이 화면에 실제로 나타날 수 있는 형태다. 입력란의 원본 문자열('6000'
-  // ·'50')은 흔한 부분 문자열이라 오탐이 나므로 쓰지 않는다.
-  for (const secret of ['1980', '19800101', '60,000,000', '500,000']) {
-    assert.ok(!text.includes(secret), `미리보기에 입력값이 보입니다: ${secret}`);
-  }
-  await page.pressKey('Escape', 'Escape', 27);
-  await sleep(200);
-});
-
-test('닫기 버튼으로도 닫힌다', { skip: skipWithoutChrome }, async () => {
-  const { page } = app;
-  await page.clickElement(SHARE_TRIGGER);
-  await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`);
-  await page.clickElement(`[...document.querySelectorAll('.modal-actions button')].find((b) => b.textContent.trim() === '닫기')`);
-  await sleep(250);
-  assert.equal(await page.evaluate(`!!document.querySelector('.modal-scrim')`), false);
+  assert.equal(await page.evaluate(`!!document.querySelector('.save-share')`), true);
+  assert.equal(await page.evaluate(`!!(${PDF_TRIGGER})`), true);
 });

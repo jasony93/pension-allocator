@@ -529,9 +529,20 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
 /* `AccountBenefitStrip`(design-system 5.31절) — 도넛 바로 아래, 우측 정렬,
    도넛 외경의 50% 폭. 데스크톱(외경 260px)은 130px, 태블릿(240px)은 120px,
-   모바일은 "오른쪽 아래"를 포기하고 전체 폭으로 내려온다(screens.md 5.7절). */
+   모바일은 "오른쪽 아래"를 포기하고 전체 폭으로 내려온다(screens.md 5.7절).
+
+   **2026-08-10 재실측 — 자리는 맞는데 붙어 보였다.** `.donut-wrap`의 svg는
+   직접 라벨이 들어갈 자리까지 자기 높이에 이미 포함하고 있어(`donutGeometry`),
+   라벨(특히 오른쪽 라벨)이 svg 상자 바닥 가까이 올 수 있다. 그 바로 뒤에
+   `margin-top: 8px`만 두면 라벨과 이 위젯 사이 간격이 12px까지 좁아지고,
+   x축도 겹쳐(오른쪽 라벨이 x:1155~1251, 위젯이 x:1190~1320 — 실측) "도넛
+   오른쪽 라벨 목록의 연장"처럼 읽힌다. 소유자가 "도넛 옆 좁은 칸"이라 부른
+   것이 이것이다. 위쪽 여백을 키우고 구분선을 그어 라벨 목록과 분리한다 —
+   `border-subtle`은 뜻을 나르는 마크가 아니라 구조적 구분선이므로 3:1 마크
+   대비 검사 대상이 아니다. */
 .account-benefit-strip {
-  align-self: flex-end; max-width: 130px; margin-top: var(--space-2);
+  align-self: flex-end; max-width: 130px; margin-top: var(--space-6);
+  padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);
   display: flex; flex-direction: column; gap: var(--space-1);
 }
 .benefit-strip-ref-caption { margin: 0 0 var(--space-1); font-size: 12.5px; color: var(--text-secondary); }
@@ -546,7 +557,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 /* 배제된 계좌 — 채움 없이 `data-excluded` 윤곽만(`AllocationBar` 배제 표시와
    같은 규약, design-system 5.31절 `excluded` 행). */
 .benefit-dot-excluded { background: transparent; border: 1px solid var(--data-excluded); }
-.benefit-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* `flex: 1` — 없으면 이 상자가 자기 텍스트 폭(가장 긴 줄)까지만 넓어지고,
+   `BenefitMeter`의 `width: 100%`가 그 좁은 폭의 100%가 되어 막대가 실제보다
+   짧게 그려진다(2026-08-10 실측 — 130px 칸 안에서도 트랙이 89px까지만
+   벌어졌다). `flex: 1`을 주면 이 상자가 행에 남는 폭 전부(점 칸 제외)를
+   차지하고, 그 안에서 막대가 그만큼 길어진다. */
+.benefit-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .benefit-row-names { color: var(--text-primary); }
 .benefit-row-note { font-size: 12.5px; color: var(--text-secondary); }
 .benefit-row-amount { font-size: 14px; }
@@ -779,11 +795,53 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   max-height: 90vh; overflow-y: auto; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4);
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--space-3); }
-.share-modal-body { display: flex; flex-direction: column; gap: var(--space-2); }
-.share-preview-list { margin: 0; padding-left: 1.2em; font-size: 13px; }
-.share-warning { color: var(--state-warning); }
-/* 실제로 저장될 이미지를 미리보기에 그대로 띄운다 — 자동 저장(`<a download>`)이
-   샌드박스에서 조용히 막혀도 사용자가 이 이미지를 길게 누르거나 오른쪽 클릭으로
-   직접 저장할 수 있는 경로를 남긴다(share.js 머리말 참조). */
-.share-image-preview { width: 100%; height: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-m); }
-.share-manual-save-note { color: var(--text-secondary); }
+
+/* `[4-H]` PDF 내보내기(`ui/print.js`) — 2026-08-10, 캔버스로 새로 그리던
+   공유 이미지를 걷어내고 브라우저 인쇄로 바꾸며 옛 `.share-*` 규칙(모달 미리보기
+   전용)을 지웠다. 안내 문구는 버튼과 같은 줄 흐름에 둔다. */
+.save-share-note { margin: var(--space-2) 0 0; text-align: right; }
+
+/* ---- 인쇄 / PDF 내보내기 (screens.md 9절의 후신, 2026-08-10) ----------------
+
+   `window.print()`(`ui/print.js`)가 그대로 찍는 대상이 이 스타일시트다.
+   **원칙 — 인쇄물에는 결과와 고지만 남는다, 입력값은 절대 남지 않는다.**
+
+   - `.input-slot`을 통째로 숨긴다. 생년월일·총급여액·낼 세금·월 납입 여력·
+     기납입액 등 **입력값 전부**가 실제로 담긴 자리이고(`<input>`의 `value`는
+     그대로 인쇄된다), 이것이 이 규칙 하나로 끝나야 실수로 흘릴 방법이 없다.
+   - 순수하게 상호작용 전용인 것만 추가로 지운다: 테마 스위처(이미 위에서
+     지운다), 초기화 버튼(입력 패널 안이라 이미 함께 사라진다), "PDF로 저장"
+     버튼 자체(`.save-share`) — 인쇄된 종이 위의 "인쇄" 버튼은 뜻이 없다.
+   - `.result-slot`의 `position: sticky` · `max-height` · `overflow-y: auto`를
+     푼다. 그대로 두면 인쇄 결과가 뷰포트 한 화면 높이로 잘린다 — 스크롤
+     가능한 상자를 인쇄하면 스크롤로만 닿던 아래쪽이 통째로 잘려 나가는 것이
+     브라우저의 공통 동작이다. `[4-D]` 표·`[4-E]`·`[4-F]`·`[4-G]`가 정확히
+     그 잘리는 자리에 있다.
+   - `<details>`(가정 사항·법령 조항·"더 보기")는 **CSS로** 펼친다. 두 번 틀렸던
+     자리다. ① 처음엔 `ui/print.js`가 `beforeprint`에서 `open` 속성을 직접
+     켜는 JS로 구현했는데, `Page.printToPDF`로 실제 PDF를 뽑아 확인하니 접힌
+     채로 나왔다 — 인쇄 렌더 패스가 이벤트 핸들러의 DOM 변경을 스냅샷에
+     반영하기 전에 레이아웃을 굳히는 것으로 보인다. ② 그다음 `details:not([open])
+     > *:not(summary) { display: block !important }`로 바꿨는데, `open`을 직접
+     `true`로 켜고 인쇄해도 여전히 접혀 나왔다 — `getComputedStyle`은 자식의
+     `display`가 `block`이라고 답했지만 실제로는 그리지 않았다. **원인은
+     `<details>`가 최근 Chromium에서 내부적으로 `::details-content` 의사요소로
+     본문을 감싸고 그 의사요소에 `content-visibility: hidden`을 건다는 것**이다
+     — 자식 자신의 `display`를 아무리 바꿔도 조상의 `content-visibility:hidden`이
+     그 서브트리 전체를 그리기에서 건너뛰므로 소용이 없다. `::details-content`
+     자체를 겨눠야 한다(`CSS.supports('selector(details::details-content)')`로
+     지원 확인 후 실측 — 겨누니 닫힌 상태에서도 `<ul>`이 실제 높이를 가졌다). */
+@media print {
+  .app-header, .app-footer, .input-slot, .save-share { display: none; }
+  .app-main { display: block; padding: 0; gap: 0; }
+  details:not([open]) > *:not(summary) { display: block !important; }
+  details:not([open])::details-content { content-visibility: visible !important; display: block !important; }
+  .result-slot {
+    position: static; max-height: none; overflow: visible; width: 100%;
+  }
+  .disclosure-banner { position: static; }
+  .result-panel-inner { box-shadow: none; border: none; }
+  /* 페이지 경계에서 카드·행이 반으로 잘리는 것을 완화한다 — 완벽히 막을 수는
+     없지만(브라우저마다 지원 폭이 다르다), 낼 수 있는 만큼은 낸다. */
+  .amount-card, .chart-area, .account-table, details, .allocation-bar-row { break-inside: avoid; }
+}

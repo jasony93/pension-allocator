@@ -141,9 +141,17 @@ export function annuityStartStatus(form) {
  * 0.9절). `validateForm`이 이 상태를 막아 `readyToCompute`를 꺼뜨리므로
  * 실제로는 이 함수가 반쪽짜리 객체를 만들 일이 없지만, 방어적으로도 반쪽을
  * 보내지 않는다.
+ *
+ * **`form.isaExists`를 더 이상 보지 않는다(2026-08-10).** 계약은 이 객체를
+ * `accounts.isa.exists`와 엮지 않는다 — 엔진은 ISA 미보유자에게도 신규 가입을
+ * 전제로 배분하므로(`isa_new_account_assumed`), 수익률 가정은 계좌 보유
+ * 여부와 무관하게 유효하다. 예전 조건은 화면이 `isaReturnEnabled` 토글을
+ * `isaExists` 조건부 블록 안에만 두었던 시절의 흔적이고, 지금은 토글이 항상
+ * 보이므로 이 조건이 남아 있으면 ISA 미보유자가 값을 넣어도 조용히 `null`이
+ * 나가는 상태가 된다.
  */
 export function buildIsaReturnAssumption(form) {
-  if (!form.isaExists || !form.isaReturnEnabled) return null;
+  if (!form.isaReturnEnabled) return null;
   const rate = parsePercentToRate(form.isaReturnRatePercent);
   if (Number.isNaN(rate) || rate < 0) return null;
   if (!ISA_INCOME_CHARACTERS.includes(form.isaIncomeCharacter)) return null;

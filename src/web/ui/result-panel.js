@@ -62,6 +62,9 @@ import {
   ISA_RETURN_SUPPRESSED_NOTE,
   isaReturnEstimateAmountText,
   isaReturnAssumptionCaption,
+  PDF_EXPORT_LABEL,
+  PDF_EXPORT_NOTE,
+  PDF_EXPORT_BLOCKED_NOTE,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
@@ -91,7 +94,7 @@ import {
   unallocatedBlockers,
   PENSION_ACCOUNTS,
 } from './eligibility.js';
-import { openShareModal } from './share.js';
+import { exportToPdf } from './print.js';
 
 // 필수 항목의 라벨·초점 대상·충족 판정은 `validation.js`의 `CORE_REQUIREMENTS`
 // 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
@@ -1137,23 +1140,44 @@ function limitNote() {
   );
 }
 
-function saveShareBlock(store, plan, scenario) {
-  return el('div', { class: 'save-share' }, [
-    el(
-      'button',
-      {
-        type: 'button',
-        class: 'btn btn-secondary',
-        onclick: () =>
-          openShareModal({
-            plan,
-            scenario,
-            onExport: () => store.reportSaveShare('screenshot'),
-          }),
+/**
+ * `[4-H]` — 2026-08-10 소유자 지시로 "공유용 이미지 만들기"(캔버스 PNG)를
+ * 걷어내고 PDF 내보내기(브라우저 인쇄)로 바꿨다. 무엇이 실리는지·실리지
+ * 않는지는 `styles.css`의 `@media print`가 구조로 보증한다(`ui/print.js`
+ * 머리말) — 이 함수는 더 이상 `plan`·`scenario`를 읽어 안전한 값만 옮겨 담을
+ * 필요가 없다. 인쇄되는 것이 곧 화면에 이미 떠 있는 결과 패널 그 자체다.
+ *
+ * **`onBlocked`가 클로저로 잡은 `note` 노드에 직접 쓰지 않고
+ * `document.querySelector`로 그 순간 다시 찾는다.** `exportToPdf`의 차단
+ * 감지는 500ms 뒤에 온다(`ui/print.js`). 그 사이 다른 입력이 blur돼
+ * 재계산이 걸리면 결과 패널 전체가 `patch`로 다시 그려지며 `saveShareBlock`도
+ * 다시 불려 **새 클로저의 새 `note` 객체**가 생긴다 — `patch`가 DOM 노드
+ * 자체는 재사용해도, 먼저 클릭했던 그 클로저가 쥔 `note` 참조는 이미 옛
+ * 렌더의 것이라 거기 쓴 텍스트가 화면에 반영되지 않는다(실측으로 잡았다:
+ * `print()` 호출은 됐는데 문구는 그대로였다). `.save-share-note`는 결과
+ * 패널에 하나뿐이므로, 콜백이 불릴 때 **그 순간의 살아있는 노드**를 다시
+ * 찾으면 이 경합이 사라진다.
+ */
+function saveShareBlock(store) {
+  const button = el(
+    'button',
+    {
+      type: 'button',
+      class: 'btn btn-secondary',
+      onclick: () => {
+        const attempted = exportToPdf({
+          onBlocked: () => {
+            const note = document.querySelector('.save-share-note');
+            if (note) note.textContent = PDF_EXPORT_BLOCKED_NOTE;
+          },
+        });
+        if (attempted) store.reportSaveShare('pdf');
       },
-      ['공유용 이미지 만들기'],
-    ),
-  ]);
+    },
+    [PDF_EXPORT_LABEL],
+  );
+  const note = el('p', { class: 'type-caption save-share-note' }, [PDF_EXPORT_NOTE]);
+  return el('div', { class: 'save-share' }, [button, note]);
 }
 
 function proposedScenarioCaption(scenario) {
@@ -1200,7 +1224,7 @@ function resultPanelForScenario(
     assumptionBlock(response, scenario, form),
     basisBlock(scenario, plan),
     limitNote(),
-    saveShareBlock(store, plan, scenario),
+    saveShareBlock(store),
   ]);
 }
 

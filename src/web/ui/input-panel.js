@@ -773,7 +773,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     ]);
   }
 
-  // ---- 그룹 ⑤ (ISA 보유 시에만) — 수익률 가정 (D28·D29·D31) -----------------
+  // ---- 그룹 ⑤ — 수익률 가정 (D28·D29·D31) ----------------------------------
   //
   // **소유자 지시(screens.md 3.11.4(b))보다 이 필드군을 우선한다.** 그 규약은
   // 이 계약(5.1.0)이 들어오기 전에 정해졌고, 이 다섯 필드(토글·수익률·소득
@@ -781,77 +781,88 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   // 어긋난다 — "④ ISA 만기 자금 전환"과는 별개의 질문이다. 새 그룹을 만드는
   // 판단은 `designer` 확인이 필요한 항목으로 최종 보고에 남긴다.
   //
+  // **`isaExists` 조건을 걷어냈다(2026-08-10 — 소유자 신고 대응).** 초판은
+  // 이 그룹 전체를 "④ ISA 만기 자금 전환"과 나란히 `if (form.isaExists)`로
+  // 묶었다. 그런데 엔진은 ISA 미보유자에게도 **신규 가입을 전제로** ISA에
+  // 배분한다(`isa_new_account_assumed`, `accounts.isa.exists: false`) — 배분은
+  // 받는데 그 배분에 얹을 수익률은 넣을 자리가 없는 상태가 됐다. 수익률
+  // 가정은 ISA 혜택 **추정에만** 쓰이고 배분·공제액·순서·경고를 바꾸지
+  // 않으므로(`echo.isa_return_affects`, 계약 4.2절), 계좌 보유 여부와 함께
+  // 묻힐 이유가 없다. `state/validation.js`·`state/store.js`의 대응하는
+  // `isaExists` 조건도 같은 근거로 함께 걷어냈다 — 여기만 고치면 토글은
+  // 보이는데 값은 조용히 버려지는 상태가 됐을 것이다.
+  //
   // **기본값도, placeholder 예시 숫자도 없다.** 토글은 꺼진 채로 시작하고
   // (`initialForm`), 사용자가 스스로 켜야 나머지 넷이 나타난다 — 이 서비스가
   // 수익률을 제안하지 않는다는 구분이 D31 이후 남은 방어선 전부다(0.10절).
-  let groupFive = null;
-  if (form.isaExists) {
-    const returnToggle = segmentToggle({
-      id: 'isaReturnEnabled',
-      label: ISA_RETURN_TOGGLE_LABEL,
-      value: form.isaReturnEnabled,
-      options: [
-        { value: false, label: '아니오' },
-        { value: true, label: '예' },
-      ],
-      onChange: (v) => store.setField('isaReturnEnabled', v, { immediate: true }),
-      help: ISA_RETURN_SECTION_HELP,
-    });
+  const returnToggle = segmentToggle({
+    id: 'isaReturnEnabled',
+    label: ISA_RETURN_TOGGLE_LABEL,
+    value: form.isaReturnEnabled,
+    options: [
+      { value: false, label: '아니오' },
+      { value: true, label: '예' },
+    ],
+    onChange: (v) => store.setField('isaReturnEnabled', v, { immediate: true }),
+    help: ISA_RETURN_SECTION_HELP,
+  });
 
-    const rateField = percentField({
-      id: 'isaReturnRatePercent',
-      label: ISA_RETURN_RATE_LABEL,
-      value: form.isaReturnRatePercent,
-      error: fieldError(errors, 'isaReturnRatePercent', { showMissing: true }),
-      onInput: (v) => store.setField('isaReturnRatePercent', v),
-      onBlur: () => store.flush(),
-      renderGuard,
-    });
-    const characterToggle = segmentToggle({
-      id: 'isaIncomeCharacter',
-      label: ISA_RETURN_INCOME_CHARACTER_LABEL,
-      value: form.isaIncomeCharacter,
-      options: ISA_INCOME_CHARACTERS.map((id) => ({ value: id, label: ISA_INCOME_CHARACTER_LABEL[id] })),
-      onChange: (v) => store.setField('isaIncomeCharacter', v, { immediate: true }),
-      help: ISA_RETURN_INCOME_CHARACTER_HELP,
-    });
-    // 버튼 라벨은 짧다 — 고른 항목의 예시를 그 아래 한 줄로 구체화한다.
-    const characterExample = form.isaIncomeCharacter
-      ? el('p', { class: 'field-help' }, [ISA_INCOME_CHARACTER_EXAMPLE[form.isaIncomeCharacter]])
-      : null;
-    const settlementYearsFieldNode = yearsField({
-      id: 'isaSettlementYears',
-      label: ISA_RETURN_SETTLEMENT_YEARS_LABEL,
-      value: form.isaSettlementYears,
-      error: fieldError(errors, 'isaSettlementYears'),
-      help: ISA_RETURN_SETTLEMENT_YEARS_HELP,
-      onInput: (v) => store.setField('isaSettlementYears', v),
-      onBlur: () => store.flush(),
-      renderGuard,
-    });
-    const lossField = numberField({
-      id: 'isaLossAmount',
-      label: ISA_RETURN_LOSS_LABEL,
-      value: form.isaLossAmount,
-      error: fieldError(errors, 'isaLossAmount'),
-      help: ISA_RETURN_LOSS_HELP,
-      onInput: (v) => store.setField('isaLossAmount', v),
-      onBlur: () => store.flush(),
-      renderGuard,
-    });
+  const rateField = percentField({
+    id: 'isaReturnRatePercent',
+    label: ISA_RETURN_RATE_LABEL,
+    value: form.isaReturnRatePercent,
+    error: fieldError(errors, 'isaReturnRatePercent', { showMissing: true }),
+    onInput: (v) => store.setField('isaReturnRatePercent', v),
+    onBlur: () => store.flush(),
+    renderGuard,
+  });
+  const characterToggle = segmentToggle({
+    id: 'isaIncomeCharacter',
+    label: ISA_RETURN_INCOME_CHARACTER_LABEL,
+    value: form.isaIncomeCharacter,
+    options: ISA_INCOME_CHARACTERS.map((id) => ({ value: id, label: ISA_INCOME_CHARACTER_LABEL[id] })),
+    onChange: (v) => store.setField('isaIncomeCharacter', v, { immediate: true }),
+    help: ISA_RETURN_INCOME_CHARACTER_HELP,
+  });
+  // 버튼 라벨은 짧다 — 고른 항목의 예시를 그 아래 한 줄로 구체화한다.
+  const characterExample = form.isaIncomeCharacter
+    ? el('p', { class: 'field-help' }, [ISA_INCOME_CHARACTER_EXAMPLE[form.isaIncomeCharacter]])
+    : null;
+  const settlementYearsFieldNode = yearsField({
+    id: 'isaSettlementYears',
+    label: ISA_RETURN_SETTLEMENT_YEARS_LABEL,
+    value: form.isaSettlementYears,
+    error: fieldError(errors, 'isaSettlementYears'),
+    help: ISA_RETURN_SETTLEMENT_YEARS_HELP,
+    onInput: (v) => store.setField('isaSettlementYears', v),
+    onBlur: () => store.flush(),
+    renderGuard,
+  });
+  const lossField = numberField({
+    id: 'isaLossAmount',
+    label: ISA_RETURN_LOSS_LABEL,
+    value: form.isaLossAmount,
+    error: fieldError(errors, 'isaLossAmount'),
+    help: ISA_RETURN_LOSS_HELP,
+    onInput: (v) => store.setField('isaLossAmount', v),
+    onBlur: () => store.flush(),
+    renderGuard,
+  });
 
-    const returnInner = conditionalGroup(
-      form.isaReturnEnabled,
-      [rateField, characterToggle, characterExample, settlementYearsFieldNode, lossField],
-      'isaReturnGroup',
-    );
+  const returnInner = conditionalGroup(
+    form.isaReturnEnabled,
+    [rateField, characterToggle, characterExample, settlementYearsFieldNode, lossField],
+    'isaReturnGroup',
+  );
 
-    groupFive = el('section', { class: 'input-group input-group-conditional', 'data-key': 'groupFive' }, [
-      el('h3', { class: 'input-group-title' }, [ISA_RETURN_SECTION_TITLE]),
-      returnToggle,
-      returnInner,
-    ]);
-  }
+  // **`input-group-conditional`(accent-subtle 강조)을 쓰지 않는다.** 그 표시는
+  // "앞선 답 때문에 나타난 그룹"(예: ④)에 쓰는 것이고, 이 그룹은 이제 앞선
+  // 답과 무관하게 항상 있다 — ①②③과 같은 성격의 그룹이다.
+  const groupFive = el('section', { class: 'input-group', 'data-key': 'groupFive' }, [
+    el('h3', { class: 'input-group-title' }, [ISA_RETURN_SECTION_TITLE]),
+    returnToggle,
+    returnInner,
+  ]);
 
   const resetButton = el(
     'button',

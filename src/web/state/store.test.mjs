@@ -348,9 +348,18 @@ test('untouched or turned-off, the request carries no assumption at all — the 
   );
 });
 
-test('turning the toggle on without ISA held still sends nothing — the assumption is ISA-only', () => {
+test('turning the toggle on without ISA held still sends the assumption — the engine allocates to ISA either way (2026-08-10)', () => {
+  // 예전엔 여기서 null을 기대했다. 그런데 계약은 `IsaReturnAssumption`을
+  // `accounts.isa.exists`와 엮지 않는다 — ISA 미보유자에게도 신규 가입을
+  // 전제로 배분하므로(`isa_new_account_assumed`), 수익률 가정은 계좌 보유
+  // 여부와 무관하게 유효하다. `isaReturnEnabled` 토글도 이제 `isaExists`
+  // 조건부 블록 밖에 있어(`ui/input-panel.js`) 이 상태에 실제로 도달할 수
+  // 있다 — 그러니 이 함수가 조용히 null을 돌려주면 안 된다.
   const form = { ...initialForm(), isaExists: false, isaReturnEnabled: true, isaReturnRatePercent: '7', isaIncomeCharacter: 'interest_dividend' };
-  assert.equal(buildIsaReturnAssumption(form), null);
+  const assumption = buildIsaReturnAssumption(form);
+  assert.notEqual(assumption, null, 'ISA 미보유자도 수익률 가정을 보낼 수 있어야 한다');
+  assert.equal(assumption.annual_return_rate, 0.07);
+  assert.equal(assumption.income_character, 'interest_dividend');
 });
 
 test('a fully answered toggle sends the rate as a ratio, not a percent, and the exact character id', () => {

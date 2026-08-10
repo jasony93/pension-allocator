@@ -280,34 +280,42 @@ export function validateForm(form, { today } = {}) {
       const priorAppliedErr = validateNonNegativeAmount(form.isaTransferPriorApplied, { required: false });
       if (priorAppliedErr) errors.isaTransferPriorApplied = priorAppliedErr;
     }
+  }
 
-    // D28·D31 — 수익률 가정은 전부 선택이다. 객체를 보내려면 수익률과 소득
-    // 성격이 **둘 다** 있어야 한다는 계약 3.6절의 짝 요구를 화면도 지킨다.
-    // **여기서 막힌다고 나머지 계산이 막히지 않는다** — `buildIsaReturnAssumption`
-    // (state/store.js)이 이 값들이 전부 유효할 때만 요청에 싣고, 그렇지 않으면
-    // 조용히 `null`을 보내 주 계산과 분리한다.
-    if (form.isaReturnEnabled) {
-      if (isBlank(form.isaReturnRatePercent)) {
-        errors.isaReturnRatePercent = { code: 'missing', message: '값을 입력해 주세요.' };
-      } else {
-        const rate = parsePercentToRate(form.isaReturnRatePercent);
-        if (Number.isNaN(rate)) {
-          errors.isaReturnRatePercent = { code: 'not_a_number', message: '0 이상의 숫자로 넣어 주세요.' };
-        }
-        // 음수는 형식 자체가 만들 수 없다(정규식이 부호를 받지 않는다) — 별도
-        // "negative" 분기가 없는 이유다.
+  // D28·D31 — 수익률 가정은 전부 선택이다. 객체를 보내려면 수익률과 소득
+  // 성격이 **둘 다** 있어야 한다는 계약 3.6절의 짝 요구를 화면도 지킨다.
+  // **여기서 막힌다고 나머지 계산이 막히지 않는다** — `buildIsaReturnAssumption`
+  // (state/store.js)이 이 값들이 전부 유효할 때만 요청에 싣고, 그렇지 않으면
+  // 조용히 `null`을 보내 주 계산과 분리한다.
+  //
+  // **`isaExists` 블록 밖으로 뺐다(2026-08-10).** 엔진은 ISA 미보유자에게도
+  // 신규 가입을 전제로 배분하므로(`isa_new_account_assumed`), 수익률 가정은
+  // 계좌 보유 여부와 무관하게 유효하다(계약 3.6절 — `IsaReturnAssumption`은
+  // `accounts.isa.exists`를 읽지 않는다). 이 블록이 `isaExists`에 묶여 있으면
+  // ISA가 없는 사용자는 토글을 켜고 값을 넣어도 검사를 거치지 않고
+  // `buildIsaReturnAssumption`이 조용히 `null`을 보내 — 화면은 받은 것처럼
+  // 보이는데 아무 일도 일어나지 않는 상태가 된다.
+  if (form.isaReturnEnabled) {
+    if (isBlank(form.isaReturnRatePercent)) {
+      errors.isaReturnRatePercent = { code: 'missing', message: '값을 입력해 주세요.' };
+    } else {
+      const rate = parsePercentToRate(form.isaReturnRatePercent);
+      if (Number.isNaN(rate)) {
+        errors.isaReturnRatePercent = { code: 'not_a_number', message: '0 이상의 숫자로 넣어 주세요.' };
       }
-      if (!ISA_INCOME_CHARACTERS.includes(form.isaIncomeCharacter)) {
-        errors.isaIncomeCharacter = { code: 'missing', message: '수익이 어떤 형태로 들어오는지 선택해 주세요.' };
-      }
-      if (!isBlank(form.isaSettlementYears)) {
-        if (!/^\d+$/.test(form.isaSettlementYears.trim()) || Number(form.isaSettlementYears) < 1) {
-          errors.isaSettlementYears = { code: 'out_of_range', message: '1 이상의 정수(년)가 필요합니다.' };
-        }
-      }
-      const lossErr = validateNonNegativeAmount(form.isaLossAmount, { required: false });
-      if (lossErr) errors.isaLossAmount = lossErr;
+      // 음수는 형식 자체가 만들 수 없다(정규식이 부호를 받지 않는다) — 별도
+      // "negative" 분기가 없는 이유다.
     }
+    if (!ISA_INCOME_CHARACTERS.includes(form.isaIncomeCharacter)) {
+      errors.isaIncomeCharacter = { code: 'missing', message: '수익이 어떤 형태로 들어오는지 선택해 주세요.' };
+    }
+    if (!isBlank(form.isaSettlementYears)) {
+      if (!/^\d+$/.test(form.isaSettlementYears.trim()) || Number(form.isaSettlementYears) < 1) {
+        errors.isaSettlementYears = { code: 'out_of_range', message: '1 이상의 정수(년)가 필요합니다.' };
+      }
+    }
+    const lossErr = validateNonNegativeAmount(form.isaLossAmount, { required: false });
+    if (lossErr) errors.isaLossAmount = lossErr;
   }
 
   const errorKeyFor = { priorTax: 'priorTaxAmount' };
