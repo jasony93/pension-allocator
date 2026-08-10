@@ -26,6 +26,7 @@ import {
   NOT_ALLOCATED_IN_PLAN_CAPTION,
   CONDITIONAL_PENDING_ALERT,
   CONDITIONAL_PENDING_STALE_CAPTION,
+  RESULT_PLACEHOLDER_COPY,
   EXCLUDED_ACCOUNT_FALLBACK_REASON,
   EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
   CREDIT_HEADROOM_EXCEEDED_CAPTION,
@@ -51,7 +52,18 @@ import {
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
 import { taxCreditHeadlineView, isBoundedHeadline, anyPlanCapApplied, HEADLINE_MODE } from '../tax-credit-view.js';
-import { donutChart, donutLegend, allocationBar, stackBarSegments, computeTrackScalePercent, CHART_ACCOUNT_ORDER } from './charts.js';
+import {
+  donutChart,
+  donutLegend,
+  allocationBar,
+  stackBarSegments,
+  computeTrackScalePercent,
+  placeholderRing,
+  prefersReducedMotion,
+  nextSeatStep,
+  shapeOf,
+  CHART_ACCOUNT_ORDER,
+} from './charts.js';
 import {
   accountLimitView,
   excludedAccounts,
@@ -136,15 +148,43 @@ function focusField(key) {
   }
 }
 
+/**
+ * `ResultPlaceholder` — design-system 5.29절 · screens.md 8.1절.
+ *
+ * **`RequirementChecklist`와 분업한다.** 체크리스트가 "무엇을 하면 되는가"에
+ * 답하고(항목 이름·남은 개수·진행 막대), 자리표시자는 "무엇이 나오는가"에
+ * 답한다(결과의 형태와 자리·문구 두 줄). **자리표시자에는 숫자가 없다** — 남은
+ * 항목 수를 여기 적으면 조건부 필수 항목이 분모에 안 들어가는 탓에 두 곳의 수가
+ * 실제로 어긋나고, 어긋나는 순간 사용자는 어느 쪽을 믿을지 모른다.
+ *
+ * 링과 `?`는 `aria-hidden`이고 대체 문장 한 줄이 그 자리를 대신한다.
+ * **`aria-live`를 걸지 않는다** — 빈 상태는 갱신이 아니다.
+ */
+function resultPlaceholder() {
+  return el('div', { class: 'result-placeholder' }, [
+    placeholderRing(),
+    el('p', { class: 'visually-hidden' }, [RESULT_PLACEHOLDER_COPY.screenReader]),
+    el('div', { class: 'placeholder-copy' }, [
+      // 강조는 크기·굵기·색으로만 한다(8.1절 2번).
+      el('p', { class: 'placeholder-copy-lead type-title-s' }, [RESULT_PLACEHOLDER_COPY.lead]),
+      el('p', { class: 'placeholder-copy-sub type-body-s' }, [RESULT_PLACEHOLDER_COPY.sub]),
+    ]),
+  ]);
+}
+
+/** 사라지는 중인 링 — 120ms 뒤 그 자리를 도넛이 받는다. 문구 두 줄은 함께 가지 않는다. */
+function leavingPlaceholderRing() {
+  const ring = placeholderRing();
+  ring.setAttribute('class', 'placeholder-ring placeholder-ring-leaving');
+  return ring;
+}
+
 function inputIncompletePanel(state) {
   return el('div', { class: 'result-panel-inner' }, [
     disclosureBanner(),
     el('div', { class: 'result-body' }, [
       requirementChecklist(state),
-      el('div', { class: 'result-placeholder', 'aria-hidden': 'true' }, [
-        el('div', { class: 'placeholder-shape' }),
-        el('p', {}, ['값을 모두 넣으면 여기에 계좌별 배분과 계산된 절세액이 표시됩니다']),
-      ]),
+      resultPlaceholder(),
       el('div', { class: 'expectation-block' }, [
         el('h3', { class: 'type-title-s' }, ['이 계산기가 보여주는 것']),
         el(
@@ -369,7 +409,7 @@ function fillOrderNote(plan, scenario) {
   ]);
 }
 
-function chartArea(plan, scenario, months) {
+function chartArea(plan, scenario, months, { seatDraw = 'donut' } = {}) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
@@ -378,13 +418,20 @@ function chartArea(plan, scenario, months) {
     unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
     excludedAccounts: excluded,
   };
-  const donut = donutChart({
-    ...donutArgs,
-    // 도넛 중앙의 `월 배분`은 엔진이 낸 배분 총액이다. 화면이 조각을 더하면
-    // 미배분까지 섞여 라벨과 값이 어긋난다(charts.js 중앙 값 주석).
-    totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw,
-    isProposed: !scenario.is_enacted,
-  });
+  // 자리에는 **도형이 하나만** 놓인다(`nextSeatStep`). 사라지는 링과 도넛이 같은
+  // 프레임에 함께 있는 경로가 코드에 없다 — 있으면 12등분이 결과로 변형되는
+  // 것처럼 보이고, 그러면 "자리표시자가 답이었다"는 인상이 남는다.
+  const donut =
+    seatDraw === 'placeholder-leaving'
+      ? leavingPlaceholderRing()
+      : donutChart({
+          ...donutArgs,
+          // 도넛 중앙의 `월 배분`은 엔진이 낸 배분 총액이다. 화면이 조각을 더하면
+          // 미배분까지 섞여 라벨과 값이 어긋난다(charts.js 중앙 값 주석).
+          totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw,
+          isProposed: !scenario.is_enacted,
+          animateFromZero: seatDraw === 'donut-entering',
+        });
 
   // D16 — 공통 배율. 납입 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
   // 그 비율만큼 짧아진다(screens.md 5.4절). 세 계좌의 납입 잔여 한도를 먼저 다
@@ -770,7 +817,14 @@ function proposedScenarioCaption(scenario) {
   ]);
 }
 
-function resultPanelForScenario(response, scenario, activePlanId, store, onSelectPlan, { conditionalPending = false, form = {} } = {}) {
+function resultPanelForScenario(
+  response,
+  scenario,
+  activePlanId,
+  store,
+  onSelectPlan,
+  { conditionalPending = false, form = {}, seatDraw = 'donut' } = {},
+) {
   const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
   const showAllExitBanner = scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty');
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
@@ -782,7 +836,7 @@ function resultPanelForScenario(response, scenario, activePlanId, store, onSelec
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
-    chartArea(plan, scenario, response.echo.months_remaining_in_tax_year),
+    chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, { seatDraw }),
     fillOrderNote(plan, scenario),
     reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
@@ -821,19 +875,60 @@ function scenarioTabs(response, activeScenarioId, onSelect) {
 
 let uiSelection = { scenarioId: 'current', planId: null };
 
+// ---------------------------------------------------------------------------
+// 결과 자리의 전환 상태 (design-system 5.29절)
+//
+// 판단은 `nextSeatStep`(순수 함수)이 하고 여기서는 그 결과를 기억하고 타이머를
+// 건다. 상태를 이 모듈에 두는 이유: 자리표시자 → 결과 전환은 **한 번만** 일어나는
+// 사건이라 store의 상태에서 파생되지 않는다(같은 `status === 'result'`가 첫 번째
+// 계산인지 열 번째인지 상태만으로는 알 수 없다).
+// ---------------------------------------------------------------------------
+
+let seatShape = null; // 직전에 실제로 그린 도형
+let seatPhase = 'idle';
+
+function planSeat(desired) {
+  const step = nextSeatStep({ desired, lastShape: seatShape, phase: seatPhase, reducedMotion: prefersReducedMotion() });
+  seatPhase = step.phase;
+  seatShape = shapeOf(step.draw);
+  if (step.scheduleFadeMs != null) {
+    // 링이 사라진 **다음 프레임에** 도넛을 그린다. 겹치는 프레임이 없다.
+    setTimeout(() => {
+      seatPhase = 'entering';
+      rerenderHook();
+    }, step.scheduleFadeMs);
+  }
+  return step.draw;
+}
+
 export function renderResultPanel({ state, store }) {
   const { status, result, fatalError } = state;
 
-  if (status === 'fatal_error') return fatalErrorPanel(fatalError);
-  if (status === 'blocked') return blockedPanel(fatalError, store);
-  if (status === 'blank' || status === 'input_incomplete') return inputIncompletePanel(state);
+  if (status === 'fatal_error') {
+    planSeat('none');
+    return fatalErrorPanel(fatalError);
+  }
+  if (status === 'blocked') {
+    planSeat('none');
+    return blockedPanel(fatalError, store);
+  }
+  if (status === 'blank' || status === 'input_incomplete') {
+    planSeat('placeholder');
+    return inputIncompletePanel(state);
+  }
 
   // loading / field_error / result — 직전 결과를 유지한다는 규약(design-system 6.1)
   if (!result) {
-    // 첫 계산이 아직 끝나지 않은 로딩 상태
+    // 첫 계산이 아직 끝나지 않은 로딩 상태. **자리표시자를 그대로 둔다** — 결과
+    // 자리를 비우면 ① 레이아웃이 한 번 접혔다 펴지고 ② 자리표시자 → 결과 전환의
+    // 두 끝이 붙어 있지 않게 되어 5.29절의 전환 자체가 성립하지 않는다.
+    planSeat('placeholder');
     return el('div', { class: `result-panel-inner ${loadingOverlayClass(false)}` }, [
       disclosureBanner(),
-      el('div', { class: 'result-body' }, [el('p', { class: 'type-body-s' }, ['계산 중입니다…'])]),
+      el('div', { class: 'result-body' }, [
+        resultPlaceholder(),
+        el('p', { class: 'type-body-s chart-note' }, ['계산 중입니다…']),
+      ]),
     ]);
   }
 
@@ -857,7 +952,12 @@ export function renderResultPanel({ state, store }) {
   // 않았다는 표시를 함께 둔다. 오류 색이 아니라 info다 — 사용자가 무언가를
   // 망가뜨린 것이 아니라 아직 덜 채운 것이다.
   const conditionalPending = Boolean(state.validation?.conditionalPending);
-  const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, { conditionalPending, form: state.form });
+  const seatDraw = planSeat('donut');
+  const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
+    conditionalPending,
+    form: state.form,
+    seatDraw,
+  });
 
   const wrapperClass =
     status === 'loading' ? 'result-panel-inner result-loading-overlay' : status === 'field_error' ? 'result-panel-inner' : 'result-panel-inner';

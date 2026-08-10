@@ -15,6 +15,15 @@ import {
   LABEL_TEXT_BUDGET,
   LABEL_BLOCK_BELOW,
   DONUT_OUTER_DIAMETER,
+  CHART_ACCOUNT_ORDER,
+  MAX_RESULT_SLICE_COUNT,
+  PLACEHOLDER_SLICE_COUNT,
+  PLACEHOLDER_FADE_MS,
+  DONUT_SWEEP_MS,
+  placeholderGeometry,
+  placeholderSliceAngles,
+  nextSeatStep,
+  shapeOf,
 } from './charts.js';
 
 test('the account with the largest remaining limit always scales to exactly 100%', () => {
@@ -307,4 +316,112 @@ test('the mobile legend stands in for the labels, so it lists exactly the slices
     ['retirement_pension', 'unallocated'],
     '배분 0원인 연금저축도, 배제된 ISA도 조각이 없으니 범례에도 없다',
   );
+});
+
+// --- ResultPlaceholder (design-system 5.29절 · screens.md 8.1절) -------------
+//
+// **자리표시자가 결과로 읽히지 않게 하는 장치 넷을 여기서 고정한다.** 소유자가
+// 도넛 형태를 지시했고 designer가 형태 금지를 풀되 "결과가 만들 수 없는 형태로만"
+// 허용했다(D23 판정 3). 넷 중 하나라도 흐려지면 사용자가 자리표시자를 답으로
+// 읽으므로, 넷 다 눈이 아니라 수치로 지켜야 한다.
+
+test('B1 — 자리표시자의 조각 수가 결과 도넛의 최대 조각 수보다 많다', () => {
+  // 결과 도넛은 계좌 셋 + 미배분 하나로 최대 4조각이다. 12는 이 제품의 어떤
+  // 입력으로도 나올 수 없는 수이고, 세다가 다섯 번째에서 결과가 아니라는 것이
+  // 확정된다. **`12`를 상수로 적는 것만으로는 이 사실이 지켜지지 않는다** —
+  // 계좌가 늘면 최대 조각 수도 는다. 그래서 둘의 관계를 검사한다.
+  assert.equal(MAX_RESULT_SLICE_COUNT, CHART_ACCOUNT_ORDER.length + 1);
+  assert.ok(
+    PLACEHOLDER_SLICE_COUNT > MAX_RESULT_SLICE_COUNT,
+    `자리표시자 ${PLACEHOLDER_SLICE_COUNT}조각이 결과 최대 ${MAX_RESULT_SLICE_COUNT}조각 이하입니다 — 결과로 읽힐 수 있습니다`,
+  );
+  assert.equal(placeholderSliceAngles({ rMid: 100 }).length, PLACEHOLDER_SLICE_COUNT);
+});
+
+test('B2 — 12조각이 전부 같은 각이다. 균등 분할은 비율 정보가 0이라 읽을 값이 없다', () => {
+  const arcs = placeholderSliceAngles({ rMid: 100 });
+  const sweeps = arcs.map((a) => a.end - a.start);
+  const first = sweeps[0];
+  for (const s of sweeps) assert.ok(Math.abs(s - first) < 1e-9, `조각 각이 다릅니다: ${sweeps.join(', ')}`);
+  // 간격을 빼기 전의 몫은 정확히 30°다.
+  assert.equal(360 / arcs.length, 30);
+});
+
+test('B2 — 조각이 원을 한 바퀴만 돌고, 사이 간격이 결과 도넛(2px)보다 넓다', () => {
+  const rMid = 100;
+  const arcs = placeholderSliceAngles({ rMid });
+  assert.equal(arcs[0].start > 0, true, '첫 조각도 시작에서 간격만큼 물러난다');
+  assert.ok(arcs[arcs.length - 1].end < 360);
+  const gapDeg = arcs[1].start - arcs[0].end;
+  const gapPx = (gapDeg / 360) * 2 * Math.PI * rMid;
+  assert.ok(Math.abs(gapPx - 4) < 1e-6, `간격이 4px가 아닙니다: ${gapPx}`);
+  assert.ok(gapPx > 2, '넓은 간격이 "조각"이 아니라 "눈금"으로 읽히게 한다');
+});
+
+test('B3 — 평면이다. 기울기 0°, 압출 0 — 결과 도넛의 15°/8%와 같은 도형일 수 없다', () => {
+  const geom = placeholderGeometry('labelled');
+  assert.equal(geom.tiltDeg, 0);
+  assert.equal(geom.extrudeDepth, 0);
+  assert.equal(geom.ry, 1, 'ry가 1이 아니면 원근이 생겨 입체로 읽힌다');
+  // 결과 도넛은 기울기 15°를 쓰므로 ry가 1보다 작다 — 둘이 같아지면 B3이 무너진다.
+  assert.ok(Math.cos((15 * Math.PI) / 180) < geom.ry);
+});
+
+test('자리표시자의 상자가 결과 도넛과 완전히 같다 — 결과가 들어올 때 자리가 밀리지 않는다', () => {
+  for (const mode of ['labelled', 'legend']) {
+    const donut = donutGeometry(mode);
+    const ph = placeholderGeometry(mode);
+    assert.equal(ph.width, donut.width, `${mode}: 폭이 다르다`);
+    assert.equal(ph.height, donut.height, `${mode}: 높이가 다르다`);
+    assert.equal(ph.R, donut.R);
+    assert.equal(ph.rInner, donut.rInner, '링 두께 비율도 같다');
+  }
+});
+
+// --- 자리표시자 ↔ 결과 전환 (design-system 5.29절) ---------------------------
+
+test('전환 어느 단계에서도 그리는 도형은 하나뿐이다 — 겹치는 프레임이 구조적으로 없다', () => {
+  // 크로스페이드·모프를 넣으려면 이 함수의 반환 타입부터 바꿔야 한다. 12등분이
+  // 결과 조각으로 변형되는 것처럼 보이면 "자리표시자가 답이었다"는 인상이 남는다.
+  const seen = [];
+  let phase = 'idle';
+  let lastShape = 'placeholder';
+  for (let i = 0; i < 4; i++) {
+    const step = nextSeatStep({ desired: 'donut', lastShape, phase, reducedMotion: false });
+    seen.push(step.draw);
+    phase = step.phase === 'leaving' ? 'entering' : step.phase; // 타이머가 하는 일
+    lastShape = shapeOf(step.draw);
+  }
+  assert.deepEqual(seen, ['placeholder-leaving', 'donut-entering', 'donut', 'donut']);
+  for (const draw of seen) assert.equal(typeof draw, 'string', 'draw는 도형 하나를 가리키는 값이다');
+});
+
+test('링을 지우는 시간이 먼저 흐르고, 그 다음에 조각이 펼쳐진다', () => {
+  const step = nextSeatStep({ desired: 'donut', lastShape: 'placeholder', phase: 'idle', reducedMotion: false });
+  assert.equal(step.draw, 'placeholder-leaving');
+  assert.equal(step.scheduleFadeMs, PLACEHOLDER_FADE_MS);
+  assert.equal(PLACEHOLDER_FADE_MS, 120);
+  assert.equal(DONUT_SWEEP_MS, 240);
+});
+
+test('결과 → 자리표시자 복귀는 역재생이 아니라 즉시 교체다', () => {
+  // 역방향 애니메이션은 "결과가 자리표시자로 줄어든다"로 읽혀 금액이 감소한 것처럼
+  // 보인다(5.29절).
+  const step = nextSeatStep({ desired: 'placeholder', lastShape: 'donut', phase: 'idle', reducedMotion: false });
+  assert.equal(step.draw, 'placeholder');
+  assert.equal(step.scheduleFadeMs, null);
+  assert.equal(step.phase, 'idle');
+});
+
+test('prefers-reduced-motion이면 전환이 0ms다 — 페이드 단계 자체가 없다', () => {
+  const step = nextSeatStep({ desired: 'donut', lastShape: 'placeholder', phase: 'idle', reducedMotion: true });
+  assert.equal(step.draw, 'donut', '사라지는 링을 거치지 않고 곧바로 도넛이다');
+  assert.equal(step.scheduleFadeMs, null);
+});
+
+test('결과가 이미 있는 상태에서 값만 바뀌면 조각을 다시 펼치지 않는다', () => {
+  // 그때 움직이는 것은 각도이지 "결과가 처음 생겼다"는 사실이 아니다. 테마 변경도
+  // 같다 — 값이 바뀐 것이 아니므로 조각은 그 자리에 있다(design-system 5.30절).
+  const step = nextSeatStep({ desired: 'donut', lastShape: 'donut', phase: 'idle', reducedMotion: false });
+  assert.equal(step.draw, 'donut');
 });

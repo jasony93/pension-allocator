@@ -1,13 +1,35 @@
 /* 디자인 토큰 — docs/stage-2-design/design-system.md 를 그대로 옮긴다.
-   hex 값은 설계 문서가 "참조값"이라 명시한 임시값이다(브랜드 확정 전). */
+   hex 값은 설계 문서가 "참조값"이라 명시한 임시값이다(브랜드 확정 전).
+   **단, data 계열은 임시값이 아니다** — 3.5.4절의 팔레트 검증기 출력이 근거이고
+   바꾸려면 같은 검증기를 다시 돌려야 한다(design-system open_questions).
+
+   ────────────────────────────────────────────────────────────────────────────
+   선언 순서가 계약이다 (design-system 8.2절). 규칙 넷:
+
+   1) **모든 색은 맨바닥 `:root`에 값을 하나씩 갖는다.** 미디어 쿼리나
+      `[data-theme]` 안에만 존재하는 색이 있으면, 두 조건 중 어느 것도 참이 아닌
+      실행 환경에서 그 토큰이 비어 글자가 반대쪽 배경에 얹힌다.
+      → `styles-tokens.test.mjs`가 기계로 검사한다.
+   2) 다크 블록은 **바뀌는 토큰만** 다시 선언한다(간격·반경은 다시 적지 않는다).
+   3) `color-scheme`을 함께 바꾼다 — 스크롤바·기본 폼 컨트롤·`::selection`.
+   4) 미디어 블록의 선택자는 `:root:where(:not([data-theme="light"]))`다.
+      `:not(...)`이 없으면 **명시적 라이트가 OS 다크를 못 이기고**, `:where()`가
+      없으면 (0,2,0)끼리 부딪혀 승부가 **선언 순서**에 걸린다.
+   ──────────────────────────────────────────────────────────────────────────── */
 :root {
+  color-scheme: light;
+
   --surface-base: #f7f8fa;
   --surface-raised: #ffffff;
   --surface-sunken: #edeff2;
   --surface-overlay: #ffffff;
   --surface-scrim: rgba(16, 18, 20, 0.48);
   --border-subtle: #e1e5ea;
-  --border-strong: #c3cad2;
+  /* D23 — 입력 필드의 경계는 **뜻을 나르는 경계**다(WCAG 1.4.11, 비텍스트 3:1).
+     초판 `#c3cad2`는 필드 안쪽(`surface-sunken`) 대비 1.44, 카드 대비 1.65로
+     어느 방향으로도 3:1을 못 넘었다 — 저시력 사용자에게 칸의 존재가 사라진다.
+     새 값은 sunken 3.29 / raised 3.79 / base 3.57이다. */
+  --border-strong: #7c848d;
 
   --text-primary: #14181c;
   --text-secondary: #4a535c;
@@ -28,25 +50,38 @@
   --state-info: #2f5d8c;
   --state-info-subtle: #e8eff7;
 
-  --data-pension: #2e7d8a;
-  --data-pension-side: #215a63;
-  --data-irp: #b4762b;
-  --data-irp-side: #855620;
-  --data-isa: #6b5ba6;
-  --data-isa-side: #4c4079;
-  --data-unallocated: #9aa3ab;
-  --data-track: #e1e5ea;
+  /* 계좌 색 — 검증기가 여섯 검사를 통과시킨 값(3.5.2·3.5.4절). */
+  --data-pension: #0a9a96;
+  --data-irp: #da7134;
+  --data-isa: #8758c1;
+  /* 압출 측면 — **전용 토큰이다.** 초판은 "상단면 명도 −18%"라는 산식만 있었고
+     구현이 직접 계산할 수밖에 없었다. 산식(OKLCH L − 0.112)의 결과를 표로 박아
+     둔 것이 아래 값이다(design-system 5.20절): **구현은 산식을 다시 돌리지
+     않는다.** 그래야 계좌 색이 바뀔 때 측면이 따라 바뀐다. */
+  --data-pension-side: #017572;
+  --data-irp-side: #b34f03;
+  --data-isa-side: #67369d;
+  /* 역할 색 — 계좌가 아니다. 무채색 사다리에서 뽑되 표면 대비로 계층을 가른다.
+     값을 나르면 3:1 이상 · 뜻을 나르는 경계도 3:1 이상 · 아무것도 나르지 않으면
+     2:1 미만. **2:1과 3:1 사이는 비어 있다**(3.5.3절). */
+  --data-unallocated: #5a6166;      /* 값을 나른다 — 대비 6.29 */
+  --data-unallocated-side: #3c4247;
+  --data-excluded: #888f95;         /* 뜻을 나르는 경계 — 대비 3.29 */
+  --data-placeholder: #c0c8ce;      /* 아무것도 나르지 않는다 — 대비 1.69 */
+  --data-track: #e1e5ea;            /* 배경 — 대비 1.27 */
 
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
   --radius-s: 4px; --radius-m: 8px; --radius-l: 12px; --radius-xl: 16px; --radius-full: 999px;
 }
 
+/* 2) 운영체제가 다크이고 사용자가 라이트를 명시하지 않았을 때. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
     --surface-base: #14171a; --surface-raised: #1e2226; --surface-sunken: #0f1214;
     --surface-overlay: #252a2f; --surface-scrim: rgba(0, 0, 0, 0.62);
-    --border-subtle: #2c3238; --border-strong: #3d454d;
+    --border-subtle: #2c3238; --border-strong: #727982;
     --text-primary: #f2f4f6; --text-secondary: #b6bec6; --text-muted: #7e878f;
     --text-on-accent: #0f1214; --text-link: #79b8f0;
     --accent: #6aa3db; --accent-hover: #84b4e4; --accent-pressed: #5a90c4; --accent-subtle: #22303d;
@@ -54,16 +89,21 @@
     --state-error: #f2887f; --state-error-subtle: #3a1e1b;
     --state-warning: #e8b25a; --state-warning-subtle: #33280f;
     --state-info: #6aa3db; --state-info-subtle: #22303d;
-    --data-pension: #4fb3c4; --data-pension-side: #337c89;
-    --data-irp: #e0a249; --data-irp-side: #a97934;
-    --data-isa: #9b8bd6; --data-isa-side: #6f61a3;
-    --data-unallocated: #6e7780; --data-track: #2c3238;
+    --data-pension: #06a19d; --data-irp: #df7333; --data-isa: #8f5fcc;
+    --data-pension-side: #087c78; --data-irp-side: #b75203; --data-isa-side: #6e3da7;
+    --data-unallocated: #b1b8bf; --data-unallocated-side: #8e959c;
+    --data-excluded: #6a7076; --data-placeholder: #41474c; --data-track: #2c3238;
   }
 }
+
+/* 3) 사용자가 `어둡게`를 명시했을 때. 미디어 쿼리 밖이라 OS 설정과 무관하게 이긴다.
+      2)와 값이 같다 — 두 곳에 같은 값을 적는 것이 이 계약의 비용이고,
+      어긋나지 않는지는 `styles-tokens.test.mjs`가 기계로 대조한다. */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --surface-base: #14171a; --surface-raised: #1e2226; --surface-sunken: #0f1214;
   --surface-overlay: #252a2f; --surface-scrim: rgba(0, 0, 0, 0.62);
-  --border-subtle: #2c3238; --border-strong: #3d454d;
+  --border-subtle: #2c3238; --border-strong: #727982;
   --text-primary: #f2f4f6; --text-secondary: #b6bec6; --text-muted: #7e878f;
   --text-on-accent: #0f1214; --text-link: #79b8f0;
   --accent: #6aa3db; --accent-hover: #84b4e4; --accent-pressed: #5a90c4; --accent-subtle: #22303d;
@@ -71,10 +111,34 @@
   --state-error: #f2887f; --state-error-subtle: #3a1e1b;
   --state-warning: #e8b25a; --state-warning-subtle: #33280f;
   --state-info: #6aa3db; --state-info-subtle: #22303d;
-  --data-pension: #4fb3c4; --data-pension-side: #337c89;
-  --data-irp: #e0a249; --data-irp-side: #a97934;
-  --data-isa: #9b8bd6; --data-isa-side: #6f61a3;
-  --data-unallocated: #6e7780; --data-track: #2c3238;
+  --data-pension: #06a19d; --data-irp: #df7333; --data-isa: #8f5fcc;
+  --data-pension-side: #087c78; --data-irp-side: #b75203; --data-isa-side: #6e3da7;
+  --data-unallocated: #b1b8bf; --data-unallocated-side: #8e959c;
+  --data-excluded: #6a7076; --data-placeholder: #41474c; --data-track: #2c3238;
+}
+
+/* 4) 인쇄는 **항상 라이트**다(design-system 8.5절). 대부분의 프린터 설정에서
+      배경색이 빠지는데, 그러면 다크용 밝은 글자색이 흰 종이에 얹혀 **고지가
+      통째로 사라진다.** `data-theme="dark"`(0,2,0)를 이기려면 같은 명시도로
+      **더 뒤에** 적어야 한다 — 그래서 이 블록이 파일의 마지막 토큰 블록이다. */
+@media print {
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    color-scheme: light;
+    --surface-base: #f7f8fa; --surface-raised: #ffffff; --surface-sunken: #edeff2;
+    --surface-overlay: #ffffff; --surface-scrim: rgba(16, 18, 20, 0.48);
+    --border-subtle: #e1e5ea; --border-strong: #7c848d;
+    --text-primary: #14181c; --text-secondary: #4a535c; --text-muted: #7c858e;
+    --text-on-accent: #ffffff; --text-link: #1f5c99;
+    --accent: #2f5d8c; --accent-hover: #27506f; --accent-pressed: #1f4159; --accent-subtle: #e8eff7;
+    --focus-ring: #2f5d8c;
+    --state-error: #b3261e; --state-error-subtle: #fdecea;
+    --state-warning: #8a5a00; --state-warning-subtle: #fff4e0;
+    --state-info: #2f5d8c; --state-info-subtle: #e8eff7;
+    --data-pension: #0a9a96; --data-irp: #da7134; --data-isa: #8758c1;
+    --data-pension-side: #017572; --data-irp-side: #b34f03; --data-isa-side: #67369d;
+    --data-unallocated: #5a6166; --data-unallocated-side: #3c4247;
+    --data-excluded: #888f95; --data-placeholder: #c0c8ce; --data-track: #e1e5ea;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -104,8 +168,53 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   position: sticky; top: 0; background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle); z-index: 10;
 }
+/* 가명칭 + 과세연도 표기 한 묶음. 데스크톱에서는 한 줄에 좌·우로 벌어지고,
+   모바일에서는 세로로 쌓여 `ThemeControl` 44px에 밀리지 않는다(screens.md 2.1절). */
+.app-header-titles { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .app-title { font-size: 17px; font-weight: 600; }
 .app-tax-year { font-size: 12.5px; color: var(--text-secondary); }
+
+/* ThemeControl (design-system 5.30절 · screens.md 2.1절)
+
+   **열리기 전까지 헤더 폭을 44px만 쓴다** — 모바일에서도 가명칭·과세연도 표기를
+   밀어내지 않아야 한다. 그래서 트리거는 아이콘 하나이고, 세 항목(`자동`·`밝게`·
+   `어둡게`)은 눌렀을 때 아래로 열리는 목록이 갖는다. **2택 토글이 아니다** —
+   토글은 `자동`을 표현할 수 없어 한 번 누르면 운영체제 설정으로 못 돌아간다. */
+.theme-control { position: relative; flex: 0 0 auto; }
+.theme-control-trigger {
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: var(--radius-m);
+  background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 18px;
+}
+.theme-control-trigger:hover { background: var(--surface-sunken); }
+.theme-menu {
+  position: absolute; right: 0; top: 48px; z-index: 20; min-width: 160px;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-m);
+  background: var(--surface-overlay); box-shadow: 0 4px 12px rgba(16, 18, 20, 0.1);
+}
+/* 항목 상태는 `RadioGroup`(5.2절) 규약을 그대로 쓴다. **아이콘 단독으로 뜻을
+   나르지 않는다** — 열린 목록에는 항상 텍스트 라벨이 있다(9절). */
+.theme-menu-item {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 44px;
+  padding: 0 var(--space-3); text-align: left; cursor: pointer; font-size: 14px;
+  border: 1px solid transparent; border-radius: var(--radius-m);
+  background: transparent; color: var(--text-secondary);
+}
+.theme-menu-item:hover { background: var(--surface-sunken); }
+.theme-menu-item-selected { background: var(--accent-subtle); border-color: var(--accent); color: var(--text-primary); font-weight: 600; }
+.theme-menu-dot { width: 1.2em; }
+/* 헤더는 인쇄물에 실을 것이 아니다 — 종이에서는 결과와 고지만 남는다. */
+@media print { .theme-control { display: none; } }
+/* 모바일 좌우 여백은 설계 격자대로 16px다(design-system 4.4절). 헤더가 셋이 된
+   지금 이 16px가 `ThemeControl` 44px의 자리를 낸다 — 24px로 두면 좁은 기기에서
+   가명칭이 두 줄로 접힌다. **접혀도 잘리거나 가로 스크롤이 생기지는 않는다**
+   (`browser/theme.browser.mjs`가 320px와 360px에서 잰다). */
+@media (max-width: 767px) {
+  .app-header { padding: var(--space-3) var(--space-4); gap: var(--space-2); }
+  .app-header-titles { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
+  .app-title, .app-tax-year { white-space: nowrap; }
+}
 .app-main {
   display: flex; flex-direction: column; gap: var(--space-6);
   padding: var(--space-5);
@@ -262,8 +371,44 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    바로 말한다(screens.md 3.8.3절). 재촉이 아니라 되돌아갈 경로의 안내다. */
 .req-hint { display: block; font-size: 12.5px; color: var(--text-secondary); }
 
-.result-placeholder { border: 1px dashed var(--border-strong); border-radius: var(--radius-l); padding: var(--space-6); text-align: center; color: var(--text-secondary); }
-.placeholder-shape { width: 96px; height: 96px; margin: 0 auto var(--space-3); border-radius: 50%; background: var(--surface-sunken); }
+/* ResultPlaceholder (design-system 5.29절 · screens.md 8.1절)
+
+   **결과가 만들 수 없는 형태로만** 도넛 모양을 허용한다. 네 장치가 그것을
+   강제하고, 넷 다 `charts.js`의 순수 함수와 그 테스트가 고정한다 —
+   ① 12조각 ② 균등 30° ③ 평면(기울기 0°·압출 0) ④ `data-placeholder` 대비 1.7.
+
+   **테두리를 두르지 않는다.** 초판은 점선 상자였는데, 점선은 `AllocationBar`의
+   배제 상태가 쓰는 형태이고(5.7절) 뜻이 오염된다. */
+.result-placeholder { display: flex; flex-direction: column; align-items: center; padding: var(--space-5) 0; }
+.placeholder-ring { max-width: 100%; height: auto; }
+/* 자리표시자 → 결과: 링을 120ms에 투명도 0으로 내리고, **그 다음 프레임에**
+   도넛을 그린다. 두 도형이 겹쳐 보이는 프레임이 없어야 한다(5.29절 3번) —
+   겹치면 "12등분이 결과로 변형됐다"로 읽혀 자리표시자가 답이었다는 인상이 남는다. */
+.placeholder-ring-leaving { animation: placeholder-leave 120ms ease-out forwards; }
+@keyframes placeholder-leave { from { opacity: 1; } to { opacity: 0; } }
+/* `prefers-reduced-motion: reduce`이면 전환은 0ms다(6.2절). 자리표시자 자체는
+   어느 설정에서도 움직이지 않는다 — shimmer는 `Skeleton`의 것이고 "요청했고 오는
+   중"을 뜻하는데, 자리표시자는 아직 아무것도 요청하지 않은 상태다. */
+@media (prefers-reduced-motion: reduce) {
+  .placeholder-ring-leaving { animation-duration: 0ms; }
+  .req-progress-fill, .alloc-bar-track, .alloc-bar-fill { transition-duration: 0ms; }
+}
+.placeholder-center-label { fill: var(--text-secondary); font-size: 14px; }
+/* `?`는 **`type-display`와 같은 크기·굵기·기준선**이다 — 금액이 들어와도
+   레이아웃이 밀리지 않게 같은 메트릭으로 자리를 예약한다. */
+.placeholder-center-value { fill: var(--text-muted); font-size: 40px; font-weight: 700; letter-spacing: -0.02em; }
+/* 강조는 **크기·굵기·색으로만** 한다. 느낌표·화살표·`accent` 색을 쓰지 않는다 —
+   `accent`는 누를 수 있는 것의 색인데 이 문구는 누를 수 없다(8.1절 2번). */
+.placeholder-copy { margin: var(--space-4) 0 0; text-align: center; }
+.placeholder-copy-lead { margin: 0; color: var(--text-primary); }
+.placeholder-copy-sub { margin: var(--space-1) 0 0; color: var(--text-secondary); }
+
+/* 스크린리더 전용 문장 — 링과 `?`는 `aria-hidden`이므로 이 줄이 그 자리를
+   대신한다. **`aria-live`를 걸지 않는다**: 빈 상태는 갱신이 아니다(5.29절). */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 
 .expectation-block ul { margin: var(--space-2) 0 0; padding-left: 1.2em; }
 .entry-copy p { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 var(--space-1); }
@@ -350,7 +495,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .alloc-bar-fill { height: 100%; border-radius: var(--radius-full); transition: width 240ms ease-out; }
 /* 배제된 계좌 — 점선 윤곽만 그린다(screens.md 5.9절). 채움 없는 실선 트랙은
    "한도는 있는데 안 채웠다"와 "대상이 아니다"를 같은 그림으로 만든다. */
-.alloc-bar-track-unavailable { background: transparent; border: 1px dashed var(--border-subtle); }
+/* 점선 색은 `border-subtle`(대비 1.27)이 아니라 `data-excluded`(3.29)다.
+   이 점선은 장식이 아니라 "이 계좌는 계산 대상이 아니다"를 나르는 **경계**이므로
+   WCAG 1.4.11의 비텍스트 3:1이 걸린다(design-system 3.5.3·5.7절). */
+.alloc-bar-track-unavailable { background: transparent; border: 1px dashed var(--data-excluded); }
 
 /* EligibilityNote (design-system 5.24절) — state-info를 쓴다. state-warning 금지:
    자격 미달은 사용자 잘못이 아니고 대비할 위험도 아니다. */

@@ -43,6 +43,7 @@ import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { SERVICE_NAME } from '../copy.js';
 import { createStore } from '../state/store.js';
 import { COMPACT_MEDIA_QUERY } from './charts.js';
+import { createThemeController, themeControl } from './theme.js';
 
 function captureFocus(container) {
   const active = document.activeElement;
@@ -94,9 +95,22 @@ export function mountApp(root, { engineClient, analytics }) {
   const renderGuard = { active: false };
 
   const layout = el('div', { class: 'app-layout' });
+  // `ThemeControl`은 헤더에 있고 **store를 거치지 않는다**(design-system 5.30절).
+  // 화면 밝기는 결과가 아니라 화면 전체의 성질이고, store를 거치면 테마를 바꿀
+  // 때마다 결과 패널이 다시 그려져 도넛의 각도 애니메이션이 발동한다 — 값이
+  // 바뀐 것이 아니므로 조각은 그 자리에 있어야 한다. 색은 CSS 변수가 나른다.
+  //
+  // 가명칭과 과세연도 표기는 한 묶음이다. **묶지 않으면 모바일에서 밀린다** —
+  // 헤더가 셋이 되면서 좁은 폭에서 가명칭이 두 줄로 접히는 것을 실측으로 봤고
+  // (`browser/theme.browser.mjs`), screens.md 2.1절은 `ThemeControl`이 그 둘을
+  // 밀어내지 않을 것을 요구한다. 묶어 두면 좁은 폭에서 둘이 세로로 쌓이고
+  // 밝기 버튼은 44px 자리를 그대로 지킨다.
   const header = el('header', { class: 'app-header' }, [
-    el('span', { class: 'app-title' }, [SERVICE_NAME]),
-    el('span', { class: 'app-tax-year' }, ['2026 과세연도 기준']),
+    el('div', { class: 'app-header-titles' }, [
+      el('span', { class: 'app-title' }, [SERVICE_NAME]),
+      el('span', { class: 'app-tax-year' }, ['2026 과세연도 기준']),
+    ]),
+    themeControl(createThemeController()),
   ]);
   const mainEl = el('div', { class: 'app-main' });
   const inputSlot = el('div', { class: 'input-slot' });

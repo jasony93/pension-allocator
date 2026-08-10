@@ -8,7 +8,7 @@
  */
 
 import { el, svgEl } from './dom.js';
-import { ACCOUNT_LABEL, UNALLOCATED_LABEL } from '../copy.js';
+import { ACCOUNT_LABEL, UNALLOCATED_LABEL, DONUT_CENTER_LABEL, PLACEHOLDER_VALUE_MARK } from '../copy.js';
 import { formatKrw, formatPercent } from '../format.js';
 
 const CHART_ACCOUNT_ORDER = ['annuity_savings', 'retirement_pension', 'isa'];
@@ -21,12 +21,24 @@ const ACCOUNT_COLOR = {
   retirement_pension: 'var(--data-irp)',
   isa: 'var(--data-isa)',
 };
-const ACCOUNT_COLOR_DARK = {
+/**
+ * 압출 측면. **여기서 색을 계산하지 않는다.**
+ *
+ * 초판 설계는 "상단면 색의 명도 −18%"라는 산식만 주고 토큰을 만들지 않았다.
+ * 그것은 구현할 수 없는 문장이다 — 어느 색공간의 명도인지, 곱인지 뺄셈인지가
+ * 정해지지 않으면 구현마다 다른 색이 나온다. 설계가 산식(OKLCH L − 0.112)의
+ * 결과를 토큰으로 박아 두었으므로(design-system 5.20절) 구현은 그 토큰을 읽기만
+ * 한다. **계산으로 두면 계좌 색이 바뀔 때 측면이 따라오지 않는다.**
+ */
+const ACCOUNT_SIDE_COLOR = {
   annuity_savings: 'var(--data-pension-side)',
   retirement_pension: 'var(--data-irp-side)',
   isa: 'var(--data-isa-side)',
 };
 const UNALLOCATED_COLOR = 'var(--data-unallocated)';
+/** 미배분 조각의 측면도 전용 토큰이다 — 상단면과 같은 색을 쓰면 깊이가 사라진다. */
+const UNALLOCATED_SIDE_COLOR = 'var(--data-unallocated-side)';
+const PLACEHOLDER_COLOR = 'var(--data-placeholder)';
 /** 모바일에서 조각과 범례를 잇는 번호(screens.md 5.7절 ①②③). */
 const CIRCLED_NUMBERS = ['①', '②', '③', '④'];
 
@@ -282,6 +294,10 @@ export function donutChart({
   isProposed = false,
   excludedAccounts = [],
   labelMode = preferredLabelMode(),
+  // 자리표시자가 사라진 **다음 프레임에** 조각을 0°에서 펼친다(design-system
+  // 5.29절 전환 2번). 값이 바뀌어 다시 그리는 경우에는 걸지 않는다 — 그때
+  // 움직이는 것은 각도이지 "결과가 처음 생겼다"는 사실이 아니다.
+  animateFromZero = false,
 }) {
   const geom = donutGeometry(labelMode);
   const { R, rInner, depth, width, height, cx, cy } = geom;
@@ -296,11 +312,14 @@ export function donutChart({
   const monthlyOf = (arc) => (arc.isUnallocated ? unallocatedMonthlyKrw : (monthlyByAccount[arc.account] ?? 0));
   const nameOf = (arc) => (arc.isUnallocated ? UNALLOCATED_LABEL : ACCOUNT_LABEL[arc.account]);
 
+  // **측면에 `opacity`를 걸지 않는다.** 설계가 측면 색을 토큰으로 확정하면서
+  // 상단면 대비(1.57~1.62)와 인접 측면끼리의 적록 ΔE를 그 값으로 실측했다 —
+  // 투명도를 얹으면 화면에 실제로 나오는 색이 그 값이 아니게 되어, 검증기가
+  // 판정한 색과 사용자가 보는 색이 갈린다.
   const sides = arcs.map((a) =>
     svgEl('path', {
       d: annulusSlicePath(cx, cy + depth, R, rInner, RY_RATIO, a.start, a.end),
-      fill: a.isUnallocated ? UNALLOCATED_COLOR : ACCOUNT_COLOR_DARK[a.account],
-      opacity: 0.9,
+      fill: a.isUnallocated ? UNALLOCATED_SIDE_COLOR : ACCOUNT_SIDE_COLOR[a.account],
     }),
   );
 
@@ -367,7 +386,7 @@ export function donutChart({
   // 더하면 **미배분 조각까지 더해져** 배분 총액이 아니라 납입 여력이 나온다 —
   // 라벨이 `월 배분`인데 값은 배분되지 않은 돈까지 담게 된다.
   const centerText = svgEl('text', { class: 'donut-center', x: cx, y: cy, 'text-anchor': 'middle' }, [
-    svgEl('tspan', { class: 'donut-center-label', x: cx, dy: '-0.4em' }, ['월 배분']),
+    svgEl('tspan', { class: 'donut-center-label', x: cx, dy: '-0.4em' }, [DONUT_CENTER_LABEL]),
     svgEl('tspan', { class: 'donut-center-value', x: cx, dy: '1.5em' }, [formatKrw(totalAllocatedMonthlyKrw)]),
   ]);
 
@@ -394,7 +413,49 @@ export function donutChart({
     ].filter(Boolean),
   );
 
+  if (animateFromZero && !prefersReducedMotion()) {
+    const shapes = [
+      ...sides.map((node, i) => ({ node, cy: cy + depth, arc: arcs[i] })),
+      ...tops.map((node, i) => ({ node, cy, arc: arcs[i] })),
+      ...hatches.map((node, i) => ({ node, cy, arc: arcs.filter((a) => !a.isUnallocated)[i] })),
+    ];
+    animateSliceSweep(shapes, { cx, R, rInner, ry: RY_RATIO });
+  }
+
   return svg;
+}
+
+/** `prefers-reduced-motion: reduce`이면 전환 시간을 전부 0으로 본다(6.2절). */
+export function prefersReducedMotion() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+/** 자리표시자 링이 사라지는 시간 · 결과 조각이 펼쳐지는 시간(design-system 6.2절). */
+export const PLACEHOLDER_FADE_MS = 120;
+export const DONUT_SWEEP_MS = 240;
+
+/**
+ * 조각 각도를 0°에서 최종값으로 편다. **길이(각도)만 변한다** — 회전도 확대도
+ * 없다(design-system 5.20절: "뷰 각도 회전·확대 애니메이션 금지").
+ *
+ * 시작각은 처음부터 12시로 고정이고 각 조각은 자기 시작각에서 자란다.
+ */
+function animateSliceSweep(shapes, { cx, R, rInner, ry }, durationMs = DONUT_SWEEP_MS) {
+  if (typeof requestAnimationFrame !== 'function') return;
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  for (const { node, cy, arc } of shapes) node.setAttribute('d', annulusSlicePath(cx, cy, R, rInner, ry, arc.start, arc.start));
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / durationMs);
+    const eased = 1 - (1 - p) ** 3; // ease-out
+    for (const { node, cy, arc } of shapes) {
+      if (!node.isConnected) return; // 다시 그려졌다 — 최종값은 새 노드가 갖고 있다
+      node.setAttribute('d', annulusSlicePath(cx, cy, R, rInner, ry, arc.start, arc.start + (arc.end - arc.start) * eased));
+    }
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 /**
@@ -541,6 +602,126 @@ export function stackBarSegments({ allocations, unallocatedAnnualKrw, totalBudge
     wrapper.append(node);
   }
   return wrapper;
+}
+
+// ---------------------------------------------------------------------------
+// ResultPlaceholder — 결과가 아직 없는 자리 (design-system 5.29절 · screens.md 8.1절)
+// ---------------------------------------------------------------------------
+
+/**
+ * 결과 도넛이 만들 수 있는 조각 수의 **상한**. 계좌 셋 + 미배분 하나다.
+ * 자리표시자의 조각 수는 이 값보다 커야 한다 — 그것이 장치 B1의 내용이다.
+ */
+export const MAX_RESULT_SLICE_COUNT = CHART_ACCOUNT_ORDER.length + 1;
+
+/** B1 — 12는 이 제품의 어떤 입력으로도 나올 수 없는 조각 수다. */
+export const PLACEHOLDER_SLICE_COUNT = 12;
+/** 조각 사이 간격. 결과 도넛의 2px보다 넓다 — 넓은 간격이 "조각"이 아니라 "눈금"으로 읽히게 한다. */
+export const PLACEHOLDER_GAP_PX = 4;
+
+/**
+ * 자리표시자 링의 기하. **상자는 `AccountDonut`과 완전히 같고**(결과가 들어올 때
+ * 자리가 밀리면 안 된다) 도형만 다르다 — B3: 기울기 0°, 압출 0, 그래서 `ry = 1`.
+ *
+ * 순수 함수다. 넷 중 셋(B1·B2·B3)이 여기서 결정되므로 테스트가 이 함수만 보면
+ * 자리표시자가 결과로 읽힐 수 없다는 것을 고정할 수 있다.
+ */
+export function placeholderGeometry(labelMode = 'labelled') {
+  const box = donutGeometry(labelMode);
+  return { ...box, tiltDeg: 0, extrudeDepth: 0, ry: 1, rMid: (box.R + box.rInner) / 2 };
+}
+
+/**
+ * B2 — 12조각 **전부 같은 각(30°)**. 균등 분할은 비율 정보가 0이므로 읽을 값이
+ * 없다. 조각 사이 간격은 각 조각의 양끝에서 같은 만큼 덜어 만든다(가운데 반지름
+ * 기준 호 길이가 `gapPx`가 되는 각).
+ */
+export function placeholderSliceAngles({ count = PLACEHOLDER_SLICE_COUNT, gapPx = PLACEHOLDER_GAP_PX, rMid = 0 } = {}) {
+  const step = 360 / count;
+  const gapDeg = rMid > 0 ? Math.min(step / 2, (gapPx / (2 * Math.PI * rMid)) * 360) : 0;
+  return Array.from({ length: count }, (_, i) => ({
+    start: i * step + gapDeg / 2,
+    end: (i + 1) * step - gapDeg / 2,
+  }));
+}
+
+/**
+ * 자리표시자 링. **결과가 만들 수 없는 형태로만** 도넛 모양을 쓴다 —
+ * 12조각(B1) · 균등 30°(B2) · 평면(B3) · `data-placeholder` 단색(B4).
+ *
+ * 하지 않는 것: `data-unallocated`(그 회색은 "미배분 100%"라는 **실재 가능한
+ * 결과**다) · 45° 해칭(`bill_stage` 전용) · 회전·맥동·shimmer(움직이면 "곧
+ * 온다"로 읽힌다) · 숫자·눈금·범례·지시선.
+ */
+export function placeholderRing({ labelMode = preferredLabelMode() } = {}) {
+  const geom = placeholderGeometry(labelMode);
+  const { R, rInner, ry, width, height, cx, cy, rMid } = geom;
+  const arcs = placeholderSliceAngles({ rMid });
+
+  const slices = arcs.map((a) =>
+    svgEl('path', {
+      d: annulusSlicePath(cx, cy, R, rInner, ry, a.start, a.end),
+      fill: PLACEHOLDER_COLOR,
+    }),
+  );
+
+  // 중앙 — 라벨 줄은 결과와 **같은 문자열·같은 자리**이고 값 줄만 `?`다.
+  const center = svgEl('text', { x: cx, y: cy, 'text-anchor': 'middle' }, [
+    svgEl('tspan', { class: 'placeholder-center-label', x: cx, dy: '-0.4em' }, [DONUT_CENTER_LABEL]),
+    svgEl('tspan', { class: 'placeholder-center-value', x: cx, dy: '1.5em' }, [PLACEHOLDER_VALUE_MARK]),
+  ]);
+
+  return svgEl(
+    'svg',
+    {
+      viewBox: `0 0 ${width} ${height}`,
+      width,
+      height,
+      class: 'placeholder-ring',
+      preserveAspectRatio: 'xMidYMid meet',
+      // 링과 `?`는 장식이다. 대체 문장은 결과 패널이 시각적으로 숨겨 따로 낸다.
+      'aria-hidden': 'true',
+      focusable: 'false',
+    },
+    [...slices, center],
+  );
+}
+
+/**
+ * 결과 자리에 지금 무엇을 그릴지 정하는 **순수 함수**. design-system 5.29절의
+ * 전환 규약이 통째로 여기 들어 있다.
+ *
+ * **`draw`는 언제나 도형 하나다.** 두 도형이 동시에 나오는 반환값이 없으므로
+ * "겹쳐 보이는 프레임"이 구조적으로 생기지 않는다 — 그것이 이 함수가 순수한
+ * 이유이고, 테스트가 고정하는 것도 그 사실이다. 크로스페이드·모프를 넣으려면
+ * 이 함수의 반환 타입부터 바꿔야 한다.
+ *
+ * 되돌아가는 전환(결과 → 자리표시자)에는 `leaving`이 없다 — **역재생하지 않고
+ * 즉시 교체한다.** 역방향 애니메이션은 "결과가 자리표시자로 줄어든다"로 읽혀
+ * 금액이 감소한 것처럼 보인다.
+ *
+ * @param {'placeholder'|'donut'|'none'} desired 지금 상태가 요구하는 도형
+ * @param {'placeholder'|'donut'|null} lastShape 직전에 실제로 그린 도형
+ * @param {'idle'|'leaving'|'entering'} phase
+ * @param {boolean} reducedMotion `prefers-reduced-motion: reduce`
+ */
+export function nextSeatStep({ desired, lastShape = null, phase = 'idle', reducedMotion = false }) {
+  if (desired !== 'donut') {
+    return { draw: desired === 'placeholder' ? 'placeholder' : 'none', phase: 'idle', scheduleFadeMs: null };
+  }
+  if (phase === 'leaving') return { draw: 'placeholder-leaving', phase: 'leaving', scheduleFadeMs: null };
+  if (phase === 'entering') return { draw: 'donut-entering', phase: 'idle', scheduleFadeMs: null };
+  if (lastShape === 'placeholder' && !reducedMotion) {
+    return { draw: 'placeholder-leaving', phase: 'leaving', scheduleFadeMs: PLACEHOLDER_FADE_MS };
+  }
+  return { draw: 'donut', phase: 'idle', scheduleFadeMs: null };
+}
+
+/** `draw` 값이 남기는 "직전에 그린 도형". 다음 호출의 `lastShape`가 된다. */
+export function shapeOf(draw) {
+  if (draw === 'placeholder' || draw === 'placeholder-leaving') return 'placeholder';
+  if (draw === 'donut' || draw === 'donut-entering') return 'donut';
+  return null;
 }
 
 export { CHART_ACCOUNT_ORDER };

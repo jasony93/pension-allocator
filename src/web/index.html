@@ -6,6 +6,23 @@
   <title>[가칭] 납입배분 계산기</title>
   <meta name="description" content="ISA·IRP·연금저축에 월 납입 여력을 어떻게 나눌지 브라우저 안에서 계산합니다. 입력값은 서버로 전송되지 않습니다." />
   <link rel="stylesheet" href="./styles.css" />
+  <!--
+    깜빡임(FOUC) 규약 — design-system 5.30절.
+
+    저장된 테마는 **첫 페인트 이전에** 적용되어야 한다. 렌더 후에 JS로 바꾸면
+    어두운 화면을 기대한 사용자에게 흰 화면이 한 프레임 번쩍인다. 그래서 동기
+    스크립트이고 `<head>`에 있으며, **이 한 가지만 한다** — 키 하나를 읽어 루트에
+    표시를 찍을 뿐, 아무것도 쓰지 않는다(D23 제약 2: 사용자가 누르기 전에는
+    저장이 일어나지 않는다). 값 셋 중 `system`은 표시를 찍지 않는 상태다.
+  -->
+  <script>
+    try {
+      var t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {
+      /* 저장소가 막힌 환경 — 운영체제 설정을 따른다 */
+    }
+  </script>
 </head>
 <body>
   <div id="app"></div>
