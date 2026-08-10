@@ -887,12 +887,26 @@ export const STACKBAR_BOUNDED_NOTE = `${PRIOR_TAX_LABEL}을 받지 않아 아래
 // ---------------------------------------------------------------------------
 
 export const ACCOUNT_BENEFIT_STRIP_TITLE = '계좌별 세제혜택';
-/** `[4-B]`가 같은 화면 위쪽에 전체 캡션을 이미 갖고 있으므로 전문을 다시 적지 않는다(P1). */
-export function accountBenefitStripRefCaption(taxYear) {
-  return `위 절세액과 같은 조건 — ${taxYear ? `${taxYear} 과세연도` : '이 과세연도'} 기준`;
-}
+/**
+ * D33 재개정(design-system 5.31.1절 장치②) — "조건이 같다"만으로는 이 블록이
+ * 별개로 다시 계산한 값처럼 읽힐 수 있다. "요약"·"나눠 보여주는"이라는 말로
+ * 이 블록이 파생물이지 원본이 아니라는 것을 문장으로 못박는다. 옛 문구
+ * (`위 절세액과 같은 조건 — {과세연도} 기준`)는 폐기됐다 — `taxYear`는 더 이상
+ * 쓰지 않는다.
+ */
+export const ACCOUNT_BENEFIT_STRIP_REF_CAPTION =
+  '위에서 계산한 절세액을 계좌별로 나눠 보여주는 요약입니다 — 새로 계산한 값이 아닙니다.';
 /** 연금 두 계좌가 묶여 있다는 사실 자체를 문구가 메운다(`open_questions`). */
 export const ACCOUNT_BENEFIT_POOLED_NOTE = '합산 세액공제';
+/**
+ * D33(design-system 5.31.1절 장치③) — `aria-label`에만 있던 축(denominator)
+ * 문구를 화면에도 보이는 글자로 올린다. C-2의 `납입 잔여 한도 … 사용`과
+ * 어휘를 겹치지 않게 해, 길이가 비슷해 보여도 두 막대가 서로 다른 것을 재고
+ * 있다는 사실을 캡션이 즉시 말해 준다. `fillPercent`는 0~100 스케일이다.
+ */
+export function benefitMeterAxisCaption(fillPercent) {
+  return `세액공제 인정 한도 대비 ${formatPercent(fillPercent / 100)}`;
+}
 export const ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE = '세액공제액으로는 계좌 간 차이가 없음';
 export const ACCOUNT_BENEFIT_REDUCED_NOTE = '일부는 낼 세금 한도로 반영되지 않음';
 

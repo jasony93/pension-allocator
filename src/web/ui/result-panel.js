@@ -50,7 +50,8 @@ import {
   STACKBAR_CAP_APPLIED_NOTE,
   STACKBAR_BOUNDED_NOTE,
   ACCOUNT_BENEFIT_STRIP_TITLE,
-  accountBenefitStripRefCaption,
+  ACCOUNT_BENEFIT_STRIP_REF_CAPTION,
+  benefitMeterAxisCaption,
   ACCOUNT_BENEFIT_POOLED_NOTE,
   ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE,
   ACCOUNT_BENEFIT_REDUCED_NOTE,
@@ -671,7 +672,10 @@ function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
       fillPercent != null
         ? benefitMeter({ account: p.accounts[0], grade: 'solid', fillPercent })
         : null;
-    const ariaLabel = `${names}, ${amountText}${fillPercent != null ? `, 세액공제 한도 대비 ${formatPercent(fillPercent / 100)}` : ''}`;
+    // D33(design-system 5.31.1절 장치③) — 같은 문구를 `aria-label`과 화면
+    // 둘 다에 낸다. 스크린리더 사용자와 눈으로 보는 사용자가 같은 축을 안다.
+    const axisCaption = fillPercent != null ? benefitMeterAxisCaption(fillPercent) : null;
+    const ariaLabel = `${names}, ${amountText}${axisCaption ? `, ${axisCaption}` : ''}`;
 
     return el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
       el('span', { class: 'benefit-row-dots' }, dots),
@@ -679,6 +683,7 @@ function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
         el('span', { class: 'benefit-row-names type-body-s' }, [names]),
         p.accounts.length > 1 ? el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_POOLED_NOTE]) : null,
         meter,
+        axisCaption ? el('span', { class: 'benefit-meter-axis-caption' }, [axisCaption]) : null,
         el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
         subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
       ]),
@@ -756,9 +761,12 @@ function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
     ]);
   };
 
+  // D33(design-system 5.31.1절 장치①) — 헤더 위계를 C-2 계좌명과 같은 등급
+  // (`type-body-strong`)으로 낮춘다. `<h4>`는 스크린리더 랜드마크로 유지하되
+  // 시각적 크기·굵기는 "이 카드 안의 한 요소"로 읽히게 한다.
   return el('div', { class: 'account-benefit-strip' }, [
-    el('h4', { class: 'type-title-s' }, [ACCOUNT_BENEFIT_STRIP_TITLE]),
-    el('p', { class: 'benefit-strip-ref-caption' }, [accountBenefitStripRefCaption(scenario.ruleset?.tax_year)]),
+    el('h4', { class: 'type-body-strong' }, [ACCOUNT_BENEFIT_STRIP_TITLE]),
+    el('p', { class: 'benefit-strip-ref-caption' }, [ACCOUNT_BENEFIT_STRIP_REF_CAPTION]),
     pensionRow(),
     isaRow(),
   ]);

@@ -114,6 +114,45 @@ test('인쇄 미디어에서도 도넛(SVG)이 실제 크기를 유지한다', {
   }
 });
 
+test('인쇄 미디어에서도 `AccountBenefitStrip`이 카드 내용 폭의 50%(최소 240px)로 나오고 C-2 막대보다 짧다', { skip: skipWithoutChrome }, async () => {
+  // D33 재개정 이전에는 이 위젯이 130px 고정폭이었다 — 인쇄에서도 좁은 채로
+  // 나가는 것 자체는 눈에 띄는 결함이 아니었다. 폭이 카드 폭에 연동되는 지금은
+  // "인쇄 레이아웃에서 이 연동이 실제로 살아 있는가"가 그 자체로 회귀 지점이다
+  // — `@media print`가 폭 규칙을 건드리지 않는다는 것을 실측으로 고정한다.
+  const { page } = app;
+  await page.send('Emulation.setEmulatedMedia', { media: 'print' });
+  try {
+    const m = await page.evaluate(`(() => {
+      const strip = document.querySelector('.account-benefit-strip');
+      const card = document.querySelector('.donut-with-strip');
+      const track = document.querySelector('.account-benefit-strip .benefit-meter-track');
+      const allocTrack = document.querySelector('.alloc-bar-track');
+      if (!strip || !card) return null;
+      const r = strip.getBoundingClientRect();
+      return {
+        stripWidth: r.width,
+        cardWidth: card.getBoundingClientRect().width,
+        trackWidth: track ? track.getBoundingClientRect().width : null,
+        allocTrackWidth: allocTrack ? allocTrack.getBoundingClientRect().width : null,
+      };
+    })()`);
+    assert.ok(m, '인쇄 레이아웃에서 .account-benefit-strip 또는 .donut-with-strip을 찾지 못했습니다');
+    const expected = Math.max(m.cardWidth * 0.5, 240);
+    assert.ok(
+      Math.abs(m.stripWidth - expected) <= 2,
+      `인쇄에서 위젯 폭(${m.stripWidth}px)이 카드 폭(${m.cardWidth}px)의 50%(최소 240px=${expected}px)를 따라가지 않습니다`,
+    );
+    if (m.trackWidth != null && m.allocTrackWidth != null) {
+      assert.ok(
+        m.trackWidth < m.allocTrackWidth,
+        `인쇄에서도 이 트랙(${m.trackWidth}px)이 C-2 막대(${m.allocTrackWidth}px)보다 짧아야 한다(D33)`,
+      );
+    }
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+});
+
 test('인쇄 미디어에서 고지 여섯 요소가 모두 실제로 렌더된다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });

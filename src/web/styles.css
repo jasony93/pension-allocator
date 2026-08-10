@@ -527,9 +527,21 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .donut-with-strip { display: flex; flex-direction: column; }
 .donut-wrap { display: flex; justify-content: center; }
 
-/* `AccountBenefitStrip`(design-system 5.31절) — 도넛 바로 아래, 우측 정렬,
-   도넛 외경의 50% 폭. 데스크톱(외경 260px)은 130px, 태블릿(240px)은 120px,
+/* `AccountBenefitStrip`(design-system 5.31.1절, D33 재개정) — 도넛 바로
+   아래, 우측 정렬, **도넛 카드 내용 폭의 50%, 최소 240px**(768px 이상).
    모바일은 "오른쪽 아래"를 포기하고 전체 폭으로 내려온다(screens.md 5.7절).
+
+   **옛 정의는 폐기됐다.** "도넛 외경의 50%"(데스크톱 130px·태블릿 120px)는
+   관리자 실측(트랙 98px)에서 "사이드바의 작은 진행바로 읽힌다"고 판정됐다.
+   332px(카드 내용 폭 663px의 50%)에서야 막대로 뚜렷이 읽히면서도 아래 C-2
+   막대(≈639px)보다 짧아 시각적으로 종속된다 — 자세한 실측표는
+   design-system.md 5.31.1절. 이 폭 확대가 되살릴 수 있는 오독(C-2와의 혼동)은
+   크기가 아니라 아래 네 장치로 막는다 — ① 헤더 위계를 낮춘다
+   (`.account-benefit-strip h4`를 `type-body-strong`으로, `result-panel.js`),
+   ② 참조 캡션이 "새 계산이 아니다"를 명시한다(`.benefit-strip-ref-caption`),
+   ③ 막대 아래 축 캡션을 화면에도 보이게 적는다(`.benefit-meter-axis-caption`),
+   ④ 트랙 굵기 6px을 유지한다(C-2는 20px, 아래 `.benefit-meter-track`). 넷은
+   누적 관계이지 대체 관계가 아니다 — 하나가 실패해도 나머지가 남는다.
 
    **2026-08-10 재실측 — 자리는 맞는데 붙어 보였다.** `.donut-wrap`의 svg는
    직접 라벨이 들어갈 자리까지 자기 높이에 이미 포함하고 있어(`donutGeometry`),
@@ -541,7 +553,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    `border-subtle`은 뜻을 나르는 마크가 아니라 구조적 구분선이므로 3:1 마크
    대비 검사 대상이 아니다. */
 .account-benefit-strip {
-  align-self: flex-end; max-width: 130px; margin-top: var(--space-6);
+  align-self: flex-end; width: 50%; min-width: 240px; margin-top: var(--space-6);
   padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);
   display: flex; flex-direction: column; gap: var(--space-1);
 }
@@ -579,6 +591,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   border: 1px solid var(--border-subtle); overflow: visible; width: 100%; margin: 2px 0;
 }
 .benefit-meter-fill { height: 100%; border-radius: var(--radius-full); min-width: 3px; }
+/* D33(design-system 5.31.1절 장치③) — 막대 아래 축(denominator) 캡션. 지금까지
+   `aria-label`에만 있던 `세액공제 인정 한도 대비 {n}%`를 화면에도 적는다.
+   C-2의 `.field-help`(납입 잔여 한도 …)와 어휘가 겹치지 않으므로 폰트 크기는
+   맞추되(12.5px) 별도 클래스를 둔다 — 서로 다른 축을 재는 캡션임을 스타일이
+   아니라 문구가 말하게 한다(어휘 자체가 장치다). */
+.benefit-meter-axis-caption { font-size: 12.5px; color: var(--text-secondary); }
 /* 확정(solid) — 계좌색 솔리드 채움. */
 .benefit-meter-fill-solid { border: none; }
 /* 가정(assumption) — 채움 없이 값의 위치까지 계좌색 **윤곽선만**(D28). 속은
@@ -594,12 +612,15 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   border: 1px solid var(--state-info); color: var(--state-info);
 }
 .benefit-row-assumption-caption { font-size: 12.5px; color: var(--text-secondary); }
+/* 모바일(<768px) — D33 재개정으로 "높이로 절반 크기를 지킨다"는 옛 근거는
+   폐기됐다(design-system 5.31.1절 "모바일 재검토"). 오독 방지는 크기가
+   아니라 위 네 장치로만 지므로, 모바일에서도 전체 폭을 그대로 쓴다. */
 @media (max-width: 767px) {
-  .account-benefit-strip { align-self: stretch; max-width: none; width: 100%; }
+  .account-benefit-strip { align-self: stretch; width: 100%; min-width: 0; }
 }
-@media (min-width: 768px) and (max-width: 1023px) {
-  .account-benefit-strip { max-width: 120px; }
-}
+/* 태블릿(768~1023px) — 옛 고정값(120px)은 폐기됐다. 데스크톱과 같은 공식
+   (`width: 50%, min-width: 240px`)이 두 구간을 함께 커버하므로 별도 규칙이
+   없다(design-system 5.31.1절 "태블릿도 같은 공식을 쓴다"). */
 
 .chart-donut { max-width: 100%; height: auto; }
 /* `chart-donut-entering`은 진입 애니메이션이 필요하다는 표시로만 쓰인다
