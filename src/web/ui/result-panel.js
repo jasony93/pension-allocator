@@ -899,9 +899,13 @@ function accountTable(plan, scenario) {
       );
     }
 
-    // D26 — `pension_contribution_limit_fill`에서만 나온다. 셋을 같이 낸다
-    // (원금 비과세 · 세무서 확인 필요·소급 없음 · 수익 과세) — 하나라도 빠지면
-    // 문장이 거짓이 된다(계약 5.6절).
+    // D26 — 지금까지는 `pension_contribution_limit_fill`에서만 나왔다.
+    // **D32(소유자 결정) 이후에는 기본안도 이 몫을 받을 수 있다** — 기본안의
+    // 충당 순서에 "연금 납입한도까지" 3단계가 붙기 때문이다. **이 자리는
+    // `plan.plan_id`로 걸지 않는다** — `plan.non_quantified_effects`를 그대로
+    // 읽으므로 어느 안이 이 효과를 실어 오든(기본안 포함) 자동으로 뜬다. 셋을
+    // 같이 낸다(원금 비과세 · 세무서 확인 필요·소급 없음 · 수익 과세) — 하나라도
+    // 빠지면 문장이 거짓이 된다(계약 5.6절).
     const withoutCreditEffect = (plan.non_quantified_effects ?? []).find(
       (e) => e.code === 'pension_contribution_without_credit' && e.account === a.account,
     );

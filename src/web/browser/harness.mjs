@@ -237,18 +237,37 @@ export async function openPage(browserWsUrl, url) {
      * 요소를 화면 안으로 넣고 **진짜 마우스 입력**으로 누른다. 합성 이벤트가 아니다.
      *
      * 좌표는 두 번 잰다 — 한 번은 스크롤을 일으키기 위해, 한 번은 스크롤이 끝난
-     * 뒤 실제 자리를 얻기 위해. 그리고 **이미 화면 안에 있으면 스크롤하지 않는다**
-     * (`position: fixed` 모달 안의 버튼에 `scrollIntoView`를 걸면 바깥 프레임이
-     * 움직여 좌표가 어긋난다 — 실제로 클릭이 빗나가는 것을 보고 고쳤다).
+     * 뒤 실제 자리를 얻기 위해. 그리고 **이미 눌릴 수 있는 상태면 스크롤하지
+     * 않는다**(`position: fixed` 모달 안의 버튼에 `scrollIntoView`를 걸면 바깥
+     * 프레임이 움직여 좌표가 어긋난다 — 실제로 클릭이 빗나가는 것을 보고 고쳤다).
+     *
+     * **"화면 안"의 기준을 `window.innerHeight`만으로 재면 안이 아닌데 안이라고
+     * 잘못 판정한다.** `.result-slot`처럼 `overflow-y: auto` + `max-height`로
+     * 스스로를 자르는 조상이 있으면, 버튼의 좌표가 창 안에 있어도 그 조상의
+     * 잘린 경계 밖(내부 스크롤로만 닿는 자리)일 수 있다 — 그 자리는 아무것도
+     * 그려지지 않고 클릭이 조상의 배경이나 다른 형제에게 떨어진다. 그래서 창
+     * 경계 대신 **그 좌표에서 실제로 맨 위에 있는 원소가 이 원소(또는 그 후손)인가**로
+     * 판정한다 — `elementFromPoint`는 모든 조상의 잘림·겹침을 이미 반영한 값이라
+     * `overflow` 조상이 몇 겹이든 따로 셀 필요가 없다. 이미 맨 위라면(모달의
+     * 고정 위치 버튼처럼) 스크롤을 걸지 않아 위 주석의 결함이 재발하지 않는다.
      *
      * `offset`은 iframe 안의 좌표를 바깥 페이지 좌표로 옮길 때 쓴다. 마우스 입력은
-     * 언제나 최상위 프레임 좌표계로 들어간다.
+     * 언제나 최상위 프레임 좌표계로 들어간다. `elementFromPoint`는 그 프레임
+     * 안에서만 보므로(다른 프레임의 원소는 알 수 없다) offset과 무관하게 맞다.
      */
     async clickElement(selectorExpr, { sessionId = main, offset = { x: 0, y: 0 } } = {}) {
       const measure = `(() => {
         const el = ${selectorExpr};
-        const r = el.getBoundingClientRect();
-        if (r.top < 0 || r.bottom > window.innerHeight || r.left < 0 || r.right > window.innerWidth) {
+        const hitAtCenter = () => {
+          const r = el.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return false;
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) return false;
+          const top = document.elementFromPoint(cx, cy);
+          return !!top && (top === el || el.contains(top));
+        };
+        if (!hitAtCenter()) {
           el.scrollIntoView({ block: 'center' });
         }
         const b = el.getBoundingClientRect();
