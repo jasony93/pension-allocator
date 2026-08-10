@@ -9,11 +9,15 @@ inputs:
   - docs/org/gate-decisions.md
   - docs/org/charter.md
 open_questions:
-  - "**[12차·실행기 어휘 두 건]** (1) `credit_rate.basis`·`credit_rate.fallback_applied`·`credit_rate.effective`·`credit_rate.local_tax`가 `UNUSED_VOCABULARY`에 올라 있어 **쓰면 실패한다.** 그래서 GC-40~46이 `credit_rate.income_tax` 하나만 적었고, **엔진이 그 공제율을 어느 축으로 잰 것인지는 블록이 가리지 못한다**(11.4절 (나)). (2) **규칙별 미확인 건수를 실을 자리가 어느 층에도 없다** — 블록 최상위 허용 키는 `case`·`request`·`credit_rate`·`expect` 넷뿐이고 시나리오 단위에도 `legal_basis` 계열이 없다. 계약 5.7.1절이 이 축을 **첫 번째 방어선**으로 지목했는데 그 방어선이 비어 있다. 필요한 것은 시나리오 단위 키 하나(`uncertainty_note_counts: { 규칙id: 건수 }`)이고, **룰셋 쪽 준비는 이 회차에 끝냈다**(11.5절). `calc-engine-dev`의 몫이다."
+  - "**[13차·대조가 어긋난 채로 남는 1건 — 관리자 판정이 필요하다]** `GC-61`이 `isa.tax_free_limit`의 미확인 표시를 **3건**으로 주장하고 엔진은 **1건**을 낸다. 룰셋의 `value.unverified`는 12차에 계약 5.7.1절의 지시대로 **3원소 배열**로 열렸는데, 엔진이 배열을 펼치지 않고 **키 하나를 표시 하나로** 센다. 이 유닛은 **엔진 쪽이 틀렸다고 보지만 단정하지 않는다** — 두 읽기와 각각의 근거·귀결은 12.6절에 표로 적었다. **(나)로 판정되면 12차의 배열 전환이 아무것도 바꾸지 않은 것이 되고, 계약 5.7.1절이 「구멍을 닫는 방법」으로 적은 문단을 함께 고쳐야 한다.** 이 케이스를 1로 낮춰 적으면 초록색이 되지만 그 순간 정답지가 엔진의 동작을 정답으로 옮겨 적은 것이 되므로 그러지 않았다. **이번이 첫 대조이므로 3회 반복 불일치 규칙에는 아직 걸리지 않는다.**"
+  - "**[13차·RF-7을 어떻게 했는지와 남는 물음]** 「의무가입기간 전 해지 → 혜택 0」은 **세법의 답으로 유효하나 지금의 입력으로는 실행되지 않는다.** 해지는 사실이 아니라 미래의 선택이고 요청에 그 입력이 없다. 두 길(입력을 새로 받는다 / 가정 아래에서만 성립하는 케이스로 다시 적는다)을 저울에 올려 **뒤를 골랐고**(12.3절), 그래서 `GC-58`은 금액이 0이 아니라 374,000원이며 대신 **그 금액과 `early_termination_clawback_isa` 경고가 같은 안에 함께 실리는지**를 주장한다. **해지 여부를 입력으로 받을지는 관리자·`product-planner` 판정이다** — D13(입력 수가 완료율을 갉아먹는다)과 저울에 올려야 하고, 무엇보다 사용자가 「해지하겠는가」를 미리 답할 수 있는 물음인지가 먼저다."
+  - "**[13차·표시 대장에 아직 자리가 없는 규칙 2건]** 미확인 표시를 가진 룰셋 규칙 15건 중 **13건**을 정답지가 주장한다. 남은 둘은 **엔진이 어느 골든 케이스에서도 읽지 않아 주장할 자리가 없다** — `pension.credit.per_account_attribution`(계좌별 세액공제액 표시에 관한 규칙이고 엔진은 계좌별 공제액을 내지 않는다. GC-32a·GC-51에 넣어 보았으나 둘 다 `present: false`였다)과 `proposed.productive_isa.pension_transfer.additional_contribution`(개정안 시나리오에 ISA 만기 전환이 함께 있는 케이스가 없다). **뒤의 것은 케이스를 하나 만들면 닫히지만 기대값 산출이 새로 필요하고, 이 회차는 「기대값을 다시 산출하지 않는다」는 지시 아래 있었다.** 다음 회차의 몫으로 남긴다."
+  - "**[13차·거짓 양성 표시 1건]** `pension.credit.tax_liability_cap.source_form`의 유일한 표시는 `unknown_value_policy.direction_of_error`의 본문에 「한도 **미확인** 상태의 숫자는…」이라는 구절이 있어 `text_marker`로 세어진 것이다. **그 문장은 무언가를 확인하지 못했다는 표시가 아니라 「사용자가 한도를 모를 때 어떻게 하는가」라는 정책 서술이다.** 낱말을 바꾸면 이 규칙의 표시가 0이 되고, 실행기가 「목록의 규칙이 표시를 하나도 갖지 않게 됐다」며 사람 확인을 요구한다 — 그 요구가 정확히 옳은 동작이므로 **이 유닛이 조용히 지우지 않고 여기 올린다.** GC-40이 지금은 이 규칙의 건수를 1로 고정하고 있으므로, 문구를 고치는 회차에 그 주장도 함께 0으로 내려야 한다."
+  - "~~**[12차·실행기 어휘 두 건]** (1) `credit_rate.basis`·`credit_rate.fallback_applied`·`credit_rate.effective`·`credit_rate.local_tax`가 `UNUSED_VOCABULARY`에 올라 있어 **쓰면 실패한다.** 그래서 GC-40~46이 `credit_rate.income_tax` 하나만 적었고, **엔진이 그 공제율을 어느 축으로 잰 것인지는 블록이 가리지 못한다**(11.4절 (나)). (2) **규칙별 미확인 건수를 실을 자리가 어느 층에도 없다** — 블록 최상위 허용 키는 `case`·`request`·`credit_rate`·`expect` 넷뿐이고 시나리오 단위에도 `legal_basis` 계열이 없다. 계약 5.7.1절이 이 축을 **첫 번째 방어선**으로 지목했는데 그 방어선이 비어 있다. 필요한 것은 시나리오 단위 키 하나(`uncertainty_note_counts: { 규칙id: 건수 }`)이고, **룰셋 쪽 준비는 이 회차에 끝냈다**(11.5절). `calc-engine-dev`의 몫이다.~~ **[13차에 해소]** 계약 `5.1.0`이 `credit_rate`의 네 키를 풀고 시나리오 단위에 `legal_basis`를 열었다. GC-40~46이 공제율 축 넷을 전부 적었고, 일곱 개 케이스가 규칙 13건의 표시 건수를 주장한다. **다만 그중 한 건(`isa.tax_free_limit`)은 대조가 어긋난 채로 남는다** — 맨 위 항목 참조."
   - "**[12차·정답지가 틀린 것 1건]** GC-51 개정안 `annuity_savings_first`의 IRP 배분을 **잔여 공제한도 3,000,000으로 잡아** 세액을 1,287,000으로 적었고, 대조에서 어긋나 재산출한 결과 **정답지가 틀렸다**(정답 9,000,000 / 1,485,000). 잔여 공제한도를 배분 상한으로 쓰는 것은 4단계 M1이 이미 잡은 결함(`engine-design.md` 6.4절)이고 계약 5.3절이 이름까지 붙여 경고한 자리인데, `max_tax_credit`에만 적용하고 이 안에는 적용하지 않았다. **엔진이 옳았다.** 같은 형태의 누락이 다른 회차에도 있는지는 관리자·`qa`가 볼 사안이다."
   - "**[12차·GC-43~46의 `prior_year_tax`]** 넷 다 `unknown`으로 두었다. S15의 결정세액 밴드가 **근로소득만 있는 사람의 것**이라(9절 5번) 근로소득 외의 합산소득이 있는 이 넷에는 성립하지 않기 때문이다. 그 결과 **이 넷은 세액 한도를 검사하지 않는다** — 공제율 축만 본다. 근로소득 외의 소득이 있는 사용자의 결정세액 밴드를 세우는 것은 별개 작업이고, 서비스 대상 가정(A6)이 근로소득자로 좁혀져 있는 한 우선순위가 낮다고 본다. 관리자 판정 사안이다."
-  - "**[7차·실행할 수 없는 정답 9건]** D28로 확정한 ISA 혜택 산식의 정답 9건(10절)에 **`golden` 블록을 달지 못했다.** 엔진이 `profile.isa_return_assumption`을 받지 않고 `Plan.assumption_based_isa_estimate`를 내지 않아 대조할 필드가 없다. 계약이 그 둘을 들이는 회차에 `GC-` 번호로 옮기고 블록을 단다. **그때 기대값을 다시 산출하지 않는다 — 여기 적힌 값이 먼저다.**"
-  - "**[7차·실행기 어휘]** 블록이 **구간**을 대조할 수 있어야 한다. `income_character`가 `mixed_or_unknown`·`listed_equity_capital_gain`이면 정답이 점이 아니라 구간이므로(RF-8), 허용 키에 `lower_bound_krw`·`upper_bound_krw`·`point_estimate_krw`(null 허용)·`settlement_years`·`is_annual`이 필요하다. **점만 적을 수 있는 어휘로는 이 회차의 결론이 검사받지 못한다** — 1-A.1절이 기록한 것과 같은 형태의 공백이다."
+  - "~~**[7차·실행할 수 없는 정답 9건]** D28로 확정한 ISA 혜택 산식의 정답 9건(10절)에 **`golden` 블록을 달지 못했다.** 엔진이 `profile.isa_return_assumption`을 받지 않고 `Plan.assumption_based_isa_estimate`를 내지 않아 대조할 필드가 없다. 계약이 그 둘을 들이는 회차에 `GC-` 번호로 옮기고 블록을 단다. **그때 기대값을 다시 산출하지 않는다 — 여기 적힌 값이 먼저다.**~~ **[13차에 해소]** 계약 `5.1.0`이 두 필드를 들였고 아홉 건이 `GC-52`~`GC-60`이 됐다(12절). **기대값을 다시 산출하지 않았다** — 10.2절의 값을 그대로 옮겼고, 형태가 달라진 둘(RF-6·RF-7)은 각각 12.2·12.3절에 근거를 적었다."
+  - "~~**[7차·실행기 어휘]** 블록이 **구간**을 대조할 수 있어야 한다. `income_character`가 `mixed_or_unknown`·`listed_equity_capital_gain`이면 정답이 점이 아니라 구간이므로(RF-8), 허용 키에 `lower_bound_krw`·`upper_bound_krw`·`point_estimate_krw`(null 허용)·`settlement_years`·`is_annual`이 필요하다. **점만 적을 수 있는 어휘로는 이 회차의 결론이 검사받지 못한다** — 1-A.1절이 기록한 것과 같은 형태의 공백이다.~~ **[13차에 해소]** 허용 키에 `lower_bound_krw`·`upper_bound_krw`·`point_estimate_krw`·`settlement_years`·`is_annual`이 전부 열렸고, GC-57·GC-59가 구간으로 대조된다."
   - "**[7차·단수 처리 미확인]** 세액 계산의 원 미만·10원 미만 절사 규칙을 확인하지 못해 **절사가 걸리는 경계 케이스를 일부러 만들지 않았다**(10.3절). 비과세 한도를 1원 넘기는 케이스가 그 자리다 — 규칙을 확인한 뒤에 만든다. 없는 근거로 경계값을 만들지 않았다."
   - "**[6차·실행기]** **이번 회차에 움직인 축 넷을 블록에 적을 수 없었다**(1-A.1절). 실행기의 허용 키에 자르기 전 금액(`*_before_cap_krw`)·임계값(`threshold_income_tax_krw`)·`objective_degenerate`·`pension_withdrawal_start`의 날짜 항목이 없다. 산출은 끝나 있고 적을 자리가 없었을 뿐이므로, `calc-engine-dev`가 키를 늘리면 같은 회차 안에 채울 수 있다. **적지 못한 축은 이번 전건 통과가 보증하지 않는다** — 그 사실을 통과 기록 옆에 함께 적었다(7.6절)."
   - "**[6차·만 나이]** D21이 맡긴 기준일 규칙을 만들었다(`age.reckoning.reference_date`, 8절 (가)). **결론은 단일 기준일이 존재하지 않는다는 것이다** — 나이를 세는 방법(민법 §158)과 n년 뒤 날짜(민법 §160 ③)는 정해져 있으나 판정 시점은 요건마다 다르다. `pension.withdrawal.earliest_start`는 날짜로 환원되어 기준일이 필요 없고, `isa.eligibility`의 연령 요건은 **가입 시점**에 성립해야 한다. 엔진이 쓰는 과세기간 종료일은 ISA 쪽에서 **과대** 방향의 오차를 남긴다(그 해에 19세가 되는 사람). 계산 시점 입력을 넣을지, ISA 신규 가입 경로만 보류할지, 가정으로 드러낼지는 관리자 판정이다. 아울러 엔진의 가정 코드 `age_reference_date_not_in_ruleset`과 계약의 `reference_date_from_ruleset` 서술이 이제 사실과 다르다."
@@ -43,9 +47,11 @@ open_questions:
 - 산출 유닛: `tax-domain`
 - **개정일: 2026-08-10 (7차) — 관리자 판정 D28이 수익률을 입력으로 들였다. ISA 혜택 산식(`isa.benefit.formula`)의 정답 **9건(경계값 7건)** 을 10절에 새로 산출했다. 기존 47건의 기대값은 한 건도 바꾸지 않았다.**
 - **개정일: 2026-08-10 (12차) — 계약 `5.0.0`(D26·D27)이 움직인 두 축의 정답 **12건(경계값 10건)** 을 11절에 새로 산출했다. 공제율 판정 축 7건(GC-40 ~ GC-46)과 새 배분안 `pension_contribution_limit_fill` 5건(GC-47 ~ GC-51)이다. 기존 47건의 기대값은 한 건도 바꾸지 않았다. 아울러 `isa.tax_free_limit`의 미확인 표시를 항목 배열로 열었다(11.5절).**
-- 케이스 수: **59건** (그중 경계값 케이스 **49건**) · 기계가 읽는 블록 **59건 전부**
-- **아직 실행할 수 없는 케이스: 9건**(10절, `RF-1`~`RF-9`). 엔진이 `profile.isa_return_assumption`을 받지 않고 `Plan.assumption_based_isa_estimate`를 내지 않아 대조할 필드가 없다. **`GC-` 번호를 붙이지 않고 블록도 달지 않은 것은 의도다** — 실행되지 않는 케이스가 실행되는 것처럼 보이지 않게 하려는 것이며 근거는 10.0절에 있다. **12차에 계약 `5.0.0`을 다시 확인한 결과 그 두 필드는 아직 들어오지 않았다**(10.0절 각주)
-- 계약 버전: `schema_version` **5.0.0** (M2로 3.0.0 → 3.1.0, M3으로 3.1.0 → 3.2.0, 동점 순서로 3.2.0 → 3.3.0, D18 정정으로 3.3.1, 세액 한도·개시·퇴직급여로 3.3.1 → 4.0.0 major, 공제율 판정 축·새 배분안으로 **4.0.0 → 5.0.0 major**)
+- **개정일: 2026-08-10 (13차) — 계약 `5.1.0`이 세 층을 열었다.** (1) 7차의 아홉 건(`RF-1`~`RF-9`)에 **`GC-52`~`GC-60`으로 번호와 블록을 달았다**(12절). 기대값은 다시 산출하지 않고 옮겨 적었으며, 그중 둘만 형태가 달라졌다 — `RF-6`의 「혜택 0」을 구간의 **아래 끝**으로 고쳐 적었고(12.2절), `RF-7`은 엔진이 낼 수 없는 형태라 **가정 아래에서만 성립하는 케이스로 다시 적었다**(12.3절). (2) **규칙별 미확인 건수 축을 처음으로 주장했다** — 표시를 가진 규칙 **15건 중 13건**을 일곱 개 케이스가 근거 목록에서 건수·종류·자리까지 고정한다(그중 1건은 어긋난 채로 남는다). (3) **공제율 판정 축 넷**(`basis`·`measured_amount`·`fallback_applied`·`fallback_direction`)을 GC-40~46에 적었다. 기존 59건의 기대 금액은 **한 건도 바꾸지 않았다.**
+- 케이스 수: **69건** (그중 경계값 케이스 **57건**) · 기계가 읽는 블록 **69건 전부**
+- **아직 실행할 수 없는 케이스: 0건.** 7차가 남긴 아홉 건이 12절에서 전부 실행에 올랐다.
+- **대조에서 어긋난 채로 넘기는 케이스: 1건** — `GC-61`(12.6절). `isa.tax_free_limit`의 미확인 표시가 3건인지 1건인지에서 정답지와 엔진이 갈린다. **초록색으로 만들지 않은 것이 의도다** — 근거와 양쪽 읽기는 12.6절에 있고 판정은 관리자가 한다.
+- 계약 버전: `schema_version` **5.1.0** (M2로 3.0.0 → 3.1.0, M3으로 3.1.0 → 3.2.0, 동점 순서로 3.2.0 → 3.3.0, D18 정정으로 3.3.1, 세액 한도·개시·퇴직급여로 3.3.1 → 4.0.0 major, 공제율 판정 축·새 배분안으로 4.0.0 → 5.0.0 major, **수익률 입력으로 5.0.0 → 5.1.0 minor**)
 - 대조 결과: `docs/stage-4-verification/verification-report.md`
 
 ## 1. 이 문서의 지위
@@ -84,9 +90,15 @@ open_questions:
 
 `expect`의 키는 시나리오 id(`current` / `proposed`)이고, 요청한 시나리오만 적는다. `plans`의 키는 배분안 id(`max_tax_credit` / `annuity_savings_first` / `isa_first`)이고, **값을 아는 배분안만** 적으면 된다.
 
-**시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · `pension_withdrawal_start` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent`. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
+**시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · `pension_withdrawal_start` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent` · **`legal_basis`**. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
 
-**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline`. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
+**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `unallocated_breakdown` · `credit_remaining_after_plan_krw` · `non_quantified_codes` · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline` · **`assumption_based_isa_estimate`**. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
+
+**`legal_basis`에 쓸 수 있는 키 (13차에 열렸다)** — 규칙 id를 키로 두고 그 아래에 `present` · `status` · `bill_stage` · `has_uncertainty_note` · `uncertainty_note_count` · `uncertainty_kinds` · `uncertainty_paths` · `applied_to`. **`uncertainty_paths`의 경로는 규칙의 `value`를 뿌리로 하며 `value.` 접두를 붙이지 않는다**(계약 5.7.1절). `uncertainty_kinds`는 종류의 집합이고 사전순이다. `present: false`로 **읽지 않았다는 주장**도 할 수 있다 — 다만 그것은 세법 사실이 아니라 엔진 동작에 대한 주장이므로, 이 문서는 **같은 블록이 이미 그 규칙에서 나온 숫자를 주장하고 있을 때에만** `present: true`를 적는다.
+
+**`assumption_based_isa_estimate`에 쓸 수 있는 키 (13차에 열렸다)** — `state` · `not_computable_reason_code` · `is_annual` · `settlement_years` · `settlement_years_source` · `taxable_share_min` · `taxable_share_max` · `principal_krw` · `total_return_krw` · `taxable_income_krw` · `loss_offset_applied_krw` · `net_income_krw` · `tax_free_limit_krw` · `comparison_side_tax_krw` · `isa_side_tax_krw` · `point_estimate_krw` · `lower_bound_krw` · `upper_bound_krw` · `axis_breakdown` · `comparison_baseline_code`. **점을 낼 수 없는 케이스에서는 `point_estimate_krw`가 `null`이고 두 끝만 적는다**(12.2절).
+
+**`credit_rate`에 쓸 수 있는 키** — `income_tax` · `local_tax` · `effective` · `basis` · `measured_amount` · `fallback_applied` · `fallback_direction`. **13차에 `effective`를 뺀 나머지를 GC-40~46이 전부 쓴다.** `effective`만 남긴 이유는 그 값이 두 비율의 부동소수점 곱이라 **정답지가 자릿수까지 단정할 근거가 없기** 때문이다 — 근거 없는 값을 적지 않는다는 원칙이 여기에도 걸린다.
 
 **`limits`에 쓸 수 있는 키** — `pension_combined_credit_limit_krw` · `pension_combined_credit_remaining_krw` · `pension_contribution_limit_remaining_krw` · `annuity_savings_credit_remaining_krw` · `isa_contribution_remaining_krw` · `isa_tax_free_limit_krw` · `isa_transfer_extra_credit_limit_krw`.
 
@@ -103,9 +115,9 @@ open_questions:
 **두 가지가 더 실패 사유다(6차 이후 추가).**
 
 1. **빈 객체는 거절한다.** `tax_liability_cap: {}`처럼 적으면 키는 있는데 주장이 없어 "적었으니 검사됐다"로 보이면서 실제로는 아무것도 보지 않는다. 적을 것이 없으면 키째로 뺀다. `limits` · `boundaries` · `credit_rate` · `pension_withdrawal_start`에도 같이 걸린다.
-2. **값끼리 어긋나면 대조 전에 거절한다.** `known: false`인데 `applied: true`이거나 `cap_krw`가 `null`이 아닌 경우, `computable: false`인데 `earliest_start_date`가 있는 경우다. 둘을 옮겨 적다 한쪽만 고친 자리를 잡는다.
+2. **값끼리 어긋나면 대조 전에 거절한다.** `known: false`인데 `applied: true`이거나 `cap_krw`가 `null`이 아닌 경우, `computable: false`인데 `earliest_start_date`가 있는 경우다. 둘을 옮겨 적다 한쪽만 고친 자리를 잡는다. **13차에 이 검사가 새 어휘까지 무는 것을 결함 주입으로 확인했다** — `axis_breakdown` 세 축의 합이 `upper_bound_krw`와 어긋나거나, `fallback_applied: false`인데 `fallback_direction`이 남아 있거나, `uncertainty_note_count`가 `uncertainty_paths`의 길이와 다르면 **대조 전에 거절된다.** 옮겨 적다 한쪽만 고치는 사고가 이 축들에서도 막힌다.
 
-**허용 키가 있는데 47건 어느 블록도 쓰지 않으면 실행기가 그 목록을 대며 실패한다**(`golden-cases.test.mjs` 검사 4). 지금 비어 있는 것은 위의 네 축과 `boundaries.isa_lock_in_years` · `boundaries.pension_min_age_years` · `credit_rate.local_tax` · `credit_rate.effective`이고, 실행기에 빚으로 적혀 있다. 값을 채우면 그 목록에서 지운다 — 지우지 않으면 이번에는 "이제 쓰이는데 목록에 남아 있다"로 실패한다.
+**허용 키가 있는데 어느 블록도 쓰지 않으면 실행기가 그 목록을 대며 실패한다**(`golden-cases.test.mjs` 검사 4). **13차에 빚 13건을 갚았다** — `credit_rate`의 다섯(`basis`·`fallback_applied`·`fallback_direction`·`local_tax`·`measured_amount`)과 `legal_basis` 계열 여덟이다. 남아 있는 것은 `credit_rate.effective`(위의 이유로 일부러 비워 둔다)와 `boundaries.isa_lock_in_years` · `boundaries.pension_min_age_years`다.
 
 > ⚠ **산문에 케이스 이름의 범위 표기(`~`)를 쓸 때 조심하라.** 실행기는 커버리지 검사를 위해 **블록 밖 산문의 케이스 이름까지** 읽고 범위를 펼친다. 읽을 수 있는 것은 두 형태뿐이다 — **번호끼리** 이어지는 것(`GC-NN~NN`, 접미사 없이)과 **같은 번호 안에서 접미사끼리** 이어지는 것(`GC-NNa~d`). 번호와 접미사를 섞은 표기(`GC-NN~NNd` 꼴)는 **형식 오류로 실패한다.** 4차에서 실제로 밟은 지뢰다. 섞어 가리켜야 하면 **쉼표로 나열하라.**
 
@@ -1197,6 +1209,9 @@ open_questions:
   },
   "expect": {
     "current": {
+      "legal_basis": {
+        "pension.contribution.beyond_credit_limit": {"present":true,"has_uncertainty_note":true,"uncertainty_note_count":1,"uncertainty_kinds":["unverified"],"uncertainty_paths":["unverified"]}
+      },
       "plan_count": 1,
       "comparison_note_codes": [
         "plans_collapsed_single"
@@ -2372,6 +2387,9 @@ open_questions:
   },
   "expect": {
     "current": {
+      "legal_basis": {
+        "pension.withdrawal.non_deducted_principal": {"present":true,"has_uncertainty_note":true,"uncertainty_note_count":1,"uncertainty_kinds":["unverified"],"uncertainty_paths":["confirmation_procedure.unverified"]}
+      },
       "plan_count": 2,
       "boundaries": {
         "isa_lock_in_years_remaining": 0,
@@ -2852,6 +2870,9 @@ open_questions:
   },
   "expect": {
     "proposed": {
+      "legal_basis": {
+        "proposed.pension.credit.youth_irp_rate": {"present":true,"status":"개정예고","bill_stage":"정부안","has_uncertainty_note":true,"uncertainty_note_count":2,"uncertainty_kinds":["unverified","value_absent"],"uncertainty_paths":["age_range","unverified"]}
+      },
       "plans": {
         "max_tax_credit": {
           "allocation": {
@@ -3934,6 +3955,9 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
   },
   "expect": {
     "current": {
+      "legal_basis": {
+        "pension.credit.unused.contribution_carryover": {"present":true,"has_uncertainty_note":true,"uncertainty_note_count":2,"uncertainty_kinds":["confidence_not_verified","unverified"],"uncertainty_paths":["confidence","net_contribution_limit_interaction.unverified"]}
+      },
       "plan_count": 2,
       "baseline_plan": "max_tax_credit",
       "limits": {
@@ -4649,6 +4673,9 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
   },
   "expect": {
     "current": {
+      "legal_basis": {
+        "pension.contribution.after_annuity_start": {"present":true,"status":"확정","bill_stage":null,"has_uncertainty_note":true,"uncertainty_note_count":1,"uncertainty_kinds":["unverified"],"uncertainty_paths":["scope.unverified"]}
+      },
       "plan_count": 2,
       "baseline_plan": "max_tax_credit",
       "limits": {
@@ -5277,7 +5304,9 @@ D21이 "기준일 규칙이 룰셋에 없으면 `tax-domain`이 만들고, 만�
 
 ---
 
-## 10. ISA 혜택 산식의 정답 (11차, 2026-08-10) — **아직 실행할 수 없다**
+## 10. ISA 혜택 산식의 정답 (11차, 2026-08-10) — **13차에 전부 실행에 올랐다**
+
+> **13차 갱신.** 이 절이 기다리던 조건(계약이 `profile.isa_return_assumption`과 `Plan.assumption_based_isa_estimate`를 들이는 것)이 `5.1.0`에서 성립했다. 아홉 건은 **`GC-52`~`GC-60`으로 번호와 블록을 얻었고 12절에 있다.** 아래 10.0~10.4절은 **그때의 산출 근거를 그대로 남긴 것**이며, 12절은 그 값을 옮겨 적었을 뿐 다시 산출하지 않았다. 아래의 "아직 실행할 수 없다"는 서술은 11차·12차 시점의 기록으로 읽는다.
 
 관리자 판정 **D28**이 수익률을 입력으로 받기로 했고, 이 유닛이 산식을 룰셋 규칙 `isa.benefit.formula`로 확정했다. 그 산식의 정답을 여기 적는다.
 
@@ -5466,10 +5495,27 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.15 },
+  "credit_rate": {
+    "income_tax": 0.15,
+    "local_tax": 0.1,
+    "basis": "total_salary",
+    "measured_amount": 55000000,
+    "fallback_applied": false,
+    "fallback_direction": null
+  },
   "expect": {
     "current": {
+      "legal_basis": {
+        "isa.account.requirements": {"present":true,"has_uncertainty_note":false,"uncertainty_note_count":0}
+      },
       "plan_count": 2,
+      "legal_basis": {
+        "pension.credit.rate.basis_determination": { "present": true, "status": "확정", "bill_stage": null, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["unverified"], "uncertainty_paths": ["error_direction_when_judged_by_salary_only.reverse.unverified"] },
+        "isa.early_termination.clawback": { "present": true, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["unverified"], "uncertainty_paths": ["unverified"] },
+        "pension.withdrawal.eligibility": { "present": true, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["text_marker"], "uncertainty_paths": ["requirements[2].formula"] },
+        "age.reckoning.reference_date": { "present": true, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["confidence_not_verified"], "uncertainty_paths": ["confidence"] },
+        "pension.credit.tax_liability_cap.source_form": { "present": true, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["text_marker"], "uncertainty_paths": ["unknown_value_policy.direction_of_error"] }
+      },
       "limits": { "isa_tax_free_limit_krw": 2000000 },
       "plans": {
         "max_tax_credit": {
@@ -5533,7 +5579,14 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.12 },
+  "credit_rate": {
+    "income_tax": 0.12,
+    "local_tax": 0.1,
+    "basis": "total_salary",
+    "measured_amount": 56000000,
+    "fallback_applied": false,
+    "fallback_direction": null
+  },
   "expect": {
     "current": {
       "plan_count": 2,
@@ -5598,7 +5651,14 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.12 },
+  "credit_rate": {
+    "income_tax": 0.12,
+    "local_tax": 0.1,
+    "basis": "total_salary",
+    "measured_amount": 57631578,
+    "fallback_applied": false,
+    "fallback_direction": null
+  },
   "expect": {
     "current": {
       "plan_count": 2,
@@ -5662,7 +5722,14 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.15 },
+  "credit_rate": {
+    "income_tax": 0.15,
+    "local_tax": 0.1,
+    "basis": "global_income",
+    "measured_amount": 45000000,
+    "fallback_applied": false,
+    "fallback_direction": null
+  },
   "expect": {
     "current": {
       "plan_count": 2,
@@ -5730,7 +5797,14 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.12 },
+  "credit_rate": {
+    "income_tax": 0.12,
+    "local_tax": 0.1,
+    "basis": "global_income",
+    "measured_amount": 45000001,
+    "fallback_applied": false,
+    "fallback_direction": null
+  },
   "expect": {
     "current": {
       "plan_count": 2,
@@ -5795,7 +5869,14 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.15 },
+  "credit_rate": {
+    "income_tax": 0.15,
+    "local_tax": 0.1,
+    "basis": "global_income",
+    "measured_amount": 44999999,
+    "fallback_applied": false,
+    "fallback_direction": null
+  },
   "expect": {
     "current": {
       "plan_count": 2,
@@ -5866,7 +5947,14 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
     },
     "isa_transfer": null
   },
-  "credit_rate": { "income_tax": 0.12 },
+  "credit_rate": {
+    "income_tax": 0.12,
+    "local_tax": 0.1,
+    "basis": "statutory_default",
+    "measured_amount": null,
+    "fallback_applied": true,
+    "fallback_direction": "understated_or_equal"
+  },
   "expect": {
     "current": {
       "plan_count": 2,
@@ -6452,6 +6540,8 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
 
 ### 11.4 이번에도 적지 못한 것 — 세 축 중 하나가 남는다
 
+> **13차 갱신 — 이 절의 (가)·(나)가 둘 다 해소됐다.** `calc-engine-dev`가 시나리오 단위에 `legal_basis`를 열었고 `credit_rate`의 네 키를 미사용 목록에서 풀었다. **(나)는 GC-40~46이 이 회차에 채웠고**(`basis`·`measured_amount`·`fallback_applied`·`fallback_direction`), **(가)는 여덟 개 케이스가 채웠다.** 다만 (가)에는 대조가 어긋난 건이 하나 남는다 — 12.6절. 아래 서술은 12차 시점의 기록이다.
+
 **(가) 규칙별 미확인 건수 — 블록 어휘가 아직 없다.** 계약 5.7.1절이 `LegalBasisEntry.uncertainty_notes`를 목록으로 만들면서 **"정답지가 규칙별 미확인 건수를 주장하면 줄어든 사실이 대조에 걸린다"**를 첫 번째 방어선으로 지목했다. 이 회차에 그것을 채우려 했으나 **실행기의 블록 어휘에 그 축을 실을 자리가 없다.** 확인한 허용 키는 다음이 전부다.
 
 | 자리 | 허용 키 |
@@ -6488,3 +6578,1274 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
 **다른 규칙은 이번에 바꾸지 않았다.** 2026-08-10에 두 룰셋 파일의 `unverified` 12곳을 전수 확인한 결과 나머지 11곳은 전부 미확인 하나만 담고 있어 문자열 그대로도 위 원칙을 이미 지킨다. **둘 이상을 적게 되는 자리에서 배열로 연다.**
 
 **이 판정이 닫지 못하는 것.** 계약 5.7.1절이 적은 대로, **엔진은 룰셋을 비출 뿐이므로 작성자가 지워서는 안 될 표시를 지운 경우는 여전히 엔진이 잡지 못한다.** 배열로 바꾼 것은 그 사실이 **값에 나타나게** 만든 것이지 잡은 것이 아니다. 실제로 잡으려면 11.4절 (가)의 블록 키가 필요하고, 그것이 없는 동안 이 방어선은 비어 있다.
+
+---
+
+## 12. 13차 — 7차의 아홉 건에 블록을 달았다 (GC-52 ~ GC-61, 2026-08-10)
+
+계약 `5.1.0`이 `profile.isa_return_assumption`과 `Plan.assumption_based_isa_estimate`를 들였고, 10.0절이 정한 조건("계약이 위 두 필드를 들이는 회차에 이 아홉 건을 `GC-` 번호로 옮기고 블록을 단다")이 **성립했다.**
+
+**기대값을 다시 산출하지 않았다.** 10.2절 표의 아홉 값이 먼저이고 이 절은 그것을 옮겨 적은 것이다. 산술은 10.3절에서 이미 검산했고 이 절이 다시 하지 않는다.
+
+| 7차 이름 | 이 절의 번호 | 옮기면서 달라진 것 |
+|---|---|---|
+| RF-1 | **GC-52** | 없다 |
+| RF-2 | **GC-53** | 없다 |
+| RF-3 | **GC-54** | 없다 |
+| RF-4 | **GC-55** | 없다 |
+| RF-5 | **GC-56** | 없다 |
+| RF-6 | **GC-57** | **혜택 0을 점이 아니라 구간의 아래 끝으로 적었다.** 12.2절 |
+| RF-7 | **GC-58** | **케이스를 다시 적었다.** 원래 형태로는 엔진이 낼 수 없다. 12.3절 |
+| RF-8 | **GC-59** | 없다 |
+| RF-9 | **GC-60** | 없다 |
+
+**GC-61은 7차의 아홉 건이 아니다.** 규칙별 미확인 건수 축의 한 건이며 12.6절에서 따로 다룬다.
+
+### 12.1 케이스의 정의로 새로 고른 것 — 원금·수익률·정산 기간
+
+10.2절의 표는 **`G`(이익의 합계)로** 케이스를 적었다. 요청은 `G`를 직접 받지 않고 **원금 × 수익률 × 기간**을 받으므로, 같은 `G`를 낳는 셋을 이 절에서 골라야 했다. **기대값이 아니라 케이스의 정의이고**, S15가 `prior_year_tax`에 세운 것과 같은 성격이다.
+
+**고른 기준 셋.**
+
+1. **월 납입 여력을 0으로 두었다**(GC-58만 예외). 원금은 `누적 납입액 + 그 안의 ISA 배분액`인데(계약 5.14절), 배분액은 배분안마다 다르다. 예산이 0이면 배분액이 어느 안에서도 0이라 **원금이 배분안과 무관해지고**, 아홉 건이 보려는 것(산식)만 남는다. GC-08이 예산 0에서 결과가 정상 산출됨을 이미 고정해 두었다.
+2. **수익률을 전부 0.1로 고정하고 누적 납입액으로 `G`를 맞췄다.** 두 축을 함께 움직이면 어느 쪽이 값을 바꿨는지 대조가 가리지 못한다.
+3. **정산 기간을 명시적으로 주었다.** 주지 않으면 룰셋의 계약기간 하한 3년이 대신 들어가고(`isa_settlement_years_defaulted_to_min_contract_years`), 그러면 GC-60이 보려는 **1년치와 3년치의 차이**가 케이스 정의에 섞인다.
+
+| 케이스 | 누적 납입액 | 수익률 | 정산 기간 | `R` | 10.2절의 `G` |
+|---|---|---|---|---|---|
+| GC-52 | 20,000,000 | 0.1 | 1 | 2,000,000 | 2,000,000 |
+| GC-53 | 21,000,000 | 0.1 | 1 | 2,100,000 | 2,100,000 |
+| GC-54 | 40,000,000 | 0.1 | 1 | 4,000,000 | 4,000,000 |
+| GC-55 | 50,000,000 | 0.1 | 1 | 5,000,000 | 5,000,000 (손실 2,000,000) |
+| GC-56 | 30,000,000 | 0.1 | 1 | 3,000,000 | 3,000,000 (손실 2,000,000) |
+| GC-57 | 20,000,000 | 0.1 | 1 | 2,000,000 | 성격이 정하는 구간 |
+| GC-58 | 20,000,000 + 배분 12,000,000 | 0.1 | 1 | 3,200,000 | 12.3절에서 새로 산출 |
+| GC-59 | 20,000,000 | 0.1 | 1 | 2,000,000 | 성격이 정하는 구간 |
+| GC-60 | 20,000,000 | 0.1 | **3** | 6,000,000 | 6,000,000 |
+
+**GC-52와 GC-60이 같은 계좌다.** 누적 납입액도 수익률도 같고 정산 기간만 1년과 3년으로 다르다. 그래서 두 케이스의 값을 나란히 놓으면 10.2절이 말한 1.75배가 그대로 나온다 — `308,000 × 3 = 924,000` 대 `528,000`. **연간 환산이 틀린다는 사실이 두 케이스의 차이로 검사된다.**
+
+### 12.2 GC-57 — 「혜택 0」은 점이 아니라 구간의 아래 끝이다 (`calc-engine-dev`의 지적을 확인했다)
+
+**지적이 맞다. 룰셋을 다시 읽고 확인했다.**
+
+`isa.benefit.income_character`의 `what_to_ask_instead.options`에서 `listed_equity_capital_gain`의 `s_range`는 **`0 ≤ s < 1`**이고 `result`가 **"구간 [0, 상한]. 점을 낼 수 없다"**이다. 같은 규칙의 `upper_bound_definition`이 상한을 "`isa.benefit.formula`의 benefit을 `s = 1`로 두고 계산한 값"으로, `lower_bound_definition`이 하한을 0으로 정한다.
+
+**7차의 표가 왜 0을 점처럼 적었나.** 표의 프로필 칸이 "수익이 **전부** 국내 상장주식 매매차익 (`s` = 0)"이었다. 그 문장은 `s`를 0으로 **고정한 뒤의** 값을 적은 것이고, 그러면 답은 정말로 0이다. 그러나 요청이 받는 것은 `s`가 아니라 **선택지**이고, 그 선택지가 정하는 것은 값이 아니라 구간이다. 같은 종목의 배당금이 `s`에 들어가므로 사용자가 이 선택지를 골라도 `s = 0`이라는 사실이 따라 나오지 않는다.
+
+**그러므로 GC-57의 정답은 `lower_bound_krw: 0` · `upper_bound_krw: 308,000` · `point_estimate_krw: null`이다.** 0은 사라지지 않았고 **아래 끝으로 자리를 옮겼다.** 점으로 적었다면 조문에 없는 수치가 금액이 되는 것이고, 그것은 이 규칙이 `display_rule`로 금지한 바로 그 형태다.
+
+**GC-57과 GC-59가 같은 값을 내는 것도 확인해 둔다.** `mixed_or_unknown`의 구간은 `0 ≤ s ≤ 1`, `listed_equity_capital_gain`은 `0 ≤ s < 1`이고 **양 끝이 같다.** 두 선택지가 가르는 것은 구간이 아니라 사용자가 무엇을 진술했는가이며, 금액으로는 갈리지 않는다. 이 사실을 두 케이스가 함께 고정한다.
+
+### 12.3 GC-58 — RF-7을 어떻게 할지 정했다: **입력을 새로 요구하지 않고, 가정 아래에서만 성립하는 케이스로 다시 적는다**
+
+**`calc-engine-dev`의 지적이 맞다.** 해지는 사실이 아니라 미래의 선택이고 요청에 그 입력이 없다. `fund_use_horizon: within_isa_lock_in`으로 대신 판정하는 것은 "쓸 **가능성**이 있다"는 진술을 "해지한다"로 바꿔 읽는 것이라 D14에 정면으로 어긋난다.
+
+**두 길 중 어느 쪽을 고를 것인가.**
+
+| 길 | 무엇을 얻나 | 무엇을 잃나 |
+|---|---|---|
+| (가) 해지 여부를 새 입력으로 받는다 | RF-7의 답(혜택 0)을 그대로 실행할 수 있다 | **입력이 하나 는다.** D13이 입력 수를 완료율의 문제로 못박았고, 무엇보다 **사용자가 "해지하겠다"를 미리 답할 수 있는 물음이 아니다.** 답을 강요하면 그 답이 곧 지어낸 값이 된다 |
+| (나) 가정 아래에서만 성립하는 케이스로 다시 적는다 | 입력을 늘리지 않고, **가정과 그 가정을 무너뜨리는 사실이 한 화면에 함께 나가는지**를 검사한다 | RF-7의 「혜택 0」 자체는 실행되지 않는다 |
+
+**(나)를 고른다.** 근거는 계약 5.14절이 이 자리에 이미 답을 두었다는 것이다 — `assumes_contract_held_to_settlement`가 **상수 `true`**이고, 그 문단이 "화면은 이 상수와 같은 안의 `warnings`(`early_termination_clawback_isa`)를 **함께** 읽어야 한다"고 정한다. **즉 「해지하면 0」은 금액이 아니라 금액 옆의 경고가 지는 몫이다.** 그러면 검사해야 할 것은 "혜택이 0인가"가 아니라 **"그 경고가 그 금액과 같은 안에 실려 있는가"**이고, 그것은 지금의 요청으로 검사할 수 있다.
+
+**그래서 GC-58은 둘을 한 안에서 함께 주장한다.**
+
+1. 금액이 **0이 아니다** — 계약을 유지한다는 전제 위의 374,000원이다.
+2. 같은 안의 `warning_codes`가 **정확히** `["early_termination_clawback_isa"]`이다. 하나라도 빠지면 사용자는 전제가 있는 줄 모르고 금액만 본다.
+
+**프로필을 이렇게 세운 이유.** 경고가 성립하려면 ISA 배분액이 0보다 커야 하므로(계약 8.4절) 이 케이스만 예산을 0으로 두지 않았다. 그러면 원금이 배분안에 따라 갈리는 문제가 되살아나므로, **연금 두 계좌를 `started`로 두어** 예산 전액이 어느 안에서나 ISA로 가게 했다. 가입경과연수 1년이라 잔여 의무가입기간이 2년이고, 그래야 M2가 좁힌 조건(잔여 > 0)을 통과해 경고가 실제로 나간다 — 그 조건의 반대편은 GC-21·GC-27이 이미 고정하고 있다.
+
+**산출.** 원금 `20,000,000 + 12,000,000 = 32,000,000` → `R = 3,200,000` → `G = N = 3,200,000` → ISA 쪽 세액 `(3,200,000 − 2,000,000) × 0.09 × 1.1 = 118,800` → 비교 기준 세액 `3,200,000 × 0.14 × 1.1 = 492,800` → 혜택 **374,000**. 세 축 `0 + 308,000 + 66,000 = 374,000` ✓.
+
+**남는 것을 분명히 적는다.** RF-7이 적은 「의무가입기간 전 해지 → 혜택 0」은 **세법의 답으로 여전히 유효하고**(조특법 §91조의18 ⑦, 룰셋 `isa.early_termination.clawback`), 다만 **이 서비스의 지금 입력으로는 실행되지 않는다.** 해지 여부를 입력으로 받을지는 관리자·`product-planner` 판정 사항이며 `open_questions`에 남긴다. 여기서 이 유닛이 한 것은 **답을 지운 것이 아니라 검사할 수 있는 부분만 검사에 올린 것**이다.
+
+### 12.4 아홉 건 공통 — 블록이 주장하는 것
+
+- **`is_annual: false`와 `settlement_years`.** 이 금액이 몇 년치인지가 값으로 실린다. `isa.benefit.settlement_period`의 `engine_rule`이 요구한 바로 그것이다.
+- **`taxable_share_min` / `taxable_share_max`.** 성격이 정하는 구간의 양 끝. 점을 낼 수 있는 케이스에서는 둘이 같고, 낼 수 없는 케이스에서는 갈린다.
+- **`comparison_side_tax_krw`가 `G`에서 나온다.** 10.1절 ⑥이 "`N`이 아니라 `G`"라고 못박은 자리다. GC-55·GC-56이 손실이 있는 케이스이므로, 비교 기준을 `N`으로 잘못 잡으면 두 건의 값이 각각 308,000원 작아져 즉시 걸린다.
+- **`axis_breakdown` 네 칸.** 셋의 합 + 절사 잔차가 `upper_bound_krw`와 같다. 손익통산 축이 혜택의 일부라는 사실이 합계에 삼켜지지 않는지를 GC-55·GC-56이 본다.
+- **`isa_return_estimate_reported_as_range`를 양방향으로 적었다.** 구간인 두 건(GC-57·GC-59)에는 있어야 하고 점인 여섯 건에는 없어야 한다.
+
+### 12.5 블록에 적지 못한 것 둘
+
+계약 5.14절이 정한 필드 중 **`assumes_contract_held_to_settlement`와 `is_lower_bound_for_aggregate_taxpayer`가 실행기의 허용 키에 없다.** 둘 다 상수이므로 값이 틀릴 여지는 없으나, **상수가 사라지는 것**은 이 축이 잡아야 할 사고다. GC-58이 그중 앞의 것을 경고로 우회해 잡고 있고, 뒤의 것(금융소득종합과세 대상자에게 이 값이 하한이라는 표시)은 **어느 케이스도 주장하지 못한다.**
+
+### 12.6 GC-61 — 이 케이스는 **지금 빨간색이고, 그것이 이 케이스가 하는 일이다**
+
+**주장:** `isa.tax_free_limit`의 미확인 표시가 **3건**이고 그 자리가 `unverified[0]` · `unverified[1]` · `unverified[2]`다.
+
+**근거:** 12차에 이 규칙의 `value.unverified`를 **3원소 배열**로 열었다(11.5절). 계약 5.7.1절이 그 형태를 지시했다 — "미확인을 산문 한 덩어리가 아니라 **항목 배열**로 적으면(각 항목이 자기 자리를 갖는다) 이 구조가 그대로 셀 수 있다." 같은 절의 `UncertaintyNote.path` 정의도 "배열은 `items[1]`처럼 첨자를 단다"고 적는다. 룰셋에는 지금 확인하지 못한 항목이 셋 들어 있고 각자 자기 첨자를 갖는다.
+
+**엔진이 내는 것은 1건이다** — 경로 `unverified`, 종류 `unverified`. **배열을 펼치지 않고 키 하나를 표시 하나로 센다.**
+
+**어느 쪽이 틀렸다고 보는가 — 엔진 쪽이라고 본다. 다만 단정하지 않는다.**
+
+| 읽기 | 근거 | 귀결 |
+|---|---|---|
+| **(가) 배열 원소마다 한 건** (이 문서의 주장) | 5.7.1절이 배열 형태를 **구멍을 닫는 방법으로** 지시했고, `path` 정의가 배열에 첨자를 달라고 적는다 | 셋 중 하나가 해소되면 건수가 3 → 2로 줄어 **값에 나타난다.** 이 축을 만든 목적이 그것이다 |
+| **(나) `unverified` 키 하나가 표시 하나** (엔진의 동작) | `path`의 첨자 규정을 "표시에 이르는 **경로 위의** 배열"로 읽으면 성립한다. 실제로 `isa.benefit.settlement_period`의 경로가 `statutory_basis[1].unverified`로 그 형태다 | **12차의 배열 전환이 아무것도 바꾸지 않는다.** 원소 하나를 지워도 건수가 1에서 그대로 1이고, 5.7.1절이 이름으로 지목한 구멍이 열린 채 남는다 |
+
+**(나)가 성립하면 계약 5.7.1절의 결론 문단이 거짓이 된다.** 그 문단은 룰셋을 배열로 바꾸는 것으로 구멍이 닫힌다고 적었고, 이 유닛은 그 지시를 따라 룰셋을 고쳤다. 고친 뒤에도 건수가 1이면 **고친 이유가 사라진다.**
+
+**그래서 이 케이스를 지우거나 1로 낮춰 적지 않는다.** 1로 적으면 초록색이 되지만, 그 순간 이 문서가 엔진의 동작을 정답으로 옮겨 적은 것이 되고 — 정답지가 해서는 안 되는 유일한 일이다. **판정은 관리자가 한다.** 판정이 (나)로 나면 이 케이스를 지우고 계약 5.7.1절의 해당 문단을 함께 고쳐야 한다.
+
+**케이스를 따로 세운 이유.** 이 주장을 GC-40에 얹으면 GC-40의 나머지 주장(공제율 축·배분·한도)이 같은 실패에 묻혀 검사되지 않는다. **빨간색 하나가 초록색 여럿을 가리지 않게** 자리를 분리했다.
+
+**함께 고친 것 — 이 규칙의 건수가 3이 아니라 7로 세어지고 있었다.** 12차에 넣은 메타 키 `unverified_is_an_array_on_purpose`의 산문이 계약 5.7.1절의 `text_marker`가 세는 낱말을 **네 번** 쓰고 있었다. 규약을 설명하는 문장이 규약이 세려는 대상을 스스로 부풀린 것이다. 낱말을 바꿔 넷을 없앴고, 그 사실과 앞으로의 금지를 같은 키 안에 `this_key_must_not_carry_the_marker_word`로 박았다. **이 수정은 세법 값을 한 글자도 건드리지 않는다.**
+
+### 12.7 GC-52 ~ GC-61
+
+#### GC-52 — 이자·배당 순소득이 비과세 한도와 정확히 같다 【경계 · 한도선】
+
+**프로필** 40세 · 예산 0 · ISA 일반형 누적 20,000,000 / 경과 4년 · 수익률 0.1 · `interest_dividend` · 정산 1년 · 손실 0
+
+**기대 결과** `G = N = 2,000,000` = `C` · ISA 쪽 세액 **0** · 비교 기준 세액 **308,000** · 혜택 **308,000**(점) · 축 `0 / 308,000 / 0`
+
+**도출 과정** 10.1절 ① 원금 20,000,000 × 0.1 × 1년 = 2,000,000 → ② `s = 1`이므로 `G = 2,000,000` → ③ `L = 0`이므로 `N = 2,000,000` → ④ 일반형 `C = 2,000,000` → ⑤ `max(0, 2,000,000 − 2,000,000) × 0.09 × 1.1 = 0` → ⑥ `2,000,000 × 0.14 × 1.1 = 308,000` → ⑦ 혜택 308,000 → ⑨ 1년치임을 함께 싣는다.
+
+**이 케이스가 함께 고정하는 것.** `isa.benefit.formula`와 `isa.benefit.settlement_period` 두 규칙의 미확인 표시 건수를 근거 목록에서 주장한다. 두 규칙은 이 아홉 건에서만 읽히므로 **다른 어느 케이스도 그 자리를 대신할 수 없다.**
+
+```golden
+{
+  "case": "GC-52",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 1,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 20000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "legal_basis": {
+        "isa.benefit.formula": {
+          "present": true,
+          "status": "확정",
+          "bill_stage": null,
+          "has_uncertainty_note": true,
+          "uncertainty_note_count": 1,
+          "uncertainty_kinds": [
+            "unverified"
+          ],
+          "uncertainty_paths": [
+            "loss_offset_placement.unverified"
+          ]
+        },
+        "isa.benefit.settlement_period": {
+          "present": true,
+          "status": "확정",
+          "bill_stage": null,
+          "has_uncertainty_note": true,
+          "uncertainty_note_count": 1,
+          "uncertainty_kinds": [
+            "unverified"
+          ],
+          "uncertainty_paths": [
+            "statutory_basis[1].unverified"
+          ]
+        }
+      },
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 20000000,
+            "total_return_krw": 2000000,
+            "taxable_income_krw": 2000000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 2000000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 308000,
+            "isa_side_tax_krw": 0,
+            "point_estimate_krw": 308000,
+            "lower_bound_krw": 308000,
+            "upper_bound_krw": 308000,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 0,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes": [
+        "isa_return_estimate_is_not_annual",
+        "pension_tax_deferral_not_quantified"
+      ],
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_return_estimate_reported_as_range",
+        "isa_return_estimate_not_computable"
+      ]
+    }
+  }
+}
+```
+
+#### GC-53 — 한도를 100,000원 넘긴다 【경계 · 한도 초과 진입】
+
+**프로필** GC-52와 같고 누적 납입액만 21,000,000
+
+**기대 결과** `G = N = 2,100,000` · ISA 쪽 세액 **9,900** · 비교 기준 세액 **323,400** · 혜택 **313,500** · 축 `0 / 308,000 / 5,500`
+
+**도출 과정** ⑤ `(2,100,000 − 2,000,000) × 0.09 × 1.1 = 9,900` → ⑥ `2,100,000 × 0.14 × 1.1 = 323,400` → ⑦ 313,500. 초과분 100,000원에 걸리는 것은 14%가 아니라 **14% − 9% = 5%**(지방세 포함 5.5%)이고, 그 몫 5,500원이 세율차 축이다. **비과세 축은 한도선을 넘어도 308,000원에서 더 늘지 않는다.**
+
+```golden
+{
+  "case": "GC-53",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 1,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 21000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 21000000,
+            "total_return_krw": 2100000,
+            "taxable_income_krw": 2100000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 2100000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 323400,
+            "isa_side_tax_krw": 9900,
+            "point_estimate_krw": 313500,
+            "lower_bound_krw": 313500,
+            "upper_bound_krw": 313500,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 5500,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_return_estimate_reported_as_range"
+      ]
+    }
+  }
+}
+```
+
+#### GC-54 — 서민형이 한도와 정확히 같다 【경계 · 유형 갈림】
+
+**프로필** 직전연도 총급여 **50,000,000**(서민형 경계선 안) · ISA **서민형** 누적 40,000,000 · 나머지는 GC-52와 같다
+
+**기대 결과** `C = 4,000,000` · `G = N = 4,000,000` · ISA 쪽 세액 **0** · 혜택 **616,000** · 축 `0 / 616,000 / 0`
+
+**도출 과정** ④에서 `isa.tax_free_limit`이 직전 총급여 50,000,000 **이하**이므로 서민형 4,000,000을 준다(`boundary_rule`의 "이하"). 나머지는 GC-52와 같은 순서다. `prior_year_tax`는 직전 총급여 50,000,000의 밴드 [2,682,194 , 3,387,500] 안에서 3,000,000을 골랐다.
+
+**GC-05와 무엇이 다른가.** GC-05는 같은 경계에서 **한도금액**이 4,000,000으로 나오는지를 본다. 이 케이스는 그 한도금액이 **혜택 금액으로 얼마가 되는지**를 본다 — `616,000 = 4,000,000 × 0.14 × 1.1`이고, 이 값이 `isa.benefit.quantification`의 `statable_amounts`에 서민형 상한으로 이미 적혀 있는 값과 같다(10.3절 검산 2).
+
+```golden
+{
+  "case": "GC-54",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3000000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 50000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 1,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "low_income",
+        "cumulative_contribution_krw": 40000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 4000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 40000000,
+            "total_return_krw": 4000000,
+            "taxable_income_krw": 4000000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 4000000,
+            "tax_free_limit_krw": 4000000,
+            "comparison_side_tax_krw": 616000,
+            "isa_side_tax_krw": 0,
+            "point_estimate_krw": 616000,
+            "lower_bound_krw": 616000,
+            "upper_bound_krw": 616000,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 616000,
+              "rate_gap_krw": 0,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_return_estimate_reported_as_range"
+      ]
+    }
+  }
+}
+```
+
+#### GC-55 — 이익 5,000,000 / 손실 2,000,000, 통산 후에도 한도를 넘는다 【경계 · 손익통산 + 초과】
+
+**프로필** 누적 50,000,000 · 손실 **2,000,000** · 나머지는 GC-52와 같다
+
+**기대 결과** `G = 5,000,000` · `N = 3,000,000` · ISA 쪽 세액 **99,000** · 비교 기준 세액 **770,000** · 혜택 **671,000** · 축 `308,000 / 308,000 / 55,000`
+
+**도출 과정** ③ `N = max(0, 5,000,000 − 2,000,000) = 3,000,000` → ⑤ `(3,000,000 − 2,000,000) × 0.099 = 99,000` → ⑥ **`N`이 아니라 `G`로** `5,000,000 × 0.154 = 770,000` → ⑦ 671,000.
+
+**이 케이스가 막는 것.** ⑥에서 `N`을 쓰면 값이 **462,000**으로 나온다 — 209,000원이 사라지고, 사라지는 것이 정확히 손익통산 축이다. 계좌 밖에는 손익통산 규정이 없으므로 비교 기준은 이익 전액에 붙는다. 10.1절이 "산식을 옮겨 적다 가장 틀리기 쉬운 자리"라고 적은 곳이다.
+
+```golden
+{
+  "case": "GC-55",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 1,
+        "loss_amount_krw": 2000000
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 50000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 50000000,
+            "total_return_krw": 5000000,
+            "taxable_income_krw": 5000000,
+            "loss_offset_applied_krw": 2000000,
+            "net_income_krw": 3000000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 770000,
+            "isa_side_tax_krw": 99000,
+            "point_estimate_krw": 671000,
+            "lower_bound_krw": 671000,
+            "upper_bound_krw": 671000,
+            "axis_breakdown": {
+              "loss_offset_krw": 308000,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 55000,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_return_estimate_reported_as_range"
+      ]
+    }
+  }
+}
+```
+
+#### GC-56 — 통산이 순소득을 한도 아래로 내린다 【경계 · 통산이 구간을 바꾼다】
+
+**프로필** 누적 30,000,000 · 손실 **2,000,000** · 나머지는 GC-52와 같다
+
+**기대 결과** `G = 3,000,000` · `N = 1,000,000` · ISA 쪽 세액 **0** · 비교 기준 세액 **462,000** · 혜택 **462,000** · 축 `308,000 / 154,000 / 0`
+
+**도출 과정** ③ `N = 1,000,000` → ④ `C = 2,000,000` → ⑤ `max(0, 1,000,000 − 2,000,000) = 0`이므로 ISA 쪽 세액 0 → ⑥ `3,000,000 × 0.154 = 462,000` → ⑦ 462,000.
+
+**GC-55와 짝이다.** 손실 금액이 같은데 통산 결과가 한도의 **위**에 남는가 **아래**로 내려가는가로 갈린다. 아래로 내려가면 세율차 축이 0이 되고 비과세 축이 `C`가 아니라 **`N`에** 걸린다(`1,000,000 × 0.154 = 154,000`) — 비과세 한도는 쓰지 않은 몫을 돌려주지 않는다.
+
+```golden
+{
+  "case": "GC-56",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 1,
+        "loss_amount_krw": 2000000
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 30000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 30000000,
+            "total_return_krw": 3000000,
+            "taxable_income_krw": 3000000,
+            "loss_offset_applied_krw": 2000000,
+            "net_income_krw": 1000000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 462000,
+            "isa_side_tax_krw": 0,
+            "point_estimate_krw": 462000,
+            "lower_bound_krw": 462000,
+            "upper_bound_krw": 462000,
+            "axis_breakdown": {
+              "loss_offset_krw": 308000,
+              "tax_free_krw": 154000,
+              "rate_gap_krw": 0,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_return_estimate_reported_as_range"
+      ]
+    }
+  }
+}
+```
+
+#### GC-57 — 수익이 국내 상장주식의 가격 상승으로 들어온다 【경계 · 성격 하한】
+
+**프로필** GC-52와 같고 성격만 `listed_equity_capital_gain`
+
+**기대 결과** 구간 **0 ~ 308,000** · `point_estimate_krw` **`null`** · `taxable_share` `0 ~ 1`
+
+**도출 과정** ② `isa.benefit.income_character`의 `s_range`가 `0 ≤ s < 1` → 점을 낼 수 없다 → 아래 끝은 `lower_bound_definition`의 0, 위 끝은 `upper_bound_definition`이 정한 대로 `s = 1`에서 계산한 값 308,000. 자세한 근거는 12.2절.
+
+```golden
+{
+  "case": "GC-57",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "listed_equity_capital_gain",
+        "settlement_years": 1,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 20000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 0,
+            "taxable_share_max": 1,
+            "principal_krw": 20000000,
+            "total_return_krw": 2000000,
+            "taxable_income_krw": 2000000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 2000000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 308000,
+            "isa_side_tax_krw": 0,
+            "point_estimate_krw": null,
+            "lower_bound_krw": 0,
+            "upper_bound_krw": 308000,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 0,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes": [
+        "isa_return_estimate_reported_as_range"
+      ],
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied"
+      ]
+    }
+  }
+}
+```
+
+#### GC-58 — 계약을 유지한다는 전제 위의 금액과, 그 전제를 깨는 사실의 경고 【경계 · 추징】
+
+**프로필** 40세 · 월 1,000,000 × 12 = 예산 12,000,000 · 연금 두 계좌 **연금수령 개시함** · ISA 일반형 누적 20,000,000 / 경과 **1년** · horizon **`within_isa_lock_in`** · 수익률 0.1 · `interest_dividend` · 정산 1년
+
+**기대 결과** ISA 배분 **12,000,000** · 원금 **32,000,000** · 혜택 **374,000** · 축 `0 / 308,000 / 66,000` · 경고 **정확히 `["early_termination_clawback_isa"]`** · 잔여 의무가입기간 **2년**
+
+**도출 과정** 12.3절.
+
+```golden
+{
+  "case": "GC-58",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "within_isa_lock_in",
+      "monthly_capacity_krw": 1000000,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 1,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 20000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 1,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "boundaries": {
+        "isa_lock_in_years_remaining": 2
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 12000000
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 1,
+          "warning_codes": [
+            "early_termination_clawback_isa"
+          ],
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 32000000,
+            "total_return_krw": 3200000,
+            "taxable_income_krw": 3200000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 3200000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 492800,
+            "isa_side_tax_krw": 118800,
+            "point_estimate_krw": 374000,
+            "lower_bound_krw": 374000,
+            "upper_bound_krw": 374000,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 66000,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_lock_in_already_elapsed"
+      ]
+    }
+  }
+}
+```
+
+#### GC-59 — 성격이 섞여 있거나 아직 정하지 않았다 【구간】
+
+**프로필** GC-52와 같고 성격만 `mixed_or_unknown`
+
+**기대 결과** 구간 **0 ~ 308,000** · `point_estimate_krw` **`null`**
+
+**도출 과정** ② `s_range`가 `0 ≤ s ≤ 1` → 양 끝은 GC-57과 같다. 두 선택지가 금액으로 갈리지 않는다는 사실을 이 두 건이 함께 고정한다(12.2절).
+
+```golden
+{
+  "case": "GC-59",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "mixed_or_unknown",
+        "settlement_years": 1,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 20000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 1,
+            "settlement_years_source": "user",
+            "taxable_share_min": 0,
+            "taxable_share_max": 1,
+            "principal_krw": 20000000,
+            "total_return_krw": 2000000,
+            "taxable_income_krw": 2000000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 2000000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 308000,
+            "isa_side_tax_krw": 0,
+            "point_estimate_krw": null,
+            "lower_bound_krw": 0,
+            "upper_bound_krw": 308000,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 0,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes": [
+        "isa_return_estimate_reported_as_range"
+      ],
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied"
+      ]
+    }
+  }
+}
+```
+
+#### GC-60 — 같은 계좌, 정산 기간만 3년 【경계 · 계약 단위 대 과세기간 단위】
+
+**프로필** GC-52와 **완전히 같고 정산 기간만 3년**
+
+**기대 결과** `R = 6,000,000` · `G = N = 6,000,000` · ISA 쪽 세액 **396,000** · 비교 기준 세액 **924,000** · 혜택 **528,000** · 축 `0 / 308,000 / 220,000`
+
+**도출 과정** ① 20,000,000 × 0.1 × **3** = 6,000,000 → ⑤ `(6,000,000 − 2,000,000) × 0.099 = 396,000` → ⑥ `6,000,000 × 0.154 = 924,000` → ⑦ 528,000 → ⑨ **3년치임을 함께 싣는다.**
+
+**이 케이스가 막는 것.** GC-52의 308,000원을 3년치로 곱하면 924,000원이 나오고, 그것은 비과세 한도금액 `C`를 **해마다 새로 주는** 계산이다. 조문은 그 금액을 "가입일 또는 연장일을 기준으로" 계약 한 건에 대해 한 번 정한다(조특법 §91조의18 ②). 928,000이 아니라 528,000이며 **연간 환산은 1.75배 과대다.** 두 케이스의 `settlement_years`가 1과 3으로 다르게 실리는지도 함께 본다.
+
+```golden
+{
+  "case": "GC-60",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 0,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": {
+        "annual_return_rate": 0.1,
+        "income_character": "interest_dividend",
+        "settlement_years": 3,
+        "loss_amount_krw": 0
+      }
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 20000000,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 4,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "plan_count": 1,
+      "limits": {
+        "isa_tax_free_limit_krw": 2000000
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": {
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
+          },
+          "tax_credit": {
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
+          },
+          "warning_count": 0,
+          "assumption_based_isa_estimate": {
+            "state": "computed",
+            "is_annual": false,
+            "settlement_years": 3,
+            "settlement_years_source": "user",
+            "taxable_share_min": 1,
+            "taxable_share_max": 1,
+            "principal_krw": 20000000,
+            "total_return_krw": 6000000,
+            "taxable_income_krw": 6000000,
+            "loss_offset_applied_krw": 0,
+            "net_income_krw": 6000000,
+            "tax_free_limit_krw": 2000000,
+            "comparison_side_tax_krw": 924000,
+            "isa_side_tax_krw": 396000,
+            "point_estimate_krw": 528000,
+            "lower_bound_krw": 528000,
+            "upper_bound_krw": 528000,
+            "axis_breakdown": {
+              "loss_offset_krw": 0,
+              "tax_free_krw": 308000,
+              "rate_gap_krw": 220000,
+              "rounding_residual_krw": 0
+            },
+            "comparison_baseline_code": "withholding_at_general_rate"
+          }
+        }
+      },
+      "notice_codes": [
+        "isa_return_estimate_is_not_annual"
+      ],
+      "notice_codes_absent": [
+        "isa_return_assumption_not_supplied",
+        "isa_return_estimate_reported_as_range"
+      ]
+    }
+  }
+}
+```
+
+#### GC-61 — `isa.tax_free_limit`의 미확인 표시는 몇 건인가 【불일치 · 판정 대기】
+
+**주장과 근거, 그리고 왜 초록색으로 만들지 않았는지는 12.6절.**
+
+```golden
+{
+  "case": "GC-61",
+  "request": {
+    "scenarios": [
+      "current"
+    ],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 3600000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12,
+      "isa_return_assumption": null
+    },
+    "accounts": {
+      "annuity_savings": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "retirement_pension": {
+        "ytd_contribution_krw": 0,
+        "annuity_start_status": "not_started"
+      },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 0,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "expect": {
+    "current": {
+      "legal_basis": {
+        "isa.tax_free_limit": {
+          "present": true,
+          "status": "확정",
+          "bill_stage": null,
+          "has_uncertainty_note": true,
+          "uncertainty_note_count": 3,
+          "uncertainty_kinds": [
+            "unverified"
+          ],
+          "uncertainty_paths": [
+            "unverified[0]",
+            "unverified[1]",
+            "unverified[2]"
+          ]
+        }
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": { "annuity_savings": 6000000, "retirement_pension": 3000000, "isa": 0 },
+          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "warning_count": 0
+        }
+      }
+    }
+  }
+}
+```
+
