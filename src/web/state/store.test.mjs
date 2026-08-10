@@ -181,7 +181,9 @@ test('the request sends the raw birth date and no derived age at all (D21)', () 
 });
 
 test('prior-year tax is sent as an explicit state, never inferred from a blank field', () => {
-  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '3000000' }), {
+  // 폼의 결정세액은 만원 단위다(소유자 지시, 6절) — `buildPriorYearTax`가
+  // 원 단위로 바꿔 계약에 싣는다.
+  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '300' }), {
     state: 'amount',
     determined_tax_krw: 3000000,
     pension_credit_applied_krw: null,
@@ -195,6 +197,13 @@ test('prior-year tax is sent as an explicit state, never inferred from a blank f
   assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '0' }), {
     state: 'amount',
     determined_tax_krw: 0,
+    pension_credit_applied_krw: null,
+  });
+  // 결정세액은 만원으로 딱 떨어지지 않을 수 있다(예: 1,234,567원) — 소수
+  // 넷째 자리(1원)까지 정확히 원 단위로 변환된다. 반올림이 없다.
+  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '123.4567' }), {
+    state: 'amount',
+    determined_tax_krw: 1234567,
     pension_credit_applied_krw: null,
   });
 });
@@ -211,10 +220,49 @@ test('annuity_start_status never defaults to not_started', () => {
 
 test('the request keeps retirement transfers out of the contribution field', () => {
   // 여력에 섞여 들어오면 세액공제액이 과대 계산된다(계약 3.2절, 10절).
-  const form = { ...initialForm(), annuitySavingsYtd: '1000000' };
+  // 입력은 만원 단위다 — '100'은 1,000,000원이다.
+  const form = { ...initialForm(), annuitySavingsYtd: '100' };
   const req = buildEngineRequest(form, ['current']);
   assert.equal(req.accounts.annuity_savings.ytd_contribution_krw, 1000000);
   assert.equal(req.accounts.annuity_savings.retirement_transfer_in_krw, null);
+});
+
+// ---------------------------------------------------------------------------
+// 6절 — 금액 입력은 만원 단위, 계약에는 원 단위로 나간다
+// ---------------------------------------------------------------------------
+
+test('every money field in the request is converted from 만원 (screen unit) to 원 (contract unit)', () => {
+  const form = {
+    ...initialForm(),
+    currentSalary: '6200', // 62,000,000원
+    priorSalaryEnabled: true,
+    priorSalary: '5800', // 58,000,000원
+    monthlyCapacity: '80', // 800,000원
+    annuitySavingsYtd: '300', // 3,000,000원
+    retirementPensionYtd: '250.5', // 2,505,000원
+    isaExists: true,
+    isaCumulative: '1200', // 12,000,000원
+    isaYtd: '400', // 4,000,000원
+    isaTransferEnabled: true,
+    isaTransferAmount: '500', // 5,000,000원
+    isaTransferPriorApplied: '10', // 100,000원
+  };
+  const req = buildEngineRequest(form, ['current']);
+  assert.equal(req.profile.current_year_total_salary_krw, 62000000);
+  assert.equal(req.profile.prior_year_total_salary_krw, 58000000);
+  assert.equal(req.profile.monthly_capacity_krw, 800000);
+  assert.equal(req.accounts.annuity_savings.ytd_contribution_krw, 3000000);
+  assert.equal(req.accounts.retirement_pension.ytd_contribution_krw, 2505000);
+  assert.equal(req.accounts.isa.cumulative_contribution_krw, 12000000);
+  assert.equal(req.accounts.isa.ytd_contribution_krw, 4000000);
+  assert.equal(req.isa_transfer.amount_krw, 5000000);
+  assert.equal(req.isa_transfer.prior_year_applied_extra_credit_krw, 100000);
+});
+
+test('an unparsable money field falls back the same way a blank one does — never NaN reaching the engine', () => {
+  const req = buildEngineRequest({ ...initialForm(), currentSalary: 'not a number' }, ['current']);
+  assert.equal(req.profile.current_year_total_salary_krw, 0);
+  assert.ok(!Number.isNaN(req.profile.current_year_total_salary_krw));
 });
 
 test('declared_youth stays null until the user checks it — the screen never fills it from an age', () => {

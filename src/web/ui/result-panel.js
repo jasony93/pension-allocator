@@ -19,7 +19,7 @@ import {
   exclusionReasonMessage,
   excludedFromComparisonMessage,
   contributionRemainingCaption,
-  creditHeadroomCaption,
+  creditHeadroomExceededMessage,
   isaTaxFreeCaption,
   donutSingleSliceCaption,
   unallocatedReasonMessage,
@@ -29,7 +29,6 @@ import {
   RESULT_PLACEHOLDER_COPY,
   EXCLUDED_ACCOUNT_FALLBACK_REASON,
   EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
-  CREDIT_HEADROOM_EXCEEDED_CAPTION,
   PROPOSED_BADGE_LABEL,
   FILL_ORDER_NOTE_HEADING,
   FILL_ORDER_TAG_FACT,
@@ -550,23 +549,31 @@ function donutSingleSliceAccount(plan, excluded) {
 }
 
 /**
- * 세액공제 인정 여지 — 연금계좌 묶음에 한 번, `(연금저축·IRP 합산)`을 붙여
- * 적는다. 배분액이 이 값을 넘으면 그 사실과 이유를 함께 적는다(5.10절 (3)).
- * 넘는 현상은 개정안 시나리오에서만 나타나므로 그때 `ProposedBadge`가 붙는다.
+ * 세액공제 인정 여지 — **배분액이 이 여지를 넘을 때만** 그린다.
+ *
+ * 소유자가 잡은 문제: 이 여지(`pension_combined_credit_remaining_krw`)는
+ * `scenario.limits`의 **배분 전** 값이라 어느 배분안을 보든 같다. 넘지 않는
+ * 보통의 경우 이 값을 배분 결과 옆에 그대로 적으면, 배분이 여지를 정확히 다
+ * 채운 흔한 경우(예: 월 80만원 예시의 연금 배분 900만원)에 "더 인정될 수 있는
+ * 금액 900만원"이 나란히 서서 이미 다 쓴 한도를 아직 남은 것처럼 읽힌다. 틀이
+ * 어긋난 것이지 숫자가 틀린 게 아니었다(`copy.js` `creditHeadroomExceededMessage`
+ * 주석).
+ *
+ * 이 값이 여전히 필요한 자리는 배분액이 여지를 **넘는** 예외뿐이다(계약
+ * 5.3절 — 상한이 아니므로 넘을 수 있다). 그때는 크기와 이유를 한 문장에 담아
+ * 적는다(5.10절 (3)). 넘는 현상은 개정안 시나리오에서만 나타나므로 그때
+ * `ProposedBadge`가 붙는다.
  */
 function creditHeadroomBlock(scenario, plan) {
   const view = pensionCreditHeadroomView(scenario, plan);
-  if (view.remainingKrw === null) return null;
+  if (!view.exceeded) return null;
   const laws = lawEntriesForPath(scenario, 'limits.pension_combined_credit_limit_krw');
   return el('div', { class: 'headroom-note' }, [
-    el('p', { class: 'type-body-s' }, [creditHeadroomCaption(view.remainingKrw)]),
-    view.exceeded ? el('p', { class: 'type-body-s' }, [CREDIT_HEADROOM_EXCEEDED_CAPTION]) : null,
-    view.exceeded || laws.length
-      ? el('p', { class: 'note-laws' }, [
-          view.exceeded && !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
-          ...laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
-        ])
-      : null,
+    el('p', { class: 'type-body-s' }, [creditHeadroomExceededMessage(view.remainingKrw)]),
+    el('p', { class: 'note-laws' }, [
+      !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
+      ...laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
+    ]),
   ]);
 }
 
@@ -782,16 +789,17 @@ function accountTable(plan, scenario) {
     );
 
     // 보조 줄 — 배분액과 나란한 열에 놓지 않는다(5.10·5.11절). 나란히 놓는 순간
-    // "이만큼까지 넣을 수 있다"로 읽힌다.
+    // "이만큼까지 넣을 수 있다"로 읽힌다. **배분액이 여지를 넘을 때만** 그린다
+    // — 넘지 않으면 배분 전 잔여 여지를 배분 결과 옆에 두게 되어, 이미 다 쓴
+    // 한도가 남은 것처럼 읽힌다(`creditHeadroomBlock` 주석과 같은 이유).
     if (a.account === lastPensionAccount) {
       const headroom = pensionCreditHeadroomView(scenario, plan);
-      if (headroom.remainingKrw !== null) {
+      if (headroom.exceeded) {
         rows.push(
           el('tr', { class: 'table-row-note' }, [
             el('td', { colspan: 5 }, [
-              creditHeadroomCaption(headroom.remainingKrw),
-              headroom.exceeded ? ` ${CREDIT_HEADROOM_EXCEEDED_CAPTION} ` : null,
-              headroom.exceeded && !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
+              creditHeadroomExceededMessage(headroom.remainingKrw),
+              !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
             ]),
           ]),
         );
@@ -841,8 +849,85 @@ function accountTable(plan, scenario) {
   ]);
 }
 
+// ---------------------------------------------------------------------------
+// D25 — 가정 사항 · 법령 조항 블록. 관리자 판정(게이트 2 → D25)으로 기본 접힘이
+// 허용됐다. **접기는 삭제가 아니다** — 이 절이 그 경계를 코드로 지킨다.
+//
+// 1. 접힌 상태에서도 제목과 건수가 읽힌다(아래 `summaryLabel`류 함수).
+// 2. 펼치면 "중요한 5개"를 먼저 보이되, 나머지 전부에 도달할 경로가 **같은
+//    블록 안**에 남는다 — 잘라내지 않는다(`splitTopFive` + 중첩 `<details>`).
+// 3. 고지 배너(요소 ①②)는 이 절의 대상이 아니다 — `disclosureBanner()`는
+//    별도 함수로 항상 렌더된다.
+// ---------------------------------------------------------------------------
+
+/**
+ * "중요한 5개"의 기준 — **계산 결과에 실제로 영향을 준 것이 우선이다.**
+ *
+ * tier 0: 이번 계산에서 실제로 쓰인 숫자(배분액·세액공제 한도·계좌 자격)를
+ *   바꾸는 가정 — 없었다면 그 금액이 달라졌을 것들.
+ * tier 1: 화면에 보이는 다른 값(잔여 연수·안내 문구)이나 판정 시점에는
+ *   영향을 주지만, 이 결과 화면의 헤드라인 금액 자체를 바꾸지는 않는 것들.
+ * tier 2: 이번 계산의 특정 숫자가 아니라 서비스의 범위·계산 방식을 말하는
+ *   일반 고지(예: "다른 소득공제는 반영하지 않았다").
+ *
+ * 목록에 없는 코드는 tier 1(중간)로 둔다 — 모르는 것을 최상위로 올려 다른
+ * 항목을 밀어내지도, 바닥으로 내려 숨기지도 않는 안전한 기본값이다.
+ */
+const ASSUMPTION_TIER = {
+  // tier 0 — 헤드라인 금액·한도·자격을 바꾸는 가정
+  months_remaining_defaulted: 0,
+  isa_new_account_assumed: 0,
+  other_savings_zero_assumed: 0,
+  prior_transfer_credit_zero_assumed: 0,
+  prior_pension_credit_zero_assumed: 0,
+  retirement_transfer_counted_in_contribution_limit: 0,
+  local_tax_follows_income_tax_cap: 0,
+  age_reference_date_not_in_ruleset: 0,
+  deferred_retirement_income_absent_assumed: 0,
+  existing_contribution_untouched: 0,
+  transfer_destination_defaulted: 0,
+  zero_capacity: 0,
+  budget_exceeds_all_limits: 0,
+  existing_contribution_over_limit: 0,
+  isa_excluded_financial_income_taxpayer: 0,
+  isa_excluded_age: 0,
+  tax_liability_cap_unknown: 0,
+  tax_liability_cap_zero: 0,
+  tax_liability_cap_applied: 0,
+  pension_contribution_blocked_annuity_started: 0,
+  retirement_transfer_excluded_from_credit: 0,
+  // tier 2 — 특정 숫자가 아니라 범위·계산 방식을 말하는 일반 고지
+  single_tax_year_only: 2,
+  other_deductions_excluded: 2,
+  rounding_floor_to_won: 2,
+  isa_benefit_not_quantified: 2,
+  fund_use_horizon_excluded_from_amounts: 2,
+  early_exit_penalty_not_quantified: 2,
+};
+
+function assumptionTier(code) {
+  return ASSUMPTION_TIER[code] ?? 1;
+}
+
+/** 안정 정렬로 tier가 낮은(중요한) 순서로 앞에 오게 한다 — 같은 tier 안의 순서는 바뀌지 않는다. */
+function splitTopFive(entries, rank) {
+  const ranked = entries.map((entry, index) => ({ entry, index, tier: rank(entry) }));
+  ranked.sort((a, b) => a.tier - b.tier || a.index - b.index);
+  const ordered = ranked.map((r) => r.entry);
+  return { primary: ordered.slice(0, 5), rest: ordered.slice(5) };
+}
+
+/** 나머지 항목으로 가는 경로 — 모달·별도 페이지가 아니라 같은 블록 안의 중첩 `<details>`다. */
+function moreItemsDisclosure(restNodes, label) {
+  if (!restNodes.length) return null;
+  return el('details', { class: 'more-items' }, [
+    el('summary', { class: 'more-items-trigger' }, [`나머지 ${restNodes.length}건 더 보기 (${label})`]),
+    el('ul', {}, restNodes),
+  ]);
+}
+
 function assumptionBlock(response, scenario, form) {
-  const items = [];
+  const entries = [];
   for (const a of response.assumptions) {
     // 이 가정이 **어느 요건에 걸리는지**를 엔진이 규칙 id로 지목하면, 그 요건의
     // 조항을 항목 옆에 붙인다(헌장 고지 요소 3 · 계약 5.7절의 두 방향 연결).
@@ -854,49 +939,73 @@ function assumptionBlock(response, scenario, form) {
     // 싶을 때 쓸 수 있게 넘기되, **엔진이 실은 `params`가 언제나 이긴다** —
     // 화면이 엔진의 값을 덮어쓰는 경로를 만들지 않는다.
     const params = { tax_year: response.echo?.tax_year, ...a.params };
-    items.push(affected.length ? [assumptionMessage(a.code, params), lawChipRow(affected, 'note-laws')] : assumptionMessage(a.code, params));
+    entries.push({
+      code: a.code,
+      node: affected.length ? [assumptionMessage(a.code, params), lawChipRow(affected, 'note-laws')] : assumptionMessage(a.code, params),
+    });
   }
   // 화면 파생 항목(screens.md 4.5절) — 엔진 notice가 아니라 폼 상태에서 나온다.
   // 이 넷이 빠져 있어서 입력 부족 화면의 "그 사실을 아래 가정에 적습니다"가
   // 지켜지지 않고 있었다.
-  for (const code of formDerivedAssumptionCodes(form ?? {})) items.push(assumptionMessage(code, {}));
+  for (const code of formDerivedAssumptionCodes(form ?? {})) entries.push({ code, node: assumptionMessage(code, {}) });
   for (const n of scenario.notices.filter((n) => n.severity === 'info' || n.severity === 'warning')) {
     if (n.code === 'proposed_not_enacted') continue; // 고지 ⑥에서 별도 표시
     // 배분안이 하나로 합쳐졌다는 사실은 **비교 자리에서** 이미 말한다(4.4절).
-    // 여기 한 번 더 적으면 "이 결과가 선 조건"이라는 목록의 성격과도 어긋난다 —
-    // 계산의 전제가 아니라 결과의 형태에 대한 안내다.
+    // 여기 한 번 더 적으면 "가정 사항" 목록의 성격과도 어긋난다 — 계산의
+    // 전제가 아니라 결과의 형태에 대한 안내다.
     if (n.code === 'plans_collapsed_single') continue;
-    items.push(noticeMessage(n));
+    entries.push({ code: n.code, node: noticeMessage(n) });
   }
-  return el('details', { class: 'assumption-block', open: true }, [
-    el('summary', { class: 'type-title-m' }, ['이 결과가 선 조건']),
-    el(
-      'ul',
-      {},
-      items.map((item) => el('li', { class: 'type-body-s' }, [].concat(item))),
+
+  const { primary, rest } = splitTopFive(entries, (e) => assumptionTier(e.code));
+  const li = (entry) => el('li', { class: 'type-body-s' }, [].concat(entry.node));
+
+  return el('details', { class: 'assumption-block' }, [
+    // **접힌 상태에서도 제목과 건수가 읽힌다** — D25가 지킨 조건 2번.
+    el('summary', { class: 'block-summary type-title-m' }, [
+      el('span', { class: 'block-summary-chevron', 'aria-hidden': 'true' }, ['▸']),
+      `가정 사항 ${entries.length}건`,
+    ]),
+    el('ul', {}, primary.map(li)),
+    moreItemsDisclosure(
+      rest.map(li),
+      '이번 계산의 결과 금액을 바꾸지 않는 일반 고지 위주',
     ),
   ]);
 }
 
-function basisBlock(scenario) {
-  return el('details', { class: 'basis-block', open: true }, [
-    el('summary', { class: 'type-title-m' }, [`적용한 법령 조항 ${scenario.legal_basis.length}건 · ${scenario.ruleset.tax_year} 과세연도 기준`]),
-    el(
-      'ul',
-      {},
-      scenario.legal_basis.map((entry) =>
-        el('li', {}, [
-          el('span', { class: 'law-chip' }, [entry.law]),
-          ` ${entry.title} · ${entry.effective_from} 시행`,
-          entry.bill_stage ? el('span', { class: 'proposed-badge' }, [`정부안 · 국회 통과 전`]) : null,
-          el(
-            'a',
-            { href: entry.url, target: '_blank', rel: 'noopener', class: 'law-link' },
-            ['원문'],
-          ),
-        ]),
-      ),
-    ),
+/**
+ * 법령 조항의 "중요한 5개" — 이 배분안의 헤드라인 세액공제액(`deterministic_
+ * benefit`)을 뒷받침하는 조항을 최우선으로, 그다음 계좌별 납입 한도를 뒷받침
+ * 하는 조항, 나머지는 원래 순서를 지킨다. 판정하지 않는다 — 엔진이 이미 실어
+ *보낸 `basis_rule_ids` 지목을 읽어 정렬만 한다.
+ */
+function lawEntryTier(entry, headlineRuleIds, limitRuleIds) {
+  if (headlineRuleIds.has(entry.rule_id)) return 0;
+  if (limitRuleIds.has(entry.rule_id)) return 1;
+  return 2;
+}
+
+function basisBlock(scenario, plan) {
+  const headlineRuleIds = new Set(plan?.deterministic_benefit?.basis_rule_ids ?? []);
+  const limitRuleIds = new Set((scenario?.limits?.by_account ?? []).flatMap((l) => l.basis_rule_ids ?? []));
+  const { primary, rest } = splitTopFive(scenario.legal_basis, (entry) => lawEntryTier(entry, headlineRuleIds, limitRuleIds));
+
+  const row = (entry) =>
+    el('li', {}, [
+      el('span', { class: 'law-chip' }, [entry.law]),
+      ` ${entry.title} · ${entry.effective_from} 시행`,
+      entry.bill_stage ? el('span', { class: 'proposed-badge' }, [`정부안 · 국회 통과 전`]) : null,
+      el('a', { href: entry.url, target: '_blank', rel: 'noopener', class: 'law-link' }, ['원문']),
+    ]);
+
+  return el('details', { class: 'basis-block' }, [
+    el('summary', { class: 'block-summary type-title-m' }, [
+      el('span', { class: 'block-summary-chevron', 'aria-hidden': 'true' }, ['▸']),
+      `법령 조항 ${scenario.legal_basis.length}건 · ${scenario.ruleset.tax_year} 과세연도 기준`,
+    ]),
+    el('ul', {}, primary.map(row)),
+    moreItemsDisclosure(rest.map(row), '이 배분안의 세액공제액·납입 한도를 직접 뒷받침하지 않는 조항 위주'),
   ]);
 }
 
@@ -962,7 +1071,7 @@ function resultPanelForScenario(
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),
     assumptionBlock(response, scenario, form),
-    basisBlock(scenario),
+    basisBlock(scenario, plan),
     limitNote(),
     saveShareBlock(store, plan, scenario),
   ]);

@@ -19,64 +19,50 @@
 :root {
   color-scheme: light;
 
-  /* 2026-08-10 개정 — 소유자 지시("색깔이 너무 없어 보여 · 밝은 초록색 색감")를
-     반영해 표면을 초록(OKLCH H≈156)으로 옮긴다(design-system 3.1·3.6절).
-     **표면은 두 등급으로 갈린다**(3.1.1절) — `surface-raised`·`surface-overlay`
-     ·`data-track`은 **마크 표면**이라 계좌 색과 3:1을 져야 하므로 채도 상한이
-     낮고(C ≲ 0.031), 나머지(`surface-base`·`surface-sunken`·`brand-band`·
-     `*-subtle`)는 마크가 놓이지 않으므로 채도를 세 배까지 올린다. 이 파일의
-     `styles-tokens.test.mjs`가 마크 표면 셋에 대해서만 데이터 색 3:1을 검사한다
-     — `surface-base`(페이지)는 검사 대상이 아니다. **차트를 페이지 배경 위로
-     빼면 이 여유가 사라진다**(반례 실측: design-system 3.1.1절). */
-  --surface-base: #cdf2da;
-  --surface-raised: #f0fdf4;
-  --surface-sunken: #dcfce7;
-  --surface-overlay: #f7fefa;
-  --surface-scrim: rgba(6, 32, 18, 0.48);
-  /* `brand-band` — 헤더 띠·구획 띠·빈 상태 워시 전용(신설). 마크가 없는 자리이므로
-     이 화면에서 가장 진한 초록(C 0.100)이 성립한다(screens.md 2.3.1절). */
-  --brand-band: #a3eebe;
-  --border-subtle: #8fd7aa;
+  /* 2026-08-10 재개정 — 소유자 지시로 표면·강조색의 초록을 걷어내고 초록 도입
+     직전 값으로 되돌린다. **되돌리는 것은 색조뿐이다** — 같은 회차에 들어갔던
+     결함 수정(D23 경계 대비, 카드 그림자, 트랙 대비, 도넛 번호 배지)은 색이
+     아니라 위계·대비 문제였으므로 그대로 남긴다. 계좌 색 셋(`--data-pension`
+     ·`--data-irp`·`--data-isa`와 각 `-side`)은 소유자가 유지를 지시해 손대지
+     않았다. `--brand-band`는 오직 "표면에 초록을 더 놓는다"는 목적으로 신설된
+     토큰이라 색조 복귀 대상이고, 값을 되돌리는 것을 넘어 그 쓰임(헤더·구획
+     띠·빈 상태 워시)까지 걷어냈다 — 남겨 두면 강조색만 파랑으로 돌아가고
+     대역만 초록으로 남는 뒤섞인 상태가 된다. */
+  --surface-base: #f7f8fa;
+  --surface-raised: #ffffff;
+  --surface-sunken: #edeff2;
+  --surface-overlay: #ffffff;
+  --surface-scrim: rgba(16, 18, 20, 0.48);
+  --border-subtle: #e1e5ea;
   /* D23 — 입력 필드의 경계는 **뜻을 나르는 경계**다(WCAG 1.4.11, 비텍스트 3:1).
-     이 판정은 초록 표면으로 옮긴 뒤에도 유지된다 — 새 값은 sunken 대비 3.62 /
-     raised 대비 3.80(design-system 3.1절)으로 어느 방향으로도 3:1을 넘는다. */
-  --border-strong: #4f8c68;
+     이 값은 초록이 들어오기 전부터 이미 이 요건을 만족했다 — sunken 대비 3.29
+     / raised 대비 3.79. 색조를 되돌려도 표면이 같은 계열로 돌아가므로 그대로
+     유지된다. */
+  --border-strong: #7c848d;
 
   --text-primary: #14181c;
   --text-secondary: #4a535c;
   --text-muted: #7c858e;
   --text-on-accent: #ffffff;
-  /* `accent`가 초록이 되면서 링크만 파랑으로 남으면 "누를 수 있는 것"의 색이
-     둘로 갈린다 — 그래서 링크도 같은 초록 사다리에서 뽑는다(design-system
-     3.2절). 실측 대비 6.81(surface-raised). */
-  --text-link: #166534;
+  --text-link: #1f5c99;
 
-  /* `accent` — 2026-08-10 개정으로 파랑에서 초록으로 옮겼다(design-system
-     3.3·3.6.2절). 실측 근거: 참고 사이트가 실제로 쓰는 H≈150 사다리에서 두 단
-     아래(대비 여유를 남긴 값)를 골랐고, 계좌색(연금저축 H192)과의 ΔE(13.0)가
-     이 시스템이 이미 감수 중인 최소 인접 ΔE(다크 11.7)보다 넓다. */
-  --accent: #15803d;
-  --accent-hover: #166534;
-  --accent-pressed: #14532d;
-  --accent-subtle: #cdf5db;
-  --focus-ring: #15803d;
+  --accent: #2f5d8c;
+  --accent-hover: #27506f;
+  --accent-pressed: #1f4159;
+  --accent-subtle: #e8eff7;
+  --focus-ring: #2f5d8c;
 
-  /* `state-*`는 이번 개정에서 색상각을 하나도 바꾸지 않았다 — 그것이 설계다
-     (design-system 3.4절). 화면 전체가 초록이 된 이상 `state-info`(블루)가
-     초록 화면 위의 **유일한 파란 면**으로 남아야 고지와 브랜드 장식이 색만으로
-     구분된다. */
   --state-error: #b3261e;
   --state-error-subtle: #fdecea;
   --state-warning: #8a5a00;
   --state-warning-subtle: #fff4e0;
   --state-info: #2f5d8c;
-  /* subtle만 채도를 올렸다(라이트 C 0.013 → 0.025) — 초록 표면 위에서 "파란
-     면"으로 읽히는 데 필요한 최소치다(design-system 3.4절). */
-  --state-info-subtle: #dbe9f8;
+  --state-info-subtle: #e8eff7;
 
-  /* 계좌 색 — 검증기가 여섯 검사를 통과시킨 값(3.5.2·3.5.4절). **이번 개정에서
-     hex를 바꾸지 않았다** — 바뀐 것은 이 색이 놓이는 표면이고, 그래서 대비를
-     마크 표면(카드·모달·트랙) 기준으로 다시 쟀다(아래 --data-track 참고). */
+  /* 계좌 색 — 검증기가 여섯 검사를 통과시킨 값(3.5.2·3.5.4절). 소유자 지시로
+     이번 색감 복귀에서도 hex를 바꾸지 않는다 — "도넛 차트는 색깔을 그대로
+     유지". 표면이 되돌아가면서 대비를 다시 쟀고(아래 --data-track·
+     --data-excluded 참고), 검증기 재실행 결과는 보고에 남긴다. */
   --data-pension: #0a9a96;
   --data-irp: #da7134;
   --data-isa: #8758c1;
@@ -90,29 +76,32 @@
   /* 역할 색 — 계좌가 아니다. 무채색 사다리에서 뽑되 표면 대비로 계층을 가른다.
      값을 나르면 3:1 이상 · 뜻을 나르는 경계도 3:1 이상 · 아무것도 나르지 않으면
      2:1 미만. **2:1과 3:1 사이는 비어 있다**(3.5.3절). */
-  --data-unallocated: #5a6166;      /* 값을 나른다 — 카드 대비 6.01 */
+  --data-unallocated: #5a6166;      /* 값을 나른다 — 카드 대비 6.29 */
   --data-unallocated-side: #3c4247;
-  /* 초록 표면 위에서 재실측해 한 단 내렸다(#888F95 → #7D848A) — 새 페이지
-     표면 위에서 2.68로 3:1을 놓쳤기 때문이다. 카드 3.62 / 페이지 3.12 /
-     트랙 3.49로 세 방향 모두 넘는다(design-system 3.5.3절). */
-  --data-excluded: #7d848a;         /* 뜻을 나르는 경계 — 카드 대비 3.62 */
-  --data-placeholder: #c0c8ce;      /* 아무것도 나르지 않는다 — 카드 대비 1.62 */
-  /* `data-track`은 배경이 아니라 **마크 표면**이다(3.5.3.1절, 결함 ①의 수정).
-     막대의 채움색은 카드가 아니라 트랙 위에 놓이므로 그 경계도 WCAG 1.4.11의
-     대상이다. 초판 값(#E1E5EA)은 IRP 2.66 / 연금저축 2.81로 3:1 미달이었다 —
-     트랙을 "배경"으로 분류해 검사에서 빼 둔 탓이다. 새 값은 라이트 트랙에서
-     연금저축 3.18 · IRP 3.02(여유 0.02, 가장 얇은 자리) · ISA 4.60 전부 통과한다. */
-  --data-track: #e4fbec;
+  /* 초록 표면 위에서 한 번 재실측됐던 값(#7D848A)이었지만, 표면을 되돌리면서
+     그 재실측의 전제(초록 페이지 위 2.68 미달)가 사라졌다 — 초록 도입 전
+     값(#888F95)으로 되돌린다. 재실행한 검증기가 카드 3.28 / 페이지 3.08 /
+     트랙(아래) 대비를 다시 확인한다. */
+  --data-excluded: #888f95;         /* 뜻을 나르는 경계 */
+  --data-placeholder: #c0c8ce;      /* 아무것도 나르지 않는다 */
+  /* `data-track`은 배경이 아니라 **마크 표면**이다(3.5.3.1절, 결함 ①의 수정 —
+     색이 아니라 대비 결함이므로 되돌리지 않는다). 초판 값(#E1E5EA)은 IRP
+     2.66 / 연금저축 2.81로 3:1 미달이었다. 초록 도입 때의 수정값(#E4FBEC)은
+     그 초록 표면에 맞춘 색이라 색조 복귀 대상이지만, 대비 수정 자체는 남겨야
+     하므로 **표면을 되돌린 채로 다시 계산한 무채색** 값을 쓴다 — 라이트
+     트랙에서 연금저축 3.31 · IRP 3.15 · ISA 4.79 · 미배분 6.03으로 전부
+     통과하고, 카드(#FFFFFF) 대비 1.04로 "아무것도 나르지 않는다" 대역(<2)에도
+     남는다. */
+  --data-track: #fafafa;
 
-  /* 카드 그림자 — 2026-08-10 개정. 초판은 알파가 지각 한계 근처였고 구현은
-     `.input-panel`에 아예 `box-shadow: none`이었다(design-system 3.6.1절 ④ ·
-     결함 ③). 색을 중립 회색에서 짙은 초록(6,40,20)으로 바꿨다 — 초록 표면
-     위에 회색 그림자를 얹으면 채도가 빠진 얼룩으로 보인다. 그림자는 위계의
-     유일한 장치가 아니다 — 카드 대 페이지 1.16:1과 테두리 1.61:1이 먼저
-     있고, 그림자는 그 위에 얹는 세 번째 층이다(4.3절). */
-  --shadow-1: 0 1px 2px rgba(6, 40, 20, 0.06), 0 4px 12px rgba(6, 40, 20, 0.08);
-  --shadow-2: 0 4px 12px rgba(6, 40, 20, 0.14);
-  --shadow-3: 0 12px 32px rgba(6, 40, 20, 0.22);
+  /* 카드 그림자 — 문서가 명세했는데 구현에는 없던 것(design-system 3.6.1절 ④
+     · 결함 ③, 카드 대 페이지 대비 1.06 미해결). **그림자가 존재한다는 사실은
+     색이 아니라 위계이므로 되돌리지 않는다.** 다만 그 회차의 그림자 색(짙은
+     초록 6,40,20)은 초록 표면과 짝지어 고른 값이라 표면을 되돌리면 함께
+     되돌린다 — 중립 어두운 값(옛 `--surface-scrim`과 같은 16,18,20)으로. */
+  --shadow-1: 0 1px 2px rgba(16, 18, 20, 0.06), 0 4px 12px rgba(16, 18, 20, 0.08);
+  --shadow-2: 0 4px 12px rgba(16, 18, 20, 0.14);
+  --shadow-3: 0 12px 32px rgba(16, 18, 20, 0.22);
 
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
@@ -123,30 +112,26 @@
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --surface-base: #0a1710; --surface-raised: #12251a; --surface-sunken: #050d08;
-    --surface-overlay: #163020; --surface-scrim: rgba(0, 0, 0, 0.62);
-    --brand-band: #173d27;
-    --border-subtle: #2b4d38; --border-strong: #6c8f79;
+    --surface-base: #14171a; --surface-raised: #1e2226; --surface-sunken: #0f1214;
+    --surface-overlay: #252a2f; --surface-scrim: rgba(0, 0, 0, 0.62);
+    --border-subtle: #2c3238; --border-strong: #727982;
     --text-primary: #f2f4f6; --text-secondary: #b6bec6; --text-muted: #7e878f;
-    /* `text-on-accent`가 다크에서 거의 검정(#0F1214)이던 것을 짙은 초록으로
-       바꿨다 — 8.3절이 금지한 "순수 검정에 가까운 값"을 피하면서 밝은 초록
-       버튼 위 대비를 유지한다(실측 8.55:1). */
-    --text-on-accent: #052e16; --text-link: #86efac;
-    --accent: #4ade80; --accent-hover: #86efac; --accent-pressed: #22c55e; --accent-subtle: #14331f;
-    --focus-ring: #86efac;
+    --text-on-accent: #0f1214; --text-link: #79b8f0;
+    --accent: #6aa3db; --accent-hover: #84b4e4; --accent-pressed: #5a90c4; --accent-subtle: #22303d;
+    --focus-ring: #8fc0ee;
     --state-error: #f2887f; --state-error-subtle: #3a1e1b;
     --state-warning: #e8b25a; --state-warning-subtle: #33280f;
-    --state-info: #6aa3db; --state-info-subtle: #1f3040;
+    --state-info: #6aa3db; --state-info-subtle: #22303d;
     --data-pension: #06a19d; --data-irp: #df7333; --data-isa: #8f5fcc;
     --data-pension-side: #087c78; --data-irp-side: #b75203; --data-isa-side: #6e3da7;
     --data-unallocated: #b1b8bf; --data-unallocated-side: #8e959c;
     --data-excluded: #6a7076; --data-placeholder: #41474c;
-    /* 다크 트랙도 마크 표면이다(3.5.3.1절) — 카드보다 살짝 어두워 채움과 3:1을
-       진다(연금저축 5.54 · IRP 5.58 · ISA 3.93, design-system 3.5.4절). */
-    --data-track: #0b1c12;
-    /* 다크는 그림자를 절반으로 줄이고 `border-subtle`(대비 1.70)이 경계를
-       대신한다(design-system 4.3·8.3절) — 순수 검정 그림자는 8.3절이 금지한
-       "잔상이 생기는 과한 명도 대비"를 만든다. */
+    /* 다크 트랙도 마크 표면이다(3.5.3.1절) — 이 값은 초록 도입 전부터 옛
+       `--surface-sunken`과 같은 계열이었고, 표면을 되돌린 지금도 연금저축
+       5.97 · IRP 6.01 · ISA 4.24 · 미배분 9.49로 3:1을 넉넉히 넘는다. */
+    --data-track: #101010;
+    /* 그림자는 색조 복귀 대상이 아니었다 — 다크 그림자는 애초에 초록이 아니라
+       중립 검정이었다(순수 검정을 피하도록 알파만 낮춘 값). 그대로 둔다. */
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
     --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
@@ -158,22 +143,21 @@
       어긋나지 않는지는 `styles-tokens.test.mjs`가 기계로 대조한다. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface-base: #0a1710; --surface-raised: #12251a; --surface-sunken: #050d08;
-  --surface-overlay: #163020; --surface-scrim: rgba(0, 0, 0, 0.62);
-  --brand-band: #173d27;
-  --border-subtle: #2b4d38; --border-strong: #6c8f79;
+  --surface-base: #14171a; --surface-raised: #1e2226; --surface-sunken: #0f1214;
+  --surface-overlay: #252a2f; --surface-scrim: rgba(0, 0, 0, 0.62);
+  --border-subtle: #2c3238; --border-strong: #727982;
   --text-primary: #f2f4f6; --text-secondary: #b6bec6; --text-muted: #7e878f;
-  --text-on-accent: #052e16; --text-link: #86efac;
-  --accent: #4ade80; --accent-hover: #86efac; --accent-pressed: #22c55e; --accent-subtle: #14331f;
-  --focus-ring: #86efac;
+  --text-on-accent: #0f1214; --text-link: #79b8f0;
+  --accent: #6aa3db; --accent-hover: #84b4e4; --accent-pressed: #5a90c4; --accent-subtle: #22303d;
+  --focus-ring: #8fc0ee;
   --state-error: #f2887f; --state-error-subtle: #3a1e1b;
   --state-warning: #e8b25a; --state-warning-subtle: #33280f;
-  --state-info: #6aa3db; --state-info-subtle: #1f3040;
+  --state-info: #6aa3db; --state-info-subtle: #22303d;
   --data-pension: #06a19d; --data-irp: #df7333; --data-isa: #8f5fcc;
   --data-pension-side: #087c78; --data-irp-side: #b75203; --data-isa-side: #6e3da7;
   --data-unallocated: #b1b8bf; --data-unallocated-side: #8e959c;
   --data-excluded: #6a7076; --data-placeholder: #41474c;
-  --data-track: #0b1c12;
+  --data-track: #101010;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
   --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
@@ -183,37 +167,26 @@
       배경색이 빠지는데, 그러면 다크용 밝은 글자색이 흰 종이에 얹혀 **고지가
       통째로 사라진다.** `data-theme="dark"`(0,2,0)를 이기려면 같은 명시도로
       **더 뒤에** 적어야 한다 — 그래서 이 블록이 파일의 마지막 토큰 블록이다. */
-/* **알려진 미결 사항(보고 대상)** — screens.md 2.3.5절은 인쇄에서 헤더의
-   `brand-band`를 칠하지 않고 `surface-base`도 흰색으로 되돌리라고 적었다("초록
-   바탕은 잉크만 쓴다"). 이번 개정은 그 반전을 구현하지 않았다 — 이 저장소의
-   기존 계약 검사(`styles-tokens.test.mjs` "인쇄는 테마와 무관하게 라이트
-   팔레트를 강제한다")가 인쇄 블록과 라이트 `:root`의 **모든** 색 토큰이 한
-   글자도 다르지 않을 것을 요구하고, 그 계약을 깨지 않는 선에서는 헤더 한
-   자리만 예외로 흰색으로 되돌릴 수 없기 때문이다. 인쇄 대응은 이번 소집의
-   범위(초록 표면·계좌별 위젯·결함 셋) 밖이라 판단해 값은 라이트 `:root`와
-   동일하게 두고 이 사실만 남긴다 — 다음에 인쇄 전용 반전을 구현하는 사람은
-   이 계약 검사부터 다시 설계해야 한다. */
 @media print {
   :root, :root[data-theme="dark"], :root[data-theme="light"] {
     color-scheme: light;
-    --surface-base: #cdf2da; --surface-raised: #f0fdf4; --surface-sunken: #dcfce7;
-    --surface-overlay: #f7fefa; --surface-scrim: rgba(6, 32, 18, 0.48);
-    --brand-band: #a3eebe;
-    --border-subtle: #8fd7aa; --border-strong: #4f8c68;
+    --surface-base: #f7f8fa; --surface-raised: #ffffff; --surface-sunken: #edeff2;
+    --surface-overlay: #ffffff; --surface-scrim: rgba(16, 18, 20, 0.48);
+    --border-subtle: #e1e5ea; --border-strong: #7c848d;
     --text-primary: #14181c; --text-secondary: #4a535c; --text-muted: #7c858e;
-    --text-on-accent: #ffffff; --text-link: #166534;
-    --accent: #15803d; --accent-hover: #166534; --accent-pressed: #14532d; --accent-subtle: #cdf5db;
-    --focus-ring: #15803d;
+    --text-on-accent: #ffffff; --text-link: #1f5c99;
+    --accent: #2f5d8c; --accent-hover: #27506f; --accent-pressed: #1f4159; --accent-subtle: #e8eff7;
+    --focus-ring: #2f5d8c;
     --state-error: #b3261e; --state-error-subtle: #fdecea;
     --state-warning: #8a5a00; --state-warning-subtle: #fff4e0;
-    --state-info: #2f5d8c; --state-info-subtle: #dbe9f8;
+    --state-info: #2f5d8c; --state-info-subtle: #e8eff7;
     --data-pension: #0a9a96; --data-irp: #da7134; --data-isa: #8758c1;
     --data-pension-side: #017572; --data-irp-side: #b34f03; --data-isa-side: #67369d;
     --data-unallocated: #5a6166; --data-unallocated-side: #3c4247;
-    --data-excluded: #7d848a; --data-placeholder: #c0c8ce; --data-track: #e4fbec;
-    --shadow-1: 0 1px 2px rgba(6, 40, 20, 0.06), 0 4px 12px rgba(6, 40, 20, 0.08);
-    --shadow-2: 0 4px 12px rgba(6, 40, 20, 0.14);
-    --shadow-3: 0 12px 32px rgba(6, 40, 20, 0.22);
+    --data-excluded: #888f95; --data-placeholder: #c0c8ce; --data-track: #fafafa;
+    --shadow-1: 0 1px 2px rgba(16, 18, 20, 0.06), 0 4px 12px rgba(16, 18, 20, 0.08);
+    --shadow-2: 0 4px 12px rgba(16, 18, 20, 0.14);
+    --shadow-3: 0 12px 32px rgba(16, 18, 20, 0.22);
   }
 }
 
@@ -238,15 +211,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
 /* ---- 레이아웃 ---- */
 .app-layout { max-width: 1360px; margin: 0 auto; }
-/* 헤더 배경은 `brand-band`다(screens.md 2.1·2.3.2절 #1). 헤더에는 데이터
-   마크가 없으므로 이 화면에서 가장 진한 초록이 성립하는 자리다 — 초판은
-   흰 헤더 위 3px 초록 바였고, 그 결과가 라이트 첫 화면 유채색 면적 0.00%였다
-   (design-system 3.6.1절). `text-primary`/`text-secondary` on `brand-band`는
-   각각 13.19/5.79(라이트) · 10.99/6.44(다크)로 여유가 크다. */
 .app-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--space-4) var(--space-5);
-  position: sticky; top: 0; background: var(--brand-band);
+  position: sticky; top: 0; background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle); z-index: 10;
 }
 /* 가명칭 + 과세연도 표기 한 묶음. 데스크톱에서는 한 줄에 좌·우로 벌어지고,
@@ -330,13 +298,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .panel-title { font-size: 24px; font-weight: 700; margin: 0; }
 .input-group { padding: var(--space-4) 0; border-bottom: 1px solid var(--border-subtle); }
 .input-group:last-child { border-bottom: none; }
-/* 구획 띠(screens.md 2.3.2절 #7) — 그룹 헤더(`① 나에 대해` 등)가 `brand-band`
-   배경을 얹는다. 마크가 없는 자리라 이 채도가 성립하고, 긴 폼에서 초록이
-   스크롤을 따라 반복되는 유일한 신호가 된다. */
-.input-group-title {
-  margin: 0 0 var(--space-3); background: var(--brand-band);
-  padding: var(--space-2) var(--space-3); border-radius: var(--radius-s);
-}
+.input-group-title { margin: 0 0 var(--space-3); }
 .input-group-conditional { background: var(--accent-subtle); border-radius: var(--radius-m); padding: var(--space-4); border-bottom: none; margin-top: var(--space-3); }
 
 .field { margin-bottom: var(--space-4); }
@@ -348,6 +310,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .field-input-error ~ .field-suffix, .field-control:has(.field-input-error) { border-color: var(--state-error); background: var(--state-error-subtle); }
 .field-suffix { color: var(--text-secondary); font-size: 14px; }
 .field-help { font-size: 12.5px; color: var(--text-secondary); margin: var(--space-1) 0 0; }
+/* 만원 입력의 원 단위 되비추기(6절) — "5000 → 5,000만원"이 실제로 인식됐다는
+   확인을 입력 즉시 보여준다. 도움말보다 한 단 눈에 띄어야 해서 `type-num`의
+   숫자 스타일을 빌린다. */
+.field-won-preview { font-size: 12.5px; color: var(--text-secondary); margin: var(--space-1) 0 0; font-variant-numeric: tabular-nums; }
 .field-error-msg { font-size: 12.5px; color: var(--state-error); margin: var(--space-1) 0 0; }
 
 .field-warning-msg { font-size: 12.5px; color: var(--state-warning); margin: var(--space-1) 0 0; }
@@ -418,6 +384,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 }
 .horizon-option:last-child { border-bottom: none; }
 .horizon-option-selected { background: var(--accent-subtle); border-left: 3px solid var(--accent); }
+.horizon-option-head { display: flex; align-items: center; gap: var(--space-2); }
+/* 숫자 아이콘 — 순서만 나타내는 장식이라 무채색 사다리에서 뽑는다(뜻을 나르는
+   계좌 색과 섞이지 않게). `req-dot`·도넛 번호 배지와 같은 시각 언어. */
+.horizon-option-index {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-strong); font-size: 12.5px; font-weight: 600;
+  color: var(--text-secondary); font-variant-numeric: tabular-nums;
+}
+.horizon-option-selected .horizon-option-index { border-color: var(--accent); color: var(--accent); }
 .horizon-option-label { font-weight: 600; }
 .horizon-option-desc { font-size: 14px; color: var(--text-secondary); }
 .horizon-option-caption { font-size: 12.5px; color: var(--text-secondary); }
@@ -493,12 +469,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .placeholder-center-value { fill: var(--text-muted); font-size: 40px; font-weight: 700; letter-spacing: -0.02em; }
 /* 강조는 **크기·굵기·색으로만** 한다. 느낌표·화살표·`accent` 색을 쓰지 않는다 —
    `accent`는 누를 수 있는 것의 색인데 이 문구는 누를 수 없다(8.1절 2번). */
-/* 빈 상태 워시(screens.md 2.3.2절 #8) — 결과가 없는 상태에서만 존재하는
-   `brand-band` 배경. **자리표시자 링 자체에는 얹지 않는다** — 링은
-   `data-placeholder` 단색이라는 규약이 있다(design-system 5.29절 B4). 문구는
-   `text-primary`/`text-secondary`라 대비가 5.79(라이트)·6.44(다크)로 4.5:1을
-   넘는다(design-system 2.1절 헤더와 같은 조합). */
-.placeholder-copy { margin: var(--space-4) 0 0; padding: var(--space-4); background: var(--brand-band); border-radius: var(--radius-m); text-align: center; }
+.placeholder-copy { margin: var(--space-4) 0 0; text-align: center; }
 .placeholder-copy-lead { margin: 0; color: var(--text-primary); }
 .placeholder-copy-sub { margin: var(--space-1) 0 0; color: var(--text-secondary); }
 
@@ -632,8 +603,8 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   .input-group-title {
     position: sticky; top: 0; z-index: 1;
     min-height: 36px; display: flex; align-items: center;
-    background: var(--brand-band); margin: 0 calc(-1 * var(--space-5)) var(--space-3);
-    padding: 0 var(--space-5); border-radius: 0;
+    background: var(--surface-raised); margin: 0 calc(-1 * var(--space-5)) var(--space-3);
+    padding: 0 var(--space-5);
   }
 }
 .chart-note { text-align: center; }
@@ -712,9 +683,38 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .law-link { margin-left: var(--space-2); font-size: 12.5px; }
 
 .assumption-block, .basis-block { border: 1px solid var(--border-subtle); border-radius: var(--radius-m); padding: var(--space-4); }
-.assumption-block summary, .basis-block summary { cursor: pointer; }
 .assumption-block ul, .basis-block ul { margin: var(--space-3) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
 .basis-block li { list-style: none; margin-left: -1.2em; }
+
+/* D25 — 기본 접힘이 허용됐지만 "여는 장치가 눈에 띄어야" 하고, 접힌 상태에서도
+   제목과 건수가 읽혀야 한다. 브라우저 기본 `<summary>` 삼각형은 대비도 크기도
+   보장하지 않으므로 직접 그린다 — 44px 이상의 터치 타깃, 명시적 셰브런,
+   `list-style: none`으로 기본 마커를 지우고 우리 마커로 교체한다. */
+.assumption-block summary, .basis-block summary { list-style: none; }
+.assumption-block summary::-webkit-details-marker, .basis-block summary::-webkit-details-marker { display: none; }
+.block-summary {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 44px;
+  cursor: pointer; border-radius: var(--radius-s); margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  padding: var(--space-2);
+}
+.block-summary:hover { background: var(--surface-sunken); }
+.block-summary-chevron { display: inline-block; color: var(--text-secondary); transition: transform 160ms ease-out; flex-shrink: 0; }
+/* 열림 상태에서 셰브런이 90도 돈다 — 텍스트가 아니라 방향으로도 상태를 말한다. */
+details[open] > .block-summary > .block-summary-chevron { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .block-summary-chevron { transition-duration: 0ms; }
+}
+
+/* 나머지 항목 — 같은 블록 안의 중첩 `<details>`다. 모달도 별도 페이지도 아니다
+   (D25 조건 1 "아무것도 삭제하지 않는다"). 위 5개보다 한 단 낮은 위계로 보이게
+   들여쓰고 얇은 왼쪽 경계를 준다. */
+.more-items { margin-top: var(--space-2); padding-left: var(--space-3); border-left: 1px solid var(--border-subtle); }
+.more-items-trigger {
+  list-style: none; cursor: pointer; min-height: 32px; display: flex; align-items: center;
+  font-size: 12.5px; color: var(--text-link);
+}
+.more-items-trigger::-webkit-details-marker { display: none; }
+.more-items ul { margin: var(--space-2) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
 
 .limit-note { font-size: 12.5px; color: var(--text-secondary); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
 .limit-note p { margin: 0 0 var(--space-1); }

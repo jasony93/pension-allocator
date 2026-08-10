@@ -16,7 +16,7 @@
  * `analytics.js`의 화이트리스트가 지킨다.
  */
 
-import { validateForm } from './validation.js';
+import { validateForm, parseManwonToWon } from './validation.js';
 import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 const DEBOUNCE_MS = 400;
@@ -55,13 +55,20 @@ export function initialForm() {
   };
 }
 
-function toIntOrNull(v) {
+/**
+ * 화면 경계의 단위 변환 — **모든 금액 입력란은 만원 단위다**(소유자 지시).
+ * 계약이 받는 단위는 원이므로 여기서만 바꾼다. 변환 자체(고정소수점, 소수
+ * 넷째 자리=1원까지)는 `validation.js`의 `parseManwonToWon` 하나뿐이다 —
+ * 화면 쪽에 변환 로직을 두 번 적지 않는다. 형식이 아니면(검증을 통과했어야
+ * 정상이지만 방어적으로) `null`/`0`으로 접는다.
+ */
+function manwonToWonOrNull(v) {
   if (v === '' || v === null || v === undefined) return null;
-  const n = Number.parseInt(v, 10);
-  return Number.isNaN(n) ? null : n;
+  const won = parseManwonToWon(v);
+  return Number.isNaN(won) ? null : won;
 }
-function toIntOrZero(v) {
-  return toIntOrNull(v) ?? 0;
+function manwonToWonOrZero(v) {
+  return manwonToWonOrNull(v) ?? 0;
 }
 
 /**
@@ -81,7 +88,7 @@ export function buildPriorYearTax(form) {
   if (form.priorTaxState === 'amount') {
     return {
       state: 'amount',
-      determined_tax_krw: toIntOrZero(form.priorTaxAmount),
+      determined_tax_krw: manwonToWonOrZero(form.priorTaxAmount),
       pension_credit_applied_krw: null,
     };
   }
@@ -119,7 +126,7 @@ export function buildEngineRequest(form, scenarios) {
     // **본인이 새로 넣는 돈만이다.** 퇴직급여 입금액·계약이전액은 별도 칸이고
     // 화면이 그것을 묻지 않으므로 null을 보낸다 — 합치면 세액공제액이 과대
     // 계산된다(계약 3.2절, 10절).
-    ytd_contribution_krw: toIntOrZero(ytd),
+    ytd_contribution_krw: manwonToWonOrZero(ytd),
     annuity_start_status: annuityStart,
     opened_on: null, // 묻지 않는다 — 계약이 개시 가능 시점을 "계산할 수 없음"으로 둔다
     has_deferred_retirement_income: null,
@@ -134,14 +141,14 @@ export function buildEngineRequest(form, scenarios) {
       // 생년월일 원본을 그대로 넘긴다. 만 나이 환산은 엔진이 한다(D21).
       birth_date: form.birthDate || null,
       prior_year_tax: buildPriorYearTax(form),
-      current_year_total_salary_krw: toIntOrZero(form.currentSalary),
-      prior_year_total_salary_krw: form.priorSalaryEnabled ? toIntOrNull(form.priorSalary) : null,
+      current_year_total_salary_krw: manwonToWonOrZero(form.currentSalary),
+      prior_year_total_salary_krw: form.priorSalaryEnabled ? manwonToWonOrNull(form.priorSalary) : null,
       financial_income_taxpayer_last_3_years: financialIncomeTaxpayer(form),
       // 화면이 만 나이로 자동 판정해 채워 보내지 않는다(screens.md 3.9.1·3.9.5절).
       // 사용자가 누르지 않으면 null이다.
       declared_youth: form.declaredYouth ? true : null,
       fund_use_horizon: form.fundUseHorizon ?? 'unknown',
-      monthly_capacity_krw: toIntOrZero(form.monthlyCapacity),
+      monthly_capacity_krw: manwonToWonOrZero(form.monthlyCapacity),
       months_remaining_in_tax_year: null, // 사용자에게 묻지 않는다 — 엔진이 12로 기본 처리
     },
     accounts: {
@@ -150,8 +157,8 @@ export function buildEngineRequest(form, scenarios) {
       isa: {
         exists: form.isaExists,
         account_type: form.isaExists ? form.isaAccountType : null,
-        cumulative_contribution_krw: form.isaExists ? toIntOrZero(form.isaCumulative) : 0,
-        ytd_contribution_krw: form.isaExists ? toIntOrZero(form.isaYtd) : 0,
+        cumulative_contribution_krw: form.isaExists ? manwonToWonOrZero(form.isaCumulative) : 0,
+        ytd_contribution_krw: form.isaExists ? manwonToWonOrZero(form.isaYtd) : 0,
         years_since_opening: null, // 1차 출시에서 묻지 않는 선택 입력
         other_savings_contract_krw: null, // 위와 동일
       },
@@ -159,9 +166,9 @@ export function buildEngineRequest(form, scenarios) {
     isa_transfer:
       form.isaExists && form.isaTransferEnabled
         ? {
-            amount_krw: toIntOrZero(form.isaTransferAmount),
+            amount_krw: manwonToWonOrZero(form.isaTransferAmount),
             destination: form.isaTransferDestination ?? null,
-            prior_year_applied_extra_credit_krw: toIntOrNull(form.isaTransferPriorApplied),
+            prior_year_applied_extra_credit_krw: manwonToWonOrNull(form.isaTransferPriorApplied),
             prior_multi_year_applied_extra_credit_krw: null,
           }
         : null,

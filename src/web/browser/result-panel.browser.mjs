@@ -71,7 +71,9 @@ test('입력을 바꾸면 결과 숫자가 실제로 갱신된다 — 노드를 
   const before = await page.evaluate(readAmount);
   await page.evaluate(`(() => {
     const el = document.getElementById('monthlyCapacity');
-    el.focus(); el.value = '1200000'; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur();
+    // 만원 단위다(6절) — '120'은 1,200,000원. FILL_REQUIRED_FIELDS의 기본값
+    // 500,000원과 다른 값이면 충분하다.
+    el.focus(); el.value = '120'; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur();
   })()`);
   await page.waitFor(`${readAmount} !== ${JSON.stringify(before)}`, { timeoutMs: 4000 });
   const after = await page.evaluate(readAmount);
@@ -115,7 +117,10 @@ test('미리보기에는 입력값이 실려 있지 않다', { skip: skipWithout
   await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`);
   const text = await page.evaluate(`document.querySelector('.modal-scrim [role="dialog"]').textContent`);
   // screens.md 9절 — 생년월일·총급여액·월 납입 여력은 이미지에도 미리보기에도 없다.
-  for (const secret of ['1980', '19800101', '60000000', '500000']) {
+  // 금액은 만원 단위 입력이 원으로 환산된 뒤의 표시 형태(천 단위 쉼표)로 찾는다
+  // — 그것이 화면에 실제로 나타날 수 있는 형태다. 입력란의 원본 문자열('6000'
+  // ·'50')은 흔한 부분 문자열이라 오탐이 나므로 쓰지 않는다.
+  for (const secret of ['1980', '19800101', '60,000,000', '500,000']) {
     assert.ok(!text.includes(secret), `미리보기에 입력값이 보입니다: ${secret}`);
   }
   await page.pressKey('Escape', 'Escape', 27);

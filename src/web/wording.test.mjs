@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
-  creditHeadroomCaption,
+  creditHeadroomExceededMessage,
   contributionRemainingCaption,
   isaTaxFreeCaption,
   fillOrderFactMessage,
@@ -61,12 +61,17 @@ test('no screen string says "잔여 한도" without saying which limit it is', (
   );
 });
 
-test('the credit headroom caption never calls itself a limit', () => {
-  // 이 값은 배분 상한이 아니다(계약 5.3절). 이름에 "한도"가 들어가면 그 사실이 무너진다.
-  const caption = creditHeadroomCaption(9000000);
-  assert.ok(!caption.includes('한도'), caption);
-  assert.ok(caption.includes('세액공제가 더 인정될 수 있는 금액'));
-  assert.ok(caption.includes('(연금저축·IRP 합산)'), '계좌마다 적으면 사용자가 둘을 더한다');
+test('the credit headroom message never calls itself a limit, and only speaks when the allocation exceeds it', () => {
+  // 이 값은 배분 상한이 아니다(계약 5.3절). "한도"라는 이름이 들어가면 그 사실이 무너진다.
+  // 소유자 지시로 "세액공제가 더 인정될 수 있는 금액 …" 단독 캡션은 없앴다 — 배분
+  // 전 잔여 여지를 배분 결과 옆에 나란히 두면 이미 다 쓴 한도가 남은 것처럼 읽힌다.
+  // 남는 자리는 배분액이 이 여지를 **넘는** 예외뿐이고, 그 경우에도 "한도"라고
+  // 부르지 않는다.
+  const message = creditHeadroomExceededMessage(9000000);
+  assert.ok(!message.includes('한도'), message);
+  assert.ok(message.includes('세액공제 인정 여지'));
+  assert.ok(message.includes('(연금저축·IRP 합산)'), '계좌마다 적으면 사용자가 둘을 더한다');
+  assert.ok(message.includes('넘습니다'), '이 문장은 초과 사실을 스스로 담아야 한다 — 앞줄이 사라졌기 때문이다');
 });
 
 test('the contribution caption names the limit it means, and the ISA caption stays a limit', () => {

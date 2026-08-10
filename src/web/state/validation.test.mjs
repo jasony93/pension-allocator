@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateForm, validateBirthDate, formDerivedAssumptionCodes, CORE_REQUIREMENTS } from './validation.js';
+import { validateForm, validateBirthDate, formDerivedAssumptionCodes, CORE_REQUIREMENTS, parseManwonToWon } from './validation.js';
 import { assumptionMessage } from '../copy.js';
 import { initialForm } from './store.js';
 
@@ -109,9 +109,15 @@ test('zero is a valid answer and is not the same as unknown', () => {
   assert.equal(zero.hasErrors, false);
 });
 
-test('a negative or non-integer determined tax is an error', () => {
+test('a negative determined tax is an error; a decimal one is not — 만원 단위는 소수를 허용한다(6절)', () => {
   assert.equal(validate(baseForm({ priorTaxAmount: '-1' })).errors.priorTaxAmount.code, 'negative');
-  assert.equal(validate(baseForm({ priorTaxAmount: '3.5' })).errors.priorTaxAmount.code, 'not_integer');
+  // '3.5'만원 = 35,000원 — 만원으로 딱 떨어지지 않는 결정세액을 반올림 없이
+  // 받기 위한 것이므로 오류가 아니다.
+  assert.equal(validate(baseForm({ priorTaxAmount: '3.5' })).errors.priorTaxAmount, undefined);
+  assert.equal(validate(baseForm({ priorTaxAmount: 'abc' })).errors.priorTaxAmount.code, 'not_integer');
+  // 소수 넷째 자리(1원)까지만 받는다 — 다섯째 자리부터는 원 단위보다 잘게
+  // 쪼개는 것이라 의미가 없다.
+  assert.equal(validate(baseForm({ priorTaxAmount: '3.55555' })).errors.priorTaxAmount.code, 'too_precise');
 });
 
 test('a determined tax above the salary is a confirmation request, not a block', () => {
@@ -245,4 +251,51 @@ test('every screen-derived assumption code has a sentence in the dictionary', ()
   const codes = formDerivedAssumptionCodes(baseForm({ isaExists: true, isaTransferEnabled: true }));
   assert.ok(codes.length > 0);
   for (const code of codes) assert.notEqual(assumptionMessage(code, {}), code, `${code}에 대응하는 문구가 없다`);
+});
+
+// ---------------------------------------------------------------------------
+// 6절 — 금액 입력은 만원 단위다. `parseManwonToWon`이 화면 경계의 유일한 변환이다.
+// ---------------------------------------------------------------------------
+
+test('a whole 만원 amount converts to the exact won amount', () => {
+  assert.equal(parseManwonToWon('5000'), 50000000);
+  assert.equal(parseManwonToWon('0'), 0);
+});
+
+test('결정세액처럼 만원으로 딱 떨어지지 않는 금액도 반올림 없이 정확한 원으로 변환된다', () => {
+  // 1,234,567원을 만원으로 표시하면 소수점을 마지막 네 자리 앞에 찍은 것과
+  // 같다 — 사용자는 서류의 숫자에 점 하나만 찍으면 된다.
+  assert.equal(parseManwonToWon('123.4567'), 1234567);
+  assert.equal(parseManwonToWon('0.0001'), 1);
+  assert.equal(parseManwonToWon('80.5'), 805000, '월 납입액처럼 만원 미만 자투리가 있는 값');
+});
+
+test('부동소수점을 쓰지 않는다 — 이진 오차가 나는 값에서도 정확하다', () => {
+  // `0.1 * 10000`은 부동소수점 연산에서 정확히 1000이 아닐 수 있다(고전적
+  // 부동소수점 함정). 문자열 기반 고정소수점 변환이라 이 값에서도 정확하다.
+  assert.equal(parseManwonToWon('0.1'), 1000);
+  assert.equal(parseManwonToWon('0.0001') + parseManwonToWon('0.0001') + parseManwonToWon('0.0001'), 3);
+});
+
+test('다섯째 소수 자리부터는 형식 오류다 — 1원보다 잘게 쪼갤 수 없다', () => {
+  assert.ok(Number.isNaN(parseManwonToWon('1.23456')));
+});
+
+test('음수·문자·빈 문자열은 형식 오류이거나 형식대로 처리된다', () => {
+  assert.ok(Number.isNaN(parseManwonToWon('')));
+  assert.ok(Number.isNaN(parseManwonToWon('abc')));
+  assert.ok(Number.isNaN(parseManwonToWon('1,000'))); // 쉼표는 표시 형식이지 입력 형식이 아니다
+  assert.equal(parseManwonToWon('-5'), -50000, '음수 형식 자체는 파싱되고, 범위 검증은 validateForm이 한다');
+});
+
+test('the too_precise error is distinct from a plain format error, so the message can be specific', () => {
+  const result = validate(baseForm({ monthlyCapacity: '80.12345' }));
+  assert.equal(result.errors.monthlyCapacity.code, 'too_precise');
+});
+
+test('ISA 비교(당해연도 vs 누적)는 소수 만원 입력에서도 원 단위로 정확히 비교된다', () => {
+  const result = validate(
+    baseForm({ isaExists: true, isaCumulative: '100.5', isaYtd: '100.5001' }),
+  );
+  assert.equal(result.errors.isaYtd.code, 'exceeds_cumulative', '1,005,001원 > 1,005,000원');
 });

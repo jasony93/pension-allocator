@@ -18,6 +18,7 @@ import {
   FUND_USE_HORIZON_LABEL,
   FUND_USE_HORIZON_DESCRIPTION,
   HORIZON_EFFECT_CAPTION,
+  HORIZON_CAPTION_BASIS_PREFIX,
   BIRTH_DATE_LABEL,
   BIRTH_DATE_PLACEHOLDER,
   BIRTH_DATE_HELP,
@@ -45,8 +46,9 @@ import {
   RESET_CONFIRM_CANCEL,
 } from '../copy.js';
 import { openConfirm } from './modal.js';
-import { formatYears } from '../format.js';
+import { formatYears, formatKrw } from '../format.js';
 import { isWithinYouthAgeRange } from '../engine/provisional-rules.js';
+import { parseManwonToWon } from '../state/validation.js';
 
 /** `SourceGuide`는 한 번 펼치면 그 세션 동안 펼침 상태를 유지한다(design-system 5.27절). */
 let sourceGuideOpen = false;
@@ -71,12 +73,24 @@ function fieldError(errors, key, { showMissing = false } = {}) {
   return e.message;
 }
 
-function numberField({ id, label, value, help, error, warning, onInput, onBlur, renderGuard, suffix = '원' }) {
+/**
+ * `numberField` — **만원 단위 금액 입력**(소유자 지시, 6절). "5000"을 치면
+ * 5,000만원으로 인식한다. `inputmode="decimal"`로 바꿔 소수점을 모바일
+ * 키패드에서도 칠 수 있게 한다 — 만원 정수만 받으면 만원 미만 금액(월 납입액
+ * 등)을 넣을 방법이 없어진다.
+ *
+ * 원 단위 환산을 **되비춘다**(`field-won-preview`) — "5000 → 5,000만원"이
+ * 실제로 인식됐다는 확인을, 계산이 끝나길 기다리지 않고 입력 즉시 보여준다.
+ * 계산 자체는 여전히 `state/store.js`의 `manwonToWonOrZero`가 하고, 여기서는
+ * 같은 순수 함수(`parseManwonToWon`)로 미리보기만 만든다 — 값을 새로 계산하지
+ * 않고 화면이 이미 아는 변환을 한 번 더 보여줄 뿐이다.
+ */
+function numberField({ id, label, value, help, error, warning, onInput, onBlur, renderGuard, suffix = '만원' }) {
   const inputEl = el('input', {
     id,
     class: `field-input${error ? ' field-input-error' : warning ? ' field-input-warning' : ''}`,
     type: 'text',
-    inputmode: 'numeric',
+    inputmode: 'decimal',
     value,
     'aria-invalid': Boolean(error),
     'aria-describedby': error ? `${id}-error` : warning ? `${id}-warning` : help ? `${id}-help` : null,
@@ -99,6 +113,7 @@ function numberField({ id, label, value, help, error, warning, onInput, onBlur, 
   return el('div', { class: 'field' }, [
     el('label', { for: id, class: 'field-label' }, [label]),
     el('div', { class: 'field-control' }, [inputEl, suffix ? el('span', { class: 'field-suffix' }, [suffix]) : null]),
+    wonPreviewNode(value, error),
     error
       ? el('p', { id: `${id}-error`, class: 'field-error-msg', role: 'alert' }, [error])
       : warning
@@ -107,6 +122,18 @@ function numberField({ id, label, value, help, error, warning, onInput, onBlur, 
           ? el('p', { id: `${id}-help`, class: 'field-help' }, [help])
           : null,
   ]);
+}
+
+/**
+ * "입력값 → 원 단위 환산"을 되비추는 한 줄. 값이 비어 있거나 파싱되지 않으면
+ * (오류 메시지가 이미 그 사실을 말하므로) 그리지 않는다 — 두 곳이 같은 사실을
+ * 다른 말로 하면 어느 쪽을 믿을지 사용자가 갈린다.
+ */
+function wonPreviewNode(value, error) {
+  if (error || value === '' || value == null) return null;
+  const won = parseManwonToWon(value);
+  if (Number.isNaN(won)) return null;
+  return el('p', { class: 'field-won-preview' }, [`= ${formatKrw(won)}`]);
 }
 
 function segmentToggle({ id, label, value, options, onChange, help }) {
@@ -236,7 +263,12 @@ function priorTaxField({ form, errors, warnings, store, renderGuard }) {
     id: 'priorTaxAmount',
     class: `field-input${error ? ' field-input-error' : warning ? ' field-input-warning' : ''}`,
     type: 'text',
-    inputmode: 'numeric',
+    // **결정세액도 다른 금액과 같은 만원 단위다** — 예외를 두지 않는다. 결정세액은
+    // 만원으로 딱 떨어지지 않는 게 정상이라(예: 1,234,567원) 소수 넷째 자리(1원)
+    // 까지 받는 `parseManwonToWon`이 그 문제를 정확히 해결한다: 반올림 없이
+    // "123.4567"로 받으면 그대로 1,234,567원이 된다. 그래서 결정세액만 원 단위로
+    // 남기거나 내림·오차방향 안내를 따로 만들지 않았다 — 보고에 근거를 남긴다.
+    inputmode: 'decimal',
     autocomplete: 'off',
     value: isUnknown ? '' : form.priorTaxAmount,
     'aria-invalid': Boolean(error),
@@ -262,7 +294,8 @@ function priorTaxField({ form, errors, warnings, store, renderGuard }) {
 
   return el('div', { class: 'field known-unknown-field' }, [
     el('label', { for: 'priorTaxAmount', class: 'field-label' }, [PRIOR_TAX_LABEL]),
-    el('div', { class: 'field-control' }, [amountInput, el('span', { class: 'field-suffix' }, ['원'])]),
+    el('div', { class: 'field-control' }, [amountInput, el('span', { class: 'field-suffix' }, ['만원'])]),
+    wonPreviewNode(isUnknown ? '' : form.priorTaxAmount, error),
     el('div', { class: 'known-unknown-group', role: 'radiogroup', 'aria-label': PRIOR_TAX_LABEL }, [unknownOption]),
     error ? el('p', { id: 'priorTaxAmount-error', class: 'field-error-msg', role: 'alert' }, [error]) : null,
     warning && !error ? el('p', { id: 'priorTaxAmount-warning', class: 'field-warning-msg', role: 'status' }, [warning]) : null,
@@ -368,7 +401,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   const groupOne = el('section', { class: 'input-group' }, [
-    el('h3', { class: 'input-group-title' }, ['① 나에 대해']),
+    el('h3', { class: 'input-group-title' }, ['① 기본정보']),
     birthField,
     youthBlock({ form, store, provisionalYouth, derivedAgeYears }),
     // 출처가 같은 입력을 인접시킨다(3.11.4절 (c)) — 두 값이 흩어져 있으면
@@ -427,15 +460,19 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
       el(
         'div',
         { class: 'horizon-choice-group' },
-        horizonOptions.map((value) => {
+        horizonOptions.map((value, index) => {
           const selected = form.fundUseHorizon === value;
-          // 캡션의 연수는 **엔진이 룰셋에서 읽어 낸 값**이다. 값이 오지 않으면
+          // 캡션의 연수는 **엔진이 룰셋에서 읽어 낸, 이 사용자의 실제 계산값**이다
+          // (`fund_use_horizon_boundaries`) — 예시가 아니다. 값이 오지 않으면
           // 캡션 줄 자체를 그리지 않는다 — 라벨만으로 선택이 완결된다(3.4절).
+          // **"입력하신 값 기준"을 항상 붙인다** — 아직 고르지 않은 선택지에도
+          // 같은 형식의 숫자가 붙어 "가상의 경우"처럼 읽혔던 것을, 말을 지어내지
+          // 않고 사실(입력에서 계산됐다는 것)을 캡션 자체에 새겨 바로잡는다.
           const caption =
             value === 'within_isa_lock_in' && boundariesInfo?.isa_lock_in_years_remaining != null
-              ? `남은 의무가입기간 ${formatYears(boundariesInfo.isa_lock_in_years_remaining)}`
+              ? `${HORIZON_CAPTION_BASIS_PREFIX} · 남은 의무가입기간 ${formatYears(boundariesInfo.isa_lock_in_years_remaining)}`
               : value === 'before_pension_age' && boundariesInfo?.pension_years_remaining != null
-                ? `그 나이까지 ${formatYears(boundariesInfo.pension_years_remaining)}`
+                ? `${HORIZON_CAPTION_BASIS_PREFIX} · 그 나이까지 ${formatYears(boundariesInfo.pension_years_remaining)}`
                 : null;
           return el(
             'button',
@@ -448,7 +485,12 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
               onclick: () => store.setField('fundUseHorizon', value, { immediate: true }),
             },
             [
-              el('span', { class: 'horizon-option-label' }, [FUND_USE_HORIZON_LABEL[value]]),
+              el('span', { class: 'horizon-option-head' }, [
+                // 숫자 아이콘 — 소유자 지시. 순서만 나타내고 값을 나르지 않으므로
+                // `aria-hidden`이다(선택 상태는 `aria-checked`가 이미 말한다).
+                el('span', { class: 'horizon-option-index', 'aria-hidden': 'true' }, [String(index + 1)]),
+                el('span', { class: 'horizon-option-label' }, [FUND_USE_HORIZON_LABEL[value]]),
+              ]),
               FUND_USE_HORIZON_DESCRIPTION[value]
                 ? el('span', { class: 'horizon-option-desc' }, [FUND_USE_HORIZON_DESCRIPTION[value]])
                 : null,
@@ -464,7 +506,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   const groupTwo = el('section', { class: 'input-group' }, [
-    el('h3', { class: 'input-group-title' }, ['② 이번에 배분할 돈']),
+    el('h3', { class: 'input-group-title' }, ['② 월 납입액']),
     capacityField,
     annuityStartToggle,
     annuityStartedNote,

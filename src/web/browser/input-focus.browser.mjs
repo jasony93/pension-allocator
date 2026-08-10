@@ -89,7 +89,8 @@ test('조건부 블록을 켜고 끄며 blur를 연쇄시켜도 무한 루프·�
     await page.evaluate(`(() => {
       const el = document.getElementById('currentSalary');
       el.focus();
-      el.value = '6000000${round % 10}';
+      // 만원 단위다(6절) — 여전히 소득 규모의 값(수천만원대)으로 유지한다.
+      el.value = '600${round % 10}';
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.blur();
     })()`);

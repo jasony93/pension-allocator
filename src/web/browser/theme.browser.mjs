@@ -132,9 +132,9 @@ after(async () => {
 
 test('네 조합이 전부 의도한 테마로 나온다 (지정 없음 × 2, 명시 × 2)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  // 2026-08-10 개정 — 표면이 초록으로 옮겼다(design-system 3.1절).
-  const LIGHT_BASE = '#cdf2da';
-  const DARK_BASE = '#0a1710';
+  // 2026-08-10 재개정 — 표면 색조를 초록 도입 직전 값으로 되돌렸다(소유자 지시).
+  const LIGHT_BASE = '#f7f8fa';
+  const DARK_BASE = '#14171a';
 
   const combos = [
     { name: 'OS 라이트 + 지정 없음', scheme: 'light', theme: null, expect: LIGHT_BASE, scheme_expected: 'light' },
@@ -232,8 +232,64 @@ test('고지 요소에 다크 전용 처리가 없다 — 접히거나 흐려지
   await page.evaluate(`document.documentElement.setAttribute('data-theme','dark')`);
   const dark = await page.evaluate(read);
   assert.deepEqual(dark, light, '다크에서만 달라지는 고지 처리가 있습니다 — 헌장 D11은 테마와 무관하다');
-  assert.equal(dark.basisOpen, true, '고지 ③은 기본 펼침이다');
-  assert.equal(dark.assumptionOpen, true, '고지 ④는 기본 펼침이다');
+  // D25(관리자 판정) — 소유자 지시로 "가정 사항"·"법령 조항" 두 블록은 이제
+  // 기본 접힘이 허용된다. 고지 ①②(disclosure-banner)는 이 판정의 대상이
+  // 아니고 여전히 항상 보인다 — `bannerDisplay`가 위에서 두 테마 모두 같은 값인
+  // 것으로 그 사실을 함께 확인한다.
+  assert.equal(dark.basisOpen, false, 'D25 — 법령 조항은 기본 접힘이다');
+  assert.equal(dark.assumptionOpen, false, 'D25 — 가정 사항은 기본 접힘이다');
+});
+
+test('D25 — 접힌 가정·법령 블록도 제목과 건수가 읽히고, 펼치면 나머지 전부에 닿는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.basis-block')`, { timeoutMs: 6000 });
+  await sleep(300);
+
+  const collapsed = await page.evaluate(`(() => {
+    const basis = document.querySelector('.basis-block');
+    const assumption = document.querySelector('.assumption-block');
+    return {
+      basisOpen: basis.open,
+      assumptionOpen: assumption.open,
+      // 접힌 상태에서도 요약 텍스트(제목+건수)가 실제로 보인다 — display:none이
+      // 아니라 <details> 기본 동작대로 summary만 남고 나머지가 숨는다.
+      basisSummary: basis.querySelector('.block-summary').textContent.trim(),
+      assumptionSummary: assumption.querySelector('.block-summary').textContent.trim(),
+      basisSummaryVisible: basis.querySelector('.block-summary').offsetHeight > 0,
+    };
+  })()`);
+  assert.equal(collapsed.basisOpen, false);
+  assert.equal(collapsed.assumptionOpen, false);
+  assert.ok(/법령 조항 \d+건/.test(collapsed.basisSummary), `건수가 안 읽힙니다: ${collapsed.basisSummary}`);
+  assert.ok(/가정 사항 \d+건/.test(collapsed.assumptionSummary), `건수가 안 읽힙니다: ${collapsed.assumptionSummary}`);
+  assert.equal(collapsed.basisSummaryVisible, true);
+
+  // 펼친다 — 클릭 한 번으로 열리는지, 그리고 잘라내지 않고 나머지에 도달하는
+  // 경로(중첩 <details>)가 같은 블록 안에 있는지를 잰다.
+  await page.clickElement(`document.querySelector('.basis-block .block-summary')`);
+  await page.clickElement(`document.querySelector('.assumption-block .block-summary')`);
+  await sleep(150);
+  const opened = await page.evaluate(`(() => {
+    const basis = document.querySelector('.basis-block');
+    const totalLawItems = basis.querySelectorAll('ul li').length;
+    const moreTrigger = basis.querySelector('.more-items-trigger');
+    return {
+      basisOpen: basis.open,
+      assumptionOpen: document.querySelector('.assumption-block').open,
+      totalLawItemsReachable: totalLawItems,
+      hasMoreTrigger: !!moreTrigger,
+      declaredCount: Number((basis.querySelector('.block-summary').textContent.match(/(\\d+)건/) || [])[1]),
+    };
+  })()`);
+  assert.equal(opened.basisOpen, true);
+  assert.equal(opened.assumptionOpen, true);
+  // 잘라내지 않는다 — 중첩 <details>가 열리지 않은 상태에서도 DOM에는 나머지
+  // 항목이 이미 존재해야 "같은 화면에서 도달 가능"이 성립한다.
+  if (opened.declaredCount > 5) {
+    assert.equal(opened.hasMoreTrigger, true, '5건을 넘는데 나머지로 가는 장치가 없습니다');
+  }
+  assert.equal(opened.totalLawItemsReachable, opened.declaredCount, '건수와 실제로 DOM에 있는 항목 수가 어긋납니다');
 });
 
 // ---------------------------------------------------------------------------
@@ -286,13 +342,8 @@ test('인쇄는 사용자가 어둡게를 골라도 라이트 팔레트로 나�
   await emulate(page, { scheme: 'dark', media: 'print' });
   const tokens = await page.evaluate(READ_TOKENS);
   // 인쇄 팔레트는 라이트 `:root`와 값이 같다(styles-tokens.test.mjs가 기계로
-  // 대조한다) — 2026-08-10 개정으로 `surface-raised`도 초록빛 흰색이 됐다.
-  // **알려진 미결**: screens.md 2.3.5절이 요구하는 "인쇄에서 surface-base·
-  // brand-band를 흰색으로 되돌린다"는 이번 개정에 구현하지 않았다(styles.css
-  // 인쇄 블록 주석 참고) — 기존 계약 검사가 인쇄 블록과 라이트 `:root`의 색이
-  // 한 글자도 다르지 않을 것을 요구해, 그 계약을 깨지 않는 선에서는 헤더 한
-  // 자리만 예외로 되돌릴 수 없었다.
-  assert.equal(tokens['--surface-raised'], '#f0fdf4');
+  // 대조한다) — 2026-08-10 재개정으로 `surface-raised`가 흰색으로 되돌아갔다.
+  assert.equal(tokens['--surface-raised'], '#ffffff');
   assert.equal(tokens['--text-primary'], '#14181c');
   assert.equal(tokens['--data-pension'], '#0a9a96');
   assert.equal(tokens.colorScheme, 'light');
@@ -363,7 +414,7 @@ test('저장된 테마가 첫 페인트 이전에 적용된다 — 흰 화면이
   });
   await page.goto(`${origin}/src/web/index.html`);
   assert.equal(await page.evaluate(`window.__themeAtParse`), 'dark', '첫 페인트 전에 표시가 찍히지 않았습니다');
-  assert.equal(await page.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--surface-base').trim()`), '#0a1710');
+  assert.equal(await page.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--surface-base').trim()`), '#14171a');
   await page.evaluate(`localStorage.clear()`);
 });
 

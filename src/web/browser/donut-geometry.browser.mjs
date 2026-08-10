@@ -152,7 +152,8 @@ test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   // 진입(240ms) 도중에 값을 한 번 더 바꿔 디바운스 재계산을 건다 — 재렌더가
   // rAF 체인을 끊는 경로를 실측으로 때린다.
-  await page.evaluate(`(() => { const el = document.getElementById('monthlyCapacity'); el.focus(); el.value = '600000'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  // 만원 단위다(6절) — '60'은 600,000원.
+  await page.evaluate(`(() => { const el = document.getElementById('monthlyCapacity'); el.focus(); el.value = '60'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   await sleep(1200); // 디바운스(400ms) + 재계산 + 진입까지 넉넉히
   const m = await page.evaluate(MEASURE_SLICES);
   measurements.interruptedEntrance = m;

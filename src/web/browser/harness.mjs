@@ -364,12 +364,18 @@ export async function attachSandboxedFrame(page, { path: framePath = '/src/web/i
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 필수 항목을 채워 결과가 나오는 상태로 만든다(값 대입 — 여기서는 커서가 관심사가 아니다). */
+/**
+ * 필수 항목을 채워 결과가 나오는 상태로 만든다(값 대입 — 여기서는 커서가 관심사가
+ * 아니다). 금액 입력란은 **만원 단위**다(소유자 지시, 6절) — `currentSalary`
+ * `6000`은 60,000,000원, `monthlyCapacity` `50`은 500,000원과 같다. 이 값을
+ * 바꾸면 실제 원 단위 금액도 함께 바뀌므로, 다른 실측이 기대하는 결과(도넛
+ * 크기·경계값 등)가 흔들리지 않게 **단위 전환 전과 같은 원 금액**을 유지했다.
+ */
 export const FILL_REQUIRED_FIELDS = `(() => {
   const set = (id, v) => { const el = document.getElementById(id); el.focus(); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
   set('birthDate', '19800101');
-  set('currentSalary', '60000000');
-  set('monthlyCapacity', '500000');
+  set('currentSalary', '6000');
+  set('monthlyCapacity', '50');
   document.getElementById('priorTaxUnknown').click();
   document.getElementById('annuityStarted-false').click();
   document.getElementById('fundUseHorizon-before_pension_age').click();

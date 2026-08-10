@@ -13,7 +13,51 @@
  * 월 납입 여력 · 연금 수령 여부 · 자금 사용 시점. 늘어난 둘(결정세액·연금 수령
  * 여부)은 **클릭 한 번으로 유효한 답이 되는 형태**라 숫자 입력을 강제하지 않는다.
  * 기납입액은 진행을 막지 않고, 조건부 필수 항목(전환 금액)은 분모에 넣지 않는다.
+ *
+ * ---------------------------------------------------------------------------
+ * 금액 입력 단위 — **만원**(소유자 지시). "5000"을 입력하면 5,000만원으로
+ * 받는다. 계약(`engine-interface.md`)이 받는 단위는 여전히 **원**이므로,
+ * 화면 경계(이 파일 · `state/store.js`)에서만 변환한다 — `parseManwonToWon`이
+ * 그 경계다.
+ *
+ * **왜 소수를 허용하는가.** 결정세액처럼 만원으로 딱 떨어지지 않는 금액이
+ * 있다(예: 1,234,567원). 만원 정수만 받으면 그 값을 반올림하게 되고, 그 값이
+ * 세액공제 한도를 정하므로 사용자가 실제로 받을 금액이 입력 단위 때문에
+ * 달라진다 — 이 조직의 "추정하지 않는다" 원칙에 어긋난다. 그래서 정수 대신
+ * **소수 넷째 자리(=1원)까지** 받는다. 1원 = 0.0001만원이므로 넷째 자리까지면
+ * 어떤 원 단위 금액도 반올림 없이 표현할 수 있다 — 1,234,567원은
+ * "123.4567"이고, 원래 값의 마지막 네 자리 앞에 점 하나를 찍는 것과 같다.
+ * 결정세액만 예외로 두지 않고 **모든 금액 입력에 같은 규칙을 적용한다** —
+ * 다른 금액(기납입액 등)도 만원의 배수가 아닐 수 있고, 그때도 반올림해
+ * 계산에 넣으면 같은 문제가 재발한다.
+ *
+ * **부동소수점을 쓰지 않는다.** `parseFloat(v) * 10000` 같은 계산은 이진
+ * 부동소수점 오차로 정확한 원 단위를 보장하지 않는다(`0.1 * 10000`이
+ * 정확히 `1000`이 아닐 수 있다). 그래서 문자열을 직접 자르고 이어 붙이는
+ * 고정소수점 방식을 쓴다 — 정수 연산만 하므로 오차가 없다.
+ * ---------------------------------------------------------------------------
  */
+
+/**
+ * 만원 단위 입력 문자열 → 원 단위 정수. 형식이 아니면 `NaN`.
+ *
+ * 소수 넷째 자리까지만 받는다(`\d{1,4}`) — 다섯째 자리부터는 원 단위보다
+ * 더 잘게 쪼개는 것이라 의미가 없고, 정규식이 통째로 실패해 `NaN`을 낸다
+ * (호출부가 "너무 정밀하다"는 구체적 오류로 구분해 알린다).
+ */
+export function parseManwonToWon(v) {
+  if (typeof v !== 'string' || v.trim() === '') return NaN;
+  const m = /^(-?)(\d+)(?:\.(\d{1,4}))?$/.exec(v.trim());
+  if (!m) return NaN;
+  const [, sign, intPart, fracPart = ''] = m;
+  const won = Number.parseInt(intPart + fracPart.padEnd(4, '0'), 10);
+  return sign === '-' ? -won : won;
+}
+
+/** 소수점 다섯째 자리 이상 — `parseManwonToWon`이 `NaN`을 내는 이유 중 이 경우만 따로 알린다. */
+function isOverPrecise(v) {
+  return typeof v === 'string' && /^-?\d+\.\d{5,}$/.test(v.trim());
+}
 
 /**
  * 필수 항목의 정의 자리. 라벨·초점 대상·충족 판정이 한 곳에 모여 있어야
@@ -46,13 +90,6 @@ export const CORE_REQUIRED_FIELDS = CORE_REQUIREMENTS.map((r) => r.key);
 
 function isBlank(v) {
   return v === '' || v === null || v === undefined;
-}
-
-function parseIntStrict(v) {
-  if (typeof v === 'number') return Number.isInteger(v) ? v : NaN;
-  if (typeof v !== 'string' || v.trim() === '') return NaN;
-  if (!/^-?\d+$/.test(v.trim())) return NaN; // 소수점·문자 거부
-  return Number.parseInt(v.trim(), 10);
 }
 
 /**
@@ -88,10 +125,14 @@ export function validateBirthDate(value, today = new Date()) {
   return undefined;
 }
 
+/** 금액 입력(만원 단위, 소수 넷째 자리까지) 검증. `parseManwonToWon`이 단위 변환의 유일한 통로다. */
 function validateNonNegativeAmount(value, { required } = { required: true }) {
   if (isBlank(value)) return required ? { code: 'missing', message: '값을 입력해 주세요.' } : undefined;
-  const n = parseIntStrict(value);
-  if (Number.isNaN(n)) return { code: 'not_integer', message: '원 단위 정수로 넣어 주세요.' };
+  if (isOverPrecise(value)) {
+    return { code: 'too_precise', message: '소수점 넷째 자리(1원 단위)까지만 입력할 수 있습니다.' };
+  }
+  const n = parseManwonToWon(value);
+  if (Number.isNaN(n)) return { code: 'not_integer', message: '만원 단위 숫자로 넣어 주세요.' };
   if (n < 0) return { code: 'negative', message: '0 이상의 값이 필요합니다.' };
   return undefined;
 }
@@ -114,8 +155,8 @@ function validatePriorTax(form) {
  */
 function priorTaxWarning(form) {
   if (form.priorTaxState !== 'amount') return undefined;
-  const tax = parseIntStrict(form.priorTaxAmount);
-  const salary = parseIntStrict(form.currentSalary);
+  const tax = parseManwonToWon(form.priorTaxAmount);
+  const salary = parseManwonToWon(form.currentSalary);
   if (Number.isNaN(tax) || Number.isNaN(salary)) return undefined;
   if (tax > salary) return { code: 'exceeds_salary', message: '총급여액보다 큰 값입니다. 두 값을 확인해 주세요.' };
   return undefined;
@@ -164,7 +205,7 @@ export function validateForm(form, { today } = {}) {
     if (
       !ytdErr &&
       !cumulativeErr &&
-      parseIntStrict(form.isaYtd || '0') > parseIntStrict(form.isaCumulative || '0')
+      parseManwonToWon(form.isaYtd || '0') > parseManwonToWon(form.isaCumulative || '0')
     ) {
       errors.isaYtd = { code: 'exceeds_cumulative', message: 'ISA 당해연도 납입액은 누적 납입액을 넘을 수 없습니다.' };
     }
@@ -172,11 +213,13 @@ export function validateForm(form, { today } = {}) {
     if (form.isaTransferEnabled) {
       if (isBlank(form.isaTransferAmount)) {
         errors.isaTransferAmount = { code: 'missing', message: '전환 금액을 입력해 주세요.' };
+      } else if (isOverPrecise(form.isaTransferAmount)) {
+        errors.isaTransferAmount = { code: 'too_precise', message: '소수점 넷째 자리(1원 단위)까지만 입력할 수 있습니다.' };
       } else {
-        const n = parseIntStrict(form.isaTransferAmount);
-        if (Number.isNaN(n)) errors.isaTransferAmount = { code: 'not_integer', message: '원 단위 정수로 넣어 주세요.' };
-        else if (n < 1) errors.isaTransferAmount = { code: 'out_of_range', message: '1원 이상이어야 합니다.' };
-        else if (!cumulativeErr && n > parseIntStrict(form.isaCumulative || '0')) {
+        const n = parseManwonToWon(form.isaTransferAmount);
+        if (Number.isNaN(n)) errors.isaTransferAmount = { code: 'not_integer', message: '만원 단위 숫자로 넣어 주세요.' };
+        else if (n <= 0) errors.isaTransferAmount = { code: 'out_of_range', message: '0보다 큰 값이 필요합니다.' };
+        else if (!cumulativeErr && n > parseManwonToWon(form.isaCumulative || '0')) {
           errors.isaTransferAmount = {
             code: 'exceeds_cumulative',
             message: 'ISA 누적 납입액을 넘을 수 없습니다.',
@@ -225,7 +268,7 @@ export function validateForm(form, { today } = {}) {
  */
 export function formDerivedAssumptionCodes(form) {
   const codes = [];
-  const zero = (v) => isBlank(v) || parseIntStrict(v) === 0;
+  const zero = (v) => isBlank(v) || parseManwonToWon(v) === 0;
 
   if (zero(form.annuitySavingsYtd) && zero(form.retirementPensionYtd) && (!form.isaExists || zero(form.isaYtd))) {
     codes.push('existing_contribution_untouched');
@@ -237,5 +280,3 @@ export function formDerivedAssumptionCodes(form) {
   }
   return codes;
 }
-
-export { parseIntStrict };
