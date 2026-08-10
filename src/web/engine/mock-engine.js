@@ -1,11 +1,19 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 7.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 8.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `7.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `8.0.0`으로 맞췄다.
+ *
+ * **8.0.0에서 따라온 것(0.12·0.13절, major).** `7.0.0`이 적은 월 환산 이탈의
+ * 위쪽 끝 `±(개월수 − 1)`이 산술로 틀렸다 — 실제는 **−(개월수 − 1) 이상
+ * (갈래 수 − 1) × (개월수 − 1) 이하**다. **필드도 산식도 값도 하나도 바뀌지
+ * 않는다** — `apportionMonthly`는 그대로다. 이 대조 기준이 옛 서술을 숫자로
+ * 옮겨 적어 둔 곳이 없는지 훑었고, 없었다(`0`~`3`으로 적은 곳들은 갈래가 넷일
+ * 때의 `remaining`/`roundingAdjustmentMonthlyKrw` 실제 상한이지 `7.0.0`이 잘못
+ * 적었던 서술을 옮긴 것이 아니다). 고칠 것은 버전 문자열뿐이었다.
  *
  * **7.0.0에서 따라온 것(0.12절, major).** 월 납입 여력에 250만원을 넣었는데
  * 도넛 가운데가 `2,499,999원`으로 나온 신고가 원인이다 — 이 목이 계좌별
@@ -79,8 +87,8 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 // 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '7';
-export const MOCK_SCHEMA_VERSION = '7.0.0';
+const KNOWN_SCHEMA_MAJOR = '8';
+export const MOCK_SCHEMA_VERSION = '8.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
 // 5.1.0(D28·D29) — 수익이 어떤 형태로 들어오는가. 자산군이 아니다(계약 3.6절).

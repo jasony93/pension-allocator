@@ -177,7 +177,7 @@ function validForm(store) {
 test('the request carries the contract version the engine actually supports', () => {
   const req = buildEngineRequest(initialForm(), ['current']);
   assert.equal(req.schema_version, SCHEMA_VERSION);
-  assert.equal(SCHEMA_VERSION.split('.')[0], '7', '계약이 7.0.0(major)으로 올랐다(0.12절 — 월 환산 잔차)');
+  assert.equal(SCHEMA_VERSION.split('.')[0], '8', '계약이 8.0.0(major)으로 올랐다(0.12·0.13절 — 월 환산 잔차 이탈 상한의 서술 정정)');
 });
 
 test('the request sends the raw birth date and no derived age at all (D21)', () => {
