@@ -88,6 +88,13 @@ const ACCOUNT_DISPLAY_ORDER = ['annuity_savings', 'retirement_pension', 'isa'];
  *
  * `budget`은 목록에 있지만 미배분 사유가 될 수 없다 — 예산이 모자라 멈춘 것과
  * 예산이 남은 것은 동시에 성립하지 않는다. 그래서 문장에서 뺀다.
+ *
+ * **`credit_limit`은 6.0.0(D32)에서 계약 열거형에서 빠졌다** — 어떤 배분안도
+ * 더 이상 세액공제 대상 한도에서 멈추지 않으므로(네 안 모두 연금 납입 한도까지
+ * 채운다) 이 값은 응답으로 돌지 않는다(`engine-interface.md` 0.11·5.5절). 이
+ * 자리를 지우지 않은 이유는 (a) 오래된 요청·기록된 응답을 재생하는 화면 밖
+ * 소비자가 있을 수 있고, (b) 지워도 얻는 것이 없기 때문이다 — `unallocatedBlockers`가
+ * 실제 응답에서 관측되지 않는 값을 걸러내므로 죽은 분기가 렌더로 이어지지 않는다.
  */
 export const UNALLOCATED_REASON_ORDER = ['contribution_limit', 'credit_limit', 'not_eligible'];
 

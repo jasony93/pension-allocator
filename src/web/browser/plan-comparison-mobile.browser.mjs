@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
 
 /**
- * 배분안이 넷일 때의 비교 UI·표를 좁은 화면에서 실측한다 (계약 5.0.0 · D26).
+ * 배분안이 넷일 때의 비교 UI·표를 좁은 화면에서 실측한다 (계약 5.0.0 · D26,
+ * 넷째 안 개명은 6.0.0 · D32).
  *
- * **왜 실측인가.** `pension_contribution_limit_fill`이 넷째 안으로 들어오면서
- * `PLAN_LABEL`의 라벨 길이가 기존 셋보다 길어졌다. jsdom 기반 단위 검사는
- * 레이아웃을 계산하지 않으므로 고정폭 열이 좁은 화면에서 잘려 나가는 것을
- * 잡지 못한다 — 실제로 이 실측에서 스택바 금액이 화면 밖으로 잘리고
- * `AccountTable`의 헤더 글자가 한 자씩 세로로 쪼개지는 결함을 잡았다.
+ * **왜 실측인가.** 넷째 안(옛 id `pension_contribution_limit_fill`, 지금은
+ * `pension_contribution_before_isa`)이 비교 목록에 들어오면서 `PLAN_LABEL`의
+ * 라벨 길이가 기존 셋보다 길어졌다. jsdom 기반 단위 검사는 레이아웃을
+ * 계산하지 않으므로 고정폭 열이 좁은 화면에서 잘려 나가는 것을 잡지 못한다
+ * — 실제로 이 실측에서 스택바 금액이 화면 밖으로 잘리고 `AccountTable`의
+ * 헤더 글자가 한 자씩 세로로 쪼개지는 결함을 잡았다.
  *
  * 넷을 모두 서로 다른 배분으로 만들려면 개정안 청년 우대(계좌마다 공제율이
  * 갈려 `max_tax_credit`·`annuity_savings_first`의 세제상 동점 전제가 무너진다,
@@ -48,10 +50,10 @@ test('네 배분안이 전부 다른 배분으로 나온다 — 넷째 안이 �
     `Array.from(document.querySelectorAll('.stackbar-row-label')).map((e) => e.textContent.trim())`,
   );
   assert.equal(labels.length, 4);
-  assert.ok(labels.some((l) => l.includes('납입 한도까지')), '넷째 안(D26)이 비교 목록에 있다');
+  assert.ok(labels.some((l) => l.includes('ISA보다 먼저')), '넷째 안(D32에서 개명)이 비교 목록에 있다');
   // 넷째 안은 언제나 `is_baseline: false`다 — "(기본)" 표시가 붙지 않는다.
-  const limitFillLabel = labels.find((l) => l.includes('납입 한도까지'));
-  assert.ok(!limitFillLabel.includes('기본'), '납입 한도 안은 추천으로 보이면 안 된다(D26)');
+  const beforeIsaLabel = labels.find((l) => l.includes('ISA보다 먼저'));
+  assert.ok(!beforeIsaLabel.includes('기본'), '연금계좌를 ISA보다 먼저 채우는 안은 추천으로 보이면 안 된다(D26·D32)');
 });
 
 test('375px 너비에서도 스택바 행이 뷰포트를 벗어나지 않는다', { skip: skipWithoutChrome }, async () => {

@@ -432,13 +432,14 @@ test('every assumption sentence survives an empty params object without leaving 
 });
 
 // ---------------------------------------------------------------------------
-// 계약 5.0.0 — D26의 넷째 배분안. requirements.md 6절 AC: "어떤 배분안에도
-// 추천·최적·권장 같은 단정적 표현을 쓰지 않는다. 기본안은 '기본'이라는
-// 표시만 단다." 이 안은 세법이 유불리를 정하지 않으므로 특히 더 엄격하다.
+// 계약 5.0.0 — D26의 넷째 배분안(6.0.0·D32에서 `pension_contribution_before_isa`로
+// 개명). requirements.md 6절 AC: "어떤 배분안에도 추천·최적·권장 같은 단정적
+// 표현을 쓰지 않는다. 기본안은 '기본'이라는 표시만 단다." 이 안은 세법이
+// 유불리를 정하지 않으므로 특히 더 엄격하다.
 // ---------------------------------------------------------------------------
 
 test('every plan id the contract can send has a label, and none of them reads as a recommendation', () => {
-  const planIds = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_limit_fill'];
+  const planIds = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
   for (const id of planIds) {
     const label = PLAN_LABEL[id];
     assert.ok(label, `${id}에 대응하는 라벨이 없다`);

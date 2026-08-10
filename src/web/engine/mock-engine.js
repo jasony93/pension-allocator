@@ -1,11 +1,11 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 5.1.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 6.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `5.1.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `6.0.0`으로 맞췄다.
  *
  * **4.0.0에서 따라온 것.** 요청에 `profile.birth_date`·`profile.prior_year_tax`·
  * `accounts.*.annuity_start_status`가 필수로 들어오고 `profile.age_years`가
@@ -15,7 +15,8 @@
  * **5.0.0에서 따라온 것(D26·D27).** 요청에
  * `profile.has_non_wage_global_income_current_year`가 필수로 들어오고(선택인
  * `current_year_global_income_krw`가 짝이다) 공제율 판정 축이 총급여/종합소득금액
- * 둘로 나뉜다(0.7절). 배분안이 셋에서 넷으로 늘고(`pension_contribution_limit_fill`),
+ * 둘로 나뉜다(0.7절). 배분안이 셋에서 넷으로 늘고(`pension_contribution_limit_fill`,
+ * 6.0.0에서 `pension_contribution_before_isa`로 개명됨),
  * `Plan`에 `unallocated_breakdown`·`pension_combined_credit_remaining_after_plan_krw`가,
  * `NonQuantifiedEffect`에 `facts`·`headroom_shared_with`가 붙는다.
  *
@@ -28,13 +29,26 @@
  * 수익률을 제안하거나 미리 채우지 않는다** — 목이 기본값을 만들지 않는 것이
  * 그 방어선의 절반이고, 나머지 절반은 입력 폼이 진다(0.10절).
  *
+ * **6.0.0에서 따라온 것(D32, major).** 소유자가 기본안의 배분을 바꿨다 — 네 안
+ * 전부의 충당 순서에 "연금계좌를 **납입** 한도까지" 단계가 붙는다(연금 공제한도
+ * → ISA 납입한도 → 연금 납입한도 → 미배분). `plan_id` 열거형에서
+ * `pension_contribution_limit_fill`이 빠지고 `pension_contribution_before_isa`가
+ * 들어오며, `priority_basis.code`도 `pension_contribution_limit_before_isa`로
+ * 바뀐다. `Allocation.limited_by`에서 `credit_limit`이 사라진다(애초에 이 목은
+ * 그 값을 낸 적이 없다 — 신용 한도로 멈추는 것도 `contribution_limit`으로
+ * 냈다). `NonQuantifiedEffect`의 `pension_contribution_without_credit`이
+ * **기본안을 포함한 어느 안에서도** 나올 수 있다 — 더 이상 넷째 안의 전유물이
+ * 아니다(0.11절). `unallocated_breakdown`의 두 여력 갈래는 네 안 모두 미배분이
+ * 남으면 사실상 항상 0이 된다 — 미배분이 남았다는 것 자체가 세 한도가 모두
+ * 찼다는 뜻이기 때문이다(5.13절).
+ *
  * 이 파일은 `calc-engine-dev`의 실제 엔진(`src/engine/`)이 나오기 전까지 UI를
  * 독립적으로 확인하기 위한 대체물이다. 세법 수치는 전부 인자로 주입되는
  * `rulesets`(= data/tax-rules/*.json을 파싱한 객체)에서 읽으며 이 파일 어디에도
  * 하드코딩하지 않는다 — 제품 원칙 1을 목에도 그대로 적용한다.
  *
  * **배분 알고리즘은 근사치다.** 네 배분안(`max_tax_credit` / `annuity_savings_first`
- * / `isa_first` / `pension_contribution_limit_fill`)의 우선순위를 반영하는 합리적인
+ * / `isa_first` / `pension_contribution_before_isa`)의 우선순위를 반영하는 합리적인
  * 순차 충당 규칙을 구현했지만,
  * 이는 `calc-engine-dev`가 `engine-design.md`에서 확정할 실제 알고리즘을
  * 대신하는 것이 아니다. 목의 책임은 계약의 타입·필드·코드를 정확히 지키고
@@ -45,12 +59,15 @@
 
 const ACCOUNTS = ['retirement_pension', 'annuity_savings', 'isa'];
 const SCENARIO_ORDER = ['current', 'proposed'];
-// 5.0.0 (D26) — 넷째 안 `pension_contribution_limit_fill`. 연금 **납입** 한도를
-// 채우는 안이고, 세법이 유불리를 정하지 않으므로 기본안이 되지 않는다.
-const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_limit_fill'];
+// 6.0.0 (D32) — 넷째 안의 이름이 `pension_contribution_limit_fill`에서
+// `pension_contribution_before_isa`로 바뀌었다. 네 안 모두 이제 연금 **납입**
+// 한도까지 채우므로(0.11절), 이 안을 다른 셋과 가르는 것은 더 이상 "납입
+// 한도까지 채운다"는 사실이 아니라 "ISA보다 먼저"라는 순서뿐이다. 세법이
+// 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
+const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '5';
-export const MOCK_SCHEMA_VERSION = '5.1.0';
+const KNOWN_SCHEMA_MAJOR = '6';
+export const MOCK_SCHEMA_VERSION = '6.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
 // 5.1.0(D28·D29) — 수익이 어떤 형태로 들어오는가. 자산군이 아니다(계약 3.6절).
@@ -1114,72 +1131,138 @@ function computeScenario(scenario, request, rulesets) {
     notices.push({ code: 'existing_contribution_over_limit', severity: 'warning', field: null, params: {}, basis_rule_ids: pensionContributionLimitRule ? [pensionContributionLimitRule.id] : [] });
   }
 
-  // -- 배분안 4종 계산 ------------------------------------------------------ (5.0.0 D26)
-  const fillSequences = {
-    max_tax_credit: ['annuity_savings', 'retirement_pension', 'isa'],
-    annuity_savings_first: ['annuity_savings', 'retirement_pension', 'isa'],
-    isa_first: ['isa', 'annuity_savings', 'retirement_pension'],
-    // 연금 **납입** 한도를 채우는 안 — 세액공제 대상 한도가 아니라 납입 한도가
-    // 상한이다. 순서가 세 안과 다른 것도 의도다(D26 — 확정 순서라 동점 규칙이
-    // 적용되지 않는다).
-    pension_contribution_limit_fill: ['retirement_pension', 'annuity_savings', 'isa'],
-  };
-  // annuity_savings_first·pension_contribution_limit_fill는 신용 최적화를 위해
-  // 600만원에서 멈추지 않고 계속 채운다.
-  const annuityCapByPlan = {
-    max_tax_credit: annuityCreditCap,
-    annuity_savings_first: Infinity,
-    isa_first: annuityCreditCap,
-    pension_contribution_limit_fill: Infinity,
-  };
+  // -- 배분안 4종 계산 ------------------------------------------------------ (6.0.0 D32)
+  //
+  // **네 안 모두 연금 쌍을 두 단계로 돈다**(계약 5.6절) — 1차는 세액공제 대상
+  // 한도까지(그 안의 이름이나 동점 규칙이 순서를 정한다), 2차는 ISA 납입 한도,
+  // 3차는 남은 연금 납입 한도(1,800만)까지다. 3차는 공제를 낳지 않는 몫이라
+  // 세액이 순서를 정하지 못하므로 **언제나** 인출이 자유로운 계좌(확정 룰셋에서는
+  // 연금저축)부터 채운다 — `pension.withdrawal.midterm_restriction`이 그 근거다.
+  //
+  // `annuity_savings_first`·`pension_contribution_before_isa`는 한 계좌를 신용
+  // 한도에서 멈추지 않고 완전히 채운 뒤 다음 계좌로 넘어가는 것이 이름의 의도라
+  // 1차·3차가 사실상 한 단계로 합쳐진다(`fillPensionMerged`). `max_tax_credit`·
+  // `isa_first`만 두 단계가 실제로 갈린다 — 1차에서 두 계좌 모두 신용 한도로
+  // 멈추고 ISA를 채운 뒤, 3차가 남은 예산을 연금저축부터 납입 한도까지 채운다.
+  const PENSION_FLEXIBLE_FIRST = ['annuity_savings', 'retirement_pension'];
+  function eligibleFor(account) {
+    return account === 'isa' ? isaEligible : pensionEligibility[account].eligible;
+  }
+  const annuityCreditCapEffective = annuityCreditCap + (transferDestination === 'annuity_savings' ? extraCreditLimit : 0);
+  const combinedCreditCapEffective = baseCombinedCreditCap + extraCreditLimit;
+  const annuitySubRemainingBase = Math.max(0, annuityCreditCapEffective - accounts.annuity_savings.ytd_contribution_krw);
+  const creditPoolRemainingBase = Math.max(
+    0,
+    combinedCreditCapEffective -
+      Math.min(accounts.annuity_savings.ytd_contribution_krw, annuityCreditCapEffective) -
+      accounts.retirement_pension.ytd_contribution_krw,
+  );
 
   const rawPlans = PLAN_ORDER.map((planId) => {
-    const sequence = fillSequences[planId];
     let remainingBudget = budget;
     let pensionPool = sharedPensionPoolBase;
     let isaPool = isaAnnualRoom;
-    const allocByAccount = {};
+    let creditPool = creditPoolRemainingBase;
+    let annuitySub = annuitySubRemainingBase;
+    const allocByAccount = { retirement_pension: 0, annuity_savings: 0, isa: 0 };
     const limitedBy = {};
     let order = 1;
     const fillOrderByAccount = {};
 
-    for (const account of sequence) {
-      let cap;
-      let eligible = true;
-      if (account === 'isa') {
-        cap = isaPool;
-        eligible = isaEligible;
-      } else if (account === 'annuity_savings') {
-        cap = Math.min(pensionPool, annuityCapByPlan[planId]);
-        eligible = pensionEligibility[account].eligible;
-      } else {
-        cap = pensionPool;
-        eligible = pensionEligibility[account].eligible;
-      }
-      if (!eligible) {
-        allocByAccount[account] = 0;
+    // 계좌 하나에 대한 한 걸음. `cap`은 이 걸음이 볼 수 있는 상한(신용 한도든
+    // 납입 한도든 호출부가 고른다). **`limited_by`는 마지막 걸음이 이긴다** —
+    // 같은 계좌가 1차·3차 두 번 걸리면 3차의 판정이 화면에 남는 판정이다.
+    function step(account, cap) {
+      if (!eligibleFor(account)) {
         limitedBy[account] = 'not_eligible';
-        continue;
+        return 0;
       }
       const want = remainingBudget;
       const allocated = Math.max(0, Math.min(want, cap));
-      allocByAccount[account] = allocated;
-      if (allocated > 0) fillOrderByAccount[account] = order++;
+      if (allocated > 0) {
+        allocByAccount[account] += allocated;
+        if (fillOrderByAccount[account] == null) fillOrderByAccount[account] = order++;
+      }
+      remainingBudget -= allocated;
+      // **`credit_limit`은 6.0.0에서 사라졌다** — 신용 한도로 멈추든 납입
+      // 한도로 멈추든 같은 값 `contribution_limit`으로 낸다(계약 5.5절).
       if (allocated < want) limitedBy[account] = cap <= want ? 'contribution_limit' : 'budget';
       else limitedBy[account] = null;
-      remainingBudget -= allocated;
-      if (account === 'isa') isaPool -= allocated;
-      else pensionPool -= allocated;
+      return allocated;
+    }
+
+    function fillIsa() {
+      const allocated = step('isa', isaPool);
+      isaPool -= allocated;
+    }
+
+    // 신용 한도를 보지 않고 계좌 하나를 납입 한도까지 채운다 — 이름이 "이
+    // 계좌를 먼저·완전히 채운다"를 뜻하는 두 안(`annuity_savings_first`·
+    // `pension_contribution_before_isa`)에 쓴다.
+    function fillPensionMerged(seq) {
+      for (const account of seq) {
+        const allocated = step(account, pensionPool);
+        pensionPool -= allocated;
+        creditPool -= Math.min(allocated, creditPool);
+        if (account === 'annuity_savings') annuitySub -= Math.min(allocated, annuitySub);
+      }
+    }
+
+    // 1차 — 세액공제 대상 한도까지. 확정 룰셋에서는 두 계좌의 한계 공제율이
+    // 언제나 같아 인출이 자유로운 계좌가 항상 먼저다(0.4절). 개정안 청년 우대로
+    // 공제율이 갈리는 재정렬은 이 목의 근사치가 다루지 않는다.
+    function fillPensionStageOne() {
+      for (const account of PENSION_FLEXIBLE_FIRST) {
+        const creditCapForAccount = account === 'annuity_savings' ? Math.min(annuitySub, creditPool) : creditPool;
+        const allocated = step(account, Math.min(creditCapForAccount, pensionPool));
+        pensionPool -= allocated;
+        creditPool -= allocated;
+        if (account === 'annuity_savings') annuitySub -= allocated;
+      }
+    }
+
+    // 3차 — 남은 납입 한도까지. **언제나** 인출이 자유로운 계좌부터(계약 5.6절).
+    function fillPensionStageThree() {
+      for (const account of PENSION_FLEXIBLE_FIRST) {
+        const allocated = step(account, pensionPool);
+        pensionPool -= allocated;
+      }
+    }
+
+    if (planId === 'isa_first') {
+      fillIsa();
+      fillPensionStageOne();
+      fillPensionStageThree();
+    } else if (planId === 'annuity_savings_first') {
+      fillPensionMerged(['annuity_savings', 'retirement_pension']);
+      fillIsa();
+    } else if (planId === 'pension_contribution_before_isa') {
+      fillPensionMerged(PENSION_FLEXIBLE_FIRST);
+      fillIsa();
+    } else {
+      // max_tax_credit
+      fillPensionStageOne();
+      fillIsa();
+      fillPensionStageThree();
     }
 
     const unallocated = remainingBudget;
 
-    // 5.0.0(D26) — 이 배분을 실행한 뒤 남는 두 여력. 예산이 credit_limit 같은
-    // 값싼 벽에 먼저 막혀 남은 경우 이 값이 양수로 남는다 — 「미배분」이 갈 곳이
-    // 없다는 뜻이 아니라는 사실이 여기서 나온다.
+    // **실제로 쓴 순서**(계약 5.6절 `fill_sequence`) — 첫 배분이 일어난 순서를
+    // 그대로 관측한다. 이 안에서는(두 단계로 갈리는 안) 계좌가 1차에서 0원을
+    // 받고 3차에서 처음 받을 수도 있어, 고정 배열이 아니라 실측값이어야 한다.
+    const observedSequence = [...ACCOUNTS].sort((a, b) => {
+      const oa = fillOrderByAccount[a] ?? Infinity;
+      const ob = fillOrderByAccount[b] ?? Infinity;
+      return oa !== ob ? oa - ob : ACCOUNTS.indexOf(a) - ACCOUNTS.indexOf(b);
+    });
+
+    // 이 배분을 실행한 뒤 남는 두 여력. **6.0.0부터 네 안 모두 ISA·연금 납입
+    // 한도까지 채우므로**, 예산이 그 둘의 합을 넘지 않는 한 이 값은 0이다
+    // (계약 5.13절 — 「미배분」이 갈 곳이 없다는 뜻이 되는 것이 이제 정상이다).
     return {
       planId,
-      sequence,
+      sequence: observedSequence,
       allocByAccount,
       limitedBy,
       fillOrderByAccount,
@@ -1348,8 +1431,11 @@ function computeScenario(scenario, request, rulesets) {
       annuity_savings_first: 'annuity_savings_limit_first',
       isa_first: 'isa_liquidity_first',
       // **이름이 세액공제를 말하지 않는다** — 이 안이 채우는 것은 납입 한도이고
-      // 그 납입이 유리한지는 세법이 정하지 않는다(D26).
-      pension_contribution_limit_fill: 'pension_contribution_limit_first',
+      // 그 납입이 유리한지는 세법이 정하지 않는다(D26). 6.0.0에서
+      // `pension_contribution_limit_first`에서 `pension_contribution_limit_before_isa`로
+      // 바뀌었다 — 남은 차이가 "납입 한도까지 채운다"(이제 네 안 전부가 한다)가
+      // 아니라 "ISA보다 먼저"뿐이라는 사실을 이름이 말해야 한다(0.11절).
+      pension_contribution_before_isa: 'pension_contribution_limit_before_isa',
     }[p.planId];
 
     const nonQuantified = [];
@@ -1369,11 +1455,13 @@ function computeScenario(scenario, request, rulesets) {
       });
     }
 
-    // -- 5.0.0(D26) — 세액공제를 낳지 않는 연금계좌 납입 -----------------------
-    // `pension_contribution_limit_fill`에서만 나온다. 다른 세 안은 (이 목의
-    // 근사 배분 규칙에서도) 연금저축을 세액공제 대상 한도까지만 채우도록
-    // `annuityCapByPlan`이 이미 막아 두었으므로, 남는 초과는 이 안에서만 생긴다.
-    if (p.planId === 'pension_contribution_limit_fill') {
+    // -- 6.0.0(D32) — 세액공제를 낳지 않는 연금계좌 납입 -----------------------
+    // **더 이상 `pension_contribution_before_isa`의 전유물이 아니다.** 네 안
+    // 모두 이제 연금 납입 한도(1,800만)까지 채우므로, 이 배분안이 실제로 그
+    // 계좌에 신용 한도 너머를 넣었으면(= 위 2단계 fill이 3차 단계를 밟았으면)
+    // 어느 안이든 이 효과가 붙는다. `plan.plan_id`로 걸지 않는다 — 아래
+    // `withoutCreditByAccount`가 이 배분안의 실제 배분액에서 직접 계산한다.
+    {
       const beyondCreditLimitRule = use('pension.contribution.beyond_credit_limit', 'plans[].non_quantified_effects');
       const nonDeductedPrincipalRule = use('pension.withdrawal.non_deducted_principal', 'plans[].non_quantified_effects');
       if (beyondCreditLimitRule && nonDeductedPrincipalRule) {
@@ -1440,7 +1528,7 @@ function computeScenario(scenario, request, rulesets) {
       headrooms_overlap: pensionHeadroomKrw + isaHeadroomKrw > p.unallocated,
       basis_rule_ids: [
         pensionContributionLimitRule?.id,
-        'pension.contribution.beyond_credit_limit',
+        use('pension.contribution.beyond_credit_limit')?.id,
         ...(isaRequirementsRule ? [isaRequirementsRule.id] : []),
       ].filter(Boolean),
     };
@@ -1452,19 +1540,34 @@ function computeScenario(scenario, request, rulesets) {
       priority_basis: {
         code: priorityBasisCode,
         fill_sequence: p.sequence,
-        basis_rule_ids:
-          p.planId === 'isa_first'
-            ? [use('pension.withdrawal.eligibility')?.id, use('isa.account.requirements')?.id].filter(Boolean)
-            : p.planId === 'pension_contribution_limit_fill'
-              ? [pensionContributionLimitRule?.id, use('pension.contribution.beyond_credit_limit')?.id].filter(Boolean)
-              : [],
+        // 6.0.0(D32, 0.11절) — **네 안 전부**가 이제 3차(연금 납입 한도까지)를
+        // 밟을 수 있으므로, 그 근거 셋(연금 납입 한도 · 신용 한도 너머 취급 ·
+        // 인출 자유 순서)이 네 안 전부의 근거 목록에 들어간다.
+        // `priority_basis.code`는 여전히 각 안의 이름(`tax_credit_maximization`
+        // 등)을 그대로 쓴다 — 3차 몫의 근거는 이름이 아니라 이 목록이 말한다.
+        basis_rule_ids: [
+          ...new Set(
+            [
+              pensionContributionLimitRule?.id,
+              use('pension.contribution.beyond_credit_limit')?.id,
+              use('pension.withdrawal.midterm_restriction')?.id,
+              ...(p.planId === 'isa_first'
+                ? [use('pension.withdrawal.eligibility')?.id, use('isa.account.requirements')?.id]
+                : []),
+            ].filter(Boolean),
+          ),
+        ].sort(),
         // 확정 룰셋에는 계좌에 따라 공제율이 갈리는 규칙이 없어 두 연금계좌의
         // 한계 공제율이 언제나 같다 — 그래서 확정 시나리오는 언제나
-        // `withdrawal_flexibility_first`다(계약 5.6절). `annuity_savings_first`·
-        // `pension_contribution_limit_fill`은 순서가 이름/설계로 고정된 안이라
-        // 동점 규칙을 적용하지 않는다(계약 5.6절 — "동점의 전제가 이 안에서 무너진다").
+        // `withdrawal_flexibility_first`다(계약 5.6절). `annuity_savings_first`만
+        // 순서가 이름/설계로 고정된 안이라 동점 규칙을 적용하지 않는다
+        // (계약 5.6절 — "동점의 전제가 이 안에서 무너진다"). **6.0.0에서
+        // `pension_contribution_before_isa`는 이 예외에서 빠졌다** — 이 안의
+        // 1차(연금 공제한도까지) 순서도 이제 다른 두 안과 같은 동점 규칙을 따른다.
+        // `tie_break.code`는 **1차의 판정**이다(5.6절) — 3차는 동점 여부와
+        // 무관하게 언제나 인출 자유 계좌부터 채운다.
         tie_break:
-          p.planId === 'annuity_savings_first' || p.planId === 'pension_contribution_limit_fill' || scenario === 'proposed'
+          p.planId === 'annuity_savings_first' || scenario === 'proposed'
             ? { code: 'not_applicable', basis_rule_ids: [] }
             : {
                 code: 'withdrawal_flexibility_first',
@@ -1472,8 +1575,8 @@ function computeScenario(scenario, request, rulesets) {
               },
         // **이 안이 이름으로 내세운 목적함수가 이 입력에서 순위를 정하지 못하는가.**
         // 한도가 0이면 연금계좌에 얼마를 넣든 공제액이 0이라 최대값이 유일하지 않다.
-        // `isa_first`·`pension_contribution_limit_fill`은 언제나 false다 — 두 안의
-        // 근거(인출 가능성 / 납입 한도)는 세액 한도와 무관하게 그대로 성립한다(5.12절).
+        // `isa_first`·`pension_contribution_before_isa`는 언제나 false다 — 두 안의
+        // 근거(인출 가능성 / ISA와의 선후)는 세액 한도와 무관하게 그대로 성립한다(5.12절).
         objective_degenerate:
           (p.planId === 'max_tax_credit' || p.planId === 'annuity_savings_first') && capKnown && capKrw === 0,
       },
@@ -1532,12 +1635,12 @@ function computeScenario(scenario, request, rulesets) {
   function warningCount(plan) {
     return plan.warnings.filter((w) => w.severity === 'warning').length;
   }
-  // `pension_contribution_limit_fill`은 기본안 후보에서 뺀다(계약 5.5·10절 —
+  // `pension_contribution_before_isa`는 기본안 후보에서 뺀다(계약 5.5·10절 —
   // "언제나 `is_baseline: false`이고 화면도 그 판단을 대신하지 않는다"). 세법이
-  // 유불리를 정하지 않는 안을 엔진이 기본으로 고르면 그것이 곧 자문이다(D26).
+  // 유불리를 정하지 않는 안을 엔진이 기본으로 고르면 그것이 곧 자문이다(D26·D32).
   const baselineCandidates = collapsed
     .map((plan, index) => ({ plan, index }))
-    .filter(({ plan }) => plan.plan_id !== 'pension_contribution_limit_fill');
+    .filter(({ plan }) => plan.plan_id !== 'pension_contribution_before_isa');
   let baselineIndex = baselineCandidates[0]?.index ?? 0;
   if (profile.fund_use_horizon === 'within_isa_lock_in' || profile.fund_use_horizon === 'before_pension_age') {
     let best = baselineCandidates[0];

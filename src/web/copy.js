@@ -49,10 +49,14 @@ export const PLAN_LABEL = {
   max_tax_credit: '세액공제액이 가장 큰 배분',
   annuity_savings_first: '연금저축을 먼저 채우는 배분',
   isa_first: 'ISA를 먼저 채우는 배분',
-  // D26 — 이름이 "추천"으로 읽히지 않게, 그리고 세액공제가 아니라 납입 한도가
-  // 기준이라는 사실이 이름에 그대로 드러나게 한다. 세법이 유불리를 정하지
-  // 않으므로 이 배분안은 다른 셋과 같은 자리에서 선택지로만 낸다.
-  pension_contribution_limit_fill: '연금계좌 납입 한도까지 채우는 배분',
+  // D26 — 이름이 "추천"으로 읽히지 않게 한다. 세법이 유불리를 정하지 않으므로
+  // 이 배분안은 다른 셋과 같은 자리에서 선택지로만 낸다.
+  //
+  // **D32에서 개명됐다**(옛 id `pension_contribution_limit_fill`, 계약 0.11절).
+  // 「납입 한도까지 채운다」는 이제 네 안 전부가 하므로 더 이상 이 안을
+  // 가르는 사실이 아니다 — 남은 차이는 ISA와의 **선후**뿐이라, 라벨도 그
+  // 사실만 말한다.
+  pension_contribution_before_isa: '연금계좌를 ISA보다 먼저 채우는 배분',
 };
 
 export const FUND_USE_HORIZON_LABEL = {
@@ -396,6 +400,9 @@ export function isaTaxFreeCaption(limitKrw) {
 const UNALLOCATED_REASON_CLAUSE = {
   contribution_limit: (names) => `${names}는 납입 잔여 한도를 모두 채웠습니다`,
   // 이 절이 Q1의 핵심 — 납입 여지가 남아 있다는 사실을 같은 문장 안에서 말한다.
+  // **6.0.0(D32)부터 엔진이 이 값을 내지 않는다** — 어떤 배분안도 더 이상
+  // 세액공제 대상 한도에서 멈추지 않는다(`engine-interface.md` 0.11절). 자리는
+  // `eligibility.js`의 `UNALLOCATED_REASON_ORDER`와 같은 이유로 남겨 둔다.
   credit_limit: (names) => `${names}는 세액공제 대상 납입액을 모두 채웠습니다(납입 잔여 한도는 남아 있습니다)`,
   not_eligible: (names) => `${names}는 이번 계산의 배분 대상이 아닙니다`,
 };

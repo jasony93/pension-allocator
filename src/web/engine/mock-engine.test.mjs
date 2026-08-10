@@ -502,8 +502,8 @@ test('a zero cap flattens the tax-credit axis and says so, without moving the al
   );
   assert.equal(zero.plans[0].deterministic_benefit.pension_credit_total_krw, 0);
   assert.ok(zero.plans[0].deterministic_benefit.pension_credit_total_before_cap_krw > 0);
-  // `isa_first`·`pension_contribution_limit_fill`은 목적함수가 무너지지 않는다 —
-  // 두 안의 근거(인출 가능성 / 납입 한도)는 세액 한도와 무관하게 그대로 성립한다.
+  // `isa_first`·`pension_contribution_before_isa`는 목적함수가 무너지지 않는다 —
+  // 두 안의 근거(인출 가능성 / ISA와의 선후)는 세액 한도와 무관하게 그대로 성립한다.
   const degenerateNamedPlans = new Set(['max_tax_credit', 'annuity_savings_first']);
   for (const plan of zero.plans) {
     assert.equal(plan.priority_basis.objective_degenerate, degenerateNamedPlans.has(plan.plan_id));
