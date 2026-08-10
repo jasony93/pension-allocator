@@ -182,11 +182,13 @@ for (const [caseId, { parsed, line }] of cases) {
 // 되면, 그 되돌림은 목록에 가려 조용히 지나간다. 그 대가로 얻은 것은 `tax-domain`이 값을
 // 갖고도 못 적는 상태의 해소이고, **작업을 막는 검사가 곧 우회되는 검사**라는 점에서
 // 이쪽이 크다고 보았다. 목록을 회차마다 실제로 줄이는 것이 이 구멍의 유일한 방어선이다.
+//
+// **바꾼 첫 회차에 37건이 갚혔다.** `tax-domain`이 `src/engine/`을 한 줄도 열지 않고
+// 어휘 37개를 채웠고, 등식이었다면 그 37건이 전부 그 유닛이 고칠 수 없는 빌드 실패였다.
+// 갚힌 것은 이 회차에 목록에서 지웠다 — 지우는 것이 위 구멍에 대한 값이다.
 
 const VOCABULARY_DEBT = [
-  // D22가 넓히라고 한 넷. `tax-domain`이 7차에 값을 채우면 아래에서 지운다.
-  // 지우지 않으면 검사가 "이제 쓰이는데 목록에 남아 있다"고 실패한다 — 목록이 스스로
-  // 낡지 않게 하는 장치다.
+  // ── D22가 넓힌 축 (7차). `tax-domain`이 아직 채우지 않았다. ──
   'plan.tax_credit_before_cap',
   'plan.tax_liability_cap',
   'plan.objective_degenerate',
@@ -204,8 +206,6 @@ const VOCABULARY_DEBT = [
   'pension_withdrawal_start.bound_by_holding_period',
   'pension_withdrawal_start.reason_code',
 
-  // 넓히기 이전부터 비어 있던 넷. 6차 이전에는 아무도 세지 않아 드러나지 않았다.
-  //
   // 경계 연수의 **원값** 둘. 블록은 잔여 연수(`..._remaining`)만 적어 왔고, 그 잔여를
   // 만들어 낸 룰셋 원값(ISA 의무가입기간·연금 개시연령)은 한 번도 주장하지 않았다.
   // 잔여가 맞으면 원값도 맞다고 보아 온 셈인데, 나이·가입경과연수가 0인 케이스에서는
@@ -213,70 +213,38 @@ const VOCABULARY_DEBT = [
   'boundaries.isa_lock_in_years',
   'boundaries.pension_min_age_years',
 
-  // 공제율의 지방세분과 실효율은 소득세율에서 산출되는 값이라 블록이 소득세율만
-  // 적어 왔다. 산출식이 맞는지는 `ruleset-driven.test.mjs`가 룰셋에서 직접 보지만,
-  // **정답지는 그 축을 한 번도 주장하지 않았다**는 사실은 남는다.
-  'credit_rate.local_tax',
+  // 공제율의 실효율은 소득세율과 부가율에서 산출되는 값이라 블록이 그 둘만 적어 왔다.
+  // 산출식이 맞는지는 `ruleset-driven.test.mjs`가 룰셋에서 직접 본다.
   'credit_rate.effective',
 
-  // ── 계약 5.0.0이 낸 공제율 판정 축 (D27). ──
-  //
-  // **왜 지금 비어 있는가.** 47건은 근로소득만 있는 사용자를 전제로 산출됐고, 실행기가
-  // 그 전제를 `has_non_wage_global_income_current_year: false`로 명시해 채운다
-  // (`golden-block.mjs`). 그 분기에서 판정 축은 총급여액이라 기대값이 움직이지 않았다.
-  // **움직이는 쪽 — 종합소득이 있는 사용자와 금액을 모르는 사용자 — 의 정답지가 없다.**
-  // 이 결함이 25% 과대였고 지금 정답지는 그 축을 한 번도 주장하지 않는다.
-  //
-  // **넷 다 지금 당장 적을 수 있다.** 목록이 상한이 됐으므로 `tax-domain`은 이 회차에
-  // 바로 값을 채울 수 있고, 그때 이 검사는 실패하지 않는다(D30).
-  'credit_rate.basis',
-  'credit_rate.measured_amount',
-  'credit_rate.fallback_applied',
-  'credit_rate.fallback_direction',
-
-  // ── 규칙별 근거·미확인 건수 (D30). 계약 5.7.1절의 첫 번째 방어선. ──
-  // 이 축은 이번 회차에 어휘가 처음 생겼다. `tax-domain`이 채우면 검사 5의 목록도 함께 준다.
-  'scenario.legal_basis',
-  'legal_basis.present',
-  'legal_basis.status',
-  'legal_basis.bill_stage',
-  'legal_basis.has_uncertainty_note',
-  'legal_basis.uncertainty_note_count',
-  'legal_basis.uncertainty_kinds',
-  'legal_basis.uncertainty_paths',
+  // 근거가 **어느 출력에 쓰였는가**. 값 → 근거, 근거 → 값 두 방향 연결의 한쪽이고,
+  // 헌장 고지 요소 3이 서 있는 자리다. 불변식 I11이 경로의 존재만 보고 어느 규칙이
+  // 어느 자리에 붙는지는 보지 않으므로, 그 짝을 정답지가 주장할 수 있어야 한다.
   'legal_basis.applied_to',
 
-  // ── 가정 기반 ISA 정산액 (D28·D29·D31). ──
-  // `tax-domain`이 RF-1~RF-9로 정답을 이미 산출해 두었고 적을 자리가 없었을 뿐이다
-  // (`golden-cases.md` 10절). 계약이 필드를 들였으므로 이제 `GC-` 번호로 옮기고
-  // 블록을 달 수 있다. **이 유닛은 값을 채우지 않는다.**
-  'plan.assumption_based_isa_estimate',
-  'assumption_based_isa_estimate.state',
-  'assumption_based_isa_estimate.not_computable_reason_code',
-  'assumption_based_isa_estimate.is_annual',
-  'assumption_based_isa_estimate.settlement_years',
-  'assumption_based_isa_estimate.settlement_years_source',
-  'assumption_based_isa_estimate.taxable_share_min',
-  'assumption_based_isa_estimate.taxable_share_max',
-  'assumption_based_isa_estimate.principal_krw',
-  'assumption_based_isa_estimate.total_return_krw',
-  'assumption_based_isa_estimate.taxable_income_krw',
-  'assumption_based_isa_estimate.loss_offset_applied_krw',
-  'assumption_based_isa_estimate.net_income_krw',
-  'assumption_based_isa_estimate.tax_free_limit_krw',
-  'assumption_based_isa_estimate.comparison_side_tax_krw',
-  'assumption_based_isa_estimate.isa_side_tax_krw',
-  'assumption_based_isa_estimate.point_estimate_krw',
-  'assumption_based_isa_estimate.lower_bound_krw',
-  'assumption_based_isa_estimate.upper_bound_krw',
-  'assumption_based_isa_estimate.axis_breakdown',
-  'assumption_based_isa_estimate.comparison_baseline_code',
-  'isa_axis_breakdown.loss_offset_krw',
-  'isa_axis_breakdown.tax_free_krw',
-  'isa_axis_breakdown.rate_gap_krw',
-  'isa_axis_breakdown.rounding_residual_krw',
+  // ── 반영하지 않은 개정예고 규칙 (D32 후속). ──
+  // 표시를 가진 개정예고 규칙 둘이 어느 케이스에서도 **근거로 실리지 않는다** — 반영하지
+  // 않기로 한 규칙이라 `legal_basis`가 아니라 이 배열로 나가기 때문이다. 그 규칙들에 대해
+  // 정답지가 주장할 수 있는 것은 표시 건수가 아니라 **「빠졌다는 사실과 사유」**이고,
+  // 그 자리를 이번에 열었다.
+  'scenario.unapplied_proposed_rules',
+  'unapplied_proposed_rules.present',
+  'unapplied_proposed_rules.reason_code',
 
-  // 미배분 갈래. 소유자가 지적한 자리이고 47건 중 미배분이 0이 아닌 케이스가 있는데도
+  // ── 계약이 상수로 고정한 넷 (D32 후속). ──
+  // **상수라서 오히려 비어 있으면 안 되는 자리다** — 아무도 주장하지 않으면 조용히
+  // 달라지고, 달라져도 어떤 금액도 틀리지 않아 다른 검사에 걸리지 않는다.
+  // `tax-domain`이 `is_lower_bound_for_aggregate_taxpayer`를 "우회로가 없다"고 짚었다.
+  'assumption_based_isa_estimate.principal_basis_code',
+  'assumption_based_isa_estimate.return_accrual_code',
+  'assumption_based_isa_estimate.is_lower_bound_for_aggregate_taxpayer',
+  'assumption_based_isa_estimate.assumes_contract_held_to_settlement',
+
+  // 못 낸 이유. ISA 유형 미선언·정수 표현 불가 두 갈래가 있고 아직 어느 케이스도
+  // 그 상태를 세우지 않았다.
+  'assumption_based_isa_estimate.not_computable_reason_code',
+
+  // 미배분 갈래. 소유자가 지적한 자리이고 미배분이 0이 아닌 케이스가 있는데도
   // 갈래는 아무도 주장하지 않는다.
   'plan.unallocated_breakdown',
   'unallocated_breakdown.total_annual_krw',
@@ -285,7 +253,7 @@ const VOCABULARY_DEBT = [
   'unallocated_breakdown.no_headroom_krw',
   'unallocated_breakdown.headrooms_overlap',
 
-  // 배분 **후** 잔여 공제 한도. 16.6절의 문구를 참으로 만드는 세 값 중 하나다.
+  // 배분 **후** 잔여 공제 한도. 계약 5.13.1절의 문구를 참으로 만드는 세 값 중 하나다.
   'plan.credit_remaining_after_plan_krw',
 
   // 비정량 효과의 코드 목록. 새 배분안의 `pension_contribution_without_credit`이

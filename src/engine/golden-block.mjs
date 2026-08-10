@@ -78,7 +78,18 @@ export const SCENARIO_KEYS = [
    * 적을 어휘가 어느 층에도 없었다. 규칙 id를 키로 하는 객체다.
    */
   'legal_basis',
+  /**
+   * 반영하지 **않은** 개정예고 규칙과 사유(D32 후속). 규칙 id를 키로 하는 객체다.
+   *
+   * **왜 필요한가.** 반영하지 않은 규칙은 근거가 아니므로 `legal_basis`에 실리지 않고,
+   * 그러면 그 규칙에 남은 미확인 표시를 정답지가 주장할 자리가 어디에도 없다. 다만
+   * 주장할 수 있는 것은 **표시 건수가 아니라 「빠졌다는 사실과 그 사유」**다 — 근거가
+   * 아닌 규칙의 불확실성은 사용자에게 고지되지 않으므로 셀 대상이 아니다.
+   */
+  'unapplied_proposed_rules',
 ];
+/** 반영하지 않은 규칙 하나에 대해 주장할 수 있는 것. */
+export const UNAPPLIED_KEYS = ['present', 'reason_code'];
 /** `legal_basis` 항목 하나가 주장할 수 있는 것. */
 export const LEGAL_BASIS_KEYS = [
   /** 이 규칙이 근거 목록에 실렸는가. `false`면 나머지를 적을 수 없다 */
@@ -139,6 +150,16 @@ export const ISA_ESTIMATE_KEYS = [
   'settlement_years_source',
   'taxable_share_min',
   'taxable_share_max',
+  /**
+   * **아래 넷은 계약이 상수로 고정한 값이다** — 그래서 오히려 어휘에 있어야 한다.
+   * 상수는 아무도 주장하지 않으면 조용히 달라지고, 달라져도 어떤 금액도 틀리지 않아
+   * 다른 검사에 걸리지 않는다. `tax-domain`이 `is_lower_bound_for_aggregate_taxpayer`를
+   * "우회로가 없다"고 짚었고, 같은 성질을 가진 셋을 함께 연다.
+   */
+  'principal_basis_code',
+  'return_accrual_code',
+  'is_lower_bound_for_aggregate_taxpayer',
+  'assumes_contract_held_to_settlement',
   'principal_krw',
   'total_return_krw',
   'taxable_income_krw',
@@ -482,6 +503,24 @@ function validateLegalBasis(value, where, errors) {
   }
 }
 
+/** 반영하지 않은 개정예고 규칙(D32 후속). */
+function validateUnapplied(value, where, errors) {
+  if (!requireNonEmptyObject(value, where, errors)) return;
+
+  for (const [ruleId, entry] of Object.entries(value)) {
+    const at = `${where}.${ruleId}`;
+    if (!requireNonEmptyObject(entry, at, errors)) continue;
+    unknownKeys(entry, UNAPPLIED_KEYS, at, errors);
+
+    if ('present' in entry) requireBoolean(entry.present, `${at}.present`, errors);
+    if ('reason_code' in entry) requireStringOrNull(entry.reason_code, `${at}.reason_code`, errors);
+    // 목록에 없다고 적어 놓고 그 항목의 사유를 적을 수는 없다.
+    if (entry.present === false && 'reason_code' in entry) {
+      errors.push(`${at}: present:false인데 reason_code를 주장한다 — 없는 항목의 사유를 적을 수 없다`);
+    }
+  }
+}
+
 /** 가정 기반 ISA 정산액. 상태와 금액이 어긋나면 대조 전에 거절한다. */
 function validateIsaEstimate(value, where, errors) {
   if (!requireNonEmptyObject(value, where, errors)) return;
@@ -490,8 +529,30 @@ function validateIsaEstimate(value, where, errors) {
   if ('state' in value && !ISA_ESTIMATE_STATES.includes(value.state)) {
     errors.push(`${where}.state: 모르는 상태 "${value.state}" (허용: ${ISA_ESTIMATE_STATES.join(', ')})`);
   }
-  for (const key of ['not_computable_reason_code', 'settlement_years_source', 'comparison_baseline_code']) {
+  for (const key of [
+    'not_computable_reason_code',
+    'settlement_years_source',
+    'comparison_baseline_code',
+    'principal_basis_code',
+    'return_accrual_code',
+  ]) {
     if (key in value) requireStringOrNull(value[key], `${where}.${key}`, errors);
+  }
+  // 계약이 `true`로 고정한 둘. `false`로 적으면 계약이 하지 않은 선언을 하는 것이다.
+  for (const key of ['is_lower_bound_for_aggregate_taxpayer', 'assumes_contract_held_to_settlement']) {
+    if (key in value) requireBoolean(value[key], `${where}.${key}`, errors);
+  }
+  if (value.is_lower_bound_for_aggregate_taxpayer === false) {
+    errors.push(
+      `${where}.is_lower_bound_for_aggregate_taxpayer: 언제나 true다 — ` +
+        '금융소득종합과세 대상자에게는 실제 혜택이 이보다 크므로 이 값은 하한이다',
+    );
+  }
+  if (value.assumes_contract_held_to_settlement === false) {
+    errors.push(
+      `${where}.assumes_contract_held_to_settlement: 언제나 true다 — ` +
+        '중도해지는 요청에 입력이 없어 엔진이 판정하지 않는다(계약 5.14절)',
+    );
   }
   for (const key of ['settlement_years', ...ISA_ESTIMATE_AMOUNT_KEYS]) {
     if (key in value && key !== 'axis_breakdown') requireIntOrNull(value[key], `${where}.${key}`, errors);
@@ -706,6 +767,13 @@ function validateScenario(expectation, where, errors) {
   if ('legal_basis' in expectation) {
     validateLegalBasis(expectation.legal_basis, `${where}.legal_basis`, errors);
   }
+  if ('unapplied_proposed_rules' in expectation) {
+    validateUnapplied(
+      expectation.unapplied_proposed_rules,
+      `${where}.unapplied_proposed_rules`,
+      errors,
+    );
+  }
 }
 
 /**
@@ -801,6 +869,7 @@ export const VOCABULARY = [
   ...BOUNDARY_KEYS.map((k) => `boundaries.${k}`),
   ...PENSION_START_KEYS.map((k) => `pension_withdrawal_start.${k}`),
   ...LEGAL_BASIS_KEYS.map((k) => `legal_basis.${k}`),
+  ...UNAPPLIED_KEYS.map((k) => `unapplied_proposed_rules.${k}`),
   ...PLAN_KEYS.map((k) => `plan.${k}`),
   ...PLAN_TAX_CAP_KEYS.map((k) => `tax_liability_cap.${k}`),
   ...UNALLOCATED_KEYS.map((k) => `unallocated_breakdown.${k}`),
@@ -824,6 +893,9 @@ export function vocabularyUsedBy(parsed) {
     }
     for (const entry of Object.values(expectation.legal_basis ?? {})) {
       for (const key of Object.keys(entry ?? {})) used.add(`legal_basis.${key}`);
+    }
+    for (const entry of Object.values(expectation.unapplied_proposed_rules ?? {})) {
+      for (const key of Object.keys(entry ?? {})) used.add(`unapplied_proposed_rules.${key}`);
     }
     for (const plan of Object.values(expectation.plans ?? {})) {
       for (const key of Object.keys(plan)) used.add(`plan.${key}`);
@@ -1188,6 +1260,21 @@ function checkScenario(scenario, expected, label) {
   }
   if (expected.legal_basis) {
     checkLegalBasis(scenario, expected.legal_basis, label);
+  }
+  for (const [ruleId, entry] of Object.entries(expected.unapplied_proposed_rules ?? {})) {
+    const actual = scenario.unapplied_proposed_rules.find((item) => item.rule_id === ruleId);
+    if ('present' in entry) {
+      assert.equal(
+        actual !== undefined,
+        entry.present,
+        `${label} 미반영 규칙 실림 여부(${ruleId}) (나온 것: ${scenario.unapplied_proposed_rules.map((i) => i.rule_id).join(', ')})`,
+      );
+      if (entry.present === false) continue;
+    }
+    assert.ok(actual, `${label} 미반영 규칙에 "${ruleId}"이 없다`);
+    if ('reason_code' in entry) {
+      assert.equal(actual.reason_code, entry.reason_code, `${label} 미반영 사유(${ruleId})`);
+    }
   }
 
   const notices = scenario.notices.map((n) => n.code);

@@ -227,6 +227,84 @@ test('배열 안의 표시는 몇 번째 항목인지까지 가리킨다', () =>
   assert.deepStrictEqual(notes, [{ path: 'items[1].unverified', kind: 'unverified' }]);
 });
 
+// ── 표시 자리가 배열일 때 (D32) ──────────────────────────────────
+//
+// 계약 5.7.1절이 남는 구멍을 닫는 방법으로 배열을 제시하면서 **"각 항목이 자기 자리를
+// 갖는다"**고 못 박았다. 배열을 펼치지 않으면 산문 한 덩어리와 3원소 배열이 똑같이
+// 1건으로 세어져 그 해법이 아무것도 바꾸지 않는다 — **그 상태가 계약이 막으려던 것이다.**
+
+test('표시 자리가 배열이면 원소마다 자리를 갖는다 — 하나를 지우면 건수가 준다', () => {
+  const value = { unverified: ['첫째 항목', '둘째 항목', '셋째 항목'] };
+
+  assert.deepStrictEqual(uncertaintyNotesIn(value), [
+    { path: 'unverified[0]', kind: 'unverified' },
+    { path: 'unverified[1]', kind: 'unverified' },
+    { path: 'unverified[2]', kind: 'unverified' },
+  ]);
+
+  // 항목 하나가 해소되어 원소가 빠지면 **그 사실이 값에 나타난다.**
+  value.unverified.splice(1, 1);
+  const remaining = uncertaintyNotesIn(value);
+  assert.equal(remaining.length, 2);
+  assert.equal(remaining.some((n) => n.path === 'unverified[2]'), false);
+});
+
+test('산문 한 덩어리로 되돌리면 다시 1건으로 세어진다 — 그것이 막으려던 상태다', () => {
+  const asArray = uncertaintyNotesIn({ unverified: ['(1) 첫째', '(2) 둘째', '(3) 셋째'] });
+  // 같은 사실 셋을 한 문자열에 적으면 자리가 하나뿐이라 **일부 해소가 보이지 않는다.**
+  const asProse = uncertaintyNotesIn({ unverified: '(1) 첫째 (2) 둘째 (3) 셋째' });
+
+  assert.equal(asArray.length, 3);
+  assert.equal(asProse.length, 1);
+  assert.deepStrictEqual(asProse, [{ path: 'unverified', kind: 'unverified' }]);
+});
+
+test('경로 위의 배열과 표시 자리의 배열이 섞이지 않는다', () => {
+  // 앞은 표시로 **가는 길**에 배열이 있는 형태(`isa.benefit.settlement_period`),
+  // 뒤는 표시를 담는 키 자체가 배열인 형태(`isa.tax_free_limit`)다. 건수가 갈린다.
+  const onTheWay = uncertaintyNotesIn({ basis: [{ ok: 1 }, { unverified: '한 항목' }] });
+  const atTheSpot = uncertaintyNotesIn({ unverified: ['한 항목', '또 한 항목'] });
+
+  assert.deepStrictEqual(onTheWay.map((n) => n.path), ['basis[1].unverified']);
+  assert.deepStrictEqual(atTheSpot.map((n) => n.path), ['unverified[0]', 'unverified[1]']);
+});
+
+test('룰셋의 배열이 실제로 펼쳐져 근거로 나간다 — 원소를 지우면 응답의 건수가 준다', () => {
+  const ruleId = 'isa.tax_free_limit';
+  const base = scenarioOf(compute(baseRequest(), rulesets)).legal_basis.find(
+    (e) => e.rule_id === ruleId,
+  );
+  const elements = findRule(rulesets, CONFIRMED_FILE, ruleId).value.unverified;
+  assert.ok(Array.isArray(elements) && elements.length > 1, '이 규칙의 표시 자리가 여러 원소짜리 배열이다');
+  assert.equal(
+    base.uncertainty_notes.filter((n) => n.path.startsWith('unverified[')).length,
+    elements.length,
+    '룰셋의 원소 수와 응답의 표시 건수가 다르다 — 배열이 펼쳐지지 않았다',
+  );
+
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, ruleId).value.unverified.pop();
+  });
+  const after = scenarioOf(compute(baseRequest(), mutated)).legal_basis.find(
+    (e) => e.rule_id === ruleId,
+  );
+  assert.equal(
+    after.uncertainty_notes.length,
+    base.uncertainty_notes.length - 1,
+    '원소를 하나 지웠는데 응답의 건수가 그대로다',
+  );
+
+  // 배열을 산문 한 덩어리로 되돌리면 셋이 하나로 뭉개진다. **정답지의 건수 주장이 그것을 문다.**
+  const collapsed = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, ruleId).value.unverified = elements.join(' ');
+  });
+  const asProse = scenarioOf(compute(baseRequest(), collapsed)).legal_basis.find(
+    (e) => e.rule_id === ruleId,
+  );
+  assert.equal(asProse.uncertainty_notes.filter((n) => n.kind === 'unverified').length, 1);
+  assert.equal(asProse.has_uncertainty_note, true, '뭉개져도 유무는 그대로 참이다 — 유무로는 못 잡는다');
+});
+
 test('한 규칙 안의 여러 표시가 하나로 뭉개지지 않는다', () => {
   // **독립 오라클이다.** 아래 두 진술은 룰셋의 사실이고 `uncertaintyNotesIn`을 거치지 않는다 —
   // 응답을 그 함수의 출력과만 비교하면 함수가 첫 건만 남겨도 통과한다.

@@ -242,6 +242,12 @@ const LEGAL_BASIS = {
         // **없다는 것도 주장이다** — 읽지 않은 규칙을 근거로 싣지 않는다는 규약이 그 자리다.
         'pension.credit.isa_transfer.extra_limit': { present: false },
       },
+      // 확정 시나리오에는 반영하지 않은 개정예고 규칙이 없다. **비어 있다는 것도 사실이므로
+      // 주장할 수 있어야 한다** — 표시를 가진 개정예고 규칙 둘이 근거가 아니라 이 배열로
+      // 나가기 때문에 열어 둔 자리다(D32 후속).
+      unapplied_proposed_rules: {
+        'proposed.productive_isa.youth_income_deduction': { present: false },
+      },
       plans: {
         max_tax_credit: {
           allocation: { annuity_savings: ANNUITY_LIMIT, retirement_pension: 0, isa: 0 },
@@ -362,6 +368,12 @@ const ISA_POINT = {
               rounding_residual_krw: 0,
             },
             comparison_baseline_code: 'withholding_at_general_rate',
+            // 계약이 상수로 고정한 넷. **상수라서 오히려 주장되어야 한다** —
+            // 아무도 안 보면 조용히 달라지고, 달라져도 어떤 금액도 틀리지 않는다.
+            principal_basis_code: 'cumulative_contribution_plus_plan_allocation',
+            return_accrual_code: 'simple_interest',
+            is_lower_bound_for_aggregate_taxpayer: true,
+            assumes_contract_held_to_settlement: true,
           },
         },
       },
@@ -539,6 +551,20 @@ const INJECTIONS = [
   { via: 'format', block: ISA_POINT, name: 'computed인데 못 낸 이유가 있음', path: E('not_computable_reason_code'), value: 'isa_tax_free_limit_unknown', token: 'not_computable_reason_code' },
   { via: 'format', block: ISA_RANGE, name: '금액 없는 상태인데 금액을 주장', path: E('state'), value: 'not_computable', token: '금액을 주장한다' },
   { via: 'format', block: ISA_POINT, name: '모르는 상태 이름', path: E('state'), value: 'estimated', token: '모르는 상태' },
+
+  // ── 계약이 상수로 고정한 넷 (D32 후속) ──
+  // 상수는 아무도 주장하지 않으면 조용히 달라지고, 달라져도 어떤 금액도 틀리지 않아
+  // 다른 검사에 걸리지 않는다. 그래서 **주장할 수 있는지**와 **주장하면 무는지**를 함께 본다.
+  { via: 'compare', block: ISA_POINT, name: 'principal_basis_code', path: E('principal_basis_code'), value: 'account_balance', mentions: ['GC-96', 'principal_basis_code'] },
+  { via: 'compare', block: ISA_POINT, name: 'return_accrual_code', path: E('return_accrual_code'), value: 'compound_interest', mentions: ['GC-96', 'return_accrual_code'] },
+  // 두 boolean 상수는 `false`가 형식 단계에서 거절되므로 그쪽으로 확인한다 —
+  // 계약이 하지 않은 선언을 정답지가 대신 하는 것을 막는다.
+  { via: 'format', block: ISA_POINT, name: 'is_lower_bound_for_aggregate_taxpayer:false', path: E('is_lower_bound_for_aggregate_taxpayer'), value: false, token: '하한이다' },
+  { via: 'format', block: ISA_POINT, name: 'assumes_contract_held_to_settlement:false', path: E('assumes_contract_held_to_settlement'), value: false, token: '중도해지는 요청에 입력이 없어' },
+
+  // ── 반영하지 않은 개정예고 규칙 (D32 후속) ──
+  { via: 'compare', block: LEGAL_BASIS, name: 'unapplied (없는데 있다고 적음)', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction'], value: { present: true }, mentions: ['GC-94', '미반영 규칙 실림 여부'] },
+  { via: 'format', block: LEGAL_BASIS, name: 'present:false인데 사유를 주장', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction'], value: { present: false, reason_code: 'out_of_product_scope' }, token: '없는 항목의 사유' },
 ];
 
 for (const injection of INJECTIONS) {
@@ -588,6 +614,7 @@ const TYPOS = [
   { where: '공제율', path: CR('basis_code'), block: LEGAL_BASIS },
   { where: 'ISA 정산액', path: E('upper_bound'), block: ISA_POINT },
   { where: 'ISA 정산액 축', path: E('axis_breakdown', 'tax_free'), block: ISA_POINT },
+  { where: '미반영 규칙 항목', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction', 'reason'], block: LEGAL_BASIS },
 ];
 
 for (const { where, path, block } of TYPOS) {

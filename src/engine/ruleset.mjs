@@ -122,12 +122,26 @@ export function createAccess({ base, proposed }) {
  * 지운 경우는 여전히 잡지 못한다 — 엔진은 룰셋을 그대로 비출 뿐이다. 그 자리를 무는 것은
  * `tax-domain`의 골든 블록과 룰셋 검증기이고, 엔진이 하는 일은 **세고 가리킬 수 있게
  * 만드는 것**까지다(계약 5.7절).
+ *
+ * **표시 자리가 배열이면 원소마다 자리를 준다 (D32).** 계약 5.7.1절이 남는 구멍을 닫는
+ * 방법으로 배열을 제시하면서 **"각 항목이 자기 자리를 갖는다"**고 못 박았다. 배열을 펼치지
+ * 않으면 산문 한 덩어리와 3원소 배열이 똑같이 1건으로 세어져 **계약이 스스로 내놓은 해법이
+ * 아무것도 바꾸지 않는다.** 규정을 그 목적이 사라지는 쪽으로 읽지 않는다.
  */
 export function uncertaintyNotesIn(value) {
   const found = [];
 
   const walk = (node, key, path) => {
     if (key === 'unverified') {
+      // 배열이면 원소 하나가 확인하지 못한 항목 하나다. 첨자가 그 자리의 이름이 된다 —
+      // 하나가 해소되어 원소가 빠지면 3에서 2로 줄어든 사실이 값에 나타난다.
+      // 문자열 하나면 자리도 하나다. **그것이 계약이 막으려던 상태**이므로 늘리지 않는다.
+      if (Array.isArray(node)) {
+        node.forEach((_, index) =>
+          found.push({ path: `${path}[${index}]`, kind: UNCERTAINTY_KIND.UNVERIFIED }),
+        );
+        return;
+      }
       found.push({ path, kind: UNCERTAINTY_KIND.UNVERIFIED });
       return;
     }
