@@ -233,3 +233,112 @@ test('주입 / 3단계 몫을 더 묶이는 계좌에 먼저 넣으면 I36이 �
     before.deterministic_benefit.pension_credit_total_krw,
   );
 });
+
+// ── 주입 4·5. 월 환산 잔차를 잘못 얹는다 ─────────────────────────────────────
+//
+// 소유자가 신고한 것은 「도넛 가운데가 1원 모자란다」였고, 고친 방향은 **잔차를 한도
+// 여유가 남은 갈래에 얹는 것**이다. 그 고침에는 틀릴 길이 정확히 둘 있다.
+//
+//   · 여유가 **없는** 계좌에 얹는다 → 그 계좌의 연간 납입이 납입 한도를 넘는다.
+//   · 내림 대신 **반올림**한다 → 여러 계좌가 한꺼번에 올라 한도와 예산을 함께 넘는다.
+//
+// 둘 다 **과대 방향**이다. 아래 두 주입이 그 둘을 실제로 만들어 보이고, I12.1(b)(c)가
+// 무는지 확인한다. 검사식은 불변식 테스트와 같은 문장을 여기 다시 적는다 —
+// 주입된 엔진에 그 파일을 물릴 수 없기 때문이다.
+
+/** 남은 납입 한도의 합과 예산이 정확히 같은 요청. 세 계좌가 전부 한도에 닿는다. */
+function exactlyAtLimitsRequest() {
+  const probe = compute(baseRequest({ profile: { monthly_capacity_krw: 10_000_000 } }), rulesets)
+    .scenarios[0];
+  const isaLimit = probe.limits.by_account.find((l) => l.account === 'isa')
+    .contribution_limit_remaining_krw;
+  const pensionLimit = probe.limits.pension_contribution_limit_remaining_krw;
+  const months = 12;
+  const ytd = (pensionLimit + isaLimit) % months;
+  const budget = pensionLimit + isaLimit - ytd;
+
+  return {
+    months,
+    pensionLimit: pensionLimit - ytd,
+    isaLimit,
+    request: baseRequest({
+      profile: { monthly_capacity_krw: budget / months, months_remaining_in_tax_year: months },
+      accounts: { annuity_savings: { ytd_contribution_krw: ytd } },
+    }),
+  };
+}
+
+const pensionAnnualized = (plan) =>
+  plan.allocations
+    .filter((a) => a.account !== 'isa')
+    .reduce((sum, a) => sum + a.monthly_annualized_krw, 0);
+
+test('주입 / 한도 검사를 지우면 잔차가 한도가 찬 계좌에 얹힌다', async () => {
+  const mutated = await mutatedCompute({
+    file: 'monthly.mjs',
+    from: "if (part.poolId !== null && (headroom[part.poolId] ?? 0) < cost) continue;",
+    to: 'if (false) continue;',
+  });
+
+  const { months, pensionLimit, isaLimit, request } = exactlyAtLimitsRequest();
+  const before = baselineOf(compute(request, rulesets));
+  const after = baselineOf(mutated(request, rulesets));
+
+  // 지금은 얹을 곳이 없어 **모자라는 사실을 값으로 낸다.**
+  assert.ok(before.monthly_unassigned_krw > 0, '이 요청에서는 얹을 곳이 없어야 한다');
+  assert.ok(pensionAnnualized(before) <= pensionLimit, '지금은 한도를 넘지 않는다');
+
+  // 주입된 엔진은 합을 맞추는 대신 **한도를 넘긴다.**
+  assert.equal(after.monthly_unassigned_krw, 0, '검사를 지웠는데도 얹지 못했다 — 주입이 겨눈 자리가 아니다');
+  const isaAfter = after.allocations.find((a) => a.account === 'isa');
+  assert.ok(
+    pensionAnnualized(after) > pensionLimit || isaAfter.monthly_annualized_krw > isaLimit,
+    '한도 검사를 지웠는데 어느 한도도 넘지 않는다 — 그 검사는 아무것도 막고 있지 않았다',
+  );
+
+  // 연 배분과 공제액은 그대로다. **연 기준만 보는 검사는 이 결함에 눈이 먼다.**
+  for (const account of ['retirement_pension', 'annuity_savings', 'isa']) {
+    assert.equal(amount(after, account), amount(before, account), account);
+  }
+  assert.equal(
+    after.deterministic_benefit.pension_credit_total_krw,
+    before.deterministic_benefit.pension_credit_total_krw,
+  );
+  assert.equal(months, 12);
+});
+
+test('주입 / 내림을 반올림으로 바꾸면 예산과 한도를 함께 넘긴다', async () => {
+  const mutated = await mutatedCompute({
+    file: 'monthly.mjs',
+    from: 'const floorMonthlyKrw = Math.floor(bucket.annualKrw / months);',
+    to: 'const floorMonthlyKrw = Math.round(bucket.annualKrw / months);',
+  });
+
+  // (a) 예산을 넘는다. 연 배분 두 갈래의 나머지가 정확히 개월수의 절반이면 **둘 다**
+  //     올라가는데, 올릴 수 있는 몫은 하나뿐이다. 기납입 6원이 그 상태를 만든다.
+  const halfway = baseRequest({
+    profile: { monthly_capacity_krw: 2_500_000, months_remaining_in_tax_year: 12 },
+    accounts: { annuity_savings: { ytd_contribution_krw: 6 } },
+  });
+  const rounded = mutated(halfway, rulesets);
+  const roundedPlan = baselineOf(rounded);
+  const monthlyOf = (plan) => plan.allocations.reduce((sum, a) => sum + a.monthly_krw, 0);
+
+  assert.ok(
+    monthlyOf(roundedPlan) * 12 > rounded.echo.annual_budget_krw,
+    '반올림했는데 예산을 넘지 않는다 — 이 요청은 이 주입을 시험하지 못한다',
+  );
+  const sound = compute(halfway, rulesets);
+  assert.ok(
+    monthlyOf(baselineOf(sound)) * 12 <= sound.echo.annual_budget_krw,
+    '지금의 엔진은 예산을 넘지 않는다',
+  );
+
+  // (b) 납입 한도를 넘는다. 세 계좌가 한도에 닿아 있으면 1원이라도 올리는 순간 넘는다.
+  const { pensionLimit, request } = exactlyAtLimitsRequest();
+  assert.ok(
+    pensionAnnualized(baselineOf(mutated(request, rulesets))) > pensionLimit,
+    '반올림했는데 납입 한도를 넘지 않는다',
+  );
+  assert.ok(pensionAnnualized(baselineOf(compute(request, rulesets))) <= pensionLimit);
+});

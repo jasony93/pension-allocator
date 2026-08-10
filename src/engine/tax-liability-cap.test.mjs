@@ -586,7 +586,9 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   const response = compute(legacy, rulesets);
   assert.equal(response.ok, false);
   assert.ok(errorCodes(response).includes('schema_version_mismatch'));
-  // D32에서 6으로 올렸다 — 기본안의 배분이 바뀌고 `plan_id` 열거형에서 값 하나가
-  // 사라졌으므로, 옛 소비자가 조용히 다른 숫자를 내보내는 상태를 만들지 않는다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '6');
+  // D32에서 6으로, 월 환산 잔차 처리에서 7로 올렸다(계약 0.12절) — 뒤엣것은
+  // `Allocation.monthly_krw`가 더 이상 `floor(연 ÷ 개월수)`가 아니게 된 변경이고,
+  // 그 산식을 그대로 구현한 소비자는 계좌별 금액을 더해도 월 여력이 되지 않는 화면을
+  // 계속 낸다. **옛 소비자가 조용히 다른 숫자를 내보내는 상태를 만들지 않는다.**
+  assert.equal(SCHEMA_VERSION.split('.')[0], '7');
 });

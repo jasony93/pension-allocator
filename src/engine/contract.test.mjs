@@ -129,10 +129,22 @@ test('남은 개월수가 줄면 예산이 줄고 월 배분과 연 배분이 �
   for (const plan of scenarioOf(response).plans) {
     let residual = 0;
     for (const allocation of plan.allocations) {
-      assert.equal(allocation.monthly_krw, Math.floor(allocation.annual_krw / months));
-      residual += allocation.annual_krw - allocation.monthly_krw * months;
+      // **`7.0.0`부터 월 금액은 순수한 내림이 아니다**(계약 0.12절). 내림에 잔차 몫이
+      // 얹히고, 그 몫이 화면의 네 조각을 월 납입 여력과 맞춘다.
+      assert.equal(
+        allocation.monthly_krw,
+        Math.floor(allocation.annual_krw / months) + allocation.monthly_rounding_adjustment_krw,
+      );
+      residual += allocation.annual_krw % months;
     }
     assert.equal(plan.monthly_rounding_residual_krw, residual, '잔차를 삼키지 않는다');
+    assert.equal(
+      plan.allocations.reduce((sum, a) => sum + a.monthly_krw, 0) +
+        plan.unallocated_monthly_krw +
+        plan.monthly_unassigned_krw,
+      400_000,
+      '월 표시 금액의 합이 월 납입 여력과 다르다',
+    );
   }
 });
 

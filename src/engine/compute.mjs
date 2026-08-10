@@ -240,6 +240,9 @@ function computeScenario(scenarioId, request, rulesets) {
     horizon: request.profile.fund_use_horizon,
     months,
     budget,
+    // 월 표시 금액의 합이 맞춰야 할 값. `budget / months`로 되돌려 계산하지 않는다 —
+    // 나눗셈을 다시 하면 그 자리에서 또 반올림이 생긴다.
+    capacity: request.profile.monthly_capacity_krw,
     state: limitResult.state,
     rates,
     eligible,

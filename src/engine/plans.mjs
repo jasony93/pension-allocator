@@ -11,8 +11,11 @@ import {
   COMPARISON_NOTE,
   PENSION_EXTRA_BEFORE_ISA,
   FILL_SEQUENCE,
+  HEADROOM_POOL,
   HORIZON,
   LIMITED_BY,
+  MONTHLY_BUCKET,
+  MONTHLY_UNASSIGNED_REASON,
   NON_QUANTIFIED,
   PLAN,
   PLAN_ORDER,
@@ -23,6 +26,7 @@ import {
 } from './constants.mjs';
 import { resolveCarryoverConditions } from './limits.mjs';
 import { isaEstimateFor } from './isa-return.mjs';
+import { apportionMonthly } from './monthly.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
 
 const PENSION_ACCOUNTS = new Set([ACCOUNT.PENSION, ACCOUNT.ANNUITY]);
@@ -556,8 +560,59 @@ function objectiveDegenerate(planId, { cap }) {
   return cap.known && cap.cap_krw === 0 && CREDIT_NAMED_PLANS.has(planId);
 }
 
+/**
+ * 이 배분안의 월 표시 금액. **한도 여유를 어디서 읽는가가 이 함수의 전부다.**
+ *
+ * 잔차를 얹으면 그 갈래의 연간 납입이 (개월수 − 나머지)원 늘어난다. 그것이 한도를 넘지
+ * 않으려면 **그 배분안을 실행한 뒤 남은 납입 한도**와 대야 하고, 그 값은 이미 배분 결과가
+ * 들고 있다(`pensionPoolRemaining`·`isaPoolRemaining`). 배분 **전** 한도와 대면 이미
+ * 배분된 몫을 두 번 세게 되어 한도를 넘길 수 있다.
+ *
+ * 나머지가 같을 때의 순서는 **그 배분안이 실제로 쓴 충당 순서**다. 잔차는 배분 결정이
+ * 아니므로 우선순위를 다시 다투지 않는다(`monthly.mjs` 머리말).
+ */
+function monthlySplitOf(result, { unallocatedAnnual, months, capacity, ctx }) {
+  const { eligible } = ctx;
+  const pensionOpen = eligible[ACCOUNT.PENSION] || eligible[ACCOUNT.ANNUITY];
+  const lastOrder = ACCOUNT_ORDER.length;
+
+  const outcome = apportionMonthly({
+    months,
+    capacityMonthlyKrw: capacity,
+    buckets: [
+      ...ACCOUNT_ORDER.map((account) => ({
+        id: account,
+        annualKrw: result.amounts[account],
+        poolId: account === ACCOUNT.ISA ? HEADROOM_POOL.ISA : HEADROOM_POOL.PENSION,
+        // 돈을 받지 못한 계좌는 `fillOrder`가 없다. 그런 계좌는 나머지가 0이라 후보가
+        // 되지 않지만, 순서를 미정으로 두지 않기 위해 고정 계좌 순서로 뒤에 세운다.
+        orderIndex: result.fillOrder[account] ?? lastOrder + ACCOUNT_ORDER.indexOf(account),
+      })),
+      {
+        id: MONTHLY_BUCKET.UNALLOCATED,
+        annualKrw: unallocatedAnnual,
+        // 한도가 없는 갈래. 어느 계좌에도 들어가지 않는 돈이다.
+        poolId: null,
+        orderIndex: lastOrder * 2,
+      },
+    ],
+    poolHeadroomKrw: {
+      // 두 연금계좌가 모두 막혀 있으면 납입 여력이 남아 있어도 넣을 수 없다
+      // (`unallocatedBreakdownOf`와 같은 판정이다).
+      [HEADROOM_POOL.PENSION]: pensionOpen ? clampToZero(result.pensionPoolRemaining) : 0,
+      [HEADROOM_POOL.ISA]: eligible[ACCOUNT.ISA] ? clampToZero(result.isaPoolRemaining) : 0,
+    },
+  });
+
+  const byId = new Map(outcome.buckets.map((bucket) => [bucket.id, bucket]));
+  return {
+    get: (id) => byId.get(id),
+    unassignedMonthlyKrw: outcome.unassignedMonthlyKrw,
+  };
+}
+
 export function buildPlans(ctx) {
-  const { options, horizon, months, budget, access, cap } = ctx;
+  const { options, horizon, months, budget, capacity, access, cap } = ctx;
   const requested = options.plan_variants ?? PLAN_ORDER;
 
   // ── 금액 계산. 자금 사용 시점을 읽지 않는다. ──────────────────────
@@ -597,18 +652,29 @@ export function buildPlans(ctx) {
       for (const ruleId of warning.basis_rule_ids) access.markUsed(ruleId, 'plans[].warnings');
     }
 
+    const totalAnnual = ACCOUNT_ORDER.reduce((sum, a) => sum + result.amounts[a], 0);
+    const unallocatedAnnual = clampToZero(budget - totalAnnual);
+
+    // 월 환산. **연간 금액이 확정된 뒤에 붙는다** — 위의 어떤 값도 월 금액을 읽지 않으므로
+    // 「월 표시가 연 계산을 바꾸지 않는다」가 코드 구조로 참이 된다.
+    const monthlySplit = monthlySplitOf(result, { unallocatedAnnual, months, capacity, ctx });
+
     const allocations = ACCOUNT_ORDER.map((account) => ({
       account,
-      monthly_krw: Math.floor(result.amounts[account] / months),
+      monthly_krw: monthlySplit.get(account).monthlyKrw,
+      // **월 표시 금액 × 개월수다. 연 배분과 다를 수 있다**(monthly.mjs 머리말의 증명).
+      // 화면이 직접 곱하게 두면 곱셈이 두 곳에 생기고, 둘이 갈리면 화면이 조용히 틀린다.
+      monthly_annualized_krw: monthlySplit.get(account).monthlyAnnualizedKrw,
+      // 이 계좌가 떠안은 월 환산 잔차(0 또는 1원/월). `monthly_krw = 내림 + 이 값`이다.
+      monthly_rounding_adjustment_krw: monthlySplit.get(account).roundingAdjustmentMonthlyKrw,
       annual_krw: result.amounts[account],
       fill_order: result.fillOrder[account] ?? null,
       limited_by: result.limitedBy[account] ?? null,
       basis_rule_ids: basisForAccount(account, ctx),
     }));
 
-    const totalAnnual = allocations.reduce((sum, a) => sum + a.annual_krw, 0);
     const totalMonthly = allocations.reduce((sum, a) => sum + a.monthly_krw, 0);
-    const unallocatedAnnual = clampToZero(budget - totalAnnual);
+    const unallocatedMonthly = monthlySplit.get(MONTHLY_BUCKET.UNALLOCATED);
     const unallocatedBreakdown = unallocatedBreakdownOf(result, unallocatedAnnual, ctx);
     for (const ruleId of unallocatedBreakdown.basis_rule_ids) {
       access.markUsed(ruleId, 'plans[].unallocated_breakdown');
@@ -656,7 +722,8 @@ export function buildPlans(ctx) {
       allocations,
       total_allocated_monthly_krw: totalMonthly,
       total_allocated_annual_krw: totalAnnual,
-      unallocated_monthly_krw: Math.floor(unallocatedAnnual / months),
+      unallocated_monthly_krw: unallocatedMonthly.monthlyKrw,
+      unallocated_monthly_rounding_adjustment_krw: unallocatedMonthly.roundingAdjustmentMonthlyKrw,
       unallocated_annual_krw: unallocatedAnnual,
       // 「미배분」이 "갈 곳이 없다"로 읽히지 않게 갈래를 나눈다(D26).
       unallocated_breakdown: unallocatedBreakdown,
@@ -666,8 +733,22 @@ export function buildPlans(ctx) {
       pension_combined_credit_remaining_after_plan_krw: clampToZero(
         ctx.state.combinedLimit - benefit.credit_eligible_contribution_krw,
       ),
-      // 월 환산에서 버려진 잔차를 삼키지 않는다.
-      monthly_rounding_residual_krw: totalAnnual - totalMonthly * months,
+      // **연 배분을 개월수로 내림할 때 버려지는 몫의 합(원/연).** 값의 뜻은 계약
+      // `1.0.0` 이래 그대로이고 값 자체도 그대로다 — 다만 `총 연 − 총 월 × 개월수`로
+      // 다시 계산하면 더 이상 이 값이 나오지 않는다. 월 금액이 순수한 내림이 아니게
+      // 되었기 때문이다(계약 0.12절). **잔차가 사라진 것이 아니라 갈 곳이 생겼다.**
+      monthly_rounding_residual_krw: ACCOUNT_ORDER.reduce(
+        (sum, account) => sum + (result.amounts[account] % months),
+        0,
+      ),
+      // **그 잔차 중 끝내 어디에도 얹지 못한 몫(원/월).** 0이면 월 표시 금액 넷의 합이
+      // 월 납입 여력과 정확히 같다. 0이 아니면 **합이 모자라는 것이 사실이고**, 그
+      // 사실을 값으로 낸다 — 화면에서 반올림해 보이면 계좌별 금액의 합과 어긋난다.
+      monthly_unassigned_krw: monthlySplit.unassignedMonthlyKrw,
+      monthly_unassigned_reason_code:
+        monthlySplit.unassignedMonthlyKrw > 0
+          ? MONTHLY_UNASSIGNED_REASON.NO_DESTINATION_WITHIN_CONTRIBUTION_LIMIT
+          : null,
       deterministic_benefit: benefit,
       delta_vs_baseline_krw: 0,
       non_quantified_effects: nonQuantified,

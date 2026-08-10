@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '6.0.0';
-export const SUPPORTED_MAJOR = 6;
+export const SCHEMA_VERSION = '7.0.0';
+export const SUPPORTED_MAJOR = 7;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -200,6 +200,27 @@ export const START_DATE_REASON = {
 };
 
 export const MONTHS_IN_TAX_YEAR = 12;
+
+/**
+ * 월 환산에서 잔차를 얹는 갈래. 세 계좌 밖에 하나가 더 있다 — **미배분**이다.
+ * 어느 계좌에도 들어가지 않는 돈이라 납입 한도가 걸릴 자리가 없고, 그래서 한도 검사 없이
+ * 잔차를 받을 수 있다(`monthly.mjs` 머리말).
+ */
+export const MONTHLY_BUCKET = { UNALLOCATED: 'unallocated' };
+
+/** 월 환산 잔차를 나눠 담는 한도 풀. 두 연금계좌가 납입 한도를 공유한다는 사실의 표현이다. */
+export const HEADROOM_POOL = { PENSION: 'pension', ISA: 'isa' };
+
+/**
+ * 월 표시 금액의 합이 월 납입 여력에 못 미치는 이유.
+ *
+ * **값이 하나뿐인 것은 갈래가 하나뿐이기 때문이다.** 잔차를 얹을 수 있는 곳은 납입 한도
+ * 여유가 남은 계좌와 미배분 둘인데, 둘 다 없으면 남는 이유는 「어느 계좌도 1원을 더
+ * 받을 수 없다」 하나다.
+ */
+export const MONTHLY_UNASSIGNED_REASON = {
+  NO_DESTINATION_WITHIN_CONTRIBUTION_LIMIT: 'no_destination_within_contribution_limit',
+};
 
 /**
  * 룰셋 어휘. 세법 수치가 아니라 data/tax-rules/ 파일이 스스로 쓰는 status 값이고

@@ -433,7 +433,7 @@ function checkScenario(scenario, response, request, at) {
     }
   }
 
-  // I12 — 돈이 새지 않는다
+  // I12 — 돈이 새지 않는다 (연 기준)
   const months = response.echo.months_remaining_in_tax_year;
   for (const plan of plans) {
     assert.equal(
@@ -443,14 +443,96 @@ function checkScenario(scenario, response, request, at) {
     );
     let residual = 0;
     for (const allocation of plan.allocations) {
+      residual += allocation.annual_krw % months;
+    }
+    assert.equal(
+      plan.monthly_rounding_residual_krw,
+      residual,
+      `${at} I12: 잔차를 삼켰다 — 내림으로 버려지는 몫의 합과 다르다`,
+    );
+  }
+
+  // I12.1 — **월 표시 금액이 월 납입 여력과 맞아떨어진다** (소유자 신고: 도넛 가운데 1원 부족)
+  //
+  // 여기서 고정하는 것은 넷이다. 하나라도 빠지면 지난 결함이 되돌아온다.
+  //   (a) 네 갈래(세 계좌 + 미배분) + 담지 못한 몫 = 월 납입 여력. **정확히 같다.**
+  //   (b) 월 배분의 합 × 개월수 ≤ 예산. 월 금액을 올려 예산을 넘기지 않는다.
+  //   (c) 각 계좌의 월 × 개월수 ≤ **그 계좌의 납입 잔여 한도.** 연 배분이 아니라 한도다 —
+  //       둘을 다 지키면서 합을 맞추는 것은 불가능하고(monthly.mjs 머리말의 증명),
+  //       넘으면 안 되는 것은 조문이 정한 한도 쪽이다.
+  //   (d) 벗어남의 크기가 갈래당 개월수 미만이고, 배분이 0인 갈래는 월 금액도 0이다.
+  const capacity = response.echo.monthly_capacity_krw;
+  for (const plan of plans) {
+    const allocatedMonthly = plan.allocations.reduce((sum, a) => sum + a.monthly_krw, 0);
+    assert.equal(
+      allocatedMonthly + plan.unallocated_monthly_krw + plan.monthly_unassigned_krw,
+      capacity,
+      `${at} I12.1(a): ${plan.plan_id}의 월 표시 금액 합이 월 납입 여력과 다르다`,
+    );
+    assert.ok(
+      allocatedMonthly * months <= response.echo.annual_budget_krw,
+      `${at} I12.1(b): 월 배분 × 개월수가 예산을 넘었다`,
+    );
+
+    let pensionAnnualized = 0;
+    for (const allocation of plan.allocations) {
       assert.equal(
         allocation.monthly_krw,
-        Math.floor(allocation.annual_krw / months),
-        `${at} I12: 월 금액이 내림과 다르다`,
+        Math.floor(allocation.annual_krw / months) + allocation.monthly_rounding_adjustment_krw,
+        `${at} I12.1: 월 금액이 「내림 + 잔차 몫」과 다르다`,
       );
-      residual += allocation.annual_krw - allocation.monthly_krw * months;
+      assert.equal(
+        allocation.monthly_annualized_krw,
+        allocation.monthly_krw * months,
+        `${at} I12.1: 연 환산이 월 × 개월수와 다르다`,
+      );
+      // (d) 배분이 0인 계좌에 월 금액이 붙으면 「넣지 않는다」는 보고가 거짓이 된다.
+      if (allocation.annual_krw === 0) {
+        assert.equal(allocation.monthly_krw, 0, `${at} I12.1(d): 배분 0인 계좌에 월 금액이 붙었다`);
+      }
+      // 벗어남의 크기가 잔차 몫으로 정확히 설명된다. 설명되지 않는 어긋남은 결함이다.
+      assert.equal(
+        allocation.monthly_annualized_krw - allocation.annual_krw,
+        allocation.monthly_rounding_adjustment_krw * months - (allocation.annual_krw % months),
+        `${at} I12.1(d): 월 환산의 벗어남이 잔차 몫으로 설명되지 않는다`,
+      );
+      if (allocation.account === 'isa') {
+        assert.ok(
+          allocation.monthly_annualized_krw <= limitOf('isa').contribution_limit_remaining_krw,
+          `${at} I12.1(c): ISA 월 × 개월수가 납입 잔여 한도를 넘었다`,
+        );
+      } else {
+        pensionAnnualized += allocation.monthly_annualized_krw;
+      }
     }
-    assert.equal(plan.monthly_rounding_residual_krw, residual, `${at} I12: 잔차를 삼켰다`);
+    assert.ok(
+      pensionAnnualized <= scenario.limits.pension_contribution_limit_remaining_krw,
+      `${at} I12.1(c): 연금 월 × 개월수의 합이 납입 잔여 한도를 넘었다`,
+    );
+
+    // 담지 못한 몫이 있으면 **이유가 값으로 나온다.** 조용히 모자라지 않는다.
+    assert.equal(
+      plan.monthly_unassigned_reason_code !== null,
+      plan.monthly_unassigned_krw > 0,
+      `${at} I12.1: 담지 못한 몫과 그 이유가 어긋난다`,
+    );
+    // 미배분이 0인데 월 미배분이 붙으면 「남길 것이 없다」는 보고가 거짓이 된다.
+    if (plan.unallocated_annual_krw === 0) {
+      assert.equal(plan.unallocated_monthly_krw, 0, `${at} I12.1(d): 미배분 0인데 월 미배분이 붙었다`);
+    }
+    // 얹은 몫 + 못 얹은 몫 = 내림으로 잃은 총량 ÷ 개월수. **갈래가 넷이므로 3을 넘지 못한다.**
+    const flooringLoss =
+      plan.allocations.reduce((sum, a) => sum + (a.annual_krw % months), 0) +
+      (plan.unallocated_annual_krw % months);
+    const carried =
+      plan.allocations.reduce((sum, a) => sum + a.monthly_rounding_adjustment_krw, 0) +
+      plan.unallocated_monthly_rounding_adjustment_krw;
+    assert.equal(
+      carried + plan.monthly_unassigned_krw,
+      flooringLoss / months,
+      `${at} I12.1: 얹은 몫과 못 얹은 몫의 합이 내림으로 잃은 양과 다르다`,
+    );
+    assert.ok(carried + plan.monthly_unassigned_krw <= ACCOUNT_ORDER.length, `${at} I12.1: 잔차가 갈래 수를 넘었다`);
   }
 
   // I13 — 정수·비음수·납입 한도 준수

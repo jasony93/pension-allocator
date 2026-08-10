@@ -11,6 +11,10 @@ inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json
 open_questions:
+  - "**계약을 7.0.0(major)으로 올렸다**(0.12절). 소유자가 신고한 「월 배분 총액 1원 부족」을 고치면서 `Allocation.monthly_krw`가 더 이상 `floor(연 ÷ 개월수)`가 아니게 됐다. **연간 금액·한도·세액공제액은 한 원도 움직이지 않았다.** `src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다 — 이 유닛은 `src/web/`을 열지 않았고 마이그레이션은 `web-dev`·관리자의 몫이다. 목이 맞춰야 할 것: 월 금액 산식, 새 필드 다섯, 그리고 **도넛 가운데 값을 네 조각의 합으로 계산할 것**."
+  - "**소유자가 확인 항목으로 준 불변식 둘 중 하나를 그대로 쓰지 못했다**(0.12절). 「각 계좌의 월 × 12 ≤ 그 계좌의 연 배분」과 「네 조각의 합 = 월 여력」은 **동시에 성립할 수 없다**(증명은 0.12절). 그래서 앞엣것을 **「각 계좌의 월 × 개월수 ≤ 그 계좌의 납입 잔여 한도」**로 바꿔 기계로 고정했다 — 넘으면 안 되는 것이 조문이 정한 한도 쪽이라고 판단했다. **이 대체가 옳은지 관리자 확인이 필요하다.** 다른 길은 「합을 맞추지 않고 모자란 만큼을 값으로만 낸다」이고, 그것은 소유자가 신고한 화면을 고치지 못한다."
+  - "**GC-22의 `monthly_krw` 기대값 셋과 그 부속이 이번 변경으로 깨진다**(월 기준 기대값만 깨지고 **연 기준은 한 원도 안 움직였다**). 값을 고치지 않고 그대로 두었다 — 재산출은 `tax-domain`의 몫이다. 실측값은 최종 보고에 적었다."
+  - "**월 환산 잔차가 계좌를 세액공제 대상 한도 위로 몇 원 밀어 올릴 수 있다**(연 (개월수−1)원 미만). 공제액은 연 배분으로만 계산하므로 응답의 숫자는 움직이지 않고, 그 몫은 조문상 「없는 것으로」 본다. **납입 한도는 절대 넘지 않는다.** 이 처리(공제 한도는 넘어도 되고 납입 한도는 안 된다)가 옳은지 `tax-domain` 확인이 필요하다."
   - "**계약을 6.0.0(major)으로 올렸다**(0.11절). 근거 셋 — 같은 요청에 기본안이 다른 금액을 내고(D32), `plan_id`와 `limited_by`에서 열거형 값이 하나씩 빠지며, `pension_contribution_without_credit`가 기본안에도 붙어 기존 필드의 뜻이 바뀐다. **`src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다** — 이 유닛은 `src/web/`을 열지 않았고 마이그레이션 일정은 `web-dev`·관리자의 몫이다. 목이 맞춰야 할 것: 배분안 id 개명(`pension_contribution_limit_fill` → `pension_contribution_before_isa`), `limited_by`에서 `credit_limit` 제거, 기본안의 연금 배분이 납입 한도까지 늘어난 것, 기본안에도 `pension_contribution_without_credit` 효과와 그 `facts` 셋이 붙는 것."
   - "**`pension_contribution_before_isa`를 합치지 않고 개명한 것은 이 유닛의 판단이다**(0.11절). 근거는 실측이다 — 확정 룰셋 768개 좌표에서 476곳이 기본안과 다른 벡터이고, 같아진 292곳은 기존 중복 제거가 이미 지우고 있었다. **다만 이 안이 무엇을 위한 선택지인지가 전보다 약해졌다** — 세액이 같고 인출 가능성도 ISA가 낫다면 이 안을 고를 이유를 엔진이 이름 밖에서 말하지 못한다. 화면에 남길지는 관리자·`product-planner` 판정이다."
   - "**`limited_by`에서 `credit_limit`을 지운 것은 열거형 축소이고 이 유닛의 판단이다**(0.11절). 남겨 두면 아무 입력에서도 나오지 않는 값이 계약에 남는다고 보았다. 반대 선택(남겨 두고 「현재 도달 불가」로 표시)도 가능하며, 그 사실이 옮겨 간 자리(`pension_combined_credit_remaining_after_plan_krw`·`pension_contribution_without_credit`)를 화면이 실제로 쓰고 있는지 `web-dev` 확인이 필요하다."
@@ -51,10 +55,11 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `6.0.0`.**
+**현재 계약 버전: `7.0.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
+| `7.0.0` | **소유자 신고 — 월 배분 총액이 1원 모자란다.** 계좌별 월 금액이 더 이상 `floor(연 ÷ 개월수)`가 아니다. 내림으로 버려지던 잔차를 **납입 한도 여유가 남은 갈래에 얹어** 월 표시 금액의 합이 월 납입 여력과 정확히 같아진다. `Allocation`에 `monthly_annualized_krw`·`monthly_rounding_adjustment_krw`가, `Plan`에 `monthly_unassigned_krw`·`monthly_unassigned_reason_code`·`unallocated_monthly_rounding_adjustment_krw`가 붙는다. **연간 금액·한도·세액공제액은 한 원도 움직이지 않는다.** **왜 major인지는 0.12절** |
 | `6.0.0` | **D32 — 소유자가 기본안의 배분을 바꿨다.** 기본안의 충당 순서에 「연금계좌를 **납입** 한도까지」 단계가 붙어 **네 안이 전부 납입 한도까지 채운다.** `plan_id` 열거형에서 `pension_contribution_limit_fill`이 빠지고 `pension_contribution_before_isa`가 그 자리에 들어온다. `limited_by`의 `credit_limit`이 **사라진다.** `pension_contribution_without_credit` 효과가 기본안에서도 나온다. **왜 major인지는 0.11절** |
 | `5.1.0` | **D28·D29·D31 — 수익률을 받는다.** 요청에 `profile.isa_return_assumption`(선택)과 `options.assumption_based_isa_estimate`(선택)가 붙고, 응답에 `Plan.assumption_based_isa_estimate` · `echo.isa_return_assumption` · `echo.isa_return_affects`가 추가된다. 안내 코드 6건·가정 코드 7건이 늘었다. **왜 minor인지는 0.9절** |
 | `5.0.0` | **D26·D27.** 공제율 판정 축을 두 물음으로 나눴다 — `profile.has_non_wage_global_income_current_year`가 **필수로** 들어오고 `profile.current_year_global_income_krw`가 선택으로 붙는다. 배분안이 셋에서 **넷**으로 늘고(`pension_contribution_limit_fill`), `Plan`에 `unallocated_breakdown`·`pension_combined_credit_remaining_after_plan_krw`가 추가되며, `NonQuantifiedEffect`에 `facts`·`headroom_shared_with`가, `LegalBasisEntry`에 `uncertainty_notes`가 붙는다. **왜 major인지는 0.6절** |
@@ -210,6 +215,58 @@ open_questions:
 **`isa_first`도 다시 쟀다.** 같은 768개 좌표에서 **600곳**이 다른 벡터다. 합쳐지지 않는다.
 
 **이름이 "유리하다"로 바뀌지 않는다.** 기본안이 이 몫을 받게 된 것은 **소유자가 배분을 정했기 때문**이지 세법이 유불리를 정했기 때문이 아니다(`pension.contribution.beyond_credit_limit`의 `not_determined_by_tax_law`). 그래서 `priority_basis.code`는 `tax_credit_maximization` 그대로이고, **3단계 몫의 근거는 `basis_rule_ids`가 따로 말한다** — `pension.contribution.annual_limit`·`pension.contribution.beyond_credit_limit`·`pension.withdrawal.midterm_restriction` 셋이 네 안 전부의 근거 목록에 들어간다. 세액공제 규칙은 그 몫의 근거가 아니다.
+
+### 0.12 월 환산 잔차를 어디로 보내는가, 그리고 왜 `7.0.0`(major)인가
+
+**신고:** 월 납입 여력에 250만원을 넣었는데 도넛 가운데가 `2,499,999원`이었다. 재현했다.
+
+**원인은 이미 응답에 적혀 있었다.** 엔진은 계좌별 월 금액을 각각 내림하고, 그때 버려지는 몫을 `monthly_rounding_residual_krw`로 내보내고 있었다. **알면서 화면에 넘긴 상태였다.**
+
+#### 왜 그냥 올림·반올림이 답이 아닌가 — 그리고 「월 × 개월수 ≤ 연 배분」은 지킬 수 없다
+
+어떤 갈래의 월 금액을 1원 올리면 그 갈래는 연 기준으로 (개월수 − 나머지)원을 더 내게 된다. 그 갈래가 계좌라면 **연간 납입이 늘고, 납입 한도가 차 있으면 그 순간 한도를 넘는다.** 이 프로젝트가 계속 경계해 온 과대 방향이다.
+
+그런데 **「각 계좌의 월 × 개월수 ≤ 그 계좌의 연 배분」을 지키면서 합을 맞추는 것은 불가능하다.** 증명은 두 줄이다. 연간 예산 B = 월 여력 C × 개월수 m 이고 네 갈래(세 계좌 + 미배분)의 연 금액 합이 정확히 B다. 모든 갈래에서 `월 × m ≤ 연`이면 `Σ월 × m ≤ B = C·m`이므로 `Σ월 ≤ C`이고, **등호는 모든 연 금액이 m으로 나누어떨어질 때만** 성립한다. 나머지가 하나라도 있으면 합을 맞추는 배정은 반드시 어느 한 갈래의 연 배분을 넘어선다.
+
+**그러므로 넘으면 안 되는 것은 「연 배분」이 아니라 「납입 한도」다.** 한도는 조문이 정한 값이고 연 배분은 엔진이 예산을 쪼갠 결과다. 계약이 지는 보장을 그렇게 바꿨다.
+
+#### 규칙
+
+1. 각 갈래에 `floor(연 ÷ 개월수)`를 준다.
+2. 남은 몫(최대 3원/월)을 한 원씩, **그때그때 가장 싼 갈래에** 얹는다. 값 = 그 갈래의 연 기준 초과분이고, 처음 얹을 때 (개월수 − 나머지), 두 번째부터는 개월수다. **값이 곧 연 배분에서 벗어나는 정도이므로, 싼 것부터 고르는 것이 벗어남을 가장 작게 만든다.**
+3. 얹을 수 있는 조건 둘 — **연 기준 금액이 0보다 크다**(넣지 않는다고 해 놓고 월 금액을 보이지 않는다), 그리고 **계좌는 납입 한도 여유가 그 값 이상이다.** 두 연금계좌는 한도를 공유하므로 여유도 함께 깎는다.
+4. **미배분에는 한도 조건이 없다.** 어느 계좌에도 들어가지 않는 돈이라 조문상 상한이 걸릴 자리가 없고, 그 갈래를 키우는 것은 「그만큼을 계좌에 넣지 않고 남긴다」는 참인 진술이다.
+5. 값이 같으면 **그 배분안이 실제로 쓴 충당 순서**로 깬다.
+6. 얹을 곳이 하나도 없으면 **`monthly_unassigned_krw`로 낸다.**
+
+#### 소유자가 물은 넷에 대한 답
+
+| 물음 | 답 |
+|---|---|
+| 여유가 남은 계좌에 붙이면 되는가 | **그렇게 한다.** 여유는 `limits`가 아니라 **그 배분안을 실행한 뒤 남은 납입 한도**에서 읽는다. 배분 전 한도와 대면 이미 배분한 몫을 두 번 세게 된다 |
+| 어디에도 여유가 없으면 | **합이 모자라는 것이 사실이고, 그 사실을 값으로 낸다.** `monthly_unassigned_krw > 0` + 이유 코드. **실재하는 입력이다** — 예산이 남은 한도의 합과 정확히 같으면 미배분이 0인데 세 계좌가 전부 한도에 닿는다 |
+| 미배분이 있으면 잔차가 미배분으로 가도 되는가 | **간다. 사실상 언제나 그렇게 된다** — 네 안이 전부 납입 한도까지 채우므로 **미배분이 남았다는 것은 곧 세 한도가 다 찼다는 뜻**이고(5.13절), 그러면 계좌 쪽 여유가 0이라 미배분이 유일한 갈래다 |
+| 배분 순서 원칙(인출 자유 계좌 우선)과 충돌하는가 | **충돌하지 않는다.** 여기서 정하는 것은 배분이 아니라 표시 단위 환산의 나머지이고, 크기가 갈래당 연 (개월수)원 미만이며 **세액공제액을 바꾸지 않는다**(공제는 연 배분 위에서 계산되고 월 환산은 연 계산이 끝난 뒤에 붙는다). 그래서 **우선순위를 여기서 다시 다투지 않는다** — 벗어남의 크기가 정하고, 그것이 같을 때만 이미 쓴 순서를 따른다. 새 원칙을 만들지 않았다 |
+
+#### 「월 × 개월수 = 연간」은 성립하는가
+
+**성립하지 않는 경우가 있고, 그 경우가 값으로 드러난다.** 계좌별로 `monthly_annualized_krw`(= 월 × 개월수)를 함께 내므로 화면이 곱셈을 다시 하지 않아도 되고, 그 값과 `annual_krw`의 차이가 곧 벗어남이다. 차이의 범위는 **−(개월수 − 1) 이상 +(개월수 − 1) 이하**이고, 어느 경우에도 `monthly_annualized_krw`는 그 계좌의 납입 잔여 한도를 넘지 않는다(불변식 I12.1).
+
+**세액공제액은 이 차이를 따라가지 않는다.** 인정액은 연 기준이고 연 배분에서만 나온다. 잔차가 얹힌 계좌가 세액공제 대상 한도를 몇 원 넘어서는 경우가 있으나 그 몫은 조문상 「없는 것으로」 보므로 공제액이 늘지 않으며, 엔진은 애초에 연 배분으로만 공제를 계산한다.
+
+#### `monthly_rounding_residual_krw`는 지우지 않았다 — 뜻도 값도 그대로다
+
+여전히 **「연 배분을 개월수로 내림할 때 버려지는 몫의 합(원/연)」**이고, 같은 입력에서 `6.0.0`과 **같은 값**이 나온다. 바뀐 것은 하나다 — **`총 연 − 총 월 × 개월수`로 다시 계산하면 더 이상 이 값이 나오지 않는다.** 월 금액이 순수한 내림이 아니게 되었기 때문이다. 잔차가 사라진 것이 아니라 **갈 곳이 생겼다.** 어디로 갔는지는 `monthly_rounding_adjustment_krw`가, 못 간 몫은 `monthly_unassigned_krw`가 말한다.
+
+#### 왜 major인가
+
+**minor로 낼 수 있었다** — 필드를 뺀 것이 없고 요청 형태도 그대로다. 그래도 major인 이유가 셋이다.
+
+1. **계약이 문서로 준 산식을 거둔다.** 5.5절이 `monthly_krw`를 `floor(annual_krw / months_remaining_in_tax_year)`라고 **적어 두었다.** 그 산식을 그대로 구현한 소비자는 계약을 어긴 적이 없는데 이제 다른 숫자를 낸다. 0.4절 규약의 「응답 쪽 보장을 거두는 것」이고 0.1절이 같은 근거로 major를 골랐다.
+2. **조용히 틀린다.** 값이 1~3원만 어긋나므로 어떤 범위 검증에도 걸리지 않는다. 걸리지 않은 채로 **소유자가 눈으로 보고 신고할 때까지** 살아남은 결함이 바로 이것이다.
+3. **틀린 채로 남는 소비자가 실재한다.** `src/web/engine/mock-engine.js`가 옛 산식을 그대로 구현하고 있고, major를 올려야 그 목이 `schema_version_mismatch`로 멈춘다. 멈추는 시점이 마침 화면이 새 필드를 읽어야 하는 시점이다. **이 유닛은 `src/web/`을 열지 않았다 — 마이그레이션은 `web-dev`·관리자의 몫이다.**
+
+**목이 맞춰야 할 것:** `monthly_krw`를 `내림 + monthly_rounding_adjustment_krw`로, 새 필드 다섯(`Allocation` 둘 · `Plan` 셋), 그리고 **도넛 가운데 값을 네 조각의 합으로 계산하되 `monthly_unassigned_krw`가 0이 아닌 응답을 어떻게 보일지**를 정하는 것.
 
 ### 0.10 수익률을 들이면서 지킨 선 셋 (D28·D31)
 
@@ -701,13 +758,16 @@ accounts.isa               : IsaAccountState
 | `warnings` | PlanWarning[] | — | 이 배분안에서 걸리는 중도 불이익. 5.6절. 빈 배열일 수 있다 |
 | `priority_basis` | PriorityBasis | — | **무엇을 우선한 안인가.** 5.6절 |
 | `allocations` | Allocation[] | — | **항상 세 계좌 전부.** 배분액이 0인 계좌도 생략하지 않는다 |
-| `total_allocated_monthly_krw` | integer | 원/월 | |
+| `total_allocated_monthly_krw` | integer | 원/월 | `allocations[].monthly_krw`의 합. **`unallocated_monthly_krw`를 더해야 월 납입 여력이 된다**(`monthly_unassigned_krw`가 0이면 정확히 같다) |
 | `total_allocated_annual_krw` | integer | 원/연 | |
-| `unallocated_monthly_krw` | integer | 원/월 | 한도가 모자라 배분되지 않은 금액 |
+| `unallocated_monthly_krw` | integer | 원/월 | 한도가 모자라 배분되지 않은 금액. **`7.0.0`부터 순수한 내림이 아니다** — 잔차를 떠안을 수 있다(0.12절). `unallocated_annual_krw`가 0이면 이 값도 0이다 |
+| `unallocated_monthly_rounding_adjustment_krw` | integer | 원/월 | **`7.0.0` 신규.** 미배분이 떠안은 월 환산 잔차. `0` 이상 `3` 이하. `unallocated_monthly_krw = floor(unallocated_annual_krw / months) + 이 값` |
 | `unallocated_annual_krw` | integer | 원/연 | |
 | `unallocated_breakdown` | UnallocatedBreakdown | — | **미배분액이 어디로 갈 수 있는가.** 5.13절. 항상 있다 |
 | `pension_combined_credit_remaining_after_plan_krw` | integer | 원/연 | **이 배분을 실행한 뒤** 남는 연금계좌 합산 세액공제 대상 한도. 0 이상. **`limits.pension_combined_credit_remaining_krw`는 배분 *전* 값이고 이것과 다른 것이다.** 화면이 뺄셈으로 만들지 마라 — 5.13절 아래 문장 틀을 보라 |
-| `monthly_rounding_residual_krw` | integer | 원/연 | 연간 금액을 개월수로 나눌 때 버려진 잔차의 합계. 삼키지 않고 내보낸다 |
+| `monthly_rounding_residual_krw` | integer | 원/연 | 연간 금액을 개월수로 나눌 때 버려진 잔차의 합계. 삼키지 않고 내보낸다. **`7.0.0`에서 뜻도 값도 그대로이나 산식이 달라졌다** — `총 연 − 총 월 × 개월수`로 다시 계산하면 이 값이 나오지 않는다(0.12절). 정의는 `Σ(allocations[].annual_krw mod months_remaining_in_tax_year)`이고 **계좌만 센다**(미배분은 세지 않는다) |
+| `monthly_unassigned_krw` | integer | 원/월 | **`7.0.0` 신규.** 잔차 중 **어느 갈래에도 얹지 못한 몫.** `0` 이상 `3` 이하. **0이면 `allocations[].monthly_krw`의 합 + `unallocated_monthly_krw`가 `echo.monthly_capacity_krw`와 정확히 같다.** 0이 아니면 그만큼 모자라고, **그것이 사실이다** — 화면에서 반올림해 메우면 계좌별 금액의 합과 어긋난다 |
+| `monthly_unassigned_reason_code` | string \| null | — | **`7.0.0` 신규.** `monthly_unassigned_krw > 0`일 때만 값이 있고 그때는 언제나 `"no_destination_within_contribution_limit"`다(8.6절). 0이면 `null`. **두 값의 어긋남은 불변식 I12.1이 막는다** |
 | `deterministic_benefit` | DeterministicBenefit | — | 5.6절 |
 | `delta_vs_baseline_krw` | integer | 원/연 | 기본안(`plans[0]`) 대비 세액공제액 차이. **기본안은 언제나 0. 다른 안은 음수·0·양수 모두 가능하다.** 기본안이 `max_tax_credit`일 때만 나머지가 전부 0 이하다 — 그때만 기본안이 세액공제액을 최대화하기 때문이다. `fund_use_horizon`이 기본안을 다른 안으로 옮기면(`comparison_note_codes`에 `baseline_reordered_by_fund_use_horizon`) 양수가 나온다. **부호를 "포기한 금액"으로 읽지 마라** — 경위는 0.1절 |
 | `non_quantified_effects` | NonQuantifiedEffect[] | — | 금액으로 낼 수 없는 효과. 5.6절 |
@@ -718,7 +778,9 @@ accounts.isa               : IsaAccountState
 | 필드 | 자료형 | 단위 | 설명 |
 |---|---|---|---|
 | `account` | 계좌 id | — | |
-| `monthly_krw` | integer | 원/월 | `floor(annual_krw / months_remaining_in_tax_year)` |
+| `monthly_krw` | integer | 원/월 | **`7.0.0`에서 산식이 바뀌었다.** `floor(annual_krw / months_remaining_in_tax_year) + monthly_rounding_adjustment_krw`. 옛 산식(순수한 내림)을 그대로 쓰면 **계좌별 금액을 더해도 월 납입 여력이 되지 않는다** — 그것이 소유자가 신고한 결함이다(0.12절). `annual_krw`가 0이면 이 값도 0이다 |
+| `monthly_annualized_krw` | integer | 원/연 | **`7.0.0` 신규.** `monthly_krw × months_remaining_in_tax_year`. **`annual_krw`와 다를 수 있다** — 정확히 `monthly_rounding_adjustment_krw × 개월수 − (annual_krw mod 개월수)`만큼 크거나(얹혔을 때) `annual_krw mod 개월수`만큼 작다. 화면이 직접 곱하지 마라 — 곱셈이 두 곳에 생기면 둘이 갈린다. **이 값은 그 계좌의 납입 잔여 한도를 절대 넘지 않는다**(불변식 I12.1) |
+| `monthly_rounding_adjustment_krw` | integer | 원/월 | **`7.0.0` 신규.** 이 계좌가 떠안은 월 환산 잔차. `0` 이상 `3` 이하(갈래가 넷이므로 잔차는 최대 3원/월이고, 다른 갈래가 전부 막히면 한 계좌가 다 받을 수 있다). 0이 아니면 `monthly_annualized_krw > annual_krw`이고, 그 계좌에 **그만큼의 납입 한도 여유가 있었다는 뜻**이다 |
 | `annual_krw` | integer | 원/연 | 계산의 1차 단위 |
 | `fill_order` | integer \| null | — | 이 안에서 몇 번째로 채웠는가(1부터). 배분액이 0이면 `null` |
 | `limited_by` | string \| null | — | 무엇 때문에 더 못 넣었는가. `"budget"` / `"contribution_limit"` / `"not_eligible"` / `null`. **`6.0.0`에서 `"credit_limit"`이 사라졌다** — 어떤 안도 세액공제 대상 한도에서 멈추지 않으므로 그 값은 어느 계좌의 상한도 아니다. 그 사실이 사라진 것은 아니고 `pension_combined_credit_remaining_after_plan_krw`와 `pension_contribution_without_credit`로 자리를 옮겼다(0.11절) |
@@ -1269,6 +1331,16 @@ accounts.isa               : IsaAccountState
 | `alternatives_have_equal_tax_credit` | 둘 이상의 안이 같은 세액공제액을 냄(`delta_vs_baseline_krw`가 0) |
 | `tax_credit_axis_not_discriminating` | 세액 한도가 **0으로 확정**되어 어떤 배분을 해도 세액공제액이 0이다. 뜻은 "세액공제액으로는 배분안이 갈리지 않는다"이고, `alternatives_have_equal_tax_credit`과 달리 **그 동률이 앞으로 어떤 배분에서도 깨지지 않는다**는 사실까지 말한다. 화면은 금액 열 위에 그 사실을 한 줄로 두고 계좌 구성의 차이로 비교를 이어 간다. 5.12절 |
 
+### 8.6 월 환산에서 잔차를 못 얹은 이유 (`Plan.monthly_unassigned_reason_code`)
+
+**값은 `no_destination_within_contribution_limit` 하나이고, `monthly_unassigned_krw`가 0이면 `null`이다.**
+
+**표를 두지 않는다.** 8.0절이 코드 조건 표를 8.1~8.5절에만 두라고 정했고 `scripts/org/validate-code-definitions.mjs`가 그것을 기계로 강제한다. 이 값은 안내·경고·가정 어느 목록에도 속하지 않는 **필드 전용 열거형**이므로 다섯 목록에 끼워 넣지 않고 여기서 산문으로 적는다.
+
+그 코드가 뜻하는 것은 **잔차 1원/월을 얹을 곳이 하나도 없다**는 사실이다. 세 계좌가 전부 납입 한도에 닿아 있고(여유가 얹는 값보다 작다) 미배분도 0이라 남길 것이 없는 상태이며, 예산이 남은 한도의 합과 정확히 같을 때 나온다. **이때는 월 표시 금액의 합이 월 납입 여력보다 그만큼 적고, 그것이 사실이다** — 화면에서 반올림해 메우면 계좌별 금액의 합과 어긋난다(0.12절).
+
+**값이 하나뿐인 것은 갈래가 하나뿐이기 때문이다.** 얹을 수 있는 곳은 여유가 남은 계좌와 미배분 둘인데, 둘 다 없으면 남는 이유는 이것 하나다.
+
 ---
 
 ## 9. 경계값 전용 진입점 — `computeFundUseHorizonBoundaries`
@@ -1323,6 +1395,9 @@ accounts.isa               : IsaAccountState
 - **`unallocated_breakdown`의 두 여력을 더하지 않는다.** `headrooms_overlap`이 `true`면 같은 돈을 두 번 세는 것이다.
 - **`credit_rate_bracket.fallback_applied`가 `true`면 금액에 "적어도"를 붙인다.** 세액 한도의 "최대 이만큼"과 **방향이 반대**이므로 두 표기를 같은 문장 틀로 쓰면 한쪽이 거짓이 된다(4.2절).
 - **`isa_type_cross_check_inconclusive`를 "선언이 틀렸다"로 읽지 않는다.** 결론을 내지 못했다는 사실 통지이고, `isa_type_conflicts_with_prior_income`과 문구의 세기가 달라야 한다(8.2절).
+- **도넛 가운데의 「월 배분 총액」은 네 조각의 합이다** — `allocations[].monthly_krw` 셋 + `unallocated_monthly_krw`. `7.0.0`부터 그 합이 `echo.monthly_capacity_krw`와 정확히 같다(0.12절). **화면에서 반올림해 맞추지 마라** — 그러면 조각의 합과 가운데 값이 갈린다.
+- **`monthly_unassigned_krw`가 0이 아닌 응답을 처리해야 한다.** 그때는 네 조각의 합이 월 여력보다 그만큼 적고 **그것이 사실이다.** 세 한도가 전부 차서 1원을 더 넣을 곳이 없다는 뜻이므로, 가운데 값을 여력으로 바꿔 적으면 조각의 합과 어긋난다. 이유는 `monthly_unassigned_reason_code`에 있다(8.6절).
+- **`monthly_krw × 12`를 연간 금액으로 쓰지 마라.** `annual_krw`가 연간 금액이고, 곱한 값이 필요하면 `monthly_annualized_krw`를 읽는다. 둘은 다를 수 있고, **다른 것이 정상이다**(0.12절).
 - `allocations`는 배분액이 0이어도 세 계좌 전부 온다.
 - 시나리오를 하나만 요청해도 `scenarios`는 배열이다.
 - `bill_stages`와 `legal_basis[].law`는 **룰셋에서 온 문자열이다.** 목에 넣을 값은 실제 룰셋 파일에서 복사한다. 임의로 지어내면 게이트 4에서 고지 요소 3·6 검사에 걸린다.
