@@ -375,6 +375,8 @@ export const FILL_REQUIRED_FIELDS = `(() => {
   const set = (id, v) => { const el = document.getElementById(id); el.focus(); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
   set('birthDate', '19800101');
   set('currentSalary', '6000');
+  // 계약 5.0.0(D27) — 공제율 판정 축의 첫 물음. 대다수 사용자가 여기(아니오)다.
+  document.getElementById('hasNonWageIncome-false').click();
   set('monthlyCapacity', '50');
   document.getElementById('priorTaxUnknown').click();
   document.getElementById('annuityStarted-false').click();

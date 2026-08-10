@@ -1,24 +1,32 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 4.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 5.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `4.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `5.0.0`으로 맞췄다.
  *
  * **4.0.0에서 따라온 것.** 요청에 `profile.birth_date`·`profile.prior_year_tax`·
  * `accounts.*.annuity_start_status`가 필수로 들어오고 `profile.age_years`가
  * 사라졌다. 응답에 `pension_credit_tax_liability_cap`·`pension_withdrawal_start`·
  * `DeterministicBenefit`의 자르기 전 금액이 들어왔다.
  *
+ * **5.0.0에서 따라온 것(D26·D27).** 요청에
+ * `profile.has_non_wage_global_income_current_year`가 필수로 들어오고(선택인
+ * `current_year_global_income_krw`가 짝이다) 공제율 판정 축이 총급여/종합소득금액
+ * 둘로 나뉜다(0.7절). 배분안이 셋에서 넷으로 늘고(`pension_contribution_limit_fill`),
+ * `Plan`에 `unallocated_breakdown`·`pension_combined_credit_remaining_after_plan_krw`가,
+ * `NonQuantifiedEffect`에 `facts`·`headroom_shared_with`가 붙는다.
+ *
  * 이 파일은 `calc-engine-dev`의 실제 엔진(`src/engine/`)이 나오기 전까지 UI를
  * 독립적으로 확인하기 위한 대체물이다. 세법 수치는 전부 인자로 주입되는
  * `rulesets`(= data/tax-rules/*.json을 파싱한 객체)에서 읽으며 이 파일 어디에도
  * 하드코딩하지 않는다 — 제품 원칙 1을 목에도 그대로 적용한다.
  *
- * **배분 알고리즘은 근사치다.** 세 배분안(`max_tax_credit` / `annuity_savings_first`
- * / `isa_first`)의 우선순위를 반영하는 합리적인 순차 충당 규칙을 구현했지만,
+ * **배분 알고리즘은 근사치다.** 네 배분안(`max_tax_credit` / `annuity_savings_first`
+ * / `isa_first` / `pension_contribution_limit_fill`)의 우선순위를 반영하는 합리적인
+ * 순차 충당 규칙을 구현했지만,
  * 이는 `calc-engine-dev`가 `engine-design.md`에서 확정할 실제 알고리즘을
  * 대신하는 것이 아니다. 목의 책임은 계약의 타입·필드·코드를 정확히 지키고
  * UI가 다섯 상태를 모두 확인할 수 있는 그럴듯한 값을 내는 것까지다.
@@ -28,10 +36,12 @@
 
 const ACCOUNTS = ['retirement_pension', 'annuity_savings', 'isa'];
 const SCENARIO_ORDER = ['current', 'proposed'];
-const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first'];
+// 5.0.0 (D26) — 넷째 안 `pension_contribution_limit_fill`. 연금 **납입** 한도를
+// 채우는 안이고, 세법이 유불리를 정하지 않으므로 기본안이 되지 않는다.
+const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_limit_fill'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '4';
-export const MOCK_SCHEMA_VERSION = '4.0.0';
+const KNOWN_SCHEMA_MAJOR = '5';
+export const MOCK_SCHEMA_VERSION = '5.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
 
@@ -94,11 +104,23 @@ function findRule(rulesets, ruleId, fileKeys) {
   return null;
 }
 
+/**
+ * 5.0.0(5.7.1절) — 유무(boolean)가 아니라 **목록**이다. "일부 해소"가 유무로는
+ * 보이지 않기 때문이다. 목의 근사는 룰셋 전체를 훑는 실제 엔진의 분류기만큼
+ * 정교하지 않다 — 표시가 있다는 사실 하나를 한 항목으로 낸다(합성 항목).
+ * `has_uncertainty_note === (uncertainty_notes.length > 0)`이라는 계약의 등식은
+ * 그대로 지킨다.
+ */
+function collectUncertaintyNotes(v) {
+  if (v.unverified) return [{ path: 'value.unverified', kind: 'unverified' }];
+  if (v.confidence === 'corroborated') return [{ path: 'value.confidence', kind: 'confidence_not_verified' }];
+  if (v.age_range === null) return [{ path: 'value.age_range', kind: 'value_absent' }];
+  return [];
+}
+
 function toLegalBasisEntry(rule, appliedTo) {
   const v = rule.value || {};
-  const hasUncertainty = Boolean(
-    v.unverified || v.confidence === 'corroborated' || v.age_range === null,
-  );
+  const uncertaintyNotes = collectUncertaintyNotes(v);
   return {
     rule_id: rule.id,
     title: rule.title,
@@ -111,8 +133,51 @@ function toLegalBasisEntry(rule, appliedTo) {
     effective_from: rule.effective_from,
     verified_on: rule.source.verified_on,
     applied_to: appliedTo,
-    has_uncertainty_note: hasUncertainty,
+    has_uncertainty_note: uncertaintyNotes.length > 0,
+    uncertainty_notes: uncertaintyNotes,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 공제율 판정 축 (5.0.0, D27 / 계약 0.7절)
+//
+// 값을 지어내지 않는다 — 두 물음의 답에서 **축을 고르기만** 한다. 총급여액을
+// 종합소득금액으로 환산하지 않는다(소괄호는 환산 편의가 아니라 더 엄격한 규정).
+// ---------------------------------------------------------------------------
+
+const CREDIT_RATE_BASIS = {
+  TOTAL_SALARY: 'total_salary',
+  GLOBAL_INCOME: 'global_income',
+  STATUTORY_DEFAULT: 'statutory_default',
+};
+
+/** 상한이 하나도 없는 구간 = 조문 본문의 구간(대괄호 안 예외가 아닌 쪽). */
+function isDefaultCreditRateBracket(b) {
+  return (b?.global_income_max_krw ?? null) === null && (b?.total_salary_only_max_krw ?? null) === null;
+}
+
+/** 계약 0.7절 표. profile의 두 물음에서 판정 축을 고른다 — 값을 만들지 않는다. */
+function resolveCreditRateBasisCode(profile) {
+  if (profile.has_non_wage_global_income_current_year !== true) {
+    return { code: CREDIT_RATE_BASIS.TOTAL_SALARY, amount: profile.current_year_total_salary_krw };
+  }
+  if (profile.current_year_global_income_krw != null) {
+    return { code: CREDIT_RATE_BASIS.GLOBAL_INCOME, amount: profile.current_year_global_income_krw };
+  }
+  // 금액을 모른다. 지어내지 않는다 — 대괄호 안의 예외를 적용하지 않고 본문으로 간다.
+  return { code: CREDIT_RATE_BASIS.STATUTORY_DEFAULT, amount: null };
+}
+
+/** 고른 축으로 구간을 고른다. 법문이 '이하'이므로 경계값은 그 구간에 든다. */
+function selectCreditRateBracket(brackets, basis) {
+  if (basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT) {
+    return brackets.find(isDefaultCreditRateBracket);
+  }
+  const ceiling =
+    basis.code === CREDIT_RATE_BASIS.TOTAL_SALARY
+      ? (b) => b?.total_salary_only_max_krw ?? null
+      : (b) => b?.global_income_max_krw ?? null;
+  return brackets.find((b) => ceiling(b) === null || basis.amount <= ceiling(b));
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +267,29 @@ function validateProfile(p) {
       errors.push(err('not_integer', 'profile.prior_year_total_salary_krw', {}));
     else if (p.prior_year_total_salary_krw < 0)
       errors.push(err('negative_value', 'profile.prior_year_total_salary_krw', {}));
+  }
+
+  // 5.0.0(D27) — 공제율 판정 축의 첫 물음. **필수다** — 선택으로 두면 null일 때의
+  // 기본값이 둘 다 틀린다(0.6절). `false`면 두 번째 물음을 묻지 않는다.
+  if (p.has_non_wage_global_income_current_year == null) {
+    errors.push(err('missing_required', 'profile.has_non_wage_global_income_current_year', {}));
+  } else if (typeof p.has_non_wage_global_income_current_year !== 'boolean') {
+    errors.push(err('invalid_enum', 'profile.has_non_wage_global_income_current_year', {}));
+  }
+
+  if (p.current_year_global_income_krw != null) {
+    if (!isInt(p.current_year_global_income_krw))
+      errors.push(err('not_integer', 'profile.current_year_global_income_krw', {}));
+    else if (p.current_year_global_income_krw < 0)
+      errors.push(err('negative_value', 'profile.current_year_global_income_krw', {}));
+    // `false`인데 금액이 실려 오면 둘 중 무엇이 사용자의 답인지 엔진이 고르지 않는다.
+    if (p.has_non_wage_global_income_current_year === false) {
+      errors.push(
+        err('invalid_enum', 'profile.has_non_wage_global_income_current_year', {
+          reason: 'current_year_global_income_krw_present',
+        }),
+      );
+    }
   }
 
   if (p.fund_use_horizon == null) {
@@ -443,20 +531,34 @@ function computeScenario(scenario, request, rulesets) {
   use('age.reckoning.reference_date', 'echo.derived_age.reference_date');
 
   const creditRateRule = use('pension.credit.rate', 'echo.credit_rate_bracket');
+  // 5.0.0(D27) — 비율만으로는 화면이 어느 축에서 나왔는지 알 수 없다. 그 구분의
+  // 부재가 결함이었다(0.7절).
+  const creditRateBasisRule = use('pension.credit.rate.basis_determination', 'echo.credit_rate_bracket.basis_code');
   const surtaxRule = use('tax.local.personal_income_surtax', 'echo.credit_rate_bracket');
+  const creditRateBasis = resolveCreditRateBasisCode(profile);
   // 기본값 0 — creditRateRule이 없으면(=rule_missing) 아래에서 이미 missingRules에
   // 실려 compute()가 ok:false로 조기 반환하므로, 이 0은 응답에 실릴 일이 없는
   // 방어적 자리표시자일 뿐 세법 수치를 대신하지 않는다.
   let incomeTaxRate = 0;
   if (creditRateRule) {
-    const bracket = creditRateRule.value.brackets.find(
-      (b) => b.total_salary_only_max_krw == null || profile.current_year_total_salary_krw <= b.total_salary_only_max_krw,
-    );
+    const bracket = selectCreditRateBracket(creditRateRule.value.brackets, creditRateBasis);
     incomeTaxRate = bracket ? bracket.rate : creditRateRule.value.brackets[creditRateRule.value.brackets.length - 1].rate;
   }
   const localRateOfIncomeTax = surtaxRule ? surtaxRule.value.rate_of_income_tax : 0;
   const localTaxRate = incomeTaxRate * localRateOfIncomeTax;
   const effectiveRate = incomeTaxRate + localTaxRate;
+  const creditRateFallbackApplied = creditRateBasis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT;
+  if (creditRateFallbackApplied) {
+    // **덜 말하는 쪽이 안전한 방향이다** — 우대 구간을 적용하지 않았으므로 결과는
+    // "적어도 이만큼"이다. 세액 한도의 "최대 이만큼"과 방향이 반대다(0.7절).
+    notices.push({
+      code: 'credit_rate_global_income_missing',
+      severity: 'warning',
+      field: 'profile.current_year_global_income_krw',
+      params: { error_direction: 'understated_or_equal' },
+      basis_rule_ids: [creditRateRule?.id, creditRateBasisRule?.id].filter(Boolean).sort(),
+    });
+  }
 
   // -- 연금계좌 한도 --------------------------------------------------------
   const annuityCreditLimitRule = use('pension.credit.limit.annuity_savings');
@@ -704,17 +806,23 @@ function computeScenario(scenario, request, rulesets) {
     notices.push({ code: 'existing_contribution_over_limit', severity: 'warning', field: null, params: {}, basis_rule_ids: pensionContributionLimitRule ? [pensionContributionLimitRule.id] : [] });
   }
 
-  // -- 배분안 3종 계산 ------------------------------------------------------
+  // -- 배분안 4종 계산 ------------------------------------------------------ (5.0.0 D26)
   const fillSequences = {
     max_tax_credit: ['annuity_savings', 'retirement_pension', 'isa'],
     annuity_savings_first: ['annuity_savings', 'retirement_pension', 'isa'],
     isa_first: ['isa', 'annuity_savings', 'retirement_pension'],
+    // 연금 **납입** 한도를 채우는 안 — 세액공제 대상 한도가 아니라 납입 한도가
+    // 상한이다. 순서가 세 안과 다른 것도 의도다(D26 — 확정 순서라 동점 규칙이
+    // 적용되지 않는다).
+    pension_contribution_limit_fill: ['retirement_pension', 'annuity_savings', 'isa'],
   };
-  // annuity_savings_first는 신용 최적화를 위해 600만원에서 멈추지 않고 계속 채운다.
+  // annuity_savings_first·pension_contribution_limit_fill는 신용 최적화를 위해
+  // 600만원에서 멈추지 않고 계속 채운다.
   const annuityCapByPlan = {
     max_tax_credit: annuityCreditCap,
     annuity_savings_first: Infinity,
     isa_first: annuityCreditCap,
+    pension_contribution_limit_fill: Infinity,
   };
 
   const rawPlans = PLAN_ORDER.map((planId) => {
@@ -757,11 +865,20 @@ function computeScenario(scenario, request, rulesets) {
     }
 
     const unallocated = remainingBudget;
-    if (unallocated > 0 && Object.values(limitedBy).every((v) => v !== 'budget')) {
-      // 세 계좌 모두 한도를 채우고 남은 경우
-    }
 
-    return { planId, sequence, allocByAccount, limitedBy, fillOrderByAccount, unallocated };
+    // 5.0.0(D26) — 이 배분을 실행한 뒤 남는 두 여력. 예산이 credit_limit 같은
+    // 값싼 벽에 먼저 막혀 남은 경우 이 값이 양수로 남는다 — 「미배분」이 갈 곳이
+    // 없다는 뜻이 아니라는 사실이 여기서 나온다.
+    return {
+      planId,
+      sequence,
+      allocByAccount,
+      limitedBy,
+      fillOrderByAccount,
+      unallocated,
+      pensionPoolRemaining: pensionPool,
+      isaPoolRemaining: isaPool,
+    };
   });
 
   // -- 계좌별 세액공제 계산 -------------------------------------------------
@@ -848,6 +965,15 @@ function computeScenario(scenario, request, rulesets) {
       threshold_income_tax_krw: incomeTaxBeforeCapKrw,
       credit_carryforward: creditCarryforward,
       contribution_carryover_available: capApplied,
+      // **이름 하나(`contribution_carryover_available`)가 조건 둘을 감추고
+      // 있었다**(D26) — 전환금액도 전환한 해의 600만·900만 한도를 그 해의 새
+      // 납입액과 나눠 쓰고(그래서 매년 한도를 채우는 사용자에게는 전환할 자리가
+      // 없다), 신청주의라 자동이 아니다. 전환이 걸리지 않으면 읽지 않은 규칙을
+      // 근거로 싣지 않는다 — `null`이다.
+      carryover_shares_future_year_credit_limit:
+        capApplied && carryoverRule ? (carryoverRule.value.subject_to_conversion_year_credit_limits?.value ?? null) : null,
+      carryover_requires_application:
+        capApplied && carryoverRule ? carryoverRule.value.automatic !== true : null,
       error_direction_code: capErrorDirection,
       basis_rule_ids: capApplied && carryoverRule ? [...capBasisRuleIds, carryoverRule.id] : capBasisRuleIds,
     };
@@ -913,6 +1039,9 @@ function computeScenario(scenario, request, rulesets) {
       max_tax_credit: 'tax_credit_maximization',
       annuity_savings_first: 'annuity_savings_limit_first',
       isa_first: 'isa_liquidity_first',
+      // **이름이 세액공제를 말하지 않는다** — 이 안이 채우는 것은 납입 한도이고
+      // 그 납입이 유리한지는 세법이 정하지 않는다(D26).
+      pension_contribution_limit_fill: 'pension_contribution_limit_first',
     }[p.planId];
 
     const nonQuantified = [];
@@ -921,11 +1050,88 @@ function computeScenario(scenario, request, rulesets) {
         code: 'isa_tax_free_headroom',
         account: 'isa',
         headroom_krw: taxFreeLimit,
+        headroom_shared_with: [],
         quantifiable: false,
         reason_code: 'depends_on_investment_return_not_in_ruleset',
         basis_rule_ids: isaTaxFreeRule ? [isaTaxFreeRule.id] : [],
       });
     }
+
+    // -- 5.0.0(D26) — 세액공제를 낳지 않는 연금계좌 납입 -----------------------
+    // `pension_contribution_limit_fill`에서만 나온다. 다른 세 안은 (이 목의
+    // 근사 배분 규칙에서도) 연금저축을 세액공제 대상 한도까지만 채우도록
+    // `annuityCapByPlan`이 이미 막아 두었으므로, 남는 초과는 이 안에서만 생긴다.
+    if (p.planId === 'pension_contribution_limit_fill') {
+      const beyondCreditLimitRule = use('pension.contribution.beyond_credit_limit', 'plans[].non_quantified_effects');
+      const nonDeductedPrincipalRule = use('pension.withdrawal.non_deducted_principal', 'plans[].non_quantified_effects');
+      if (beyondCreditLimitRule && nonDeductedPrincipalRule) {
+        const effects = beyondCreditLimitRule.value.effects ?? [];
+        const has = (id) => effects.some((e) => e?.id === id && e.determined_by_law === true);
+        const procedure = nonDeductedPrincipalRule.value.confirmation_procedure ?? {};
+        if (has('no_credit_this_year') && has('principal_not_taxed_on_withdrawal') && has('returns_taxed_on_withdrawal')) {
+          const factsBasis = [beyondCreditLimitRule.id, nonDeductedPrincipalRule.id].sort();
+          // 어느 계좌의 납입이 공제를 낳지 않는가 — 퇴직연금분을 먼저 인정한다
+          // (D17과 같은 우선순위). 이 배분안의 **새 납입액**만 본다(기납입분이
+          // 이미 한도를 넘는 것은 `existing_contribution_over_limit`이 따로 말한다).
+          const annuityBaseForFacts = accounts.annuity_savings.ytd_contribution_krw + p.allocByAccount.annuity_savings + (transferDestination === 'annuity_savings' ? isaTransfer.amount_krw : 0);
+          const retirementBaseForFacts = accounts.retirement_pension.ytd_contribution_krw + p.allocByAccount.retirement_pension + (transferDestination === 'retirement_pension' ? isaTransfer.amount_krw : 0);
+          const annuityCreditCapEffectiveForFacts = annuityCreditCap + (transferDestination === 'annuity_savings' ? extraCreditLimit : 0);
+          const combinedCreditCapEffectiveForFacts = baseCombinedCreditCap + extraCreditLimit;
+          const annuityCreditEligibleForFacts = Math.min(annuityBaseForFacts, annuityCreditCapEffectiveForFacts);
+          const retirementCreditEligibleForFacts = Math.max(
+            0,
+            Math.min(annuityCreditEligibleForFacts + retirementBaseForFacts, combinedCreditCapEffectiveForFacts) - annuityCreditEligibleForFacts,
+          );
+          const withoutCreditByAccount = {
+            annuity_savings: Math.min(p.allocByAccount.annuity_savings, Math.max(0, annuityBaseForFacts - annuityCreditEligibleForFacts)),
+            retirement_pension: Math.min(p.allocByAccount.retirement_pension, Math.max(0, retirementBaseForFacts - retirementCreditEligibleForFacts)),
+          };
+          for (const account of ['retirement_pension', 'annuity_savings']) {
+            const withoutCredit = withoutCreditByAccount[account];
+            if (withoutCredit <= 0) continue;
+            nonQuantified.push({
+              code: 'pension_contribution_without_credit',
+              account,
+              // 두 계좌가 **같은 풀**을 나눠 쓴다 — 더하면 이중계상이다.
+              headroom_krw: p.pensionPoolRemaining,
+              headroom_shared_with: [account === 'retirement_pension' ? 'annuity_savings' : 'retirement_pension'],
+              quantifiable: false,
+              reason_code: 'benefit_depends_on_return_horizon_and_withdrawal_form_not_in_ruleset',
+              facts: {
+                credit_this_year_krw: 0,
+                contribution_without_credit_krw: withoutCredit,
+                principal_taxed_on_withdrawal: false,
+                principal_tax_free_requires_confirmation: procedure.automatic !== true,
+                principal_tax_free_confirmation_prospective_only: procedure.prospective_only != null,
+                returns_taxed_on_withdrawal: true,
+              },
+              basis_rule_ids: factsBasis,
+            });
+          }
+        }
+      }
+    }
+
+    // 5.0.0(D26) — 미배분액을 갈래로 나눈다. 「미배분」이 "갈 곳이 없다"로 읽히지
+    // 않게, 두 계좌 여력과 정말 갈 곳 없는 몫을 나눠 낸다(5.13절). **겹치면
+    // 더하지 않는다** — `headrooms_overlap`이 그 사실을 값으로 말한다.
+    const pensionOpen = pensionEligibility.annuity_savings.eligible || pensionEligibility.retirement_pension.eligible;
+    const pensionRoom = pensionOpen ? Math.max(0, p.pensionPoolRemaining) : 0;
+    const isaRoom = isaEligible ? Math.max(0, p.isaPoolRemaining) : 0;
+    const pensionHeadroomKrw = Math.min(p.unallocated, pensionRoom);
+    const isaHeadroomKrw = Math.min(p.unallocated, isaRoom);
+    const unallocatedBreakdown = {
+      total_annual_krw: p.unallocated,
+      pension_contribution_headroom_krw: pensionHeadroomKrw,
+      isa_contribution_headroom_krw: isaHeadroomKrw,
+      no_headroom_krw: Math.max(0, p.unallocated - (pensionRoom + isaRoom)),
+      headrooms_overlap: pensionHeadroomKrw + isaHeadroomKrw > p.unallocated,
+      basis_rule_ids: [
+        pensionContributionLimitRule?.id,
+        'pension.contribution.beyond_credit_limit',
+        ...(isaRequirementsRule ? [isaRequirementsRule.id] : []),
+      ].filter(Boolean),
+    };
 
     return {
       plan_id: p.planId,
@@ -937,12 +1143,16 @@ function computeScenario(scenario, request, rulesets) {
         basis_rule_ids:
           p.planId === 'isa_first'
             ? [use('pension.withdrawal.eligibility')?.id, use('isa.account.requirements')?.id].filter(Boolean)
-            : [],
+            : p.planId === 'pension_contribution_limit_fill'
+              ? [pensionContributionLimitRule?.id, use('pension.contribution.beyond_credit_limit')?.id].filter(Boolean)
+              : [],
         // 확정 룰셋에는 계좌에 따라 공제율이 갈리는 규칙이 없어 두 연금계좌의
         // 한계 공제율이 언제나 같다 — 그래서 확정 시나리오는 언제나
-        // `withdrawal_flexibility_first`다(계약 5.6절).
+        // `withdrawal_flexibility_first`다(계약 5.6절). `annuity_savings_first`·
+        // `pension_contribution_limit_fill`은 순서가 이름/설계로 고정된 안이라
+        // 동점 규칙을 적용하지 않는다(계약 5.6절 — "동점의 전제가 이 안에서 무너진다").
         tie_break:
-          p.planId === 'annuity_savings_first' || scenario === 'proposed'
+          p.planId === 'annuity_savings_first' || p.planId === 'pension_contribution_limit_fill' || scenario === 'proposed'
             ? { code: 'not_applicable', basis_rule_ids: [] }
             : {
                 code: 'withdrawal_flexibility_first',
@@ -950,15 +1160,21 @@ function computeScenario(scenario, request, rulesets) {
               },
         // **이 안이 이름으로 내세운 목적함수가 이 입력에서 순위를 정하지 못하는가.**
         // 한도가 0이면 연금계좌에 얼마를 넣든 공제액이 0이라 최대값이 유일하지 않다.
-        // `isa_first`는 언제나 false다 — 그 안의 근거는 세액공제가 아니라 인출
-        // 가능성이라 한도가 0이어도 그대로 성립한다(계약 5.12절).
-        objective_degenerate: p.planId !== 'isa_first' && capKnown && capKrw === 0,
+        // `isa_first`·`pension_contribution_limit_fill`은 언제나 false다 — 두 안의
+        // 근거(인출 가능성 / 납입 한도)는 세액 한도와 무관하게 그대로 성립한다(5.12절).
+        objective_degenerate:
+          (p.planId === 'max_tax_credit' || p.planId === 'annuity_savings_first') && capKnown && capKrw === 0,
       },
       allocations: ACCOUNTS.map((a) => allocations.find((x) => x.account === a)),
       total_allocated_monthly_krw: totalMonthly,
       total_allocated_annual_krw: totalAnnual,
       unallocated_monthly_krw: months > 0 ? Math.floor(p.unallocated / months) : 0,
       unallocated_annual_krw: p.unallocated,
+      unallocated_breakdown: unallocatedBreakdown,
+      // **배분 후** 남는 연금계좌 합산 세액공제 대상 한도. 배분 전 값
+      // (`limits.pension_combined_credit_remaining_krw`)과는 다르다(5.13.1절) —
+      // 화면이 뺄셈으로 만들지 않도록 여기서 낸다.
+      pension_combined_credit_remaining_after_plan_krw: Math.max(0, baseCombinedCreditCap + extraCreditLimit - creditEligible),
       monthly_rounding_residual_krw: residual,
       deterministic_benefit: {
         // 4.0.0 — 앞의 세 필드는 한도 적용 **후** 값이다.
@@ -972,7 +1188,7 @@ function computeScenario(scenario, request, rulesets) {
         // 전환 신청의 대상으로 살아남는다.
         credit_eligible_contribution_krw: creditEligible,
         tax_liability_cap: planCap,
-        basis_rule_ids: [creditRateRule?.id, annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, surtaxRule?.id, capRule?.id].filter(Boolean),
+        basis_rule_ids: [creditRateRule?.id, creditRateBasisRule?.id, annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, surtaxRule?.id, capRule?.id].filter(Boolean),
       },
       delta_vs_baseline_krw: 0, // baseline 선정 후 채운다
       non_quantified_effects: nonQuantified,
@@ -994,16 +1210,22 @@ function computeScenario(scenario, request, rulesets) {
   function warningCount(plan) {
     return plan.warnings.filter((w) => w.severity === 'warning').length;
   }
-  let baselineIndex = 0;
+  // `pension_contribution_limit_fill`은 기본안 후보에서 뺀다(계약 5.5·10절 —
+  // "언제나 `is_baseline: false`이고 화면도 그 판단을 대신하지 않는다"). 세법이
+  // 유불리를 정하지 않는 안을 엔진이 기본으로 고르면 그것이 곧 자문이다(D26).
+  const baselineCandidates = collapsed
+    .map((plan, index) => ({ plan, index }))
+    .filter(({ plan }) => plan.plan_id !== 'pension_contribution_limit_fill');
+  let baselineIndex = baselineCandidates[0]?.index ?? 0;
   if (profile.fund_use_horizon === 'within_isa_lock_in' || profile.fund_use_horizon === 'before_pension_age') {
-    let best = 0;
-    for (let i = 1; i < collapsed.length; i++) {
-      if (warningCount(collapsed[i]) < warningCount(collapsed[best])) best = i;
+    let best = baselineCandidates[0];
+    for (const candidate of baselineCandidates) {
+      if (warningCount(candidate.plan) < warningCount(best.plan)) best = candidate;
     }
-    baselineIndex = best;
+    baselineIndex = best.index;
   } else {
-    const mtcIndex = collapsed.findIndex((p) => p.plan_id === 'max_tax_credit');
-    baselineIndex = mtcIndex >= 0 ? mtcIndex : 0;
+    const mtc = baselineCandidates.find(({ plan }) => plan.plan_id === 'max_tax_credit');
+    baselineIndex = mtc ? mtc.index : baselineCandidates[0].index;
   }
 
   const baseline = collapsed[baselineIndex];
@@ -1400,12 +1622,25 @@ export function compute(request, rulesets) {
   // echo.credit_rate_bracket은 확정 룰셋(2026.json) 기준으로 채운다 — 개정예고가
   // 있어도 echo는 요청 자체(해당 과세연도 소득)에서 결정되는 값이라 시나리오와 무관하다.
   const creditRateRule = findRule(rulesets, 'pension.credit.rate', ['2026.json']).rule;
+  const creditRateBasisRule = findRule(rulesets, 'pension.credit.rate.basis_determination', ['2026.json']).rule;
   const surtaxRule = findRule(rulesets, 'tax.local.personal_income_surtax', ['2026.json']).rule;
-  const bracket = creditRateRule.value.brackets.find(
-    (b) => b.total_salary_only_max_krw == null || request.profile.current_year_total_salary_krw <= b.total_salary_only_max_krw,
-  );
+  const creditRateBasis = resolveCreditRateBasisCode(request.profile);
+  const bracket = selectCreditRateBracket(creditRateRule.value.brackets, creditRateBasis);
   const incomeTaxRate = bracket.rate;
   const localTaxRate = incomeTaxRate * surtaxRule.value.rate_of_income_tax;
+  const creditRateFallbackApplied = creditRateBasis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT;
+
+  // 5.0.0(D27) — 1단계 질문을 "합산되는 소득이 있는가"로 좁혀 물으면 분리과세로
+  // 종결된 소득만 더 있는 사람도 총급여 기준으로 온다. 그것이 두 해석 중 하나를
+  // 채택하는 것이므로 조문이 정한 것처럼 표시하지 않고 가정으로 드러낸다(0.7절).
+  if (request.profile.has_non_wage_global_income_current_year !== true) {
+    assumptions.push({
+      code: 'credit_rate_wage_only_excludes_separately_taxed_income',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: [creditRateBasisRule.id],
+    });
+  }
 
   return {
     ok: true,
@@ -1428,7 +1663,13 @@ export function compute(request, rulesets) {
         income_tax_rate: incomeTaxRate,
         local_tax_rate: localTaxRate,
         effective_rate: incomeTaxRate + localTaxRate,
-        basis_rule_ids: [creditRateRule.id, surtaxRule.id],
+        basis_code: creditRateBasis.code,
+        // statutory_default면 지어낸 금액을 되돌려주지 않는다 — null이다.
+        measured_amount_krw: creditRateBasis.amount,
+        fallback_applied: creditRateFallbackApplied,
+        // 우대 구간을 적용하지 않은 것이므로 결과는 과소이거나 같다.
+        fallback_direction_code: creditRateFallbackApplied ? 'understated_or_equal' : null,
+        basis_rule_ids: [creditRateRule.id, creditRateBasisRule.id, surtaxRule.id].sort(),
       },
       // **화면은 이 나이를 사용자에게 되비추지 않는다**(designer가 박은 프라이버시 못).
       // `reference_date_from_ruleset`은 항상 false다 — 기준일 규칙이 룰셋에 없다는

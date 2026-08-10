@@ -25,6 +25,10 @@ import {
   PRIOR_TAX_LABEL,
   PRIOR_TAX_UNKNOWN_LABEL,
   PRIOR_TAX_EFFECT_CAPTION,
+  HAS_NON_WAGE_INCOME_LABEL,
+  HAS_NON_WAGE_INCOME_HELP,
+  GLOBAL_INCOME_LABEL,
+  GLOBAL_INCOME_HELP,
   SOURCE_GUIDE_TRIGGER,
   SOURCE_GUIDE_ITEMS,
   SOURCE_GUIDE_PLACEHOLDER_NOTICE,
@@ -373,6 +377,36 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     renderGuard,
   });
 
+  // 5.0.0(D27) — 공제율 판정 축의 첫 물음. **`아니오`면 입력이 하나도 안 늘어난다**
+  // — 대다수 사용자가 여기다. `예`일 때만 둘째 물음(종합소득금액)이 나타난다.
+  const hasNonWageIncomeToggle = segmentToggle({
+    id: 'hasNonWageIncome',
+    label: HAS_NON_WAGE_INCOME_LABEL,
+    value: form.hasNonWageIncome,
+    options: [
+      { value: false, label: '아니오' },
+      { value: true, label: '예' },
+    ],
+    onChange: (v) => store.setField('hasNonWageIncome', v, { immediate: true }),
+    help: HAS_NON_WAGE_INCOME_HELP,
+  });
+  const globalIncomeField = conditionalGroup(
+    form.hasNonWageIncome === true,
+    [
+      numberField({
+        id: 'globalIncomeAmount',
+        label: GLOBAL_INCOME_LABEL,
+        value: form.globalIncomeAmount,
+        help: GLOBAL_INCOME_HELP,
+        error: fieldError(errors, 'globalIncomeAmount'),
+        onInput: (v) => store.setField('globalIncomeAmount', v),
+        onBlur: () => store.flush(),
+        renderGuard,
+      }),
+    ],
+    'globalIncomeGroup',
+  );
+
   const priorSalaryCheckbox = el('label', { class: 'checkbox-row' }, [
     el('input', {
       type: 'checkbox',
@@ -408,6 +442,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     // 사용자가 서류를 두 번 꺼내야 한다.
     el('p', { class: 'input-source-divider' }, [WITHHOLDING_RECEIPT_DIVIDER]),
     salaryField,
+    hasNonWageIncomeToggle,
+    globalIncomeField,
     priorSalaryCheckbox,
     priorSalaryHelp,
     priorSalaryField,

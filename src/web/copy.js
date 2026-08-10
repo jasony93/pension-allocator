@@ -49,6 +49,10 @@ export const PLAN_LABEL = {
   max_tax_credit: '세액공제액이 가장 큰 배분',
   annuity_savings_first: '연금저축을 먼저 채우는 배분',
   isa_first: 'ISA를 먼저 채우는 배분',
+  // D26 — 이름이 "추천"으로 읽히지 않게, 그리고 세액공제가 아니라 납입 한도가
+  // 기준이라는 사실이 이름에 그대로 드러나게 한다. 세법이 유불리를 정하지
+  // 않으므로 이 배분안은 다른 셋과 같은 자리에서 선택지로만 낸다.
+  pension_contribution_limit_fill: '연금계좌 납입 한도까지 채우는 배분',
 };
 
 export const FUND_USE_HORIZON_LABEL = {
@@ -142,6 +146,12 @@ const NOTICE_MESSAGE = {
     '연금계좌 가입일을 받지 않아 연금으로 받을 수 있는 가장 이른 시점을 계산하지 않고 연령 요건만 확인했습니다.',
   retirement_transfer_excluded_from_credit: () =>
     '퇴직급여 입금액·계약이전액은 세액공제 대상 납입액에서 제외하고 계산했습니다.',
+
+  // -- 계약 5.0.0(D27)으로 들어온 안내 코드 -----------------------------------
+  // **금액 경계를 문구에 적지 않는다** — 구간을 가르는 숫자는 룰셋의 값이고
+  // 화면 코드에 박으면 제품 원칙 1을 어긴다. "적어도"라는 방향만 말한다.
+  credit_rate_global_income_missing: () =>
+    '해당 과세기간 종합소득금액을 받지 않아, 우대 공제율 구간을 적용하지 않고 계산했습니다. 종합소득금액이 우대 구간에 들면 세액공제액은 이보다 클 수 있습니다.',
 };
 
 export function noticeMessage(notice) {
@@ -202,6 +212,10 @@ const ASSUMPTION_MESSAGE = {
     '이연퇴직소득 유무를 받지 않아 없는 것으로 보고 계산했습니다. 실제로 있으면 연금으로 받을 수 있는 시점이 결과보다 이릅니다.',
   local_tax_follows_income_tax_cap: () =>
     '개인지방소득세에도 같은 낼 세금 한도가 걸리는지 세법 룰셋이 확인하지 않아, 한도 안에서 인정된 소득세분에만 부가율을 적용해 계산했습니다.',
+
+  // -- 계약 5.0.0(D27)으로 들어온 가정 코드 -----------------------------------
+  credit_rate_wage_only_excludes_separately_taxed_income: () =>
+    '근로소득 외에 다른 종합소득이 없다고 답하셔서 총급여액 기준으로 공제율을 판정했습니다. 분리과세로 끝난 소득만 따로 있는 경우도 이 판정에 포함됩니다.',
 
   // 화면이 직접 만드는 조건부 항목(엔진 notice가 아니라 입력 상태에서 파생) —
   // screens.md 4.5절 표의 나머지 행.
@@ -358,6 +372,76 @@ export function unallocatedReasonMessage(groups) {
     })
     .filter(Boolean);
   return clauses.length ? `${UNALLOCATED_LEAD} ${clauses.join(', ')}.` : UNALLOCATED_LEAD;
+}
+
+// ---------------------------------------------------------------------------
+// 「미배분」을 갈래로 나눈다 (계약 5.13절 · D26)
+//
+// **사용자가 "갈 곳이 없다"로 읽던 것이 문제였다.** 세법상 사실은 "갈 곳은
+// 있고, 다만 올해 공제는 늘지 않는다"이다. `no_headroom_krw`에 대해서만 옛
+// 뜻(정말 갈 곳이 없다)이 참이다.
+//
+// **두 여력이 겹치면 더하지 않는다.** `headrooms_overlap`이 `true`면 같은 돈을
+// 두 번 세는 것이므로, 그럴 때는 각 여력을 따로 말하고 합계를 만들지 않는다.
+// ---------------------------------------------------------------------------
+
+export function unallocatedBreakdownMessage(breakdown) {
+  if (!breakdown) return null;
+  const { pension_contribution_headroom_krw: pension, isa_contribution_headroom_krw: isa, no_headroom_krw: none, headrooms_overlap: overlap } = breakdown;
+  const clauses = [];
+  if (pension > 0) {
+    clauses.push(
+      `연금계좌에는 ${formatKrw(pension)}을 법적으로 더 납입할 수 있습니다(다만 올해의 세액공제는 늘지 않습니다)`,
+    );
+  }
+  if (isa > 0) {
+    clauses.push(`ISA에는 ${formatKrw(isa)}을 더 납입할 수 있습니다`);
+  }
+  if (clauses.length === 0) {
+    return none > 0 ? `이 중 ${formatKrw(none)}은 이번 계산의 세 계좌 어디에도 넣을 수 없습니다.` : null;
+  }
+  const overlapNote = overlap ? ' 두 여력은 같은 돈을 가리킬 수 있어 더하지 않습니다.' : '';
+  const noneNote = none > 0 ? ` 나머지 ${formatKrw(none)}은 세 계좌 어디에도 넣을 수 없습니다.` : '';
+  return `${clauses.join(' ')}.${overlapNote}${noneNote}`;
+}
+
+// ---------------------------------------------------------------------------
+// 세액공제를 낳지 않는 연금계좌 납입 (계약 5.6절 · D26)
+//
+// **셋 중 하나라도 빠지면 문장이 거짓이 된다** — 원금은 비과세이지만 확인
+// 절차가 필요하고 소급하지 않으며, 수익에는 인출 시 세금이 붙는다. 엔진이
+// 낸 `facts`를 그대로 옮긴다. "세무서"라는 말은 관공서 이름이고, 이 서비스가
+// 대신할 수 없는 절차가 있다는 표시라 그대로 쓴다(D29).
+// ---------------------------------------------------------------------------
+
+export const PENSION_WITHOUT_CREDIT_HEADING = '세액공제 없이 더 넣는 금액';
+
+/** `effect`는 `NonQuantifiedEffect`(code: `pension_contribution_without_credit`). */
+export function pensionWithoutCreditMessage(effect) {
+  const facts = effect?.facts;
+  if (!facts) return null;
+  const amount = formatKrw(facts.contribution_without_credit_krw);
+  const account = accountWithParticle(effect.account, 'topic');
+  const lines = [`${account} ${amount}만큼 세액공제 대상 한도를 넘겨 납입합니다 — 올해의 세액공제는 늘지 않습니다.`];
+  lines.push(
+    facts.principal_taxed_on_withdrawal
+      ? '이 원금은 인출 시 과세됩니다.'
+      : '이 원금은 인출 시 과세되지 않습니다(과세제외금액).',
+  );
+  if (facts.principal_tax_free_requires_confirmation) {
+    lines.push(
+      '다만 그 성격을 인정받으려면 세무서에서 확인서를 발급받아 금융회사에 제출해야 하고,' +
+        (facts.principal_tax_free_confirmation_prospective_only
+          ? ' 확인받은 날부터 적용됩니다(소급하지 않습니다).'
+          : ''),
+    );
+  }
+  lines.push(
+    facts.returns_taxed_on_withdrawal
+      ? '이 원금이 계좌 안에서 번 수익에는 인출 시 세금이 붙습니다.'
+      : '이 원금이 번 수익에는 인출 시 세금이 붙지 않습니다.',
+  );
+  return lines.join(' ');
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +692,21 @@ export const SOURCE_GUIDE_ITEMS = [
   },
 ];
 export const SOURCE_GUIDE_PLACEHOLDER_NOTICE = '[개발 빌드] 이 줄의 경로가 아직 확정되지 않았습니다.';
+
+// ---------------------------------------------------------------------------
+// 공제율 판정 축 — 두 물음 (계약 5.0.0 · D27)
+//
+// **아니오면 입력이 하나도 안 늘어난다.** 대다수 사용자가 여기다 — 이 경로에서
+// 화면이 조금도 무거워지지 않아야 한다. `예`를 고른 사람에게만 둘째 물음이
+// 나타난다.
+// ---------------------------------------------------------------------------
+
+export const HAS_NON_WAGE_INCOME_LABEL = '근로소득 외에 다른 종합소득이 있나요?';
+export const HAS_NON_WAGE_INCOME_HELP =
+  '사업·부동산임대·종합과세되는 이자·배당·연금·기타소득처럼 종합소득세 신고서에 합산되는 소득을 말합니다. 분리과세로 끝난 소득은 포함하지 않습니다.';
+export const GLOBAL_INCOME_LABEL = '해당 과세기간 종합소득금액';
+export const GLOBAL_INCOME_HELP =
+  '「종합소득세 과세표준확정신고 및 납부계산서」의 「종합소득금액」 칸. 수입금액이 아니라 근로소득금액을 포함한 합계입니다. 모르면 비워 두면 됩니다 — 그 경우 우대 공제율 구간을 적용하지 않고 계산합니다.';
 
 // ---------------------------------------------------------------------------
 // 현재 연금 수령 여부 (screens.md 3.10.1절)

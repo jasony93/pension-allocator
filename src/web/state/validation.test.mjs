@@ -12,6 +12,7 @@ function baseForm(overrides = {}) {
     ...initialForm(),
     birthDate: '1988-03-15',
     currentSalary: '62000000',
+    hasNonWageIncome: false,
     priorTaxState: 'amount',
     priorTaxAmount: '3000000',
     annuityStarted: false,
@@ -32,10 +33,11 @@ test('a fully valid core form is ready to compute', () => {
   const result = validate(baseForm());
   assert.equal(result.readyToCompute, true);
   assert.equal(result.hasErrors, false);
-  // 분모는 4에서 6이 됐다 — 생년월일 · 총급여액 · 결정세액 · 월 납입 여력 ·
-  // 연금 수령 여부 · 자금 사용 시점(screens.md 3.6절).
-  assert.equal(result.requiredFilledCount, 6);
-  assert.equal(result.requiredTotal, 6);
+  // 분모는 5.0.0(D27)에서 6에서 7이 됐다 — 생년월일 · 총급여액 · 근로소득 외
+  // 다른 종합소득 여부 · 결정세액 · 월 납입 여력 · 연금 수령 여부 · 자금 사용
+  // 시점(screens.md 3.6절).
+  assert.equal(result.requiredFilledCount, 7);
+  assert.equal(result.requiredTotal, 7);
 });
 
 test('missing any of the core fields blocks computation without erroring the others', () => {
@@ -137,6 +139,31 @@ test('the annuity-start question has no preselected answer and blocks until answ
   assert.equal(untouched.readyToCompute, false);
   assert.equal(untouched.errors.annuityStarted.code, 'missing');
   assert.equal(validate(baseForm({ annuityStarted: true })).readyToCompute, true);
+});
+
+test('the non-wage income question has no preselected answer and blocks until answered (D27)', () => {
+  assert.equal(initialForm().hasNonWageIncome, null, '`아니오`를 미리 채우면 결함이 걸리는 사람에게 조용히 틀린 답을 준다(계약 0.6절)');
+  const untouched = validate(baseForm({ hasNonWageIncome: null }));
+  assert.equal(untouched.readyToCompute, false);
+  assert.equal(untouched.errors.hasNonWageIncome.code, 'missing');
+  assert.equal(validate(baseForm({ hasNonWageIncome: false })).readyToCompute, true);
+});
+
+test('an amount for the global income question is optional even when the first answer is yes', () => {
+  // `예`를 고르고 금액을 비우면 여전히 계산이 된다 — 엔진이 본문 구간을 적용하고
+  // notice를 낸다. 금액을 요구하면 대다수 사용자가 아닌 사람에게조차 화면이
+  // 무거워진다는 지시(0.6절 "아니오면 입력이 하나도 안 늘어난다")와 어긋난다.
+  const blank = validate(baseForm({ hasNonWageIncome: true, globalIncomeAmount: '' }));
+  assert.equal(blank.readyToCompute, true);
+  assert.equal(blank.hasErrors, false);
+
+  const negative = validate(baseForm({ hasNonWageIncome: true, globalIncomeAmount: '-1' }));
+  assert.equal(negative.errors.globalIncomeAmount.code, 'negative');
+
+  // `아니오`일 때는 금액 칸의 값이 어떻든 이 오류가 나지 않는다 — 화면이 보내지
+  // 않기 때문이다(`store.js`).
+  const ignored = validate(baseForm({ hasNonWageIncome: false, globalIncomeAmount: '-1' }));
+  assert.ok(!ignored.errors.globalIncomeAmount);
 });
 
 test('negative salary, capacity, and ytd contributions are all rejected', () => {

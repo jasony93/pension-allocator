@@ -8,10 +8,13 @@
  * 정해야 하고 그것은 세법 판단이다 — 화면이 정하면 세무 유닛의 검증을 우회한다.
  * 그래서 요청은 생년월일 원본을 싣고 환산은 엔진이 한다.
  *
- * `RequirementChecklist`의 분모는 **무조건 필수인 여섯 항목**으로 고정한다
- * (`screens.md` 3.6절) — 생년월일 · 총급여액 · 직전 과세연도 결정세액 ·
- * 월 납입 여력 · 연금 수령 여부 · 자금 사용 시점. 늘어난 둘(결정세액·연금 수령
- * 여부)은 **클릭 한 번으로 유효한 답이 되는 형태**라 숫자 입력을 강제하지 않는다.
+ * `RequirementChecklist`의 분모는 **무조건 필수인 일곱 항목**으로 고정한다
+ * (`screens.md` 3.6절, 계약 5.0.0으로 D27의 첫 물음이 추가됐다) — 생년월일 ·
+ * 총급여액 · 근로소득 외 다른 종합소득 여부 · 직전 과세연도 결정세액 · 월 납입
+ * 여력 · 연금 수령 여부 · 자금 사용 시점. 이 중 넷(다른 종합소득 여부·결정세액·
+ * 연금 수령 여부·자금 사용 시점)은 **클릭 한 번으로 유효한 답이 되는 형태**라
+ * 숫자 입력을 강제하지 않는다. 종합소득금액(둘째 물음)은 **예**를 고른 사람에게만
+ * 나타나고 그때도 선택이라 분모에 넣지 않는다 — 모르면 본문 구간으로 계산된다.
  * 기납입액은 진행을 막지 않고, 조건부 필수 항목(전환 금액)은 분모에 넣지 않는다.
  *
  * ---------------------------------------------------------------------------
@@ -67,6 +70,14 @@ function isOverPrecise(v) {
 export const CORE_REQUIREMENTS = [
   { key: 'birthDate', label: '생년월일', fieldId: 'birthDate', isFilled: (f) => f.birthDate !== '' },
   { key: 'currentSalary', label: '총급여액', fieldId: 'currentSalary', isFilled: (f) => f.currentSalary !== '' },
+  {
+    key: 'hasNonWageIncome',
+    label: '근로소득 외 다른 종합소득 여부',
+    fieldId: 'hasNonWageIncome-false',
+    // 5.0.0(D27) — 예/아니오 어느 쪽도 기본으로 고르지 않는다. `false`로 접으면
+    // 결함이 걸리는 바로 그 사람들에게 조용히 틀린 답을 준다(계약 0.6절).
+    isFilled: (f) => f.hasNonWageIncome === true || f.hasNonWageIncome === false,
+  },
   {
     key: 'priorTax',
     label: '직전 과세연도 결정세액',
@@ -180,6 +191,17 @@ export function validateForm(form, { today } = {}) {
   if (form.priorSalaryEnabled) {
     const priorErr = validateNonNegativeAmount(form.priorSalary);
     if (priorErr) errors.priorSalary = priorErr;
+  }
+
+  if (form.hasNonWageIncome !== true && form.hasNonWageIncome !== false) {
+    errors.hasNonWageIncome = { code: 'missing', message: '해당 여부를 선택해 주세요.' };
+  }
+  // 금액은 **예일 때만** 나타나고, 그때도 선택이다(계약 3.1절) — 비우면 모름으로
+  // 취급되고 결과는 본문 구간(우대가 아닌 쪽)으로 계산된다. 값을 입력했다면
+  // 형식만 확인한다.
+  if (form.hasNonWageIncome === true) {
+    const globalIncomeErr = validateNonNegativeAmount(form.globalIncomeAmount, { required: false });
+    if (globalIncomeErr) errors.globalIncomeAmount = globalIncomeErr;
   }
 
   if (!form.fundUseHorizon) {

@@ -10,6 +10,9 @@ import {
   fillOrderFactMessage,
   fillOrderDecisionMessage,
   donutSingleSliceCaption,
+  PLAN_LABEL,
+  unallocatedBreakdownMessage,
+  pensionWithoutCreditMessage,
 } from './copy.js';
 
 /**
@@ -271,6 +274,8 @@ test('every code the 4.0.0 contract can send has a sentence — no raw code reac
     'pension_start_date_not_computable',
     'retirement_transfer_excluded_from_credit',
     'isa_lock_in_already_elapsed',
+    // 계약 5.0.0(D27) — 공제율 판정 축의 대체값 적용 notice.
+    'credit_rate_global_income_missing',
   ];
   for (const code of noticeCodes) {
     assert.notEqual(noticeMessage({ code, params: {} }), code, `${code}에 대응하는 문구가 없다`);
@@ -281,6 +286,8 @@ test('every code the 4.0.0 contract can send has a sentence — no raw code reac
     'retirement_transfer_counted_in_contribution_limit',
     'deferred_retirement_income_absent_assumed',
     'local_tax_follows_income_tax_cap',
+    // 계약 5.0.0(D27) — 1단계 질문을 좁혀 물은 것이 채택한 해석.
+    'credit_rate_wage_only_excludes_separately_taxed_income',
   ];
   for (const code of assumptionCodes) {
     assert.notEqual(assumptionMessage(code, {}), code, `${code}에 대응하는 문구가 없다`);
@@ -372,4 +379,75 @@ test('every assumption sentence survives an empty params object without leaving 
     assert.ok(!/undefined|null|NaN/.test(text), `${code}: 값이 없는 자리가 그대로 새어 나왔다 — ${text}`);
     assert.ok(!/\s{2,}/.test(text), `${code}: 값이 빠진 자리에 공백이 두 칸 남았다 — ${JSON.stringify(text)}`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// 계약 5.0.0 — D26의 넷째 배분안. requirements.md 6절 AC: "어떤 배분안에도
+// 추천·최적·권장 같은 단정적 표현을 쓰지 않는다. 기본안은 '기본'이라는
+// 표시만 단다." 이 안은 세법이 유불리를 정하지 않으므로 특히 더 엄격하다.
+// ---------------------------------------------------------------------------
+
+test('every plan id the contract can send has a label, and none of them reads as a recommendation', () => {
+  const planIds = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_limit_fill'];
+  for (const id of planIds) {
+    const label = PLAN_LABEL[id];
+    assert.ok(label, `${id}에 대응하는 라벨이 없다`);
+    for (const forbidden of ['추천', '최적', '권장']) {
+      assert.ok(!label.includes(forbidden), `${id}의 라벨 "${label}"이 단정적 표현("${forbidden}")을 쓴다`);
+    }
+  }
+});
+
+test('the D26 unallocated breakdown never sums two headrooms that overlap', () => {
+  const withOverlap = unallocatedBreakdownMessage({
+    total_annual_krw: 1000,
+    pension_contribution_headroom_krw: 800,
+    isa_contribution_headroom_krw: 800,
+    no_headroom_krw: 0,
+    headrooms_overlap: true,
+  });
+  // 겹치면 두 금액을 더한 합계(1,600원)를 문장에 내지 않는다.
+  assert.ok(!withOverlap.includes('1,600'));
+  assert.ok(withOverlap.includes('800'));
+
+  const onlyNoHeadroom = unallocatedBreakdownMessage({
+    total_annual_krw: 500,
+    pension_contribution_headroom_krw: 0,
+    isa_contribution_headroom_krw: 0,
+    no_headroom_krw: 500,
+    headrooms_overlap: false,
+  });
+  // 「갈 곳이 없다」는 이 몫에 대해서만 참이다(계약 5.13절) — "500"이 그 뜻으로만 나온다.
+  assert.ok(onlyNoHeadroom.includes('500'));
+  assert.ok(onlyNoHeadroom.includes('넣을 수 없습니다'));
+});
+
+test('the pension-without-credit sentence never drops one of the three required facts', () => {
+  const effect = {
+    account: 'retirement_pension',
+    facts: {
+      credit_this_year_krw: 0,
+      contribution_without_credit_krw: 3000000,
+      principal_taxed_on_withdrawal: false,
+      principal_tax_free_requires_confirmation: true,
+      principal_tax_free_confirmation_prospective_only: true,
+      returns_taxed_on_withdrawal: true,
+    },
+  };
+  const text = pensionWithoutCreditMessage(effect);
+  // (1) 원금은 비과세다.
+  assert.ok(text.includes('과세되지 않습니다'));
+  // (2) 다만 세무서 확인서가 필요하고 소급하지 않는다 — "세무서"라는 말 그대로(D29).
+  assert.ok(text.includes('세무서'));
+  assert.ok(text.includes('소급하지 않습니다'));
+  // (3) 수익에는 인출 시 세금이 붙는다.
+  assert.ok(text.includes('수익에는 인출 시 세금이 붙습니다'));
+  // 금지된 문장 — 계약 5.6절이 명시적으로 막는다.
+  assert.ok(!text.includes('이월해서 공제받을 수 있'));
+  assert.ok(!text.includes('손해'));
+  assert.ok(!text.includes('유리합니다'));
+});
+
+test('the pension-without-credit sentence returns null rather than guessing when facts are absent', () => {
+  assert.equal(pensionWithoutCreditMessage({ account: 'retirement_pension', facts: null }), null);
 });

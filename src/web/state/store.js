@@ -28,6 +28,13 @@ export function initialForm() {
   return {
     birthDate: '',
     currentSalary: '',
+    // 5.0.0(D27) — 공제율 판정 축의 첫 물음. 기본 선택 없음(예/아니오 어느 쪽도
+    // 미리 고르지 않는다) — `false`로 접으면 결함이 걸리는 사람에게 조용히
+    // 틀린 답을 준다(계약 0.6절).
+    hasNonWageIncome: null,
+    // 예일 때만 묻는 금액. 비어 있으면(=모른다) 엔진이 본문 구간을 적용하고
+    // 그 사실을 notice로 낸다 — 화면이 지어내지 않는다.
+    globalIncomeAmount: '',
     priorSalaryEnabled: false,
     priorSalary: '',
     // 직전 과세연도 결정세액 — `빈`(null) · `amount` · `unknown` 세 상태.
@@ -142,6 +149,11 @@ export function buildEngineRequest(form, scenarios) {
       birth_date: form.birthDate || null,
       prior_year_tax: buildPriorYearTax(form),
       current_year_total_salary_krw: manwonToWonOrZero(form.currentSalary),
+      // 5.0.0(D27) — 공제율 판정 축의 첫 물음은 **필수**다. `false`(또는 아직
+      // 답하지 않음)면 두 번째 물음을 보내지 않는다 — 계약이 `false`인데
+      // 금액이 실리면 `invalid_enum`으로 되돌린다(3.1절).
+      has_non_wage_global_income_current_year: form.hasNonWageIncome === true,
+      current_year_global_income_krw: form.hasNonWageIncome === true ? manwonToWonOrNull(form.globalIncomeAmount) : null,
       prior_year_total_salary_krw: form.priorSalaryEnabled ? manwonToWonOrNull(form.priorSalary) : null,
       financial_income_taxpayer_last_3_years: financialIncomeTaxpayer(form),
       // 화면이 만 나이로 자동 판정해 채워 보내지 않는다(screens.md 3.9.1·3.9.5절).

@@ -155,6 +155,7 @@ function fakeAnalytics() {
 function validForm(store) {
   store.setField('birthDate', '1988-03-15');
   store.setField('currentSalary', '62000000');
+  store.setField('hasNonWageIncome', false);
   store.setField('priorTax', { state: 'unknown', amount: '' });
   store.setField('monthlyCapacity', '800000');
   store.setField('annuityStarted', false);
@@ -168,7 +169,7 @@ function validForm(store) {
 test('the request carries the contract version the engine actually supports', () => {
   const req = buildEngineRequest(initialForm(), ['current']);
   assert.equal(req.schema_version, SCHEMA_VERSION);
-  assert.equal(SCHEMA_VERSION.split('.')[0], '4', '계약이 4.0.0(major)으로 올랐다');
+  assert.equal(SCHEMA_VERSION.split('.')[0], '5', '계약이 5.0.0(major)으로 올랐다');
 });
 
 test('the request sends the raw birth date and no derived age at all (D21)', () => {
@@ -216,6 +217,37 @@ test('annuity_start_status never defaults to not_started', () => {
   const req = buildEngineRequest(initialForm(), ['current']);
   assert.equal(req.accounts.annuity_savings.annuity_start_status, 'unknown');
   assert.equal(req.accounts.retirement_pension.annuity_start_status, 'unknown');
+});
+
+// ---------------------------------------------------------------------------
+// 계약 5.0.0(D27) — 공제율 판정 축의 두 물음
+// ---------------------------------------------------------------------------
+
+test('the first question defaults to false and never leaks a second answer past it', () => {
+  // 답하지 않은 상태에서도 요청을 만들면(방어적으로) false를 보낸다 — `null`을
+  // 그대로 보내면 계약이 요구하는 boolean이 아니다.
+  const blankReq = buildEngineRequest(initialForm(), ['current']);
+  assert.equal(blankReq.profile.has_non_wage_global_income_current_year, false);
+  assert.equal(blankReq.profile.current_year_global_income_krw, null);
+
+  // `아니오`를 명시적으로 골라도 둘째 물음의 값은 실리지 않는다 — 계약이
+  // `false`인데 금액이 실리면 `invalid_enum`으로 되돌린다(3.1절).
+  const noForm = { ...initialForm(), hasNonWageIncome: false, globalIncomeAmount: '4500' };
+  const noReq = buildEngineRequest(noForm, ['current']);
+  assert.equal(noReq.profile.has_non_wage_global_income_current_year, false);
+  assert.equal(noReq.profile.current_year_global_income_krw, null);
+});
+
+test('the second question only sends an amount when the first is yes, and null when left blank (unknown)', () => {
+  const yesUnknownForm = { ...initialForm(), hasNonWageIncome: true, globalIncomeAmount: '' };
+  const yesUnknownReq = buildEngineRequest(yesUnknownForm, ['current']);
+  assert.equal(yesUnknownReq.profile.has_non_wage_global_income_current_year, true);
+  assert.equal(yesUnknownReq.profile.current_year_global_income_krw, null);
+
+  const yesAmountForm = { ...initialForm(), hasNonWageIncome: true, globalIncomeAmount: '4500' };
+  const yesAmountReq = buildEngineRequest(yesAmountForm, ['current']);
+  assert.equal(yesAmountReq.profile.has_non_wage_global_income_current_year, true);
+  assert.equal(yesAmountReq.profile.current_year_global_income_krw, 45000000);
 });
 
 test('the request keeps retirement transfers out of the contribution field', () => {
@@ -289,7 +321,7 @@ test('starts blank and moves to input_incomplete as soon as one field is touched
   assert.equal(store.getState().status, 'input_incomplete');
 });
 
-test('never calls compute until all six core fields are valid, then computes on the trailing field', async () => {
+test('never calls compute until all seven core fields are valid, then computes on the trailing field', async () => {
   let calls = 0;
   let seen = null;
   const engine = fakeEngine({
@@ -302,15 +334,17 @@ test('never calls compute until all six core fields are valid, then computes on 
   const store = createStore({ engineClient: engine, analytics: fakeAnalytics(), onChange: () => {} });
   store.setField('birthDate', '1988-03-15');
   store.setField('currentSalary', '62000000');
+  store.setField('hasNonWageIncome', false);
   store.setField('priorTax', { state: 'unknown', amount: '' });
   store.setField('monthlyCapacity', '800000');
   store.setField('annuityStarted', false);
-  assert.equal(calls, 0, '여섯 항목이 다 차기 전에는 계산하지 않는다');
+  assert.equal(calls, 0, '일곱 항목이 다 차기 전에는 계산하지 않는다');
   store.setField('fundUseHorizon', 'unknown', { immediate: true });
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(calls, 1);
   assert.equal(store.getState().status, 'result');
   assert.equal(seen.profile.prior_year_tax.state, 'unknown');
+  assert.equal(seen.profile.has_non_wage_global_income_current_year, false);
 });
 
 test('the unknown determined tax still produces a result — it does not block the screen', async () => {

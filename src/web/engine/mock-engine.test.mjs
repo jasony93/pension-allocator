@@ -42,6 +42,10 @@ function baseRequest(overrides = {}) {
       prior_year_tax: { state: 'unknown', determined_tax_krw: null, pension_credit_applied_krw: null },
       current_year_total_salary_krw: 62000000,
       prior_year_total_salary_krw: null,
+      // 5.0.0(D27) — 공제율 판정 축의 첫 물음. 대다수 사용자가 여기다: `false`면
+      // 두 번째 물음(종합소득금액)을 아예 묻지 않는다.
+      has_non_wage_global_income_current_year: false,
+      current_year_global_income_krw: null,
       financial_income_taxpayer_last_3_years: null,
       declared_youth: null,
       fund_use_horizon: 'unknown',
@@ -105,7 +109,7 @@ test('a basic successful request returns three accounts in every plan, in fixed 
   assert.equal(res.ok, true);
   assert.equal(res.scenarios.length, 1);
   const scenario = res.scenarios[0];
-  assert.ok(scenario.plans.length >= 1 && scenario.plans.length <= 3);
+  assert.ok(scenario.plans.length >= 1 && scenario.plans.length <= 4);
   for (const plan of scenario.plans) {
     assert.deepEqual(
       plan.allocations.map((a) => a.account),
@@ -498,9 +502,11 @@ test('a zero cap flattens the tax-credit axis and says so, without moving the al
   );
   assert.equal(zero.plans[0].deterministic_benefit.pension_credit_total_krw, 0);
   assert.ok(zero.plans[0].deterministic_benefit.pension_credit_total_before_cap_krw > 0);
-  // `isa_first`만 목적함수가 무너지지 않는다 — 그 안의 근거는 인출 가능성이다.
+  // `isa_first`·`pension_contribution_limit_fill`은 목적함수가 무너지지 않는다 —
+  // 두 안의 근거(인출 가능성 / 납입 한도)는 세액 한도와 무관하게 그대로 성립한다.
+  const degenerateNamedPlans = new Set(['max_tax_credit', 'annuity_savings_first']);
   for (const plan of zero.plans) {
-    assert.equal(plan.priority_basis.objective_degenerate, plan.plan_id !== 'isa_first');
+    assert.equal(plan.priority_basis.objective_degenerate, degenerateNamedPlans.has(plan.plan_id));
   }
 });
 

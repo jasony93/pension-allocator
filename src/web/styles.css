@@ -663,10 +663,25 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .stackbar-row-fill { flex: 1; display: flex; height: 28px; border-radius: var(--radius-s); border: 1px solid var(--border-subtle); overflow: hidden; background: var(--data-track); }
 .stackbar-seg { height: 100%; }
 .stackbar-row-amount { width: 140px; text-align: right; flex-shrink: 0; }
+/* 5.0.0(D26) — 넷째 배분안의 라벨("연금계좌 납입 한도까지 채우는 배분")이 기존
+   셋보다 길다. 고정폭(180+140px) 그대로 좁은 화면에 밀어 넣으면 금액이 화면
+   밖으로 잘려 나간다(실측으로 확인) — 라벨·막대·금액 세 줄로 접는다. 행 개수와
+   무관한 결함이었지만 이 배분안에서 처음 실측으로 드러났다. */
+@media (max-width: 480px) {
+  .stackbar-row { flex-wrap: wrap; row-gap: var(--space-1); }
+  .stackbar-row-label { width: auto; flex: 1 1 100%; }
+  .stackbar-row-fill { order: 2; flex: 1 1 auto; min-width: 0; }
+  .stackbar-row-amount { order: 3; width: auto; margin-left: var(--space-2); }
+}
 
-.account-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.account-table th, .account-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
+/* 좁은 화면에서 다섯 칸 표를 억지로 욱여넣으면 헤더 글자가 한 자씩 세로로
+   쪼개진다(실측). 표를 줄이지 않고 **가로 스크롤**로 옮긴다 — 열을 지우면
+   근거 조항(적용 조항)이 화면에서 사라진다. */
+.account-table-scroll { overflow-x: auto; }
+.account-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px; }
+.account-table th, .account-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
 .account-table td:nth-child(2), .account-table td:nth-child(3) { font-variant-numeric: tabular-nums; text-align: right; }
+.account-table td:last-child, .account-table .table-row-note td, .account-table .table-row-warning td { white-space: normal; }
 .table-row-warning { background: var(--state-warning-subtle); }
 /* 배제된 계좌 행 — 오류 색을 쓰지 않는다(screens.md 8.5절: 부분 배제도 정상 상태다). */
 .table-row-excluded { background: var(--state-info-subtle); color: var(--text-secondary); }

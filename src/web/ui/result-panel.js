@@ -23,6 +23,8 @@ import {
   isaTaxFreeCaption,
   donutSingleSliceCaption,
   unallocatedReasonMessage,
+  unallocatedBreakdownMessage,
+  pensionWithoutCreditMessage,
   NOT_ALLOCATED_IN_PLAN_CAPTION,
   CONDITIONAL_PENDING_ALERT,
   CONDITIONAL_PENDING_STALE_CAPTION,
@@ -352,6 +354,21 @@ function amountCard(plan, scenario) {
 function allExitPenaltyBanner() {
   return el('div', { class: 'warning-note warning-note-banner' }, [
     el('p', {}, [comparisonNoteMessage('all_accounts_have_early_exit_penalty')]),
+  ]);
+}
+
+/**
+ * 5.0.0(D27) — `credit_rate_bracket.fallback_applied`가 `true`면 금액과 **같은
+ * 화면에** 무엇이 적용됐고 왜인지를 적는다(계약 0.7절·10절). 세액 한도의
+ * "최대 이만큼"과 방향이 반대다 — 이쪽은 "적어도 이만큼"이므로 같은 배너 틀을
+ * 쓰지 않는다. `AmountCard`의 세 상태 기계(`tax-credit-view.js`)를 건드리지
+ * 않고 그 위에 사실 배너 하나를 더한다 — 두 상태가 겹쳐도(한도도 모르고
+ * 종합소득금액도 모르는 경우) 각자의 사실을 각자의 문장으로 말하게 하기 위해서다.
+ */
+function creditRateFallbackBanner(creditRateBracket) {
+  if (!creditRateBracket?.fallback_applied) return null;
+  return el('div', { class: 'warning-note warning-note-banner' }, [
+    el('p', {}, [noticeMessage({ code: 'credit_rate_global_income_missing', params: {} })]),
   ]);
 }
 
@@ -818,6 +835,26 @@ function accountTable(plan, scenario) {
         ]),
       );
     }
+
+    // D26 — `pension_contribution_limit_fill`에서만 나온다. 셋을 같이 낸다
+    // (원금 비과세 · 세무서 확인 필요·소급 없음 · 수익 과세) — 하나라도 빠지면
+    // 문장이 거짓이 된다(계약 5.6절).
+    const withoutCreditEffect = (plan.non_quantified_effects ?? []).find(
+      (e) => e.code === 'pension_contribution_without_credit' && e.account === a.account,
+    );
+    if (withoutCreditEffect) {
+      rows.push(
+        el('tr', { class: 'table-row-note' }, [
+          el('td', { colspan: 5 }, [
+            pensionWithoutCreditMessage(withoutCreditEffect),
+            ...lawEntriesFor(scenario, withoutCreditEffect.basis_rule_ids).flatMap((entry) => [
+              ' ',
+              el('span', { class: 'law-chip' }, [entry.law]),
+            ]),
+          ]),
+        ]),
+      );
+    }
   }
   if (plan.unallocated_annual_krw > 0) {
     rows.push(
@@ -832,6 +869,14 @@ function accountTable(plan, scenario) {
         el('td', {}, [unallocatedReasonMessage(unallocatedBlockers(plan))]),
       ]),
     );
+    // D26 — 「미배분」을 갈래로 나눈다. **"갈 곳이 없다"로 읽히지 않게** 두
+    // 계좌의 여력과 정말 갈 곳 없는 몫을 나눠 말한다(계약 5.13절).
+    const breakdownMessage = unallocatedBreakdownMessage(plan.unallocated_breakdown);
+    if (breakdownMessage) {
+      rows.push(
+        el('tr', { class: 'table-row-note' }, [el('td', { colspan: 5 }, [breakdownMessage])]),
+      );
+    }
   }
   const transferLimit = scenario.isa_transfer_extra_limit;
   if (transferLimit) {
@@ -843,9 +888,14 @@ function accountTable(plan, scenario) {
       ]),
     );
   }
-  return el('table', { class: 'account-table' }, [
-    el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '납입 잔여 한도 대비', '적용 조항'].map((h) => el('th', {}, [h])))]),
-    el('tbody', {}, rows),
+  // 좁은 화면에서 다섯 칸을 욱여넣으면 헤더 글자가 한 자씩 세로로 쪼개진다
+  // (실측). 열을 지우지 않고 가로 스크롤로 옮긴다 — 근거 조항 열을 지우면
+  // 헌장 고지 요소 3이 그 표에서 사라진다.
+  return el('div', { class: 'account-table-scroll' }, [
+    el('table', { class: 'account-table' }, [
+      el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '납입 잔여 한도 대비', '적용 조항'].map((h) => el('th', {}, [h])))]),
+      el('tbody', {}, rows),
+    ]),
   ]);
 }
 
@@ -896,6 +946,9 @@ const ASSUMPTION_TIER = {
   tax_liability_cap_applied: 0,
   pension_contribution_blocked_annuity_started: 0,
   retirement_transfer_excluded_from_credit: 0,
+  // 5.0.0(D27) — 헤드라인 공제율 자체를 바꾸는 가정·안내다.
+  credit_rate_global_income_missing: 0,
+  credit_rate_wage_only_excludes_separately_taxed_income: 0,
   // tier 2 — 특정 숫자가 아니라 범위·계산 방식을 말하는 일반 고지
   single_tax_year_only: 2,
   other_deductions_excluded: 2,
@@ -1063,6 +1116,7 @@ function resultPanelForScenario(
     // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
     // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
+    creditRateFallbackBanner(response.echo?.credit_rate_bracket),
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, { seatDraw }),
