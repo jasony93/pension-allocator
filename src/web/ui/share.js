@@ -138,6 +138,25 @@ function drawToCanvas(summary) {
 export function openShareModal({ plan, scenario, onExport, onClose }) {
   const summary = shareableSummary(plan, scenario);
 
+  /**
+   * **`<a download>`는 아티팩트가 실제로 도는 `sandbox="allow-scripts"` iframe
+   * 안에서 조용히 아무 일도 하지 않는다** — `allow-downloads`가 없으면 예외도,
+   * 오류 이벤트도 없이 그냥 저장이 시작되지 않는다. 초기화 버튼의 `confirm()`과
+   * 정확히 같은 실패 형태다(모듈 머리말 참조). 그래서 자동 저장 시도(아래
+   * `exportBtn`)에만 기대지 않는다 — **렌더된 이미지 자체를 화면에 그대로
+   * 띄워서** 자동 저장이 막히더라도 사용자가 길게 누르거나 오른쪽 클릭으로
+   * 직접 저장할 수 있는 경로를 항상 남긴다. 그 수단은 문서 스크립트가 아니라
+   * 브라우저 자체의 "이미지 저장" UI를 거치므로 같은 샌드박스 제약을 받지 않는다.
+   */
+  const previewCanvas = drawToCanvas(summary);
+  const previewImage = el('img', {
+    class: 'share-image-preview',
+    src: previewCanvas.toDataURL('image/png'),
+    alt: '저장될 결과 이미지 미리보기',
+    width: String(previewCanvas.width),
+    height: String(previewCanvas.height),
+  });
+
   const previewList = el(
     'ul',
     { class: 'share-preview-list' },
@@ -151,6 +170,10 @@ export function openShareModal({ plan, scenario, onExport, onClose }) {
     el('p', { class: 'type-display-sub' }, [summary.headline.amountText]),
     el('p', { class: 'type-caption' }, [`${summary.taxYear} 과세연도 기준 · ${summary.planLabel}`]),
     summary.headline.conditionText ? el('p', { class: 'type-caption' }, [summary.headline.conditionText]) : null,
+    previewImage,
+    el('p', { class: 'type-caption share-manual-save-note' }, [
+      '자동 저장이 되지 않으면 위 이미지를 길게 누르거나 마우스 오른쪽 버튼으로 저장할 수 있습니다.',
+    ]),
     previewList,
     el(
       'ul',
@@ -180,8 +203,10 @@ export function openShareModal({ plan, scenario, onExport, onClose }) {
       type: 'button',
       class: 'btn btn-secondary',
       onclick: () => {
-        const canvas = drawToCanvas(summary);
-        canvas.toBlob((blob) => {
+        // 모달을 여는 시점에 이미 그린 것과 같은 캔버스를 그대로 쓴다 — 다시
+        // 그리면 미리보기 이미지(previewImage)와 저장되는 파일이 어긋날 길이
+        // 생긴다.
+        previewCanvas.toBlob((blob) => {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;

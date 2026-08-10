@@ -782,3 +782,8 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .share-modal-body { display: flex; flex-direction: column; gap: var(--space-2); }
 .share-preview-list { margin: 0; padding-left: 1.2em; font-size: 13px; }
 .share-warning { color: var(--state-warning); }
+/* 실제로 저장될 이미지를 미리보기에 그대로 띄운다 — 자동 저장(`<a download>`)이
+   샌드박스에서 조용히 막혀도 사용자가 이 이미지를 길게 누르거나 오른쪽 클릭으로
+   직접 저장할 수 있는 경로를 남긴다(share.js 머리말 참조). */
+.share-image-preview { width: 100%; height: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-m); }
+.share-manual-save-note { color: var(--text-secondary); }
