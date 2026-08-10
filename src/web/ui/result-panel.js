@@ -475,9 +475,16 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
       ? leavingPlaceholderRing()
       : donutChart({
           ...donutArgs,
-          // 도넛 중앙의 `월 배분`은 엔진이 낸 배분 총액이다. 화면이 조각을 더하면
-          // 미배분까지 섞여 라벨과 값이 어긋난다(charts.js 중앙 값 주석).
-          totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw,
+          // 도넛 중앙의 `월 배분`은 **네 조각의 합**이다(engine-interface.md
+          // 0.12·10절, 7.0.0) — 계좌 셋(`total_allocated_monthly_krw`)에
+          // 미배분(`unallocated_monthly_krw`)을 더해야 도넛이 실제로 그리는
+          // 네 조각의 합과 가운데 값이 같아진다. 계좌 셋만 쓰면(6.0.0까지의
+          // 동작) 미배분 조각의 몫이 빠져, 100% 배분이 아닌 배분에서 가운데
+          // 값이 조각들의 합과 어긋난다. `monthly_unassigned_krw`는 더하지
+          // 않는다 — 그 값은 네 조각 중 어디에도 실리지 않은 몫이고, 그만큼
+          // 이 값이 `monthly_capacity_krw`보다 작은 것이 사실이다(charts.js
+          // 중앙 값 주석).
+          totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
           isProposed: !scenario.is_enacted,
           animateFromZero: seatDraw === 'donut-entering',
         });

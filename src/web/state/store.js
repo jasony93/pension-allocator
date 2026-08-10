@@ -223,7 +223,12 @@ export function buildEngineRequest(form, scenarios) {
       retirement_pension: pensionAccount(form.retirementPensionYtd),
       isa: {
         exists: form.isaExists,
-        account_type: form.isaExists ? form.isaAccountType : null,
+        // 2026-08-10 — `isaExists`에 묶지 않는다. 계약 3.2절에서
+        // `account_type`은 `exists`와 독립된 선택 필드다(일반형/서민형은
+        // 소득 요건이지 보유 여부가 아니다). 엔진은 미보유 사용자에게도
+        // 신규 가입을 전제로 배분하므로(`isa_new_account_assumed`), 유형을
+        // 선언해야 비과세 한도와 수익률 가정 기반 정산액을 계산할 수 있다.
+        account_type: form.isaAccountType,
         cumulative_contribution_krw: form.isaExists ? manwonToWonOrZero(form.isaCumulative) : 0,
         ytd_contribution_krw: form.isaExists ? manwonToWonOrZero(form.isaYtd) : 0,
         years_since_opening: null, // 1차 출시에서 묻지 않는 선택 입력

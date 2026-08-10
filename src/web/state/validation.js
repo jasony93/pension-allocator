@@ -360,8 +360,19 @@ export function formDerivedAssumptionCodes(form) {
   if (zero(form.annuitySavingsYtd) && zero(form.retirementPensionYtd) && (!form.isaExists || zero(form.isaYtd))) {
     codes.push('existing_contribution_untouched');
   }
-  if (!form.isaExists) codes.push('isa_not_held_excluded');
-  if (form.isaExists && form.isaAccountType === 'general') codes.push('isa_account_type_defaulted');
+  // **`isa_not_held_excluded`를 지웠다(2026-08-10).** "ISA 계좌가 없다고
+  // 하셔서 ISA를 배분 대상에서 제외하고 계산했습니다"는 거짓이다 — 엔진은
+  // ISA 미보유 사용자에게 신규 가입을 전제로 배분한다(`isa_new_account_assumed`,
+  // 계약 3.2절 `IsaAccountState.exists`). 이 코드가 `isa_new_account_assumed`와
+  // 나란히 같은 가정 목록에 뜨면 두 문장이 서로 반대되는 사실을 말한다.
+  // `screens.md` 4.5절 표(1125행)가 이 문구를 명시하지만, 계약이 실제로 하는
+  // 일과 어긋나므로 화면은 엔진이 실제로 한 일(`isa_new_account_assumed`)을
+  // 말한다 — 문서 갱신은 최종 보고에 남긴다.
+  //
+  // **`isa_account_type_defaulted`도 `isaExists`에서 뗐다** — 유형 토글 자체가
+  // 보유 여부와 무관해졌으므로(`input-panel.js` 참고), 신규 가입 전제 사용자가
+  // 유형을 기본값(일반형)으로 둔 채 계산해도 같은 사실을 말해야 한다.
+  if (form.isaAccountType === 'general') codes.push('isa_account_type_defaulted');
   if (form.isaExists && form.isaTransferEnabled && form.isaTransferDestination === 'retirement_pension') {
     codes.push('transfer_destination_defaulted');
   }

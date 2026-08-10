@@ -64,6 +64,7 @@ import {
   ISA_RETURN_LOSS_HELP,
   ISA_INCOME_CHARACTER_LABEL,
   ISA_INCOME_CHARACTER_EXAMPLE,
+  isaAccountTypeLabel,
 } from '../copy.js';
 import { openConfirm } from './modal.js';
 import { formatYears, formatKrw } from '../format.js';
@@ -674,9 +675,18 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     onBlur: () => store.flush(),
     renderGuard,
   });
+  // **ISA 보유 여부 토글 밖으로 뗐다(2026-08-10).** 엔진은 ISA 미보유
+  // 사용자에게도 신규 가입을 전제로 배분하고(`isa_new_account_assumed`),
+  // 계약 3.2절에서 `account_type`은 `exists`와 독립된 선택 필드다 — 일반형/
+  // 서민형은 소득 요건이지 계좌 보유 여부가 아니다. 이 토글이 `isaBlock`
+  // 안(= `isaExists`가 `true`일 때만)에 있으면 ISA가 없는 사람은 유형을
+  // 선언할 자리가 없어, 비과세 한도 표시와(계약 3.2·5.3절) 수익률 가정
+  // 기반 정산액(⑤ 그룹)이 유형 미선언으로 항상 계산되지 못했다. **묻는
+  // 말은 보유 여부에 따라 달라진다** — 이미 가진 것처럼 묻지 않는다
+  // (`isaAccountTypeLabel`).
   const isaTypeToggle = segmentToggle({
     id: 'isaAccountType',
-    label: 'ISA 계좌 유형',
+    label: isaAccountTypeLabel(form.isaExists),
     value: form.isaAccountType,
     options: [
       { value: 'general', label: '일반형' },
@@ -700,11 +710,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     help: FINANCIAL_INCOME_EFFECT_CAPTION,
   });
 
-  const isaBlock = conditionalGroup(
-    form.isaExists,
-    [isaCumulativeField, isaYtdField, isaTypeToggle, financialIncomeToggle],
-    'isaBlock',
-  );
+  // `isaTypeToggle`은 더 이상 이 조건부 블록 안에 없다 — 위 주석 참고.
+  const isaBlock = conditionalGroup(form.isaExists, [isaCumulativeField, isaYtdField, financialIncomeToggle], 'isaBlock');
 
   const groupThree = el('section', { class: 'input-group' }, [
     el('h3', { class: 'input-group-title' }, ['③ 계좌 현황']),
@@ -712,6 +719,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     annuityField,
     retirementField,
     isaExistsToggle,
+    isaTypeToggle,
     isaBlock,
   ]);
 

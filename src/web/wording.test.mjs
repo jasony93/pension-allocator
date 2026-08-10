@@ -147,14 +147,23 @@ test('a single-slice caption takes the right particle for the account it names',
   assert.match(donutSingleSliceCaption('isa'), /ISA로 갑니다/);
 });
 
-test('the donut centre reads the engine total instead of adding up the slices', () => {
-  // 조각을 더하면 **미배분 조각까지** 더해져 `월 배분`이라는 라벨과 값이
-  // 어긋난다. 계약의 `total_allocated_monthly_krw`가 이미 그 값을 준다.
+test('the donut centre is the sum of all four slices, not just the three accounts (7.0.0)', () => {
+  // 6.0.0까지는 `total_allocated_monthly_krw`(계좌 셋의 합)만 썼다 — 도넛이
+  // 실제로 그리는 네 조각(계좌 셋 + 미배분) 중 하나가 가운데 값에서 빠져,
+  // 100% 배분이 아닌 배분에서는 가운데 값이 조각들의 합과 어긋났다. 월 250만원을
+  // 넣었는데 가운데가 `2,499,999원`으로 뜨던 신고의 뿌리였다(engine-interface.md
+  // 0.12·10절 — "도넛 가운데의 「월 배분 총액」은 네 조각의 합이다"). 지금은
+  // `result-panel.js`가 `total_allocated_monthly_krw + unallocated_monthly_krw`를
+  // 한 번만 더해 넘기고, `charts.js`는 그 값을 그대로 찍는다 — 두 곳에서
+  // 더하지 않는다.
   const charts = stripComments(readFileSync(path.join(here, 'ui', 'charts.js'), 'utf8'));
   const centre = charts.slice(charts.indexOf("class: 'donut-center'"), charts.indexOf("class: 'donut-center'") + 400);
   assert.match(centre, /totalAllocatedMonthlyKrw/);
   const panel = stripComments(readFileSync(path.join(here, 'ui', 'result-panel.js'), 'utf8'));
-  assert.match(panel, /totalAllocatedMonthlyKrw: plan\.total_allocated_monthly_krw/);
+  assert.match(
+    panel,
+    /totalAllocatedMonthlyKrw: plan\.total_allocated_monthly_krw \+ plan\.unallocated_monthly_krw/,
+  );
 });
 
 // ---------------------------------------------------------------------------

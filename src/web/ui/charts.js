@@ -422,9 +422,15 @@ export function donutChart({
   // 중앙 값 — **월 배분 총액**(screens.md 5.8절이 절감세액을 여기 두지 않기로
   // 하면서 확정한 값, 5.12절이 조각 하나일 때도 그대로 둔다고 재확인).
   //
-  // 엔진의 `total_allocated_monthly_krw`를 그대로 쓴다. 조각의 월 금액을 화면이
-  // 더하면 **미배분 조각까지 더해져** 배분 총액이 아니라 납입 여력이 나온다 —
-  // 라벨이 `월 배분`인데 값은 배분되지 않은 돈까지 담게 된다.
+  // **7.0.0(engine-interface.md 0.12·10절) — 네 조각의 합이다.** `total_allocated_monthly_krw`
+  // (계좌 셋의 합)만 쓰면 미배분 조각의 월 금액이 빠져, 조각 넷을 그린 도넛의
+  // 가운데가 그 조각들의 합과 어긋난다(2,500,000원을 넣었는데 2,499,999원이
+  // 뜨던 신고가 이 어긋남이었다). `totalAllocatedMonthlyKrw`는 호출부
+  // (`result-panel.js`)에서 이미 `total_allocated_monthly_krw + unallocated_monthly_krw`로
+  // 계산해 넘긴다 — **여기서 다시 더하지 않는다**(곱셈·덧셈이 두 곳에 생기면
+  // 둘이 갈린다는 경고가 계약 곳곳에 있다). `monthly_unassigned_krw`가 0보다
+  // 크면 이 값은 `echo.monthly_capacity_krw`보다 그만큼 작다 — **그것이
+  // 사실이므로 화면에서 반올림해 메우지 않는다.**
   const centerText = svgEl('text', { class: 'donut-center', x: cx, y: cy, 'text-anchor': 'middle' }, [
     svgEl('tspan', { class: 'donut-center-label', x: cx, dy: '-0.4em' }, [DONUT_CENTER_LABEL]),
     svgEl('tspan', { class: 'donut-center-value', x: cx, dy: '1.5em' }, [formatKrw(totalAllocatedMonthlyKrw)]),

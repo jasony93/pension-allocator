@@ -1,11 +1,24 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 6.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 7.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `6.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `7.0.0`으로 맞췄다.
+ *
+ * **7.0.0에서 따라온 것(0.12절, major).** 월 납입 여력에 250만원을 넣었는데
+ * 도넛 가운데가 `2,499,999원`으로 나온 신고가 원인이다 — 이 목이 계좌별
+ * 월 금액을 각각 순수하게 내림(`floor(annual/months)`)했고, 그때 버려지는
+ * 최대 3원/월이 화면에서 사라졌다. `Allocation.monthly_krw`가 `내림 +
+ * monthly_rounding_adjustment_krw`로 바뀌고, `Allocation`에
+ * `monthly_annualized_krw`·`monthly_rounding_adjustment_krw`가,
+ * `Plan`에 `unallocated_monthly_rounding_adjustment_krw`·
+ * `monthly_unassigned_krw`·`monthly_unassigned_reason_code`가 새로 붙는다
+ * (`apportionMonthly` 함수가 이 산식이다). 도넛 가운데 "월 배분 총액"도
+ * 이제 **네 조각의 합**(`allocations[].monthly_krw` 셋 + `unallocated_monthly_krw`)
+ * 이어야 정확히 `echo.monthly_capacity_krw`와 같아진다(10절 — 이 부분은 화면
+ * 쪽 수정이라 `result-panel.js`/`charts.js`가 진다).
  *
  * **4.0.0에서 따라온 것.** 요청에 `profile.birth_date`·`profile.prior_year_tax`·
  * `accounts.*.annuity_start_status`가 필수로 들어오고 `profile.age_years`가
@@ -66,8 +79,8 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 // 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '6';
-export const MOCK_SCHEMA_VERSION = '6.0.0';
+const KNOWN_SCHEMA_MAJOR = '7';
+export const MOCK_SCHEMA_VERSION = '7.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
 // 5.1.0(D28·D29) — 수익이 어떤 형태로 들어오는가. 자산군이 아니다(계약 3.6절).
@@ -200,6 +213,86 @@ function applyRate(amountKrw, rate) {
 }
 
 const clampToZero = (value) => (value < 0 ? 0 : value);
+
+/**
+ * 연간 금액을 월 표시 금액으로 나눈다 — `engine-interface.md` 0.12절의 산식을
+ * 그대로 옮긴 것이다. **세법 수치가 한 줄도 없는 순수 산술**이라 룰셋을 읽지
+ * 않는다(`src/engine/monthly.mjs`가 실제 엔진 쪽의 같은 산식이다. 이 목은 그
+ * 파일을 불러 쓰지 않고 계약 문서에서 독립적으로 다시 옮겨 적었다 — 목의
+ * 역할이 "계약을 이 유닛이 어떻게 읽었는지"를 남기는 대조 기준이기 때문이다).
+ *
+ * 문제: 연간 예산 B = 월 여력 C × 개월수 m이고, 네 갈래(세 계좌 + 미배분)의
+ * 연 금액 합이 정확히 B다. 각 갈래를 그냥 내림하면(`floor(a_i/m)`) 합이 C보다
+ * 최대 3원 적어진다 — 그 3원을, 얹어도 납입 한도를 넘지 않는 갈래 중 가장 싸게
+ * (연 기준 벗어남이 가장 작게) 얹는다. 얹을 곳이 없으면 `unassignedMonthlyKrw`로
+ * 낸다 — 삼키지 않는다.
+ *
+ * @param {object} input
+ * @param {number} input.months 개월수. 1 이상의 정수(0이면 전부 0으로 낸다).
+ * @param {number} input.capacityMonthlyKrw 월 납입 여력(원/월).
+ * @param {Array<{id: string, annualKrw: number, poolId: string|null, orderIndex: number}>} input.buckets
+ *        `poolId`가 `null`이면 한도가 없는 갈래(미배분)다. `orderIndex`는 값이
+ *        같을 때의 순서이고 작을수록 먼저다.
+ * @param {Record<string, number>} input.poolHeadroomKrw 풀별 납입 잔여 한도(원/연,
+ *        이 배분안을 실행한 **뒤** 남는 값이어야 한다 — 배분 전 값을 주면 이미
+ *        배분된 몫을 두 번 세게 된다).
+ */
+function apportionMonthly({ months, capacityMonthlyKrw, buckets, poolHeadroomKrw }) {
+  const parts = buckets.map((bucket) => {
+    const floorMonthlyKrw = months > 0 ? Math.floor(bucket.annualKrw / months) : 0;
+    return {
+      ...bucket,
+      floorMonthlyKrw,
+      remainderKrw: months > 0 ? bucket.annualKrw - floorMonthlyKrw * months : 0,
+      roundingAdjustmentMonthlyKrw: 0,
+    };
+  });
+
+  // 얹어야 할 1원/월의 개수. 예산이 정확히 C·m이므로 정수다(months가 0이면
+  // 애초에 모든 annualKrw도 0이라 아래 루프가 돌지 않는다).
+  const assignedFloorTotal = parts.reduce((sum, part) => sum + part.floorMonthlyKrw, 0);
+  let remaining = capacityMonthlyKrw - assignedFloorTotal;
+
+  // 풀별 여유를 깎아 가며 배정한다. 인자를 변형하지 않는다.
+  const headroom = { ...poolHeadroomKrw };
+
+  /** 이 갈래에 1원/월을 더 얹으면 연 기준으로 얼마를 더 벗어나는가. */
+  const costOf = (part) => (part.roundingAdjustmentMonthlyKrw === 0 ? months - part.remainderKrw : months);
+
+  // k ≤ 3이고 갈래가 넷이라 한 원씩 도는 것으로 충분하다.
+  while (remaining > 0) {
+    let chosen = null;
+    for (const part of parts) {
+      // 「넣지 않는다」고 말한 갈래에는 월 금액을 붙이지 않는다.
+      if (part.annualKrw <= 0) continue;
+      const cost = costOf(part);
+      if (part.poolId !== null && (headroom[part.poolId] ?? 0) < cost) continue;
+      if (chosen === null || cost < chosen.cost || (cost === chosen.cost && part.orderIndex < chosen.part.orderIndex)) {
+        chosen = { part, cost };
+      }
+    }
+    if (chosen === null) break;
+    if (chosen.part.poolId !== null) headroom[chosen.part.poolId] -= chosen.cost;
+    chosen.part.roundingAdjustmentMonthlyKrw += 1;
+    remaining -= 1;
+  }
+
+  return {
+    buckets: parts.map((part) => {
+      const monthlyKrw = part.floorMonthlyKrw + part.roundingAdjustmentMonthlyKrw;
+      return {
+        id: part.id,
+        monthlyKrw,
+        remainderKrw: part.remainderKrw,
+        roundingAdjustmentMonthlyKrw: part.roundingAdjustmentMonthlyKrw,
+        monthlyAnnualizedKrw: monthlyKrw * months,
+      };
+    }),
+    // 끝내 얹지 못한 몫(원/월). 0이 아니면 월 표시 금액 넷의 합이 월 여력에
+    // 못 미친다 — 삼키지 않고 그대로 낸다.
+    unassignedMonthlyKrw: remaining < 0 ? 0 : remaining,
+  };
+}
 
 /**
  * 소득 성격이 정하는 과세 비율 `s`의 구간을 룰셋 문자열에서 읽는다(계약 3.6절).
@@ -1006,9 +1099,16 @@ function computeScenario(scenario, request, rulesets) {
   notices.push({ code: 'pension_age_not_evaluated', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
 
   // -- ISA 비과세 한도 --------------------------------------------------
+  // **`accounts.isa.exists`를 조건에 넣지 않는다(2026-08-10 수정).** 계약
+  // 3.2절에서 `tax_free_limit_krw`는 `account_type`에만 걸린다 — "null이면
+  // ISA도 null"이라고 적을 뿐 `exists`를 언급하지 않는다. 엔진은 ISA 미보유
+  // 사용자에게도 신규 가입을 전제로 배분하므로(`isa_new_account_assumed`),
+  // 유형을 선언했는데 계좌가 없다는 이유로 한도를 내지 않으면 그 배분의
+  // 비과세 한도를 영영 보일 수 없다. (이전에는 `exists &&`가 앞에 있었다 —
+  // `isaAccountType` 게이트와 같은 뿌리의 결함이었다.)
   const isaTaxFreeRule = use('isa.tax_free_limit', 'scenarios[].limits.by_account[isa].tax_free_limit_krw');
   let taxFreeLimit = null;
-  if (accounts.isa.exists && accounts.isa.account_type != null && isaTaxFreeRule) {
+  if (accounts.isa.account_type != null && isaTaxFreeRule) {
     const bracket = isaTaxFreeRule.value.brackets.find((b) => b.id === (accounts.isa.account_type === 'low_income' ? '서민형' : '일반형'));
     taxFreeLimit = bracket ? bracket.limit_krw : null;
 
@@ -1029,7 +1129,7 @@ function computeScenario(scenario, request, rulesets) {
     } else {
       notices.push({ code: 'prior_year_income_missing', severity: 'info', field: 'profile.prior_year_total_salary_krw', params: {}, basis_rule_ids: [] });
     }
-  } else if (accounts.isa.exists && accounts.isa.account_type == null) {
+  } else if (accounts.isa.account_type == null) {
     notices.push({ code: 'isa_type_not_declared', severity: 'info', field: 'accounts.isa.account_type', params: {}, basis_rule_ids: [] });
   }
 
@@ -1331,6 +1431,13 @@ function computeScenario(scenario, request, rulesets) {
   const carryoverRule = use('pension.credit.unused.contribution_carryover');
   const creditCarryforward = capRule?.value?.credit_carryforward ?? false;
 
+  // 월 환산 잔차를 얹을 수 있는 풀이 열려 있는가(0.12절) — 두 연금계좌 중
+  // 하나라도 배분 대상이면 연금 풀이 열려 있다. 계좌별 여유가 아니라 안마다
+  // 「이 배분을 실행한 뒤 남는 값」(`p.pensionPoolRemaining`/`p.isaPoolRemaining`)을
+  // 쓴다 — 배분 전 값을 쓰면 이미 배분된 몫을 두 번 세게 된다.
+  const pensionOpen = pensionEligibility.annuity_savings.eligible || pensionEligibility.retirement_pension.eligible;
+  const monthlyLastOrder = ACCOUNTS.length;
+
   const plans = rawPlans.map((p) => {
     const creditEligible = creditFor(p.allocByAccount.annuity_savings, p.allocByAccount.retirement_pension);
     const incomeTaxBeforeCapKrw = Math.floor(creditEligible * incomeTaxRate);
@@ -1369,12 +1476,54 @@ function computeScenario(scenario, request, rulesets) {
       basis_rule_ids: capApplied && carryoverRule ? [...capBasisRuleIds, carryoverRule.id] : capBasisRuleIds,
     };
 
+    // -- 7.0.0(0.12절) — 월 환산 잔차를 네 갈래(세 계좌 + 미배분)에 나눈다 ------
+    // **이 배분안을 실행한 뒤 남는 값**을 풀 여유로 준다 — 배분 전 값을 주면
+    // 이미 배분된 몫을 두 번 세게 된다.
+    const monthlyBuckets = [
+      ...ACCOUNTS.map((account) => ({
+        id: account,
+        annualKrw: p.allocByAccount[account] ?? 0,
+        poolId: account === 'isa' ? 'isa' : 'pension',
+        // 돈을 받지 못한 계좌는 `fillOrderByAccount`에 없다 — 나머지가 0이라
+        // 후보가 되지 않지만, 순서를 미정으로 두지 않기 위해 고정 계좌 순서로
+        // 뒤에 세운다.
+        orderIndex: p.fillOrderByAccount[account] ?? monthlyLastOrder + ACCOUNTS.indexOf(account),
+      })),
+      {
+        id: 'unallocated',
+        annualKrw: p.unallocated,
+        // 한도가 없는 갈래 — 어느 계좌에도 들어가지 않는 돈이다.
+        poolId: null,
+        orderIndex: monthlyLastOrder * 2,
+      },
+    ];
+    const monthlySplit = apportionMonthly({
+      months,
+      capacityMonthlyKrw: profile.monthly_capacity_krw,
+      buckets: monthlyBuckets,
+      poolHeadroomKrw: {
+        // 두 연금계좌가 모두 막혀 있으면 납입 여력이 남아 있어도 얹을 수 없다
+        // (`unallocatedBreakdown`과 같은 판정이다).
+        pension: pensionOpen ? clampToZero(p.pensionPoolRemaining) : 0,
+        isa: isaEligible ? clampToZero(p.isaPoolRemaining) : 0,
+      },
+    });
+    const monthlyById = new Map(monthlySplit.buckets.map((b) => [b.id, b]));
+
     const allocations = ACCOUNTS.map((account) => {
       const annualKrw = p.allocByAccount[account] ?? 0;
-      const monthlyKrw = months > 0 ? Math.floor(annualKrw / months) : 0;
+      const m = monthlyById.get(account);
       return {
         account,
-        monthly_krw: monthlyKrw,
+        // 7.0.0에서 산식이 바뀌었다 — `내림 + monthly_rounding_adjustment_krw`
+        // (계약 0.12·5.5절). 순수한 내림만 쓰면 계좌별 금액을 더해도 월 납입
+        // 여력이 되지 않는다(소유자가 신고한 결함).
+        monthly_krw: m.monthlyKrw,
+        // 7.0.0 신규 — `monthly_krw × 개월수`. 화면이 직접 곱하지 않도록 미리
+        // 낸다(둘은 다를 수 있고, 다른 것이 정상이다).
+        monthly_annualized_krw: m.monthlyAnnualizedKrw,
+        // 7.0.0 신규 — 이 계좌가 떠안은 월 환산 잔차(0 이상 3 이하).
+        monthly_rounding_adjustment_krw: m.roundingAdjustmentMonthlyKrw,
         annual_krw: annualKrw,
         fill_order: p.fillOrderByAccount[account] ?? null,
         limited_by: annualKrw === 0 ? p.limitedBy[account] ?? null : p.limitedBy[account] ?? null,
@@ -1387,7 +1536,12 @@ function computeScenario(scenario, request, rulesets) {
 
     const totalAnnual = allocations.reduce((s, a) => s + a.annual_krw, 0);
     const totalMonthly = allocations.reduce((s, a) => s + a.monthly_krw, 0);
-    const residual = months > 0 ? totalAnnual - totalMonthly * months : 0;
+    // **뜻은 1.0.0 이래 그대로**(연 배분을 개월수로 내림할 때 버려지는 몫의
+    // 합·계좌만 센다) — 다만 `총 연 − 총 월 × 개월수`로는 더 이상 이 값이
+    // 나오지 않는다(0.12절). 계좌별 나머지(annual mod months)를 직접 더한다.
+    const residual = months > 0 ? ACCOUNTS.reduce((s, account) => s + ((p.allocByAccount[account] ?? 0) % months), 0) : 0;
+    const unallocatedMonthly = monthlyById.get('unallocated');
+    const monthlyUnassignedKrw = monthlySplit.unassignedMonthlyKrw;
 
     const warnings = [];
     for (const a of allocations) {
@@ -1515,7 +1669,7 @@ function computeScenario(scenario, request, rulesets) {
     // 5.0.0(D26) — 미배분액을 갈래로 나눈다. 「미배분」이 "갈 곳이 없다"로 읽히지
     // 않게, 두 계좌 여력과 정말 갈 곳 없는 몫을 나눠 낸다(5.13절). **겹치면
     // 더하지 않는다** — `headrooms_overlap`이 그 사실을 값으로 말한다.
-    const pensionOpen = pensionEligibility.annuity_savings.eligible || pensionEligibility.retirement_pension.eligible;
+    // (`pensionOpen`은 위 월 환산 잔차 배정에서 이미 계산했다 — 같은 판정이다.)
     const pensionRoom = pensionOpen ? Math.max(0, p.pensionPoolRemaining) : 0;
     const isaRoom = isaEligible ? Math.max(0, p.isaPoolRemaining) : 0;
     const pensionHeadroomKrw = Math.min(p.unallocated, pensionRoom);
@@ -1583,7 +1737,10 @@ function computeScenario(scenario, request, rulesets) {
       allocations: ACCOUNTS.map((a) => allocations.find((x) => x.account === a)),
       total_allocated_monthly_krw: totalMonthly,
       total_allocated_annual_krw: totalAnnual,
-      unallocated_monthly_krw: months > 0 ? Math.floor(p.unallocated / months) : 0,
+      // 7.0.0부터 순수한 내림이 아니다 — 잔차를 떠안을 수 있다(0.12절).
+      unallocated_monthly_krw: unallocatedMonthly.monthlyKrw,
+      // 7.0.0 신규 — 미배분이 떠안은 월 환산 잔차.
+      unallocated_monthly_rounding_adjustment_krw: unallocatedMonthly.roundingAdjustmentMonthlyKrw,
       unallocated_annual_krw: p.unallocated,
       unallocated_breakdown: unallocatedBreakdown,
       // **배분 후** 남는 연금계좌 합산 세액공제 대상 한도. 배분 전 값
@@ -1591,6 +1748,9 @@ function computeScenario(scenario, request, rulesets) {
       // 화면이 뺄셈으로 만들지 않도록 여기서 낸다.
       pension_combined_credit_remaining_after_plan_krw: Math.max(0, baseCombinedCreditCap + extraCreditLimit - creditEligible),
       monthly_rounding_residual_krw: residual,
+      // 7.0.0 신규 — 잔차 중 어느 갈래에도 얹지 못한 몫. 0이면 `null`이다.
+      monthly_unassigned_krw: monthlyUnassignedKrw,
+      monthly_unassigned_reason_code: monthlyUnassignedKrw > 0 ? 'no_destination_within_contribution_limit' : null,
       deterministic_benefit: {
         // 4.0.0 — 앞의 세 필드는 한도 적용 **후** 값이다.
         pension_credit_income_tax_krw: incomeTaxKrw,

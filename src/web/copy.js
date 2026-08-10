@@ -264,7 +264,10 @@ const ASSUMPTION_MESSAGE = {
   // 화면이 직접 만드는 조건부 항목(엔진 notice가 아니라 입력 상태에서 파생) —
   // screens.md 4.5절 표의 나머지 행.
   isa_account_type_defaulted: () => 'ISA 계좌 유형을 일반형으로 두고 계산했습니다. 서민형이면 비과세 한도가 달라집니다.',
-  isa_not_held_excluded: () => 'ISA 계좌가 없다고 하셔서 ISA를 배분 대상에서 제외하고 계산했습니다.',
+  // `isa_not_held_excluded`는 지웠다(2026-08-10) — `validation.js`의
+  // `formDerivedAssumptionCodes` 주석 참고. "ISA를 배분 대상에서 제외하고
+  // 계산했습니다"는 거짓이었다 — 실제로는 신규 가입을 전제로 배분한다
+  // (`isa_new_account_assumed`).
   transfer_destination_defaulted: () => '전환한 자금을 받을 계좌를 IRP로 두고 계산했습니다. 연금저축으로 받으면 적용되는 단독 한도가 달라 결과가 바뀝니다.',
   existing_contribution_untouched: () => '올해 이 계좌들에 이미 넣은 금액을 0으로 두고 계산했습니다. 이미 납입한 금액이 있으면 납입 잔여 한도가 줄어 배분이 결과와 달라집니다.',
 };
@@ -777,6 +780,20 @@ export const ANNUITY_START_EFFECT_CAPTION =
 /** `예`일 때 선택지 그룹 위에 두는 사실 통지. **조치를 지시하지 않는다**(5.9절 규약). */
 export const ANNUITY_STARTED_HORIZON_NOTE =
   '연금을 이미 받고 계신 경우, 아래 선택지의 "연금 수령 나이"를 기준으로 한 구분은 이미 지난 시점을 가리킵니다.';
+
+// ---------------------------------------------------------------------------
+// ISA 계좌 유형 (screens.md 3.6절 — 2026-08-10, ISA 보유 여부와 무관하게 뗐다)
+//
+// **엔진은 ISA 미보유 사용자에게도 신규 가입을 전제로 배분한다**
+// (`isa_new_account_assumed`, 계약 3.2절 `IsaAccountState.exists`). 일반형/
+// 서민형은 소득 요건이지 계좌 보유 여부가 아니다(계약 3.2절 `account_type`이
+// `exists`와 독립된 필드인 이유) — 그래서 이 토글은 ISA 보유 여부 토글 밖으로
+// 뗀다. 다만 **묻는 말은 달라야 한다.** ISA가 없는 사람에게 "계좌 유형"을
+// 그대로 물으면 이미 가진 계좌의 속성을 묻는 것처럼 읽힌다 — 아직 없는
+// 계좌이므로 "가입할" 유형을 묻는다.
+// ---------------------------------------------------------------------------
+
+export const isaAccountTypeLabel = (isaExists) => (isaExists ? 'ISA 계좌 유형' : '가입할 ISA 계좌 유형');
 
 // ---------------------------------------------------------------------------
 // 금융소득종합과세 대상 여부 (screens.md 3.6절 — ISA 조건부 블록 안)

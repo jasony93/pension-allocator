@@ -260,15 +260,28 @@ test('a nonzero prior contribution removes that item', () => {
   assert.ok(!codes.includes('existing_contribution_untouched'));
 });
 
-test('not holding an ISA is recorded as an assumption, holding one is not', () => {
-  assert.ok(formDerivedAssumptionCodes(baseForm({ isaExists: false })).includes('isa_not_held_excluded'));
-  assert.ok(!formDerivedAssumptionCodes(baseForm({ isaExists: true })).includes('isa_not_held_excluded'));
+// **`isa_not_held_excluded`는 지웠다(2026-08-10).** "ISA를 배분 대상에서
+// 제외하고 계산했습니다"는 거짓이었다 — 엔진은 ISA 미보유 사용자에게도
+// 신규 가입을 전제로 배분한다(`isa_new_account_assumed`). 그 문장과 이 코드가
+// 같은 가정 목록에 나란히 뜨면 서로 반대되는 사실을 말하게 된다.
+test('not holding an ISA no longer claims it was excluded — the engine assumes a new account instead', () => {
+  const codes = formDerivedAssumptionCodes(baseForm({ isaExists: false }));
+  assert.ok(!codes.includes('isa_not_held_excluded'), 'isa_new_account_assumed와 모순되는 문장이라 지웠다');
 });
 
-test('the ISA type and transfer destination items appear only when those inputs are in play', () => {
-  const noIsa = formDerivedAssumptionCodes(baseForm({ isaExists: false }));
-  assert.ok(!noIsa.includes('isa_account_type_defaulted'));
-  assert.ok(!noIsa.includes('transfer_destination_defaulted'));
+// **`isa_account_type_defaulted`는 이제 `isaExists`와 무관하다** — 유형
+// 토글이 보유 여부 밖으로 뗐으므로(input-panel.js), 신규 가입 전제
+// 사용자가 유형을 기본값(일반형)으로 둔 채 계산해도 같은 사실을 말해야
+// 한다. `transfer_destination_defaulted`는 여전히 보유·전환을 함께 켰을
+// 때만 나온다 — 그 항목은 ISA 만기 자금 전환에 관한 것이라 보유 여부와
+// 실제로 묶여 있다.
+test('the ISA type item follows account_type regardless of isaExists; transfer destination stays gated on holding + transfer', () => {
+  const noIsaDefaultType = formDerivedAssumptionCodes(baseForm({ isaExists: false }));
+  assert.ok(noIsaDefaultType.includes('isa_account_type_defaulted'), '유형 토글은 보유 여부와 무관하게 항상 값을 갖는다');
+  assert.ok(!noIsaDefaultType.includes('transfer_destination_defaulted'));
+
+  const noIsaDeclaredType = formDerivedAssumptionCodes(baseForm({ isaExists: false, isaAccountType: 'low_income' }));
+  assert.ok(!noIsaDeclaredType.includes('isa_account_type_defaulted'), '서민형을 스스로 선택했으면 기본값이 아니다');
 
   const withIsa = formDerivedAssumptionCodes(baseForm({ isaExists: true, isaTransferEnabled: true }));
   assert.ok(withIsa.includes('isa_account_type_defaulted'));
