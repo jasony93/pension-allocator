@@ -22,6 +22,7 @@ import {
   WARNING,
 } from './constants.mjs';
 import { resolveCarryoverConditions } from './limits.mjs';
+import { isaEstimateFor } from './isa-return.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
 
 const PENSION_ACCOUNTS = new Set([ACCOUNT.PENSION, ACCOUNT.ANNUITY]);
@@ -422,7 +423,11 @@ function nonQuantifiedOf(result, ctx) {
   const amounts = result.amounts;
   const out = [];
 
-  if (amounts[ACCOUNT.ISA] > 0) {
+  // **수익률 가정이 들어오면 이 효과는 더 이상 "금액으로 낼 수 없는 것"이 아니다.**
+  // 규칙이 스스로 `quantifiable_conditionally: true`라고 적고 "사용자가 직접 주면 조건부
+  // 산출은 추정이 아니다"라고 정한다. 가정이 있는데도 이 항목을 그대로 내보내면 응답이
+  // 자기 자신과 어긋난다 — `assumption_based_isa_estimate`가 그 자리를 대신한다.
+  if (amounts[ACCOUNT.ISA] > 0 && !ctx.isaReturn.supplied) {
     out.push({
       code: NON_QUANTIFIED.ISA_HEADROOM,
       account: ACCOUNT.ISA,
@@ -602,6 +607,22 @@ export function buildPlans(ctx) {
       for (const ruleId of effect.basis_rule_ids) access.markUsed(ruleId, 'plans[].non_quantified_effects');
     }
 
+    // 가정 기반 ISA 정산액. **금액 계산이 전부 끝난 뒤에 붙는다** — 위의 어떤 값도
+    // 이 값을 읽지 않으므로 `echo.isa_return_affects`의 네 `false`가 코드 구조로 참이 된다.
+    // 원금은 「가입 이후 누적 납입액 + 이 배분안의 ISA 배분액」이다.
+    const isaEstimate = isaEstimateFor({
+      context: ctx.isaReturn,
+      display: ctx.isaEstimateDisplay,
+      taxFreeLimitKrw: ctx.state.taxFreeLimit,
+      principalKrw: ctx.isaCumulativeContributionKrw + result.amounts[ACCOUNT.ISA],
+      surtaxRate: ctx.rates.surtaxRate,
+    });
+    if (isaEstimate !== null) {
+      for (const ruleId of isaEstimate.basis_rule_ids) {
+        access.markUsed(ruleId, 'plans[].assumption_based_isa_estimate');
+      }
+    }
+
     plans.push({
       plan_id: planId,
       is_baseline: false,
@@ -638,6 +659,10 @@ export function buildPlans(ctx) {
       deterministic_benefit: benefit,
       delta_vs_baseline_krw: 0,
       non_quantified_effects: nonQuantified,
+      // **`DeterministicBenefit`과 같은 축에 놓거나 더하면 안 된다.** 앞은 조문이 그
+      // 과세연도에 대해 정하는 금액이고 이것은 사용자가 준 가정 위의 계산이다.
+      // 요청에 `profile.isa_return_assumption`이 없으면 `null`이다.
+      assumption_based_isa_estimate: isaEstimate,
     });
   }
 

@@ -22,6 +22,7 @@ import {
   PLAN_ORDER,
   SCENARIO_ORDER,
   SCHEMA_VERSION,
+  UNCERTAINTY_KIND,
 } from './constants.mjs';
 
 // ── 블록 형식 ────────────────────────────────────────────────────────────────
@@ -36,14 +37,26 @@ export const CASE_KEYS = ['case', 'request', 'credit_rate', 'expect'];
  * **무엇으로** 판정됐는지는 아무도 보지 않는데, 이번에 고친 결함이 정확히 그 자리였다 —
  * 총급여만 보고 15%를 준 값과 종합소득금액으로 판정한 12%가 **같은 비율 필드**에 실린다.
  */
-export const CREDIT_RATE_KEYS = ['income_tax', 'local_tax', 'effective', 'basis', 'fallback_applied'];
+export const CREDIT_RATE_KEYS = [
+  'income_tax',
+  'local_tax',
+  'effective',
+  'basis',
+  'measured_amount',
+  'fallback_applied',
+  'fallback_direction',
+];
 const CREDIT_RATE_FIELD = {
   income_tax: 'income_tax_rate',
   local_tax: 'local_tax_rate',
   effective: 'effective_rate',
   basis: 'basis_code',
+  measured_amount: 'measured_amount_krw',
   fallback_applied: 'fallback_applied',
+  fallback_direction: 'fallback_direction_code',
 };
+/** `basis_code`가 가질 수 있는 값. 오타를 값이 아니라 형식 단계에서 잡는다. */
+const CREDIT_RATE_BASIS_VALUES = ['total_salary', 'global_income', 'statutory_default'];
 export const SCENARIO_KEYS = [
   'plans',
   'plan_count',
@@ -58,7 +71,29 @@ export const SCENARIO_KEYS = [
   'notice_codes_absent',
   'comparison_note_codes',
   'comparison_note_codes_absent',
+  /**
+   * D30 — **계약 5.7.1절이 첫 번째 방어선으로 지목한 축.** 룰셋 작성자가 지워서는 안 될
+   * 불확실성 표시를 지운 경우를 엔진은 잡지 못한다(엔진은 룰셋을 그대로 비출 뿐이다).
+   * 그 자리를 무는 것이 「정답지가 규칙별 미확인 건수를 주장한다」인데, 여태 그것을
+   * 적을 어휘가 어느 층에도 없었다. 규칙 id를 키로 하는 객체다.
+   */
+  'legal_basis',
 ];
+/** `legal_basis` 항목 하나가 주장할 수 있는 것. */
+export const LEGAL_BASIS_KEYS = [
+  /** 이 규칙이 근거 목록에 실렸는가. `false`면 나머지를 적을 수 없다 */
+  'present',
+  'status',
+  'bill_stage',
+  'has_uncertainty_note',
+  /** **몇 건 남아 있는가.** 일부 해소가 값으로 드러나는 자리다(계약 5.7.1절) */
+  'uncertainty_note_count',
+  'uncertainty_kinds',
+  /** 어디에 남아 있는가. 건수가 같은 채로 자리가 바뀌는 것까지 잡는다 */
+  'uncertainty_paths',
+  'applied_to',
+];
+const UNCERTAINTY_KINDS = Object.values(UNCERTAINTY_KIND);
 export const PLAN_KEYS = [
   'allocation',
   'tax_credit',
@@ -86,7 +121,50 @@ export const PLAN_KEYS = [
   // 목적함수가 이 입력에서 순위를 정하지 못한다는 자기 신고(계약 5.12절).
   'objective_degenerate',
   'is_baseline',
+  // D28·D29 — 가정 기반 ISA 정산액. **`DeterministicBenefit`과 다른 축이다.**
+  'assumption_based_isa_estimate',
 ];
+/**
+ * 가정 기반 ISA 정산액이 주장할 수 있는 것. 응답 필드 이름을 그대로 쓴다.
+ *
+ * **구간을 적을 수 있어야 한다는 것이 이 목록의 요점이다**(`tax-domain`이 7차 머리말에
+ * 적은 요구). 소득 성격이 확정적이지 않으면 정답이 점이 아니라 구간이므로, 점만 적을 수
+ * 있는 어휘로는 그 회차의 결론이 검사받지 못한다.
+ */
+export const ISA_ESTIMATE_KEYS = [
+  'state',
+  'not_computable_reason_code',
+  'is_annual',
+  'settlement_years',
+  'settlement_years_source',
+  'taxable_share_min',
+  'taxable_share_max',
+  'principal_krw',
+  'total_return_krw',
+  'taxable_income_krw',
+  'loss_offset_applied_krw',
+  'net_income_krw',
+  'tax_free_limit_krw',
+  'comparison_side_tax_krw',
+  'isa_side_tax_krw',
+  'point_estimate_krw',
+  'lower_bound_krw',
+  'upper_bound_krw',
+  'axis_breakdown',
+  'comparison_baseline_code',
+];
+/** 세 축 + 절사 잔차. 넷의 합이 `upper_bound_krw`와 같아야 한다. */
+export const ISA_AXIS_KEYS = [
+  'loss_offset_krw',
+  'tax_free_krw',
+  'rate_gap_krw',
+  'rounding_residual_krw',
+];
+const ISA_ESTIMATE_STATES = ['computed', 'display_suppressed', 'not_computable'];
+/** 상태가 `computed`가 아니면 이 칸들은 전부 `null`이다. 주장하면 자기모순이다. */
+const ISA_ESTIMATE_AMOUNT_KEYS = ISA_ESTIMATE_KEYS.filter(
+  (key) => key.endsWith('_krw') || key === 'axis_breakdown',
+);
 export const TAX_CREDIT_KEYS = ['income_tax', 'local_tax', 'total'];
 export const LIMIT_KEYS = [
   'pension_combined_credit_limit_krw',
@@ -347,6 +425,137 @@ function validateUnallocated(value, where, errors) {
   }
 }
 
+/**
+ * 규칙별 근거·미확인 건수(D30). **자기모순은 대조 전에 거절한다** — 옮겨 적다 한쪽만
+ * 고친 블록이 대조까지 가면 어느 쪽이 사실인지 실패 메시지가 말해 주지 못한다.
+ */
+function validateLegalBasis(value, where, errors) {
+  if (!requireNonEmptyObject(value, where, errors)) return;
+
+  for (const [ruleId, entry] of Object.entries(value)) {
+    const at = `${where}.${ruleId}`;
+    if (!requireNonEmptyObject(entry, at, errors)) continue;
+    unknownKeys(entry, LEGAL_BASIS_KEYS, at, errors);
+
+    for (const key of ['present', 'has_uncertainty_note']) {
+      if (key in entry) requireBoolean(entry[key], `${at}.${key}`, errors);
+    }
+    if ('uncertainty_note_count' in entry) {
+      requireInt(entry.uncertainty_note_count, `${at}.uncertainty_note_count`, errors);
+    }
+    for (const key of ['uncertainty_kinds', 'uncertainty_paths', 'applied_to']) {
+      if (key in entry) requireStringArray(entry[key], `${at}.${key}`, errors);
+    }
+    for (const key of ['status', 'bill_stage']) {
+      if (key in entry) requireStringOrNull(entry[key], `${at}.${key}`, errors);
+    }
+    for (const kind of entry.uncertainty_kinds ?? []) {
+      if (!UNCERTAINTY_KINDS.includes(kind)) {
+        errors.push(`${at}.uncertainty_kinds: 모르는 표시 "${kind}" (허용: ${UNCERTAINTY_KINDS.join(', ')})`);
+      }
+    }
+
+    // 실리지 않았다고 적어 놓고 그 규칙에 대해 무엇을 더 주장할 수는 없다.
+    if (entry.present === false && Object.keys(entry).length > 1) {
+      errors.push(`${at}: present:false인데 다른 항목을 주장한다 — 없는 근거의 내용을 적을 수 없다`);
+    }
+    const count = entry.uncertainty_note_count;
+    if (typeof entry.has_uncertainty_note === 'boolean' && Number.isInteger(count)) {
+      if (entry.has_uncertainty_note !== count > 0) {
+        errors.push(
+          `${at}: has_uncertainty_note(${entry.has_uncertainty_note})와 ` +
+            `uncertainty_note_count(${count})가 어긋난다 — 언제나 count > 0과 같다`,
+        );
+      }
+    }
+    if (Number.isInteger(count) && Array.isArray(entry.uncertainty_paths)) {
+      if (entry.uncertainty_paths.length !== count) {
+        errors.push(
+          `${at}: uncertainty_paths ${entry.uncertainty_paths.length}건인데 ` +
+            `uncertainty_note_count는 ${count}다 — 한쪽만 고쳤다`,
+        );
+      }
+    }
+    if (count === 0 && (entry.uncertainty_kinds ?? []).length > 0) {
+      errors.push(`${at}: 건수가 0인데 uncertainty_kinds가 비어 있지 않다`);
+    }
+  }
+}
+
+/** 가정 기반 ISA 정산액. 상태와 금액이 어긋나면 대조 전에 거절한다. */
+function validateIsaEstimate(value, where, errors) {
+  if (!requireNonEmptyObject(value, where, errors)) return;
+  unknownKeys(value, ISA_ESTIMATE_KEYS, where, errors);
+
+  if ('state' in value && !ISA_ESTIMATE_STATES.includes(value.state)) {
+    errors.push(`${where}.state: 모르는 상태 "${value.state}" (허용: ${ISA_ESTIMATE_STATES.join(', ')})`);
+  }
+  for (const key of ['not_computable_reason_code', 'settlement_years_source', 'comparison_baseline_code']) {
+    if (key in value) requireStringOrNull(value[key], `${where}.${key}`, errors);
+  }
+  for (const key of ['settlement_years', ...ISA_ESTIMATE_AMOUNT_KEYS]) {
+    if (key in value && key !== 'axis_breakdown') requireIntOrNull(value[key], `${where}.${key}`, errors);
+  }
+  for (const key of ['taxable_share_min', 'taxable_share_max']) {
+    if (key in value && typeof value[key] !== 'number') {
+      errors.push(`${where}.${key}: 수여야 한다 (받은 값: ${JSON.stringify(value[key])})`);
+    }
+  }
+
+  // **상수다.** `true`로 적으면 그 블록은 연 환산을 정답으로 주장하는 것이고,
+  // 비과세 한도가 계약 단위라 그 주장은 최대 1.75배 과대다.
+  if ('is_annual' in value && value.is_annual !== false) {
+    errors.push(`${where}.is_annual: 언제나 false다 — 이 금액은 정산 기간 전체의 값이지 1년치가 아니다`);
+  }
+
+  if ('axis_breakdown' in value && value.axis_breakdown !== null) {
+    const at = `${where}.axis_breakdown`;
+    if (requireNonEmptyObject(value.axis_breakdown, at, errors)) {
+      unknownKeys(value.axis_breakdown, ISA_AXIS_KEYS, at, errors);
+      for (const key of ISA_AXIS_KEYS) {
+        if (key in value.axis_breakdown) requireInt(value.axis_breakdown[key], `${at}.${key}`, errors);
+      }
+      const parts = ISA_AXIS_KEYS.map((key) => value.axis_breakdown[key]);
+      if (parts.every(Number.isInteger) && Number.isInteger(value.upper_bound_krw)) {
+        const sum = parts.reduce((total, part) => total + part, 0);
+        if (sum !== value.upper_bound_krw) {
+          errors.push(
+            `${at}: 네 축의 합(${sum})이 upper_bound_krw(${value.upper_bound_krw})와 다르다 — ` +
+              '세 축의 합은 혜택과 항등적으로 같고 남는 것은 절사 잔차뿐이다',
+          );
+        }
+      }
+    }
+  }
+
+  const { lower_bound_krw: lower, upper_bound_krw: upper, point_estimate_krw: point } = value;
+  if (Number.isInteger(lower) && Number.isInteger(upper) && lower > upper) {
+    errors.push(`${where}: lower_bound_krw(${lower})가 upper_bound_krw(${upper})보다 크다`);
+  }
+  // 점을 낸다는 것은 구간의 두 끝이 같다는 뜻이다. 어긋나면 근거 없는 점을 고른 것이다.
+  if (Number.isInteger(point)) {
+    for (const [key, bound] of [['lower_bound_krw', lower], ['upper_bound_krw', upper]]) {
+      if (Number.isInteger(bound) && bound !== point) {
+        errors.push(
+          `${where}: point_estimate_krw(${point})가 ${key}(${bound})와 다르다 — ` +
+            '점은 구간의 두 끝이 같을 때만 낼 수 있다',
+        );
+      }
+    }
+  }
+
+  if ('state' in value && value.state !== 'computed') {
+    for (const key of ISA_ESTIMATE_AMOUNT_KEYS) {
+      if (key in value && value[key] !== null) {
+        errors.push(`${where}: state가 "${value.state}"인데 ${key}에 금액을 주장한다`);
+      }
+    }
+  }
+  if (value.state === 'computed' && (value.not_computable_reason_code ?? null) !== null) {
+    errors.push(`${where}: state:computed인데 not_computable_reason_code가 있다`);
+  }
+}
+
 function validatePensionStart(value, where, errors) {
   if (!requireNonEmptyObject(value, where, errors)) return;
   unknownKeys(value, PENSION_ACCOUNT_KEYS, where, errors);
@@ -437,6 +646,13 @@ function validatePlan(plan, where, errors) {
   if ('is_baseline' in plan && typeof plan.is_baseline !== 'boolean') {
     errors.push(`${where}.is_baseline: 참/거짓이어야 한다`);
   }
+  if ('assumption_based_isa_estimate' in plan) {
+    validateIsaEstimate(
+      plan.assumption_based_isa_estimate,
+      `${where}.assumption_based_isa_estimate`,
+      errors,
+    );
+  }
 }
 
 function validateScenario(expectation, where, errors) {
@@ -487,6 +703,57 @@ function validateScenario(expectation, where, errors) {
       errors,
     );
   }
+  if ('legal_basis' in expectation) {
+    validateLegalBasis(expectation.legal_basis, `${where}.legal_basis`, errors);
+  }
+}
+
+/**
+ * 공제율과 **그것을 무엇으로 쟀는가**(D27·D30).
+ *
+ * 비율만 주장하면 그 비율이 총급여에서 나왔는지 종합소득금액에서 나왔는지가 검사되지
+ * 않는다. **25% 과대였던 결함이 정확히 그 축이었고**, 1원 경계 케이스는 그것을 간접적으로만
+ * 잡는다. 세 값(`basis`·`measured_amount`·`fallback_applied`)은 서로를 규정하므로
+ * 어긋나면 대조 전에 거절한다.
+ */
+function validateCreditRate(value, where, errors) {
+  unknownKeys(value, CREDIT_RATE_KEYS, where, errors);
+
+  for (const key of ['income_tax', 'local_tax', 'effective']) {
+    if (key in value && typeof value[key] !== 'number') {
+      errors.push(`${where}.${key}: 비율(수)이어야 한다 (받은 값: ${JSON.stringify(value[key])})`);
+    }
+  }
+  if ('basis' in value && !CREDIT_RATE_BASIS_VALUES.includes(value.basis)) {
+    errors.push(
+      `${where}.basis: 모르는 판정 축 "${value.basis}" (허용: ${CREDIT_RATE_BASIS_VALUES.join(', ')})`,
+    );
+  }
+  if ('measured_amount' in value) requireIntOrNull(value.measured_amount, `${where}.measured_amount`, errors);
+  if ('fallback_applied' in value) requireBoolean(value.fallback_applied, `${where}.fallback_applied`, errors);
+  if ('fallback_direction' in value) {
+    requireStringOrNull(value.fallback_direction, `${where}.fallback_direction`, errors);
+  }
+
+  const isDefault = value.basis === 'statutory_default';
+  if ('basis' in value && 'fallback_applied' in value && value.fallback_applied !== isDefault) {
+    errors.push(
+      `${where}: basis("${value.basis}")와 fallback_applied(${value.fallback_applied})가 어긋난다 — ` +
+        'fallback_applied는 basis가 statutory_default인 것과 같은 값이다',
+    );
+  }
+  // 재지 않은 금액을 되돌려주지 않는다. 대체 구간을 적용했다면 측정한 금액이 없다.
+  if (isDefault && 'measured_amount' in value && value.measured_amount !== null) {
+    errors.push(`${where}: basis가 statutory_default인데 measured_amount가 null이 아니다`);
+  }
+  if ('basis' in value && !isDefault && value.measured_amount === null) {
+    errors.push(`${where}: basis가 "${value.basis}"인데 measured_amount가 null이다 — 무엇을 쟀는지가 없다`);
+  }
+  if ('fallback_direction' in value && (value.fallback_direction !== null) !== isDefault && 'basis' in value) {
+    errors.push(
+      `${where}: basis("${value.basis}")와 fallback_direction(${JSON.stringify(value.fallback_direction)})이 어긋난다`,
+    );
+  }
 }
 
 export function validateBlock(parsed, where) {
@@ -502,7 +769,7 @@ export function validateBlock(parsed, where) {
     errors.push(`${where}: "request"가 없다 — compute()에 그대로 넘길 요청이다`);
   }
   if ('credit_rate' in parsed && requireNonEmptyObject(parsed.credit_rate, `${where}.credit_rate`, errors)) {
-    unknownKeys(parsed.credit_rate, CREDIT_RATE_KEYS, `${where}.credit_rate`, errors);
+    validateCreditRate(parsed.credit_rate, `${where}.credit_rate`, errors);
   }
 
   if (!isPlainObject(parsed.expect) || Object.keys(parsed.expect).length === 0) {
@@ -533,9 +800,12 @@ export const VOCABULARY = [
   ...LIMIT_KEYS.map((k) => `limits.${k}`),
   ...BOUNDARY_KEYS.map((k) => `boundaries.${k}`),
   ...PENSION_START_KEYS.map((k) => `pension_withdrawal_start.${k}`),
+  ...LEGAL_BASIS_KEYS.map((k) => `legal_basis.${k}`),
   ...PLAN_KEYS.map((k) => `plan.${k}`),
   ...PLAN_TAX_CAP_KEYS.map((k) => `tax_liability_cap.${k}`),
   ...UNALLOCATED_KEYS.map((k) => `unallocated_breakdown.${k}`),
+  ...ISA_ESTIMATE_KEYS.map((k) => `assumption_based_isa_estimate.${k}`),
+  ...ISA_AXIS_KEYS.map((k) => `isa_axis_breakdown.${k}`),
 ];
 
 /** 블록 하나가 실제로 주장한 어휘. 값이 아니라 **적혔는가**만 본다. */
@@ -552,6 +822,9 @@ export function vocabularyUsedBy(parsed) {
     for (const entry of Object.values(expectation.pension_withdrawal_start ?? {})) {
       for (const key of Object.keys(entry ?? {})) used.add(`pension_withdrawal_start.${key}`);
     }
+    for (const entry of Object.values(expectation.legal_basis ?? {})) {
+      for (const key of Object.keys(entry ?? {})) used.add(`legal_basis.${key}`);
+    }
     for (const plan of Object.values(expectation.plans ?? {})) {
       for (const key of Object.keys(plan)) used.add(`plan.${key}`);
       for (const key of Object.keys(plan.tax_liability_cap ?? {})) {
@@ -559,6 +832,12 @@ export function vocabularyUsedBy(parsed) {
       }
       for (const key of Object.keys(plan.unallocated_breakdown ?? {})) {
         used.add(`unallocated_breakdown.${key}`);
+      }
+      for (const key of Object.keys(plan.assumption_based_isa_estimate ?? {})) {
+        used.add(`assumption_based_isa_estimate.${key}`);
+      }
+      for (const key of Object.keys(plan.assumption_based_isa_estimate?.axis_breakdown ?? {})) {
+        used.add(`isa_axis_breakdown.${key}`);
       }
     }
   }
@@ -791,6 +1070,26 @@ function checkPlan(plan, expected, label) {
   if ('is_baseline' in expected) {
     assert.equal(plan.is_baseline, expected.is_baseline, `${label} 기본안 여부`);
   }
+  if (expected.assumption_based_isa_estimate) {
+    checkIsaEstimate(plan, expected.assumption_based_isa_estimate, label);
+  }
+}
+
+/** 가정 기반 ISA 정산액. **적힌 키는 하나도 건너뛰지 않는다.** */
+function checkIsaEstimate(plan, expected, label) {
+  const actual = plan.assumption_based_isa_estimate;
+  assert.ok(
+    actual,
+    `${label} 가정 기반 ISA 정산액: 응답이 null이다 — request.profile.isa_return_assumption을 실었는지 본다`,
+  );
+
+  for (const [key, value] of Object.entries(expected)) {
+    if (key === 'axis_breakdown') continue;
+    assert.equal(actual[key], value, `${label} 가정 기반 ISA 정산액(${key})`);
+  }
+  for (const [key, value] of Object.entries(expected.axis_breakdown ?? {})) {
+    assert.equal(actual.axis_breakdown?.[key], value, `${label} ISA 정산액 축(${key})`);
+  }
 }
 
 /** 연금계좌별 개시 가능 시점. **적힌 키는 하나도 건너뛰지 않는다.** */
@@ -803,6 +1102,59 @@ function checkPensionStart(scenario, expected, label) {
     );
     for (const [key, value] of Object.entries(entry)) {
       assert.equal(actual[key], value, `${label} 개시 가능 시점(${account}.${key})`);
+    }
+  }
+}
+
+/**
+ * 규칙별 근거와 미확인 건수(D30). **적힌 키는 하나도 건너뛰지 않는다.**
+ *
+ * 이것이 계약 5.7.1절이 첫 번째 방어선으로 지목한 자리다 — 룰셋에서 표시가 조용히
+ * 사라지면 여기서 건수가 어긋나 대조가 문다.
+ */
+function checkLegalBasis(scenario, expected, label) {
+  for (const [ruleId, entry] of Object.entries(expected)) {
+    const actual = scenario.legal_basis.find((item) => item.rule_id === ruleId);
+
+    if ('present' in entry) {
+      assert.equal(actual !== undefined, entry.present, `${label} 근거 실림 여부(${ruleId})`);
+      if (entry.present === false) continue;
+    }
+    assert.ok(
+      actual,
+      `${label} 근거에 규칙 "${ruleId}"이 없다 (있는 것: ${scenario.legal_basis.map((i) => i.rule_id).join(', ')})`,
+    );
+
+    for (const key of ['status', 'bill_stage', 'has_uncertainty_note']) {
+      if (key in entry) assert.equal(actual[key], entry[key], `${label} 근거(${ruleId}.${key})`);
+    }
+    if ('uncertainty_note_count' in entry) {
+      assert.equal(
+        actual.uncertainty_notes.length,
+        entry.uncertainty_note_count,
+        `${label} 근거(${ruleId}) 미확인 건수 — 남은 것: ${JSON.stringify(actual.uncertainty_notes)}`,
+      );
+    }
+    if (entry.uncertainty_kinds) {
+      assert.deepStrictEqual(
+        [...new Set(actual.uncertainty_notes.map((note) => note.kind))].sort(),
+        [...entry.uncertainty_kinds].sort(),
+        `${label} 근거(${ruleId}) 미확인 표시의 종류`,
+      );
+    }
+    if (entry.uncertainty_paths) {
+      assert.deepStrictEqual(
+        actual.uncertainty_notes.map((note) => note.path),
+        [...entry.uncertainty_paths],
+        `${label} 근거(${ruleId}) 미확인 표시의 위치`,
+      );
+    }
+    if (entry.applied_to) {
+      assert.deepStrictEqual(
+        actual.applied_to,
+        [...entry.applied_to].sort(),
+        `${label} 근거(${ruleId})가 쓰인 출력 경로`,
+      );
     }
   }
 }
@@ -833,6 +1185,9 @@ function checkScenario(scenario, expected, label) {
   }
   if (expected.pension_withdrawal_start) {
     checkPensionStart(scenario, expected.pension_withdrawal_start, label);
+  }
+  if (expected.legal_basis) {
+    checkLegalBasis(scenario, expected.legal_basis, label);
   }
 
   const notices = scenario.notices.map((n) => n.code);

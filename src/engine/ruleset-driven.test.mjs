@@ -187,3 +187,21 @@ test('법령 조항은 룰셋 문자열 그대로 실린다', () => {
     assert.equal(entry.verified_on, source.source.verified_on);
   }
 });
+
+// ── 소득 성격 열거형이 룰셋과 어긋나지 않는가 (D29) ──────────────────────────
+//
+// **계약이 고정하는 것은 문자열이고, 각 값이 뜻하는 과세 비율은 룰셋이 정한다.** 두 목록이
+// 갈라지면 사용자가 고를 수 있는 선택지와 엔진이 비율을 찾을 수 있는 선택지가 달라져,
+// 어떤 값은 언제나 `rule_missing`으로 끝난다. 그 상태는 조용하다 — 계약도 룰셋도 각자
+// 옳아 보이고 어긋난 것은 둘 사이뿐이다.
+test('계약의 소득 성격 목록이 룰셋의 선택지와 정확히 같다', async () => {
+  const { ISA_INCOME_CHARACTERS } = await import('./constants.mjs');
+  const options = findRule(rulesets, CONFIRMED_FILE, 'isa.benefit.income_character').value
+    .what_to_ask_instead.options;
+
+  assert.deepStrictEqual(
+    [...ISA_INCOME_CHARACTERS].sort(),
+    options.map((option) => option.id).sort(),
+    '계약의 열거형과 룰셋 `isa.benefit.income_character`의 선택지 id가 갈라졌다',
+  );
+});

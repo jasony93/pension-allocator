@@ -20,6 +20,8 @@ import {
   COMPARISON_NOTE,
   CREDIT_BOUNDED_PLANS,
   HORIZONS,
+  ISA_ESTIMATE_DISPLAY,
+  ISA_INCOME_CHARACTERS,
   NOTICE,
   NON_QUANTIFIED,
   PLAN,
@@ -1121,6 +1123,155 @@ test('I27 — 한도 미확인의 결과는 언제나 상한이다', () => {
               `${label} / ${knownPlans[i].plan_id}: 한도를 모를 때의 값이 아는 경우(${determined})보다 작다`,
             );
           }
+        }
+      }
+    }
+  }
+});
+
+// I37 — **수익률 가정은 배분·공제액·배분안 순서·경고를 한 글자도 바꾸지 않는다.**
+//
+// D28이 그은 선 ①(확정 세액공제와 가정 기반 추정치를 한 목적함수에 더하지 않는다)을
+// 규약이 아니라 **자료형과 회귀 테스트로** 강제하는 자리다. `echo.isa_return_affects`가
+// 네 값을 전부 `false`로 선언하고, 이 검사가 그 선언과 실제 동작을 대조한다.
+//
+// **D31이 규제 검토 없이 표시를 켜기로 한 뒤 이 선이 전보다 중요해졌다.** 자본시장법
+// 쪽 검토가 한 번도 없는 상태에서 남은 방어선이 "이 서비스가 내는 것은 사용자가 제시한
+// 수익률을 조문에 넣은 결과이지 권고가 아니다"인데, 수익률이 배분을 움직이는 순간
+// 그 문장이 거짓이 된다.
+//
+// **비교 대상에 「가정을 주지 않은 요청」을 넣은 것이 의도다.** 네 값이 `false`라는 것은
+// 값을 바꿔도 안 움직인다는 뜻만이 아니라 **가정을 들이는 것 자체가 안 움직인다**는 뜻이다.
+const ISA_RETURN_VARIANTS = [
+  { label: '가정 없음', assumption: null, display: null },
+  ...ISA_INCOME_CHARACTERS.map((character) => ({
+    label: `성격 ${character}`,
+    assumption: {
+      annual_return_rate: 0.07,
+      income_character: character,
+      settlement_years: null,
+      loss_amount_krw: null,
+    },
+    display: null,
+  })),
+  {
+    label: '수익률·기간·손실이 전부 다름',
+    assumption: {
+      annual_return_rate: 0.21,
+      income_character: 'interest_dividend',
+      settlement_years: 9,
+      loss_amount_krw: 3_000_000,
+    },
+    display: null,
+  },
+  {
+    label: '수익률 0',
+    assumption: {
+      annual_return_rate: 0,
+      income_character: 'interest_dividend',
+      settlement_years: 1,
+      loss_amount_krw: 0,
+    },
+    display: null,
+  },
+  {
+    // D31 — 표시를 끈 상태에서도 나머지가 그대로여야 "계산과 입력은 두고 표시만 끈다"가 참이다.
+    label: '표시 끔',
+    assumption: {
+      annual_return_rate: 0.07,
+      income_character: 'interest_dividend',
+      settlement_years: 3,
+      loss_amount_krw: null,
+    },
+    display: ISA_ESTIMATE_DISPLAY.SUPPRESS,
+  },
+];
+
+test('I37 — 수익률 가정이 배분·공제액·순서·경고를 바꾸지 않는다', () => {
+  // 선언된 네 축을 **그 이름 그대로** 뽑는다. 이름과 실제로 비교하는 것이 어긋나면
+  // 이 검사가 통과하면서 아무것도 보증하지 않는 상태가 된다.
+  const affected = (response) =>
+    response.scenarios.map((scenario) => ({
+      allocation_amounts: scenario.plans.map((plan) =>
+        plan.allocations.map((a) => [a.account, a.annual_krw, a.monthly_krw, a.fill_order, a.limited_by]),
+      ),
+      tax_credit_amounts: scenario.plans.map((plan) => plan.deterministic_benefit),
+      plan_ordering: scenario.plans.map((plan) => [plan.plan_id, plan.is_baseline]),
+      warnings: scenario.plans.map((plan) => plan.warnings),
+      // 선언에는 없지만 함께 고정한다 — 한도와 비교 안내가 흔들리면 그것도 목적함수 오염이다.
+      limits: scenario.limits,
+      comparison_note_codes: scenario.comparison_note_codes,
+    }));
+
+  for (const { label, patch } of PROFILES) {
+    for (const scenarios of SCENARIO_SETS) {
+      const shapes = ISA_RETURN_VARIANTS.map((variant) => {
+        const response = compute(
+          baseRequest(
+            deepMerge(patch, {
+              scenarios,
+              profile: { isa_return_assumption: variant.assumption },
+              options: variant.display === null ? null : { assumption_based_isa_estimate: variant.display },
+            }),
+          ),
+          rulesets,
+        );
+        assert.equal(response.ok, true, `${label} / ${variant.label}: 계산이 실패했다`);
+        assert.deepStrictEqual(
+          response.echo.isa_return_affects,
+          { allocation_amounts: false, tax_credit_amounts: false, plan_ordering: false, warnings: false },
+          `${label} / ${variant.label}: 계약이 선언한 형태가 아니다`,
+        );
+        return affected(response);
+      });
+
+      for (let i = 1; i < shapes.length; i += 1) {
+        assert.deepStrictEqual(
+          shapes[i],
+          shapes[0],
+          `${label} / [${scenarios}]: "${ISA_RETURN_VARIANTS[i].label}"에서 배분·공제액·순서·경고가 ` +
+            `"${ISA_RETURN_VARIANTS[0].label}"과 달라졌다 — echo.isa_return_affects의 네 false가 거짓이 됐다`,
+        );
+      }
+    }
+  }
+});
+
+// I38 — **표시를 껐을 때 금액이 하나도 새어 나가지 않는다.**
+// D31이 되돌릴 수 있게 하라고 한 구조의 검사다. `state`만 바뀌고 금액이 남아 있으면
+// 화면이 그것을 렌더링할 수 있고, 그러면 "표시를 껐다"가 규약일 뿐 사실이 아니게 된다.
+test('I38 — 표시를 끄면 가정 기반 금액이 하나도 남지 않는다', () => {
+  const assumption = {
+    annual_return_rate: 0.07,
+    income_character: 'interest_dividend',
+    settlement_years: 3,
+    loss_amount_krw: null,
+  };
+
+  for (const { label, patch } of PROFILES) {
+    const response = compute(
+      baseRequest(
+        deepMerge(patch, {
+          scenarios: ['current', 'proposed'],
+          profile: { isa_return_assumption: assumption },
+          options: { assumption_based_isa_estimate: ISA_ESTIMATE_DISPLAY.SUPPRESS },
+        }),
+      ),
+      rulesets,
+    );
+    assert.equal(response.ok, true, `${label}: 계산이 실패했다`);
+
+    for (const scenario of response.scenarios) {
+      assert.ok(
+        scenario.notices.some((n) => n.code === NOTICE.ISA_RETURN_ESTIMATE_SUPPRESSED),
+        `${label}: 표시를 껐는데 그 사실이 조용하다 — 미설정 상태는 스스로를 드러내야 한다(D19)`,
+      );
+      for (const plan of scenario.plans) {
+        const estimate = plan.assumption_based_isa_estimate;
+        assert.equal(estimate.state, 'display_suppressed', `${label}: 상태가 감춤이 아니다`);
+        for (const [key, value] of Object.entries(estimate)) {
+          if (!key.endsWith('_krw') && key !== 'axis_breakdown') continue;
+          assert.equal(value, null, `${label}: 표시를 껐는데 ${key}에 금액이 남아 있다`);
         }
       }
     }

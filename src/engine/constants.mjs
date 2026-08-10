@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '5.0.0';
+export const SCHEMA_VERSION = '5.1.0';
 export const SUPPORTED_MAJOR = 5;
 
 export const ACCOUNT = {
@@ -128,6 +128,60 @@ export const CREDIT_RATE_BASIS = {
  */
 export const CREDIT_RATE_FALLBACK_DIRECTION = 'understated_or_equal';
 
+/**
+ * ISA 수익의 **성격** — 자산군이 아니라 "수익이 어떤 형태로 들어오는가"다(D29 1절).
+ *
+ * **이 목록은 계약이 고정하는 문자열이고, 각 값이 뜻하는 과세 비율 `s`는 룰셋이 정한다.**
+ * `isa.benefit.income_character`의 `what_to_ask_instead.options[].s_range`가 그 자리이고,
+ * 엔진은 그 문자열을 읽어 구간을 만든다 — 여기에 비율을 적으면 세법 수치가 코드에 박힌다.
+ * 두 목록이 어긋나는 것은 `ruleset-driven.test.mjs`가 본다.
+ */
+export const ISA_INCOME_CHARACTER = {
+  /** 이자·분배금·배당처럼 **받는 형태**로 들어온다 */
+  INTEREST_DIVIDEND: 'interest_dividend',
+  /** 국내 상장주식의 가격 상승으로 들어온다 */
+  LISTED_EQUITY_CAPITAL_GAIN: 'listed_equity_capital_gain',
+  /** 섞여 있거나 아직 정하지 않았다. `fund_use_horizon`의 `unknown`과 같은 이유로 둔다 */
+  MIXED_OR_UNKNOWN: 'mixed_or_unknown',
+};
+
+export const ISA_INCOME_CHARACTERS = Object.values(ISA_INCOME_CHARACTER);
+
+/**
+ * 가정 기반 ISA 정산액의 상태. `prior_year_tax.state`와 같은 형태다 —
+ * **`null` 하나로 "묻지 않았다"와 "물었으나 낼 수 없다"와 "표시를 껐다"를 뭉치지 않는다.**
+ */
+export const ISA_ESTIMATE_STATE = {
+  COMPUTED: 'computed',
+  /** D31 — 계산과 입력은 그대로 두고 **표시만** 끈 상태. 금액이 전부 `null`이 된다 */
+  DISPLAY_SUPPRESSED: 'display_suppressed',
+  NOT_COMPUTABLE: 'not_computable',
+};
+
+/** 표시 스위치. 호스트가 정한다 — 엔진이 규제 판단을 지어내지 않는다(D31). */
+export const ISA_ESTIMATE_DISPLAY = { INCLUDE: 'include', SUPPRESS: 'suppress' };
+export const ISA_ESTIMATE_DISPLAYS = Object.values(ISA_ESTIMATE_DISPLAY);
+
+/** 금액을 낼 수 없는 이유. **모르는 것을 0으로 적지 않기 위한 자리다.** */
+export const ISA_ESTIMATE_NOT_COMPUTABLE = {
+  /** ISA 유형 미선언 → 비과세 한도금액 `C`를 모른다 */
+  TAX_FREE_LIMIT_UNKNOWN: 'isa_tax_free_limit_unknown',
+  /** 입력이 커서 정수 연산으로 값을 낼 수 없다. 추정하지 않고 멈춘다 */
+  AMOUNT_NOT_REPRESENTABLE: 'amount_not_representable',
+};
+
+/** 가정 기반 ISA 정산액에 붙는 고정 코드. 세법 수치가 아니라 이름이다. */
+export const ISA_ESTIMATE = {
+  /** 원금을 무엇으로 보았는가 — 누적 납입액 + 이 배분안의 ISA 배분액 */
+  PRINCIPAL_BASIS: 'cumulative_contribution_plus_plan_allocation',
+  /** 수익률에서 총수익을 만드는 방법. 복리·단리는 세법이 정하지 않고 단리가 과소 방향이다 */
+  RETURN_ACCRUAL: 'simple_interest',
+  /** 비교 기준 — 원천징수로 종결되는 경우(case A) */
+  COMPARISON_BASELINE: 'withholding_at_general_rate',
+  SETTLEMENT_SOURCE_USER: 'user',
+  SETTLEMENT_SOURCE_RULESET: 'ruleset_min_contract_years',
+};
+
 /** 개시 가능 시점을 계산하지 못한 이유. */
 export const START_DATE_REASON = {
   OPENED_ON_MISSING: 'opened_on_missing',
@@ -172,6 +226,14 @@ export const RULE = {
   ISA_ANNUAL_LIMIT: 'isa.contribution.annual_limit',
   ISA_CLAWBACK: 'isa.early_termination.clawback',
   LOCAL_SURTAX: 'tax.local.personal_income_surtax',
+
+  // 11차 조사(D28·D29). 수익률을 입력으로 받은 뒤 **무엇을 곱하는가**를 정하는 규칙군.
+  // 배분 금액과 세액공제액은 한 원도 바꾸지 않는다 — echo.isa_return_affects가 그 선언이다.
+  ISA_BENEFIT_FORMULA: 'isa.benefit.formula',
+  ISA_BENEFIT_SETTLEMENT_PERIOD: 'isa.benefit.settlement_period',
+  ISA_BENEFIT_INCOME_CHARACTER: 'isa.benefit.income_character',
+  ISA_BENEFIT_QUANTIFICATION: 'isa.benefit.quantification',
+  PENSION_TAX_DEFERRAL_WITH_RETURN: 'pension.tax_deferral.with_return_rate',
 
   // 6차 조사(tax-rules-report.md 13절)로 들어온 확정 규칙 6건.
   CREDIT_TAX_CAP: 'pension.credit.tax_liability_cap',
@@ -310,6 +372,17 @@ export const NOTICE = {
   ANNUITY_START_UNKNOWN: 'pension_annuity_start_unknown',
   PENSION_START_DATE_NOT_COMPUTABLE: 'pension_start_date_not_computable',
   RETIREMENT_TRANSFER_EXCLUDED: 'retirement_transfer_excluded_from_credit',
+
+  // ── 수익률 기반 ISA 정산액 (D28·D29·D31) ──
+  // **이름에 `benefit`을 쓰지 않는다.** 가정 위의 계산을 확정된 혜택과 같은 말로 부르면
+  // 화면이 두 값을 같은 축에 놓는다(D29 4절). `tax-domain`이 제안한 코드 이름 둘
+  // (`isa_benefit_is_not_annual`·`isa_benefit_reported_as_range`)을 같은 이유로 바꿨다.
+  ISA_RETURN_NOT_SUPPLIED: 'isa_return_assumption_not_supplied',
+  ISA_RETURN_ESTIMATE_NOT_ANNUAL: 'isa_return_estimate_is_not_annual',
+  ISA_RETURN_ESTIMATE_RANGE: 'isa_return_estimate_reported_as_range',
+  ISA_RETURN_ESTIMATE_NOT_COMPUTABLE: 'isa_return_estimate_not_computable',
+  ISA_RETURN_ESTIMATE_SUPPRESSED: 'isa_return_estimate_display_suppressed',
+  PENSION_TAX_DEFERRAL_NOT_QUANTIFIED: 'pension_tax_deferral_not_quantified',
 };
 
 export const COMPARISON_NOTE = {
@@ -354,6 +427,17 @@ export const ASSUMPTION = {
   // 있는가"로 좁혀 물으면 분리과세로 종결된 소득만 더 있는 사람이 총급여 기준으로
   // 가게 되고, 그것은 reading_b를 채택한 것이 된다. 조문이 정한 것처럼 표시하지 않는다.
   CREDIT_RATE_WAGE_ONLY_READING: 'credit_rate_wage_only_excludes_separately_taxed_income',
+
+  // ── 수익률 기반 ISA 정산액이 서 있는 가정들 (D28 지켜야 할 선 ②·③) ──
+  // 이 값은 조문이 정한 금액이 아니라 **사용자가 준 가정 위의 계산**이고,
+  // 그 가정이 금액과 같은 화면에 붙어야 한다. 코드마다 무엇을 가정했는지는 계약 8.3절이 정의한다.
+  ISA_RETURN_RATE_USER_SUPPLIED: 'isa_return_rate_user_supplied',
+  ISA_RETURN_SIMPLE_INTEREST: 'isa_return_simple_interest',
+  ISA_RETURN_PRINCIPAL_FROM_CONTRIBUTIONS: 'isa_return_principal_from_contributions',
+  ISA_SETTLEMENT_YEARS_DEFAULTED: 'isa_settlement_years_defaulted_to_min_contract_years',
+  ISA_LOSS_ZERO: 'isa_loss_assumed_zero',
+  ISA_COMPARISON_BASELINE_WITHHOLDING: 'isa_comparison_baseline_is_withholding_only',
+  ISA_RETURN_HELD_TO_SETTLEMENT: 'isa_return_assumes_contract_held_to_settlement',
 };
 
 export const LIMITED_BY = {

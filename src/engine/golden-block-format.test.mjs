@@ -20,6 +20,7 @@ import {
   checkCase,
   validateBlock,
 } from './golden-block.mjs';
+import { uncertaintyNotesIn } from './ruleset.mjs';
 import { CONFIRMED_FILE, baseRequest, deepMerge, findRule, loadRulesets } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
@@ -202,7 +203,213 @@ const START_UNKNOWN = {
   },
 };
 
-const BLOCKS = [CAP_APPLIED, CAP_ZERO, START_DATES, START_UNKNOWN];
+// ── 8차에 넓힌 어휘 셋 (D30·D28) ─────────────────────────────────────────────
+//
+// 값은 전부 **룰셋과 계약**에서 나온다. 엔진을 돌려 나온 값을 옮겨 오면 이 파일이
+// "엔진이 자기 답을 자기에게 되묻는" 자리가 된다.
+
+const AGE_RULE = confirmedRule('age.reckoning.reference_date');
+const AGE_UNCERTAINTY = uncertaintyNotesIn(AGE_RULE.value);
+/** 계약 4.2절이 이 규칙의 근거가 어느 출력에 붙는지를 정한다 — 엔진의 답이 아니다. */
+const AGE_APPLIED_TO = ['echo.derived_age.reference_date'];
+
+/** 규칙별 근거·미확인 건수(D30). 계약 5.7.1절이 첫 번째 방어선으로 지목한 축이다. */
+const LEGAL_BASIS = {
+  case: 'GC-94',
+  request: baseRequest({ profile: { monthly_capacity_krw: ANNUITY_LIMIT / 12 } }),
+  // 총급여만으로 판정한 축. 25% 과대였던 그 자리를 정답지가 직접 주장한다.
+  credit_rate: {
+    income_tax: CREDIT_RATE,
+    basis: 'total_salary',
+    measured_amount: LOW_SALARY,
+    fallback_applied: false,
+    fallback_direction: null,
+  },
+  expect: {
+    current: {
+      legal_basis: {
+        'age.reckoning.reference_date': {
+          present: true,
+          status: AGE_RULE.status,
+          bill_stage: null,
+          has_uncertainty_note: AGE_UNCERTAINTY.length > 0,
+          uncertainty_note_count: AGE_UNCERTAINTY.length,
+          uncertainty_kinds: [...new Set(AGE_UNCERTAINTY.map((note) => note.kind))].sort(),
+          uncertainty_paths: AGE_UNCERTAINTY.map((note) => note.path),
+          applied_to: AGE_APPLIED_TO,
+        },
+        // 요청에 전환이 없으므로 전환 특례 규칙은 근거에 실리지 않는다.
+        // **없다는 것도 주장이다** — 읽지 않은 규칙을 근거로 싣지 않는다는 규약이 그 자리다.
+        'pension.credit.isa_transfer.extra_limit': { present: false },
+      },
+      plans: {
+        max_tax_credit: {
+          allocation: { annuity_savings: ANNUITY_LIMIT, retirement_pension: 0, isa: 0 },
+          tax_credit: creditOf(Math.floor(ANNUITY_LIMIT * CREDIT_RATE)),
+          warning_count: 0,
+        },
+      },
+    },
+  },
+};
+
+/** 종합소득금액을 몰라 본문 구간으로 간 경우. `fallback_*` 세 칸이 서로를 규정한다. */
+const CREDIT_RATE_FALLBACK = {
+  case: 'GC-95',
+  request: baseRequest({
+    profile: {
+      monthly_capacity_krw: 0,
+      has_non_wage_global_income_current_year: true,
+      current_year_global_income_krw: null,
+    },
+  }),
+  credit_rate: {
+    basis: 'statutory_default',
+    // 재지 않은 금액을 되돌려주지 않는다.
+    measured_amount: null,
+    fallback_applied: true,
+    // 우대 구간을 적용하지 않은 것이므로 과소이거나 같다. 세액 한도의 "최대"와 방향이 반대다.
+    fallback_direction: 'understated_or_equal',
+  },
+  expect: {
+    current: {
+      plans: {
+        max_tax_credit: {
+          allocation: { annuity_savings: 0, retirement_pension: 0, isa: 0 },
+          tax_credit: creditOf(0),
+          warning_count: 0,
+        },
+      },
+    },
+  },
+};
+
+// ── 가정 기반 ISA 정산액 (D28·D29·D31) ──
+//
+// 원금·수익률·기간을 골라 **총수익이 비과세 한도금액과 정확히 같아지게** 둔다. 그러면
+// 기대값이 룰셋 값 하나에서 나오고 한도가 바뀌어도 이 블록이 뜻을 잃지 않는다.
+
+const GENERAL_RATE = confirmedRule('isa.benefit.quantification').value.statable_amounts.find(
+  (item) => item.id === 'rate_gap',
+).income_tax.general;
+const TAX_FREE_LIMIT = confirmedRule('isa.tax_free_limit').value.brackets.find(
+  (b) => (b.prev_total_salary_max_krw ?? null) === null && (b.prev_global_income_max_krw ?? null) === null,
+).limit_krw;
+const MIN_CONTRACT_YEARS = confirmedRule('isa.account.requirements').value.min_contract_years;
+
+/** 소득세 + 지방세. 엔진이 다른 곳에서 쓰는 두 단계와 같다. */
+const withSurtax = (amount, rate) => {
+  const incomeTax = Math.floor(amount * rate);
+  return incomeTax + Math.floor(incomeTax * SURTAX_RATE);
+};
+
+const ISA_YEARS = 2;
+const ISA_RETURN_RATE = 0.05;
+/** 이 원금·수익률·기간이면 총수익이 정확히 비과세 한도금액이 된다. */
+const ISA_PRINCIPAL = TAX_FREE_LIMIT / (ISA_RETURN_RATE * ISA_YEARS);
+const ISA_SETTLEMENT = withSurtax(TAX_FREE_LIMIT, GENERAL_RATE);
+
+const isaReturnRequest = (character, extra = {}) =>
+  baseRequest({
+    profile: {
+      monthly_capacity_krw: 0,
+      isa_return_assumption: {
+        annual_return_rate: ISA_RETURN_RATE,
+        income_character: character,
+        settlement_years: ISA_YEARS,
+        loss_amount_krw: null,
+        ...extra,
+      },
+    },
+    accounts: { isa: { cumulative_contribution_krw: ISA_PRINCIPAL, years_since_opening: 5 } },
+  });
+
+/** 소득 성격이 확정적일 때 — 점 하나가 나오고 구간의 두 끝이 그 점과 같다. */
+const ISA_POINT = {
+  case: 'GC-96',
+  request: isaReturnRequest('interest_dividend'),
+  expect: {
+    current: {
+      plans: {
+        max_tax_credit: {
+          allocation: { annuity_savings: 0, retirement_pension: 0, isa: 0 },
+          tax_credit: creditOf(0),
+          warning_count: 0,
+          assumption_based_isa_estimate: {
+            state: 'computed',
+            not_computable_reason_code: null,
+            // **1년치가 아니다.** 연 환산은 비과세 한도를 해마다 새로 주는 계산이 된다.
+            is_annual: false,
+            settlement_years: ISA_YEARS,
+            settlement_years_source: 'user',
+            taxable_share_min: 1,
+            taxable_share_max: 1,
+            principal_krw: ISA_PRINCIPAL,
+            total_return_krw: TAX_FREE_LIMIT,
+            taxable_income_krw: TAX_FREE_LIMIT,
+            loss_offset_applied_krw: 0,
+            net_income_krw: TAX_FREE_LIMIT,
+            tax_free_limit_krw: TAX_FREE_LIMIT,
+            comparison_side_tax_krw: ISA_SETTLEMENT,
+            isa_side_tax_krw: 0,
+            point_estimate_krw: ISA_SETTLEMENT,
+            lower_bound_krw: ISA_SETTLEMENT,
+            upper_bound_krw: ISA_SETTLEMENT,
+            axis_breakdown: {
+              loss_offset_krw: 0,
+              tax_free_krw: ISA_SETTLEMENT,
+              rate_gap_krw: 0,
+              rounding_residual_krw: 0,
+            },
+            comparison_baseline_code: 'withholding_at_general_rate',
+          },
+        },
+      },
+    },
+  },
+};
+
+/**
+ * 성격을 밝히지 않았을 때 — **점이 아니라 구간**이다. 구간의 두 끝은 조문에서 나오므로
+ * 추정이 아니고, 구간 안의 한 점을 고르는 것만이 추정이다(D31).
+ * 정산 기간도 주지 않아 룰셋의 계약기간 하한이 대체값으로 들어간다.
+ */
+const ISA_RANGE = {
+  case: 'GC-97',
+  request: isaReturnRequest('mixed_or_unknown', { settlement_years: null }),
+  expect: {
+    current: {
+      plans: {
+        max_tax_credit: {
+          allocation: { annuity_savings: 0, retirement_pension: 0, isa: 0 },
+          tax_credit: creditOf(0),
+          warning_count: 0,
+          assumption_based_isa_estimate: {
+            state: 'computed',
+            settlement_years: MIN_CONTRACT_YEARS,
+            settlement_years_source: 'ruleset_min_contract_years',
+            taxable_share_min: 0,
+            taxable_share_max: 1,
+            // 점을 낼 근거가 조문에 없다.
+            point_estimate_krw: null,
+            lower_bound_krw: 0,
+          },
+        },
+      },
+    },
+  },
+};
+
+const BLOCKS = [
+  CAP_APPLIED,
+  CAP_ZERO,
+  START_DATES,
+  START_UNKNOWN,
+  LEGAL_BASIS,
+  CREDIT_RATE_FALLBACK,
+  ISA_POINT,
+  ISA_RANGE,
+];
 
 const runBlock = (block) => checkCase(block, compute(buildRequest(block), rulesets));
 
@@ -230,6 +437,9 @@ const setPath = (block, path, value) => {
 
 const P = (planId, ...rest) => ['expect', 'current', 'plans', planId, ...rest];
 const S = (account, key) => ['expect', 'current', 'pension_withdrawal_start', account, key];
+const L = (ruleId, key) => ['expect', 'current', 'legal_basis', ruleId, key];
+const CR = (key) => ['credit_rate', key];
+const E = (...rest) => P('max_tax_credit', 'assumption_based_isa_estimate', ...rest);
 
 const UNCAPPED = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
 
@@ -272,6 +482,63 @@ const INJECTIONS = [
   { via: 'compare', block: START_UNKNOWN, name: 'years_until_earliest_start', path: S('retirement_pension', 'years_until_earliest_start'), value: 0, mentions: ['GC-93', 'years_until_earliest_start'] },
   { via: 'compare', block: START_UNKNOWN, name: 'reason_code', path: S('retirement_pension', 'reason_code'), value: 'other_reason', mentions: ['GC-93', 'reason_code'] },
   { via: 'format', block: START_UNKNOWN, name: 'computable:false + 날짜', path: S('retirement_pension', 'earliest_start_date'), value: '2099-01-01', token: 'computable:false' },
+
+  // ── 규칙별 근거·미확인 건수 (D30) ──
+  // **이 여덟 줄이 계약 5.7.1절의 첫 번째 방어선이 실제로 무는지를 시험한다.**
+  // 건수·위치·유무를 **어긋나지 않게** 함께 올린다 — 형식만 통과하고 대조가 무는지를 본다.
+  { via: 'compare', block: LEGAL_BASIS, name: 'uncertainty_note_count', path: ['expect', 'current', 'legal_basis', 'age.reckoning.reference_date'], value: { has_uncertainty_note: true, uncertainty_note_count: AGE_UNCERTAINTY.length + 1, uncertainty_paths: [...AGE_UNCERTAINTY.map((n) => n.path), 'value.one_more'] }, mentions: ['GC-94', 'age.reckoning.reference_date', '미확인 건수'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'uncertainty_paths', path: L('age.reckoning.reference_date', 'uncertainty_paths'), value: AGE_UNCERTAINTY.map(() => 'value.somewhere_else'), mentions: ['GC-94', '미확인 표시의 위치'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'uncertainty_kinds', path: L('age.reckoning.reference_date', 'uncertainty_kinds'), value: ['value_absent'], mentions: ['GC-94', '미확인 표시의 종류'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'legal_basis.status', path: L('age.reckoning.reference_date', 'status'), value: '개정예고', mentions: ['GC-94', 'status'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'legal_basis.bill_stage', path: L('age.reckoning.reference_date', 'bill_stage'), value: '입법예고', mentions: ['GC-94', 'bill_stage'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'legal_basis.applied_to', path: L('age.reckoning.reference_date', 'applied_to'), value: ['plans[].allocations'], mentions: ['GC-94', '쓰인 출력 경로'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'present (실렸는데 아니라고 적음)', path: ['expect', 'current', 'legal_basis', 'age.reckoning.reference_date'], value: { present: false }, mentions: ['GC-94', '근거 실림 여부'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'present (안 실렸는데 실렸다고 적음)', path: ['expect', 'current', 'legal_basis', 'pension.credit.isa_transfer.extra_limit'], value: { present: true }, mentions: ['GC-94', '근거 실림 여부'] },
+  // 건수와 유무를 한쪽만 고치면 대조까지 가기 전에 형식이 문다.
+  { via: 'format', block: LEGAL_BASIS, name: 'has_uncertainty_note만 뒤집기', path: L('age.reckoning.reference_date', 'has_uncertainty_note'), value: false, token: 'has_uncertainty_note' },
+  { via: 'format', block: LEGAL_BASIS, name: '건수만 0으로', path: L('age.reckoning.reference_date', 'uncertainty_note_count'), value: 0, token: 'uncertainty_note_count' },
+  { via: 'format', block: LEGAL_BASIS, name: '모르는 표시 종류', path: L('age.reckoning.reference_date', 'uncertainty_kinds'), value: ['made_up_kind'], token: '모르는 표시' },
+  { via: 'format', block: LEGAL_BASIS, name: 'present:false인데 내용을 주장', path: ['expect', 'current', 'legal_basis', 'pension.credit.isa_transfer.extra_limit'], value: { present: false, uncertainty_note_count: 1 }, token: 'present:false' },
+
+  // ── 공제율을 **무엇으로** 쟀는가 (D27·D30) ──
+  // 비율만 맞고 축이 틀린 상태를 잡는다. 25% 과대였던 결함이 정확히 이 자리였다.
+  { via: 'compare', block: LEGAL_BASIS, name: 'credit_rate.measured_amount', path: CR('measured_amount'), value: LOW_SALARY + 1, mentions: ['GC-94', '공제율', 'measured_amount'] },
+  { via: 'compare', block: LEGAL_BASIS, name: 'credit_rate.basis (축 자체를 바꿈)', path: ['credit_rate'], value: { income_tax: CREDIT_RATE, basis: 'global_income', measured_amount: LOW_SALARY, fallback_applied: false, fallback_direction: null }, mentions: ['GC-94', '공제율', 'basis'] },
+  { via: 'compare', block: CREDIT_RATE_FALLBACK, name: 'credit_rate.fallback_applied (대체 적용 여부)', path: ['credit_rate'], value: { basis: 'total_salary', measured_amount: 1, fallback_applied: false, fallback_direction: null }, mentions: ['GC-95', '공제율'] },
+  { via: 'format', block: CREDIT_RATE_FALLBACK, name: 'basis와 fallback_applied가 어긋남', path: CR('fallback_applied'), value: false, token: 'fallback_applied' },
+  { via: 'format', block: CREDIT_RATE_FALLBACK, name: '대체 구간인데 잰 금액이 있음', path: CR('measured_amount'), value: 1, token: 'measured_amount가 null이 아니다' },
+  { via: 'format', block: LEGAL_BASIS, name: '축은 있는데 잰 금액이 없음', path: CR('measured_amount'), value: null, token: '무엇을 쟀는지가 없다' },
+  { via: 'format', block: LEGAL_BASIS, name: '모르는 판정 축', path: CR('basis'), value: 'converted_salary', token: '모르는 판정 축' },
+
+  // ── 가정 기반 ISA 정산액 (D28·D29·D31) ──
+  // 구간으로 내야 하는 입력에 점을 적으면 대조가 문다 — 근거 없는 점을 고른 것이다.
+  { via: 'compare', block: ISA_RANGE, name: 'point_estimate_krw (구간에 점을 적음)', path: E('point_estimate_krw'), value: 0, mentions: ['GC-97', 'ISA 정산액', 'point_estimate_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'principal_krw', path: E('principal_krw'), value: ISA_PRINCIPAL + 1, mentions: ['GC-96', 'principal_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'total_return_krw', path: E('total_return_krw'), value: TAX_FREE_LIMIT + 1, mentions: ['GC-96', 'total_return_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'taxable_income_krw', path: E('taxable_income_krw'), value: TAX_FREE_LIMIT + 1, mentions: ['GC-96', 'taxable_income_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'net_income_krw', path: E('net_income_krw'), value: TAX_FREE_LIMIT - 1, mentions: ['GC-96', 'net_income_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'tax_free_limit_krw', path: E('tax_free_limit_krw'), value: TAX_FREE_LIMIT + 1, mentions: ['GC-96', 'tax_free_limit_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'comparison_side_tax_krw', path: E('comparison_side_tax_krw'), value: ISA_SETTLEMENT + 1, mentions: ['GC-96', 'comparison_side_tax_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'isa_side_tax_krw', path: E('isa_side_tax_krw'), value: 1, mentions: ['GC-96', 'isa_side_tax_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'loss_offset_applied_krw', path: E('loss_offset_applied_krw'), value: 1, mentions: ['GC-96', 'loss_offset_applied_krw'] },
+  // 축 둘을 합이 유지되게 옮긴다 — 합만 맞으면 통과하는 상태를 만들지 않는다.
+  { via: 'compare', block: ISA_POINT, name: 'axis_breakdown (합은 같고 갈래가 틀림)', path: E('axis_breakdown'), value: { loss_offset_krw: ISA_SETTLEMENT, tax_free_krw: 0, rate_gap_krw: 0, rounding_residual_krw: 0 }, mentions: ['GC-96', 'ISA 정산액 축'] },
+  { via: 'compare', block: ISA_RANGE, name: 'upper_bound_krw', path: E('upper_bound_krw'), value: 1, mentions: ['GC-97', 'upper_bound_krw'] },
+  { via: 'compare', block: ISA_RANGE, name: 'lower_bound_krw', path: E('lower_bound_krw'), value: 1, mentions: ['GC-97', 'lower_bound_krw'] },
+  { via: 'compare', block: ISA_RANGE, name: 'settlement_years (대체값)', path: E('settlement_years'), value: MIN_CONTRACT_YEARS + 1, mentions: ['GC-97', 'settlement_years'] },
+  { via: 'compare', block: ISA_RANGE, name: 'settlement_years_source', path: E('settlement_years_source'), value: 'user', mentions: ['GC-97', 'settlement_years_source'] },
+  { via: 'compare', block: ISA_RANGE, name: 'taxable_share_max', path: E('taxable_share_max'), value: 0, mentions: ['GC-97', 'taxable_share_max'] },
+  { via: 'compare', block: ISA_POINT, name: 'state', path: E(), value: { state: 'not_computable' }, mentions: ['GC-96', 'state'] },
+  // 구간 케이스에 점을 적으면 "근거 없는 점을 골랐다"가 된다. 대조가 그것을 문다.
+  { via: 'compare', block: ISA_POINT, name: 'point_estimate_krw를 null로 (점을 지움)', path: E('point_estimate_krw'), value: null, mentions: ['GC-96', 'point_estimate_krw'] },
+  { via: 'format', block: ISA_POINT, name: 'is_annual:true', path: E('is_annual'), value: true, token: '1년치가 아니다' },
+  { via: 'format', block: ISA_POINT, name: '축의 합이 상한과 다름', path: E('axis_breakdown', 'tax_free_krw'), value: ISA_SETTLEMENT + 1, token: '네 축의 합' },
+  { via: 'format', block: ISA_POINT, name: '상한만 바꿔 축의 합이 깨짐', path: E('upper_bound_krw'), value: ISA_SETTLEMENT + 1, token: '네 축의 합' },
+  { via: 'format', block: ISA_POINT, name: '점이 구간의 끝과 다름', path: E('lower_bound_krw'), value: 0, token: 'point_estimate_krw' },
+  { via: 'format', block: ISA_RANGE, name: '하한이 상한보다 큼', path: E(), value: { state: 'computed', lower_bound_krw: 1, upper_bound_krw: 0 }, token: 'lower_bound_krw' },
+  { via: 'format', block: ISA_POINT, name: 'computed인데 못 낸 이유가 있음', path: E('not_computable_reason_code'), value: 'isa_tax_free_limit_unknown', token: 'not_computable_reason_code' },
+  { via: 'format', block: ISA_RANGE, name: '금액 없는 상태인데 금액을 주장', path: E('state'), value: 'not_computable', token: '금액을 주장한다' },
+  { via: 'format', block: ISA_POINT, name: '모르는 상태 이름', path: E('state'), value: 'estimated', token: '모르는 상태' },
 ];
 
 for (const injection of INJECTIONS) {
@@ -316,6 +583,11 @@ const TYPOS = [
   { where: '시나리오', path: ['expect', 'current', 'pension_withdrawal_starts'], block: START_DATES },
   { where: '개시 시점 계좌', path: ['expect', 'current', 'pension_withdrawal_start', 'isa'], block: START_DATES },
   { where: '개시 시점 항목', path: S('retirement_pension', 'earliest_start'), block: START_DATES },
+  { where: '근거 목록', path: ['expect', 'current', 'legal_basises'], block: LEGAL_BASIS },
+  { where: '근거 항목', path: L('age.reckoning.reference_date', 'uncertainty_note_counts'), block: LEGAL_BASIS },
+  { where: '공제율', path: CR('basis_code'), block: LEGAL_BASIS },
+  { where: 'ISA 정산액', path: E('upper_bound'), block: ISA_POINT },
+  { where: 'ISA 정산액 축', path: E('axis_breakdown', 'tax_free'), block: ISA_POINT },
 ];
 
 for (const { where, path, block } of TYPOS) {
@@ -331,12 +603,20 @@ for (const { where, path, block } of TYPOS) {
 // ── 4. 빈 객체는 아무것도 주장하지 않는다 ────────────────────────────────────
 
 test('빈 객체로 적으면 형식 검사가 거절한다', () => {
-  for (const path of [
-    P('max_tax_credit', 'tax_liability_cap'),
-    ['expect', 'current', 'pension_withdrawal_start'],
-    ['expect', 'current', 'pension_withdrawal_start', 'retirement_pension'],
-  ]) {
-    const errors = validateBlock(setPath(START_DATES, path, {}), 'GC-92');
+  const cases = [
+    [START_DATES, P('max_tax_credit', 'tax_liability_cap')],
+    [START_DATES, ['expect', 'current', 'pension_withdrawal_start']],
+    [START_DATES, ['expect', 'current', 'pension_withdrawal_start', 'retirement_pension']],
+    // 이번에 넓힌 세 층에도 같은 못을 박는다 — 주장처럼 보이면서 아무것도 보지 않는 상태.
+    [LEGAL_BASIS, ['expect', 'current', 'legal_basis']],
+    [LEGAL_BASIS, ['expect', 'current', 'legal_basis', 'age.reckoning.reference_date']],
+    [LEGAL_BASIS, ['credit_rate']],
+    [ISA_POINT, E()],
+    [ISA_POINT, E('axis_breakdown')],
+  ];
+
+  for (const [block, path] of cases) {
+    const errors = validateBlock(setPath(block, path, {}), block.case);
     assert.ok(
       errors.some((e) => e.includes('빈 객체')),
       `빈 객체가 통과했다: ${path.join('.')}\n${errors.join('\n')}`,

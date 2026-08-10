@@ -11,6 +11,11 @@ inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json
 open_questions:
+  - "**계약을 5.1.0(minor)으로 올렸다**(0.9절). `web-dev`의 목은 major가 같아 **멈추지 않고 계속 동작한다** — 그것이 이번 판단의 목적이다. 다만 새 입력을 화면이 받기 시작하면 목도 `Plan.assumption_based_isa_estimate`·`echo.isa_return_affects`·`echo.isa_return_assumption` 셋을 내야 하고, **`isa_return_affects`는 네 값이 전부 `false`인 고정 객체여야 한다**(4.2절)."
+  - "**수익률 기반 금액 표시가 금융투자업·유사투자자문에 닿는지는 여전히 검토된 적이 없다.** D28이 면제하지 않는다고 적었고 D31이 그 상태로 켜기로 했다. 계약이 진 것은 D28의 선 셋을 자료형으로 강제하는 것까지이고(0.10절), **그 검토를 대신하지 못한다.** 검토 결과가 나오면 되돌리는 길은 `options.assumption_based_isa_estimate: \"suppress\"` 하나다(0.11절)."
+  - "**`tax-domain`의 RF-7(의무가입기간 전 해지 시 혜택 0)은 엔진이 낼 수 없다.** 해지는 사실이 아니라 미래의 선택이고 요청에 그 입력이 없다. `fund_use_horizon: within_isa_lock_in`으로 대신 판정하면 침묵에서 답을 만드는 것이 되어 D14에 어긋난다(5.14절). **정답지가 그 케이스를 금액으로 주장할 자리가 없다** — 입력을 새로 받을지는 관리자·`product-planner` 판정이다."
+  - "**원금을 잔액이 아니라 누적 납입액으로 본다**(5.14절 `principal_basis_code`). 요청에 ISA 평가금액이 없어 이미 난 운용수익이 빠지고, 그만큼 결과가 과소다. 입력을 늘릴지는 D13(입력 15개가 완료율을 갉아먹는다)과 저울에 올려야 한다."
+  - "**어휘 빚 목록을 등식에서 상한으로 바꿨다**(`golden-cases.test.mjs`). `tax-domain`이 값을 갖고도 적을 수 없던 상태를 푼 것이고, 대가로 「갚은 뒤 되돌린 것」이 목록에 가려 조용히 지나갈 수 있다. 목록을 회차마다 실제로 줄이는 것이 그 구멍의 유일한 방어선이다."
   - "**계약을 5.0.0(major)으로 올렸다**(0.6절). 근거 셋 — 새 필수 필드(`profile.has_non_wage_global_income_current_year`), `plans` 길이 상한 3→4, `credit_rate_bracket`의 비율이 다른 축에서 나올 수 있게 된 의미 변경. `src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다. **`src/web/engine/mock-engine.js`가 `4.0.0`에 맞춰져 있으므로 web-dev의 동기화가 필요하다** — 새 필수 입력 하나, 새 배분안 하나, 새 필드 넷(`unallocated_breakdown`·`pension_combined_credit_remaining_after_plan_krw`·`facts`·`uncertainty_notes`)."
   - "**골든 케이스 47건은 근로소득만 있는 사용자를 전제로 산출됐고, 실행기가 그 전제를 명시해 채운다**(`golden-block.mjs`의 `fillContractDefaults`). 그 분기에서 판정 축이 총급여액 그대로라 47건의 기대값이 한 원도 움직이지 않았다. **종합소득이 있는 분기와 금액을 모르는 분기의 정답지가 없다** — 결함이 25% 과대였던 바로 그 축이다. `tax-domain`이 산출해야 한다."
   - "**실행기가 골든 블록에 `options.plan_variants`를 채워 기존 세 안만 요청한다.** 47건은 세 안 체제에서 산출됐고 네 번째 안은 `plan_count`를 바꾼다. 기대값을 구현에 맞춰 고치지 않기 위한 조치이며, 감추는 것과 감추지 않는 것을 함수 주석에 적었다. **새 안의 정답지도 `tax-domain`의 몫이다.**"
@@ -42,10 +47,11 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `5.0.0`.**
+**현재 계약 버전: `5.1.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
+| `5.1.0` | **D28·D29·D31 — 수익률을 받는다.** 요청에 `profile.isa_return_assumption`(선택)과 `options.assumption_based_isa_estimate`(선택)가 붙고, 응답에 `Plan.assumption_based_isa_estimate` · `echo.isa_return_assumption` · `echo.isa_return_affects`가 추가된다. 안내 코드 6건·가정 코드 7건이 늘었다. **왜 minor인지는 0.9절** |
 | `5.0.0` | **D26·D27.** 공제율 판정 축을 두 물음으로 나눴다 — `profile.has_non_wage_global_income_current_year`가 **필수로** 들어오고 `profile.current_year_global_income_krw`가 선택으로 붙는다. 배분안이 셋에서 **넷**으로 늘고(`pension_contribution_limit_fill`), `Plan`에 `unallocated_breakdown`·`pension_combined_credit_remaining_after_plan_krw`가 추가되며, `NonQuantifiedEffect`에 `facts`·`headroom_shared_with`가, `LegalBasisEntry`에 `uncertainty_notes`가 붙는다. **왜 major인지는 0.6절** |
 | `4.0.0` | **세액 한도·연금수령 개시·개시 가능 시점·퇴직급여 입금.** `tax-domain` 6차 조사의 확정 규칙 6건을 엔진이 읽는다. 요청에 `profile.birth_date`·`profile.prior_year_tax`·`accounts.*.annuity_start_status`가 **필수로** 들어오고 `profile.age_years`가 **사라진다.** 응답에 `pension_credit_tax_liability_cap`·`pension_withdrawal_start`·`DeterministicBenefit`의 자르기 전후 금액이 추가된다. **왜 major인지는 0.5절** |
 | `3.3.1` | **D18 — 조건이 두 곳에 적혀 어긋난 것의 정정, 그리고 재발 구조를 없앤 개정.** 8.4절 맺음 문장이 `isa_lock_in_already_elapsed`의 조건을 8.2절과 다르게 적고 있어 좁혀서 8.2절에 맞췄다. 조건을 **한 곳에만** 적게 하는 규약을 8.0절로 세우고 `engine-design.md` 3.2·3.3절의 중복 서술을 참조로 바꿨다. 확정 시나리오의 `tie_break` 값을 5.6절에 명시했다. **엔진 동작은 한 줄도 바뀌지 않았다** — 서술만 정리했으므로 patch다 |
@@ -162,6 +168,51 @@ open_questions:
 **결론을 내는 쪽에도 확인하지 못한 것이 남는다.** 다목(농어민)은 시행령 위임이고 입력이 수집되지 않는다. 그래서 두 안내 모두 `params.unverifiable_bracket_ids`에 **어느 목을 확인하지 못했는지**를 싣는다. 화면은 그 목록으로 문장을 누그러뜨릴 수 있다.
 
 **한정이 사라지면 결론이 되살아난다.** 엔진은 `brackets_statutory.items`에서 `restriction`·`delegated`를 가진 목을 세고, **하나도 없으면** 총급여만으로 두 방향 다 결론짓는다. 조문이 정비되면 코드를 고치지 않아도 따라간다. 이 조건이 실제로 무는지는 결함 주입 테스트가 확인한다.
+
+### 0.9 왜 `5.1.0`(minor)인가 — 이번에는 조용히 틀릴 길이 없다
+
+**`5.0.0`·`4.0.0`을 major로 올린 근거는 언제나 하나였다** — 옛 소비자가 아무 신호 없이 **다른 숫자**를 계속 내보내는 상태를 만들지 않는 것(0.5·0.6절). 이번 변경에는 그 경로가 없다.
+
+- **새 입력이 전부 선택이고, 보내지 않으면 응답의 기존 필드가 한 원도 달라지지 않는다.** `profile.isa_return_assumption`이 `null`이면 새 규칙군을 **한 건도 읽지 않으므로** `legal_basis`까지 종전과 같다.
+- **기존 필드의 의미가 바뀌지 않는다.** 새 금액은 `Plan.assumption_based_isa_estimate`라는 **새 자리**에만 실리고, `DeterministicBenefit`은 그대로다. 두 값을 같은 축에 놓지 말라는 것이 이 필드를 새로 만든 이유다.
+- **계약이 거둔 보장이 없다.** 0.1절이 major를 고른 이유(부호 보장을 거둠)에 해당하는 것이 이번에는 없다.
+
+**그러면 새 입력을 보내는 화면이 잘못 다룰 위험은 어떻게 막는가.** 자료형으로 막는다.
+
+- `echo.isa_return_affects`의 네 `false`가 "이 입력은 배분·공제액·순서·경고를 바꾸지 않는다"를 선언하고, 불변식 I37이 프로필군 전체에서 그 선언과 실제 동작을 대조한다.
+- `Plan.assumption_based_isa_estimate.is_annual`이 `false` **상수**다. 다른 모든 금액이 연간인 화면에서 이 값만 성질이 다르다는 것을 규약이 아니라 자료형이 말한다.
+- 소득 성격이 확정적이지 않으면 `point_estimate_krw`가 `null`이고 두 끝만 나간다. **점을 낼 수 없을 때 점을 낼 자리가 없다.**
+
+**두 곳에서 기존 출력이 줄어드는 것은 의도이고, 조건이 새 입력을 보낸 경우로 한정된다.** 가정을 보내면 (a) `assumptions`에서 `isa_benefit_not_quantified`가 빠지고 (b) `non_quantified_effects`에서 `isa_tax_free_headroom`이 빠진다. 둘 다 "ISA 효과는 금액으로 낼 수 없다"는 진술인데 **바로 그 금액이 나가는 응답에서는 거짓**이다. 규칙 `isa.benefit.quantification`이 `quantifiable_conditionally: true`로 그 구분을 이미 적어 두었다. 새 입력을 보내지 않는 소비자에게는 둘 다 그대로 나간다.
+
+**채택하지 않은 대안: major로 올려 `web-dev`의 목을 멈추기.** 기각한다. major의 값은 **조용한 오답을 시끄러운 실패로 바꾸는 것**인데 이번에는 조용한 오답의 경로가 없고, 멈추는 대가는 `5.0.0`에 맞춰 진행 중인 화면 작업을 근거 없이 중단시키는 것이다. **major를 근거 없이 쓰면 다음에 정말 필요할 때 그 신호가 값을 잃는다.**
+
+### 0.10 수익률을 들이면서 지킨 선 셋 (D28·D31)
+
+소유자가 **규제 검토 없이 표시를 켜기로 결정했다**(D31 ②). 자본시장법의 투자자문업·유사투자자문업은 이 조직이 한 번도 검토한 적이 없고, 이 결정은 그 상태로 출시하는 것을 뜻한다. **그래서 D28이 그은 선 셋이 전보다 중요하고, 계약이 그 셋을 자료형으로 진다.**
+
+| D28의 선 | 계약이 진 자리 |
+|---|---|
+| ① 목적함수를 오염시키지 않는다 | `echo.isa_return_affects`(4.2절)의 네 `false` + 불변식 I37 |
+| ② 가정을 값과 같은 화면에 붙인다 | `echo.isa_return_assumption` · 가정 코드 7건(8.3절) · 정산액 안의 `settlement_years_source`·`comparison_baseline_code`·`principal_basis_code`·`return_accrual_code` |
+| ③ 확정된 것과 가정한 것을 화면에서 구분한다 | 필드 이름에 `benefit`을 쓰지 않고 `assumption_based`를 넣었다 · `is_annual: false` 상수 · 점과 구간의 분리 |
+
+**기본값을 만들지 않는 것이 남은 방어선 전부다.** 이 서비스가 내는 것은 「사용자가 제시한 수익률을 조문에 넣은 결과」이지 수익률 전망이 아니고, 그 구분이 무너지는 순간 남는 것이 없다. 그래서 `annual_return_rate`에 기본값이 없고, 객체를 보내지 않으면 계산 자체를 하지 않는다. **화면이 이 값을 제안하거나 미리 채우면 계약을 지켜도 선이 무너진다** — 그 부분은 계약이 막을 수 없고 `web-dev`·`designer`가 진다(10절).
+
+### 0.11 되돌리는 길 — 계산과 입력은 두고 표시만 끈다 (D31)
+
+관리자가 "규제 검토를 나중에 하기로 하면 표시를 끄는 것으로 되돌아간다"고 적었고, 그것이 계약에서 어떻게 표현되는지를 이 유닛이 정했다.
+
+**`options.assumption_based_isa_estimate`를 `"suppress"`로 두는 것 하나다.** 그때 엔진은
+
+- 요청을 **그대로 받는다.** 검증도 같고 오류 코드도 같다.
+- 계산을 **그대로 돌린다.** 근거 규칙도 그대로 읽어 `legal_basis`에 싣는다.
+- `Plan.assumption_based_isa_estimate`의 **금액만 전부 `null`로** 낸다. `state`가 `"display_suppressed"`이므로 화면은 "값이 없다"와 "값을 감췄다"를 구별한다.
+- 안내 `isa_return_estimate_display_suppressed`를 낸다.
+
+**왜 필드를 통째로 `null`로 두지 않았나.** D19가 "외부 의존이 확정되지 않아 기능을 비워 둘 때 그 빈 자리는 스스로를 드러내야 한다"를 일반 원칙으로 세웠다. 통째 `null`이면 "묻지 않았다"·"낼 수 없다"·"껐다" 셋이 한 값으로 뭉치고, 그 상태가 배포까지 살아남는다. **`state` 열거형은 `prior_year_tax.state`에서 이미 쓴 형태이고 새 패턴이 아니다.**
+
+**왜 계산까지 끄지 않았나.** 관리자가 정한 되돌림의 형태가 "계산과 입력은 두고 표시만"이다. 계산을 끄면 코드 경로가 갈라져 회귀 테스트가 두 벌이 되고, 다시 켤 때 켜지지 않는 것이 이 저장소가 D18에서 겪은 사고다(설계는 완벽했고 아무것도 전송되지 않았다).
 
 ### 0.4 세제상 동점일 때의 순서 원칙 (게이트 4 후속)
 
@@ -281,6 +332,7 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 | `fund_use_horizon` | `"within_isa_lock_in"` \| `"before_pension_age"` \| `"at_or_after_pension_age"` \| `"unknown"` | — | **필수** | 이 자금을 언제 쓸 계획인가. **배분 금액과 세액공제액을 바꾸지 않는다.** 배분안의 순서와 경고만 바꾼다(3.1절 아래 설명). 값을 모르면 `"unknown"`을 보낸다 — **엔진이 기본값을 만들지 않는다.** 목록 밖 값이면 `invalid_enum` 오류 |
 | `monthly_capacity_krw` | integer | 원/월 | 필수 | 월 납입 여력. 0 이상. **0은 유효한 입력이다**(오류가 아니다) |
 | `months_remaining_in_tax_year` | integer \| null | 월 | 선택 | 해당 과세연도에 남은 납입 개월수. 1 이상 12 이하. **null이면 12로 본다**(과세연도 전체를 납입한다는 가정). 이 기본값 적용 사실은 `assumptions`에 실린다 |
+| `isa_return_assumption` | IsaReturnAssumption \| null | — | 선택 | 수익률 가정(D28). 3.6절. **null이면 ISA 금액을 한 원도 내지 않고 `isa_return_assumption_not_supplied` notice를 낸다.** 배분 금액·세액공제액·배분안 순서·경고를 바꾸지 않는다 — `echo.isa_return_affects`가 그 선언이다 |
 
 연간 예산 = `monthly_capacity_krw × months_remaining_in_tax_year`.
 
@@ -383,12 +435,40 @@ accounts.isa               : IsaAccountState
 
 **E2·E4가 같은 규약에서 나온다** — 화면이 뺄셈을 시작하면 그 순간 세법 판단이 화면 코드로 새어 들어간다. 그래서 두 항과 그 차이를 엔진이 전부 낸다.
 
+### 3.6 `IsaReturnAssumption` — 수익률과 그 위에 얹히는 것들 (D28·D29)
+
+**객체 자체가 선택이고, 보내지 않으면 ISA 금액을 내지 않는다.** 화면이 수익률을 제안하거나 미리 채우면 「사용자가 제시한 수익률을 조문에 넣은 결과」라는 구분이 무너진다 — 규제 검토를 건너뛴 지금 그 구분이 남은 방어선 전부다(0.10절).
+
+**객체를 보냈으면 수익률과 소득 성격이 **둘 다** 필수다.** 성격 없이 수익률만 받으면 국내 상장주식만 담은 사용자에게 **없는 혜택을 있다고** 말하게 된다 — 과대 방향이고 이 서비스가 가장 경계해 온 형태다. `tax-domain`이 조문으로 낸 결론이며(리포트 18.1절), 계약이 그것을 자료형으로 강제한다.
+
+| 필드 | 자료형 | 단위 | 필수 | 설명 / null일 때 |
+|---|---|---|---|---|
+| `annual_return_rate` | number | 비율(0~1, 예: `0.07`) | **필수** | 사용자가 제시한 연 수익률. **퍼센트가 아니다.** 0 이상. **기본값이 없다** — 없으면 `missing_required`, 음수면 `negative_value`(음의 수익률이 아니라 `loss_amount_krw`가 손실을 받는다). `0`은 유효한 입력이고 결과는 0이다 |
+| `income_character` | `"interest_dividend"` \| `"listed_equity_capital_gain"` \| `"mixed_or_unknown"` | — | **필수** | 수익이 **어떤 형태로 들어오는가.** 자산군이 아니다 — 아래 표. 목록 밖 값이면 `invalid_enum` |
+| `settlement_years` | integer \| null | 년 | 선택 | 정산 기간(계약기간). 1 이상. **null이면 룰셋의 계약기간 하한을 쓰고 `isa_settlement_years_defaulted_to_min_contract_years` 가정을 낸다. 연수를 계약에 적지 않는다** |
+| `loss_amount_krw` | integer \| null | 원(기간 합계) | 선택 | 통산 대상 손실의 합계. 0 이상. **null이면 0으로 본다** — 손익통산 축이 0이 되어 **과소** 방향이다. 지어내면 과대가 된다. `isa_loss_assumed_zero` 가정이 나간다 |
+
+**`income_character`의 세 값 — 선택지가 정하는 것은 비율의 값이 아니라 구간이다.**
+
+| 값 | 사용자가 답하는 것 | 결과의 형태 |
+|---|---|---|
+| `interest_dividend` | 이자·분배금·배당처럼 **받는 형태**로 들어온다 (예금·적금 이자, 채권 이자, 펀드·ETF 분배금, 주식 배당금) | **점 하나.** 조문으로 확정된다 |
+| `listed_equity_capital_gain` | 국내 상장주식의 **가격 상승**으로 들어온다 | **구간.** 점을 낼 수 없다 |
+| `mixed_or_unknown` | 섞여 있거나 아직 정하지 않았다 | **구간.** 점을 낼 수 없다 |
+
+**각 값에 대응하는 과세 비율은 계약이 정하지 않는다.** 룰셋 `isa.benefit.income_character`의 `what_to_ask_instead.options[].s_range`가 정하고 엔진이 그것을 읽는다. 조문이 정비되어 그 구간이 바뀌면 엔진이 코드 수정 없이 따라간다. **계약이 고정하는 것은 문자열 셋뿐이고**, 두 목록이 갈라지는 것은 `ruleset-driven.test.mjs`가 본다.
+
+**`mixed_or_unknown`을 둔 이유는 `fund_use_horizon`의 `unknown`과 같다** — 기본값을 만들면 사용자가 밝히지 않은 사정을 엔진이 대신 정한다.
+
+**「해외주식」을 선택지 이름으로 쓰지 않는다.** ISA에 담을 수 있는 자산의 범위를 정하는 조문(조특법 §91조의18 ③ 3호)을 `tax-domain`이 1차 출처로 확인하지 못했고, 그 제한의 일부는 세법이 아니라 자본시장 관련 법령에서 나올 수 있다(리포트 18.8절 3).
+
 ### 3.4 `Options`
 
 | 필드 | 자료형 | 필수 | 설명 / null일 때 |
 |---|---|---|---|
 | `plan_variants` | string[] \| null | 선택 | 받고 싶은 배분안 id 목록. null이면 엔진 기본 집합(5.2절 셋 전부). 알 수 없는 id는 `unknown_plan_variant` 오류 |
 | `include_legal_basis` | boolean \| null | 선택 | null이면 `true`. **`false`로 두어도 화면에서 근거 표시를 뺄 수는 없다** — 헌장 고지 요소 3은 필수다. 이 옵션은 테스트·스냅샷 용도다 |
+| `assumption_based_isa_estimate` | `"include"` \| `"suppress"` \| null | 선택 | null이면 `"include"`. **D31이 남긴 되돌리는 길이다** — `"suppress"`면 요청도 계산도 그대로 두고 `Plan.assumption_based_isa_estimate`의 **금액만** `null`이 되며 `state`가 `"display_suppressed"`가 된다. 경위와 왜 통째 `null`이 아닌지는 0.11절. 목록 밖 값이면 `invalid_enum` |
 
 **제거된 필드.** `1.0.0`의 `profile.risk_profile`은 `2.0.0`에서 제거됐다. 게이트 2 D10 결정이며, 위험 성향이 아니라 자금 사용 시점이 룰셋에 근거를 갖는 변수라는 것이 이유다. 판단 이력은 `engine-design.md` 4.2절에 남아 있다. **`risk_profile`을 보내면 무시된다** — 오류로 만들지는 않되 응답 어디에도 실리지 않는다.
 
@@ -430,6 +510,8 @@ accounts.isa               : IsaAccountState
 | `credit_rate_bracket` | CreditRateBracket | — | 어떤 공제율 구간으로, **무엇을 재서** 판정됐는지. 아래 표. 세 비율은 룰셋에서 산출된 값이며 숫자는 런타임에 정해진다 |
 | `derived_age` | DerivedAge | — | 생년월일에서 엔진이 만든 만 나이와 **그 기준일.** `{ age_years, reference_date, reference_date_from_ruleset }`. `reference_date_from_ruleset`은 항상 `false`이고, **그 `false`의 뿌리가 규칙의 부재가 아니라 규칙의 내용이다** — 아래 참고. **화면은 이 나이를 사용자에게 되비추지 않는다**(designer가 박은 프라이버시 못) |
 | `tax_liability_cap_affects` | TaxLiabilityCapEffect | — | 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지. 아래 |
+| `isa_return_assumption` | IsaReturnAssumptionEcho \| null | — | 사용자가 준 가정을 **그대로** 되돌린다. 요청에 없으면 `null`. `{ annual_return_rate, income_character, settlement_years, loss_amount_krw }`이고 **네 값 다 요청값 그대로다** — 실제로 적용된 정산 기간은 여기가 아니라 `Plan.assumption_based_isa_estimate.settlement_years`에 있다. 「무엇을 주었는가」와 「무엇을 썼는가」를 한 칸에 뭉치지 않는다. **헌장 고지 요소 4를 화면이 지킬 재료다** |
+| `isa_return_affects` | IsaReturnEffect | — | 수익률 가정이 무엇을 바꾸지 **않는지**. 아래 |
 
 **`reference_date_from_ruleset`이 `false`인 이유 (7차에 다시 씀).** 룰셋에 `age.reckoning.reference_date`가 생겼고 **그 규칙의 결론이 "단일 기준일은 존재하지 않는다"이다.** 세법이 정하는 것은 (1) 나이를 세는 방법과 (2) 각 요건이 언제 성립해야 하는가뿐이고, 요건마다 판정 시점이 다르므로 기준일을 하나의 날짜로 만들 수 없다 — 만드는 것이 오히려 틀린다. 그러므로 이 값은 규칙이 생긴 뒤에도 `false`이고, **달라진 것은 그 `false`가 이제 근거를 갖는다는 점이다.** 엔진은 그 규칙을 읽고(`legal_basis`의 `applied_to`가 `echo.derived_age.reference_date`를 가리킨다) 어느 요건이 기준일을 필요로 하는지를 8.3절의 가정에 싣는다.
 
@@ -471,6 +553,21 @@ accounts.isa               : IsaAccountState
 | `plan_ordering` | boolean | 항상 `false` |
 | `baseline_selection` | boolean | 항상 `false` |
 | `warnings` | boolean | 항상 `false` |
+
+**`IsaReturnEffect`** — **네 값이 전부 `false`인 고정 객체다.** D28이 그은 선 ①(확정 세액공제와 가정 기반 추정치를 한 목적함수에 더하지 않는다)을 규약이 아니라 **자료형과 회귀 테스트로** 강제하는 장치이고, `FundUseHorizonEffect`가 D18 때 같은 일을 해 설계를 실제로 바로잡은 전례가 있다.
+
+| 필드 | 자료형 | 값 |
+|---|---|---|
+| `allocation_amounts` | boolean | 항상 `false` |
+| `tax_credit_amounts` | boolean | 항상 `false` |
+| `plan_ordering` | boolean | 항상 `false` |
+| `warnings` | boolean | 항상 `false` |
+
+**앞의 두 선언과 달리 키가 넷이다.** `tax-domain`이 형태까지 지켜 달라고 요청한 유일한 항목이고 관리자가 그 형태 그대로 승인했다(D29 4절). `limits`·`baseline_selection`을 더하면 선언이 조금 더 넓어지지만 **승인된 형태를 이 유닛이 임의로 바꾸는 것**이 되므로 그러지 않았다. 두 축이 검사되지 않는 것은 아니다 — 불변식 I37이 `limits`와 `comparison_note_codes`까지 함께 고정한다.
+
+**수익률이 금액을 바꾸지 않는다는 보장의 범위.** `allocations`의 모든 금액, `deterministic_benefit`의 모든 금액, `limits`, `plans`의 순서와 `is_baseline`, 모든 `warnings`와 `comparison_note_codes`는 `isa_return_assumption`의 **어떤 값에서도, 그리고 그 객체를 보내지 않은 요청과도** 동일하다. 달라지는 것은 `Plan.assumption_based_isa_estimate`, `echo.isa_return_assumption`, 그리고 그 계산에 딸린 `notices`·`assumptions`·`legal_basis`뿐이다.
+
+**두 곳에서 기존 출력이 줄어든다** — 가정을 보내면 `assumptions`의 `isa_benefit_not_quantified`와 `non_quantified_effects`의 `isa_tax_free_headroom`이 빠진다. 경위는 0.9절이고, **선언과 동작이 어긋나지 않게 하는 조치**이지 금액을 바꾸는 것이 아니다.
 
 **세액 한도가 배분을 바꾸지 않는다는 보장.** 한도는 **공제액만** 자른다. `allocations`의 모든 금액, `limits`, `plans`의 순서와 `is_baseline`은 `prior_year_tax`의 어떤 값에서도 동일하다. 근거는 §61 ③이 밀려난 금액을 "연금계좌세액공제를 받지 아니한 것으로" 의제하고 시행령 §118의3이 **그 납입액을 이후 과세기간으로 전환 신청할 수 있게** 하기 때문이다 — 넣은 돈이 사라지지 않으므로 "한도가 0이면 넣지 마라"는 세법의 결론이 아니라 제품 판단이고, 엔진이 그 판단을 지어내지 않는다.
 
@@ -590,6 +687,7 @@ accounts.isa               : IsaAccountState
 | `deterministic_benefit` | DeterministicBenefit | — | 5.6절 |
 | `delta_vs_baseline_krw` | integer | 원/연 | 기본안(`plans[0]`) 대비 세액공제액 차이. **기본안은 언제나 0. 다른 안은 음수·0·양수 모두 가능하다.** 기본안이 `max_tax_credit`일 때만 나머지가 전부 0 이하다 — 그때만 기본안이 세액공제액을 최대화하기 때문이다. `fund_use_horizon`이 기본안을 다른 안으로 옮기면(`comparison_note_codes`에 `baseline_reordered_by_fund_use_horizon`) 양수가 나온다. **부호를 "포기한 금액"으로 읽지 마라** — 경위는 0.1절 |
 | `non_quantified_effects` | NonQuantifiedEffect[] | — | 금액으로 낼 수 없는 효과. 5.6절 |
+| `assumption_based_isa_estimate` | AssumptionBasedIsaEstimate \| null | — | **가정 기반 ISA 정산액.** 5.14절. 요청에 `profile.isa_return_assumption`이 없으면 `null`. **`deterministic_benefit`과 더하거나 같은 축에 놓으면 안 된다** — 앞은 조문이 그 과세연도에 대해 정하는 금액이고 이것은 사용자가 준 가정 위의 계산이다 |
 
 **`Allocation`**
 
@@ -795,6 +893,63 @@ accounts.isa               : IsaAccountState
 | 남은 양 | `Plan.pension_combined_credit_remaining_after_plan_krw` |
 
 **남은 양이 0인 사용자에게 여유가 있는 것처럼 말하지 않는다.** 그 사용자에게 이어질 수 있는 문장은 "올해 연금계좌에 더 납입해도 올해의 세액공제는 늘지 않습니다"이고, 그 뒤에 미배분 갈래를 붙일 수 있다 — "남은 ○○원은 연금계좌에 납입할 수는 있습니다(`pension_contribution_headroom_krw`). 다만 그 납입은 올해의 세액공제를 늘리지 않습니다." **그 뒤를 더 쓰려면 `NonQuantifiedEffect.facts`의 세 사실을 함께 적어야 한다**(5.6절).
+
+### 5.14 `AssumptionBasedIsaEstimate` — 가정 위의 계산 (D28·D29·D31)
+
+**이름에 `benefit`을 쓰지 않았다.** `DeterministicBenefit`과 같은 낱말을 쓰면 화면이 두 값을 같은 확실성으로 다룬다. `assumption_based`가 이름에 들어가야 **자료형이 스스로 성질을 말한다** — `tax-domain`의 판단이고 관리자가 승인했다(D29 4절).
+
+**배분안 단위다.** 원금이 그 안의 ISA 배분액을 포함하므로 안마다 값이 다를 수 있고, 그것이 D28이 지목한 「공제한도 밖 구간」에서 안을 비교할 수 있게 하는 재료다.
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `state` | `"computed"` \| `"display_suppressed"` \| `"not_computable"` | — | 아래 표. **`state`가 `"computed"`가 아니면 아래 모든 `*_krw`와 `axis_breakdown`이 `null`이다** |
+| `not_computable_reason_code` | `"isa_tax_free_limit_unknown"` \| `"amount_not_representable"` \| null | — | 왜 못 냈는가. `state`가 `"not_computable"`일 때만 값이 있다 |
+| `is_annual` | `false` | — | **상수.** 이 금액은 **정산 기간 전체**의 값이고 1년치가 아니다. 비과세 한도가 계약 단위라 연 환산은 최대 1.75배 과대다(`isa.benefit.settlement_period`) |
+| `settlement_years` | integer \| null | 년 | **실제로 적용된** 정산 기간 |
+| `settlement_years_source` | `"user"` \| `"ruleset_min_contract_years"` \| null | — | 위 값이 사용자가 준 것인지 룰셋의 계약기간 하한인지 |
+| `taxable_share_min` | number | 비율(0~1) | 소득 성격이 정하는 과세 비율의 아래 끝. 룰셋에서 읽는다 |
+| `taxable_share_max` | number | 비율(0~1) | 위 끝 |
+| `principal_krw` | integer \| null | 원 | 수익을 만든 원금. `accounts.isa.cumulative_contribution_krw + 이 안의 ISA 배분액` |
+| `principal_basis_code` | `"cumulative_contribution_plus_plan_allocation"` | — | 위 값을 무엇으로 보았는가. **잔액이 아니라 납입액**이므로 이미 난 운용수익이 빠져 결과가 과소 방향이다 |
+| `return_accrual_code` | `"simple_interest"` | — | 수익률에서 총수익을 만드는 방법. 복리·단리를 세법이 정하지 않고 **단리가 과소 방향**이다 |
+| `total_return_krw` | integer \| null | 원(기간 합계) | `principal × 수익률 × settlement_years` |
+| `taxable_income_krw` | integer \| null | 원(기간 합계) | 산식의 `G` — 이자소득등 **이익**의 합계(손실 차감 전) |
+| `loss_offset_applied_krw` | integer \| null | 원(기간 합계) | 실제로 적용한 손실 `L` |
+| `net_income_krw` | integer \| null | 원(기간 합계) | `N = max(0, G − L)` |
+| `tax_free_limit_krw` | integer \| null | 원(계약당) | 비과세 한도금액 `C`. 룰셋에서 읽는다 |
+| `comparison_side_tax_krw` | integer \| null | 원(기간 합계) | 같은 소득을 ISA **밖**에서 얻었을 때의 세액 |
+| `isa_side_tax_krw` | integer \| null | 원(기간 합계) | ISA **안**에서 내는 세액 |
+| `point_estimate_krw` | integer \| null | 원(기간 합계) | **소득 성격이 확정적일 때만 값이 있다.** 아니면 `null` — 구간 안의 한 점을 고르는 근거가 조문에 없다 |
+| `lower_bound_krw` | integer \| null | 원(기간 합계) | 구간의 아래 끝(`taxable_share_min`에 대응) |
+| `upper_bound_krw` | integer \| null | 원(기간 합계) | 구간의 위 끝(`taxable_share_max`에 대응). `comparison_side_tax_krw − isa_side_tax_krw`와 같다 |
+| `axis_breakdown` | IsaAxisBreakdown \| null | — | 세 축과 절사 잔차. 아래 |
+| `comparison_baseline_code` | `"withholding_at_general_rate"` | — | 비교 기준. 원천징수로 종결되는 경우다 |
+| `is_lower_bound_for_aggregate_taxpayer` | `true` | — | **상수.** 금융소득종합과세 대상자에게는 실제 혜택이 이보다 **크다** — 오차 방향이 과소다 |
+| `assumes_contract_held_to_settlement` | `true` | — | **상수.** 정산 시점까지 계약을 유지하는 것을 전제한다. 아래 |
+| `basis_rule_ids` | string[] | — | |
+
+**`state`의 세 값**
+
+| 값 | 뜻 | 금액 |
+|---|---|---|
+| `computed` | 값을 냈다 | 있다 |
+| `display_suppressed` | 계산은 돌았고 **표시만 껐다**(0.11절) | 전부 `null` |
+| `not_computable` | 필요한 값을 얻지 못해 못 냈다 | 전부 `null` |
+
+`profile.isa_return_assumption`을 보내지 않았으면 이 객체 자체가 `null`이다. **네 상태가 서로 다른 사실이므로 화면이 같은 문구를 쓰면 안 된다.**
+
+**`IsaAxisBreakdown` — 넷의 합이 `upper_bound_krw`와 같다.**
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `loss_offset_krw` | integer | 원 | **손익통산 축.** 계좌 밖이었다면 과세됐을 이익 중 통산으로 사라진 부분 |
+| `tax_free_krw` | integer | 원 | **비과세 축.** 한도 안에서 아낀 세액 |
+| `rate_gap_krw` | integer | 원 | **세율차 축.** 한도 초과분의 세율 차이 |
+| `rounding_residual_krw` | integer | 원 | 원 미만 절사가 축마다 따로 걸려 생기는 몫. **삼키지 않고 내보낸다** |
+
+**세 축을 나눠 내는 이유.** 합계만 보이면 **손익통산이 혜택의 일부라는 사실이 사라진다.** 세 축은 각각 다른 조문에서 나오므로 화면이 값 옆에 근거를 짝지을 수 있다. 실수 산술에서는 셋의 합이 혜택과 항등적으로 같고, 정수에서는 절사가 축마다 걸려 몇 원이 어긋날 수 있어 그 몫을 넷째 칸으로 낸다 — `monthly_rounding_residual_krw`와 같은 규율이다.
+
+**`assumes_contract_held_to_settlement`가 뜻하는 것과 엔진이 하지 않는 것.** 의무가입기간 전에 해지하면 감면세액이 추징되어 이 값이 0이 된다(`isa.early_termination.clawback`). **엔진은 그 경우를 계산하지 않는다** — 해지는 사실이 아니라 미래의 선택이고 요청에 그 입력이 없다. `profile.fund_use_horizon`이 `within_isa_lock_in`인 것은 "쓸 **가능성**이 있다"는 진술이지 "해지한다"가 아니므로, 그것으로 금액을 0으로 덮으면 **침묵에서 답을 만드는 것**이고 D14가 세운 원칙에 정면으로 어긋난다. 화면은 이 상수와 같은 안의 `warnings`(`early_termination_clawback_isa`)를 **함께** 읽어야 한다.
 
 ### 5.8 `UnappliedRule`
 
@@ -1009,6 +1164,12 @@ accounts.isa               : IsaAccountState
 | `pension_annuity_start_unknown` | warning | `accounts.*.annuity_start_status`가 `"unknown"`. 그 계좌의 배분을 보류한다. `params.account`에 계좌 id |
 | `pension_start_date_not_computable` | info | `accounts.*.opened_on`이 없어 개시 가능 시점을 계산하지 못함. 나이 요건만 낸다 |
 | `retirement_transfer_excluded_from_credit` | info | 퇴직급여 입금액·계약이전액이 입력에 있어 세액공제 대상 납입액에서 제외함. `params.amount_krw` 포함 |
+| `isa_return_assumption_not_supplied` | info | `profile.isa_return_assumption`이 `null`. ISA 금액을 한 원도 내지 않았다. **화면이 수익률을 제안하거나 미리 채우면 안 된다**(0.10절) — 이 안내는 "묻지 않았다"이지 "효과가 없다"가 아니다 |
+| `isa_return_estimate_is_not_annual` | info | 가정 기반 ISA 정산액을 낸 배분안이 하나 이상 있음. 그 금액은 **정산 기간 전체**의 값이고 1년치가 아니다. `params.settlement_years` 포함. 연 환산은 비과세 한도를 해마다 새로 주는 계산이라 최대 1.75배 과대다 |
+| `isa_return_estimate_reported_as_range` | info | 소득 성격이 확정적이지 않아 점이 아니라 **구간**으로 냈다. `point_estimate_krw`가 `null`인 배분안이 하나 이상 있다는 뜻이다 |
+| `isa_return_estimate_not_computable` | warning | 수익률 가정은 받았으나 계산에 필요한 값을 얻지 못함. `params.reason_code`가 `"isa_tax_free_limit_unknown"`(ISA 유형 미선언) 또는 `"amount_not_representable"`(정수 연산으로 낼 수 없는 입력) |
+| `isa_return_estimate_display_suppressed` | info | `options.assumption_based_isa_estimate`가 `"suppress"`여서 계산은 돌았으나 금액을 싣지 않음(0.11절). **이 상태가 조용하면 안 된다**(D19) |
+| `pension_tax_deferral_not_quantified` | info | 수익률 가정이 실려 ISA 칸에 금액이 나갈 때 함께 나간다. 연금계좌 쪽 과세이연 효과는 **꺼내는 시점에 정해지므로 지금 계산할 수 없고 부호까지 가정에 달려 있다.** ISA 칸에만 금액이 보이는 것을 "ISA가 더 낫다"로 읽으면 안 된다 |
 
 ### 8.3 가정 코드
 
@@ -1031,6 +1192,13 @@ accounts.isa               : IsaAccountState
 | `retirement_transfer_counted_in_contribution_limit` | 퇴직급여 입금액·계약이전액이 연간 납입한도를 쓰는지 룰셋이 정하지 않아 **쓰는 쪽**(배분이 작아지는 방향)으로 봄. `params.amount_krw` 포함 |
 | `deferred_retirement_income_absent_assumed` | 이연퇴직소득 유무 미입력으로 없는 것으로 봄. 5년 요건이 살아 있어 잠금기간을 길게 보는 방향 |
 | `local_tax_follows_income_tax_cap` | 개인지방소득세에 같은 세액 한도 구조가 있는지 룰셋이 미확인이므로, **인정된 소득세분**에 부가율을 적용해 지방세분을 산출함 |
+| `isa_return_rate_user_supplied` | 이 금액은 **사용자가 제시한 수익률** 위의 계산이다. `params.annual_return_rate` 포함. **이 서비스는 수익률을 제시하지 않는다** — 그 구분이 D31 이후 남은 방어선 전부다 |
+| `isa_return_simple_interest` | 수익률에서 총수익을 만드는 방법(복리·단리)을 세법이 정하지 않아 **단리**로 봄. 혜택이 수익률에 단조 증가하므로 과소 방향 |
+| `isa_return_principal_from_contributions` | 원금을 잔액이 아니라 **누적 납입액 + 이 배분안의 ISA 배분액**으로 봄. 이미 난 운용수익이 빠져 과소 방향 |
+| `isa_settlement_years_defaulted_to_min_contract_years` | 정산 기간 미입력으로 룰셋의 **계약기간 하한**을 씀. `params.settlement_years` 포함. 실제 계약기간이 더 길면 결과가 달라진다 |
+| `isa_loss_assumed_zero` | 통산 대상 손실 미입력으로 0으로 봄. 손익통산 축이 0이 되어 과소 방향. 지어내면 과대가 된다 |
+| `isa_comparison_baseline_is_withholding_only` | 비교 기준을 **원천징수로 종결되는 경우**로 둠. 금융소득종합과세 대상자에게는 실제 혜택이 더 크므로 이 값은 하한이다. **서비스의 편의가 아니라 조문에서 나오는 귀결이다** — 조특법 §129조의2 ①이 그 대상자를 과세특례에서 배제한다 |
+| `isa_return_assumes_contract_held_to_settlement` | 정산 시점까지 계약을 **유지**하는 것을 전제함. 의무가입기간 전 해지 시의 추징은 계산하지 않는다 — 해지는 사실이 아니라 미래의 선택이고 요청에 그 입력이 없다(5.14절) |
 | `credit_rate_wage_only_excludes_separately_taxed_income` | `has_non_wage_global_income_current_year`가 `true`가 아니어서 **총급여액 기준**으로 공제율을 판정함. 1단계 질문을 "종합소득과세표준에 **합산되는** 소득이 있는가"로 좁혀 물었으므로, 분리과세로 종결된 소득만 더 있는 사람도 이 분기로 온다. 규칙의 `open_interpretation`이 그 쟁점을 **미확정**으로 남겼고 이 가정이 두 해석 중 하나를 채택한 것이다. **조문이 정한 것이 아니다.** 0.7절 |
 
 ### 8.4 경고 코드 (`Plan.warnings`)
@@ -1128,3 +1296,21 @@ accounts.isa               : IsaAccountState
 - **생년월일을 보낸다. 만 나이를 계산하지 않는다**(D21). 엔진이 쓴 나이와 기준일은 `echo.derived_age`에 있고, **그 값을 사용자에게 되비추지 않는다.**
 - **`annuity_start_status`의 기본값을 `"not_started"`로 두지 않는다.** 사용자가 답하지 않았으면 `"unknown"`을 보낸다 — 접는 방향의 오류가 과대다.
 - **퇴직급여 입금액을 `ytd_contribution_krw`에 합치지 않는다.** `retirement_transfer_in_krw`로 분리해 보낸다. 합치면 세액공제액이 과대 계산된다.
+
+### 10.1 수익률 가정을 다룰 때 (D28·D31)
+
+**계약이 막을 수 없고 화면이 지는 것부터 적는다.**
+
+- **수익률을 제안하거나 미리 채우지 않는다.** 자리표시자·예시값·"보통 7%" 같은 힌트도 포함이다. 이 서비스가 내는 것은 「사용자가 제시한 수익률을 조문에 넣은 결과」이지 수익률 전망이 아니고, **규제 검토를 건너뛴 지금 그 구분이 남은 방어선 전부다.** 계약은 기본값을 만들지 않을 뿐 화면이 채우는 것을 막지 못한다.
+- **소득 성격을 자산군으로 묻지 않는다.** 「국내 상장주식 / 해외주식 / 채권」식 선택지는 성립하지 않는다 — 한 선택지 안에 매매차익(혜택 0)과 배당금(혜택 있음)이 섞인다(3.6절). **「해외주식」이라는 낱말을 선택지 이름에 쓰지 않는다.**
+- **가정을 금액과 같은 화면에 붙인다.** `echo.isa_return_assumption`과 `assumptions`의 일곱 코드가 그 재료다. 세무사법 시행령 §33 ② 2호가 겨냥하는 것이 **산정 조건 없는 수치**이고, 이쪽은 검토된 영역이므로 더 엄격히 지킨다.
+
+**값을 읽을 때.**
+
+- **`assumption_based_isa_estimate`와 `deterministic_benefit`을 더하거나 나란한 굵기로 놓지 않는다.** 앞은 가정 위의 계산이고 뒤는 조문이 정한 금액이다. `BenefitMeter`가 **테두리만 그린 막대**로 그 구분을 지는 것이 D31 ①의 결정이다.
+- **「연간」이라고 쓰지 않는다.** `is_annual`이 `false` 상수다. 금액에는 `settlement_years`를 붙여 적고, 그 값이 `settlement_years_source: "ruleset_min_contract_years"`면 **가정한 기간이라는 사실**도 함께 적는다.
+- **`point_estimate_krw`가 `null`이면 점을 만들지 않는다.** 두 끝을 그대로 보인다 — 「0원 ~ ○○원」. 중간값·평균을 계산하는 순간 그 점을 고른 근거가 조문에 없어진다.
+- **`state`의 네 갈래에 같은 문구를 쓰지 않는다.** 객체가 `null`(묻지 않았다) · `not_computable`(못 낸다) · `display_suppressed`(감췄다) · `computed`(냈다)가 서로 다른 사실이다.
+- **연금계좌 칸을 `0원`으로 적지 않는다.** ISA 칸에만 금액이 보이는 것은 ISA가 낫다는 뜻이 아니라 연금 쪽 효과를 **지금 계산할 수 없다**는 뜻이다(`pension_tax_deferral_not_quantified`).
+- **`axis_breakdown`의 세 축만 더해 상한을 만들지 않는다.** `rounding_residual_krw`까지 넷이 `upper_bound_krw`와 같다.
+- **표시를 끄는 것은 `options.assumption_based_isa_estimate: "suppress"` 하나다.** 화면이 값을 받아 놓고 렌더링만 건너뛰는 방식으로 끄지 않는다 — 그러면 꺼졌는지 아닌지가 코드를 읽어야 알 수 있는 상태가 되고, 그것이 D18에서 계측이 조용히 죽어 있던 형태다.

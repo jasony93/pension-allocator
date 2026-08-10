@@ -8,6 +8,9 @@ import {
   ERROR,
   HORIZONS,
   ISA_ACCOUNT_TYPES,
+  ISA_ESTIMATE_DISPLAY,
+  ISA_ESTIMATE_DISPLAYS,
+  ISA_INCOME_CHARACTERS,
   MONTHS_IN_TAX_YEAR,
   PLAN_ORDER,
   PRIOR_TAX_STATE,
@@ -231,6 +234,58 @@ function validateProfile(c, profile) {
     monthly_capacity_krw: c.requiredInt(profile.monthly_capacity_krw, 'profile.monthly_capacity_krw'),
     months_remaining_in_tax_year: normalizedMonths,
     months_defaulted: monthsDefaulted,
+    isa_return_assumption: validateIsaReturnAssumption(c, profile.isa_return_assumption),
+  };
+}
+
+/**
+ * 수익률 가정 (D28·D29). **선택 필드이고 기본값이 없다.**
+ *
+ * 객체 자체를 보내지 않으면 ISA 금액을 내지 않는다 — 화면이 수익률을 제안하거나 미리
+ * 채우면 "사용자가 제시한 수익률을 조문에 넣은 결과"라는 구분이 무너지고, 그 구분이
+ * 금융투자업 검토를 건너뛴 지금 **남은 방어선 전부**다(D31 ①).
+ *
+ * **객체를 보냈으면 수익률과 소득 성격은 필수다.** 성격 없이 수익률만 받으면 국내
+ * 상장주식만 담은 사용자에게 없는 혜택을 있다고 말하게 된다 — 과대 방향이고 이 서비스가
+ * 가장 경계해 온 형태다(D28).
+ */
+function validateIsaReturnAssumption(c, node) {
+  const field = 'profile.isa_return_assumption';
+  if (node === undefined || node === null) return null;
+  if (!isObject(node)) {
+    c.add(ERROR.INVALID_ENUM, field, { value: String(node) });
+    return null;
+  }
+
+  const rate = node.annual_return_rate;
+  let normalizedRate = null;
+  if (rate === undefined || rate === null) {
+    c.add(ERROR.MISSING_REQUIRED, `${field}.annual_return_rate`);
+  } else if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    c.add(ERROR.NOT_INTEGER, `${field}.annual_return_rate`, { value: String(rate) });
+  } else if (rate < 0) {
+    // 음(−)의 수익률은 손실이고, 손실은 `loss_amount_krw`가 받는다. 한 사실을 두 칸으로
+    // 받으면 어긋날 때의 우선순위를 계약이 또 정해야 한다.
+    c.add(ERROR.NEGATIVE_VALUE, `${field}.annual_return_rate`, { value: rate });
+  } else {
+    normalizedRate = rate;
+  }
+
+  return {
+    annual_return_rate: normalizedRate,
+    income_character: c.enumValue(
+      node.income_character,
+      `${field}.income_character`,
+      ISA_INCOME_CHARACTERS,
+      { required: true },
+    ),
+    // 모르면 채우지 않는다. 룰셋의 계약기간 하한을 가정으로 세우고 그 사실을 드러낸다.
+    settlement_years: c.optionalInt(node.settlement_years, `${field}.settlement_years`, { min: 1 }),
+    settlement_years_provided:
+      node.settlement_years !== undefined && node.settlement_years !== null,
+    // 모르면 0으로 둔다 — 손익통산 축이 0이 되어 **과소** 방향이다.
+    loss_amount_krw: c.optionalInt(node.loss_amount_krw, `${field}.loss_amount_krw`),
+    loss_provided: node.loss_amount_krw !== undefined && node.loss_amount_krw !== null,
   };
 }
 
@@ -444,7 +499,11 @@ function validateTransfer(c, transfer, accounts) {
 
 function validateOptions(c, options) {
   if (options === undefined || options === null) {
-    return { plan_variants: null, include_legal_basis: true };
+    return {
+      plan_variants: null,
+      include_legal_basis: true,
+      assumption_based_isa_estimate: ISA_ESTIMATE_DISPLAY.INCLUDE,
+    };
   }
   if (!isObject(options)) {
     c.add(ERROR.INVALID_ENUM, 'options', { value: String(options) });
@@ -470,6 +529,16 @@ function validateOptions(c, options) {
   return {
     plan_variants: variants,
     include_legal_basis: c.optionalBoolean(options.include_legal_basis, 'options.include_legal_basis') ?? true,
+    // D31 — 되돌리는 길. **계산과 입력은 그대로 두고 표시만 끈다.** 규제 검토를 나중에
+    // 하기로 하면 이 값 하나가 `"suppress"`가 되고, 그때도 요청 형태·배분·공제액·경고는
+    // 한 글자도 바뀌지 않는다. 기본값이 `"include"`인 것은 소유자 결정(D31 ②)이다.
+    assumption_based_isa_estimate:
+      c.enumValue(
+        options.assumption_based_isa_estimate,
+        'options.assumption_based_isa_estimate',
+        ISA_ESTIMATE_DISPLAYS,
+        { required: false },
+      ) ?? ISA_ESTIMATE_DISPLAY.INCLUDE,
   };
 }
 

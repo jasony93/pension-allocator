@@ -7,6 +7,9 @@ import {
   CREDIT_RATE_FALLBACK_DIRECTION,
   DEFAULT_UNAPPLIED_REASON,
   HORIZON,
+  ISA_ESTIMATE,
+  ISA_ESTIMATE_DISPLAY,
+  ISA_ESTIMATE_STATE,
   NOTICE,
   REASON_INPUT_MISSING,
   RULE,
@@ -17,6 +20,7 @@ import {
 } from './constants.mjs';
 import { boundariesFrom, boundariesSource, dedupeErrors } from './boundaries.mjs';
 import { buildPlans } from './plans.mjs';
+import { resolveIsaReturn } from './isa-return.mjs';
 import { buildLegalBasis, createAccess, selectRulesets } from './ruleset.mjs';
 import { effectiveRate } from './ratio.mjs';
 import {
@@ -43,6 +47,7 @@ export function compute(request, rulesets) {
   const errors = [];
   let creditRateBracket = null;
   let ageReckoning = null;
+  let isaReturn = null;
 
   for (const scenarioId of normalized.scenarios) {
     const outcome = computeScenario(scenarioId, normalized, rulesets);
@@ -54,6 +59,8 @@ export function compute(request, rulesets) {
     creditRateBracket ??= outcome.creditRateBracket;
     // 나이 계산 규칙은 개정 대상이 아니므로 두 시나리오에서 같다.
     ageReckoning ??= outcome.ageReckoning;
+    // 정산 기간·계약기간 하한도 개정 대상이 아니다. 가정 목록은 응답 단위이므로 하나만 쓴다.
+    isaReturn ??= outcome.isaReturn;
   }
 
   if (errors.length > 0) return failure(request, dedupeErrors(errors));
@@ -79,6 +86,19 @@ export function compute(request, rulesets) {
         warnings: true,
       },
       credit_rate_bracket: creditRateBracket,
+      // 사용자가 준 가정을 **그대로** 되돌린다. 헌장 고지 요소 4(가정을 값과 같은 화면에)를
+      // 화면이 지킬 재료다. 실제로 적용된 정산 기간은 여기가 아니라 정산액 객체에 있다 —
+      // "무엇을 주었는가"와 "무엇을 썼는가"를 한 칸에 뭉치지 않는다.
+      isa_return_assumption: echoIsaReturnAssumption(normalized.profile.isa_return_assumption),
+      // **네 값이 전부 `false`인 고정 객체다.** D28이 그은 선 ①(확정 세액공제와 가정 기반
+      // 추정치를 한 목적함수에 더하지 않는다)을 규약이 아니라 **자료형과 회귀 테스트로**
+      // 강제한다. `fund_use_horizon_affects`가 D18 때 같은 일을 해 설계를 바로잡았다.
+      isa_return_affects: {
+        allocation_amounts: false,
+        tax_credit_amounts: false,
+        plan_ordering: false,
+        warnings: false,
+      },
       // 화면이 만 나이를 만들지 않는다(D21). 환산 결과와 **그 기준일**을 함께 되돌려 주어
       // 무엇을 기준으로 센 나이인지가 응답만 보고도 드러나게 한다.
       derived_age: {
@@ -101,7 +121,18 @@ export function compute(request, rulesets) {
       },
     },
     scenarios: scenarioResults,
-    assumptions: buildAssumptions(normalized, ageReckoning),
+    assumptions: buildAssumptions(normalized, ageReckoning, isaReturn),
+  };
+}
+
+/** 요청에 실린 가정 그대로. 없으면 `null`이고, 그때 화면에 붙일 가정 자체가 없다. */
+function echoIsaReturnAssumption(assumption) {
+  if (assumption === null) return null;
+  return {
+    annual_return_rate: assumption.annual_return_rate,
+    income_character: assumption.income_character,
+    settlement_years: assumption.settlement_years,
+    loss_amount_krw: assumption.loss_amount_krw,
   };
 }
 
@@ -159,6 +190,12 @@ function computeScenario(scenarioId, request, rulesets) {
   //      규칙이 없어도 그 사실이 조용히 빠진 채 계산이 끝난다.
   const withoutCreditFacts = resolvePensionWithoutCreditFacts(access);
 
+  // 6.6. 수익률 가정이 있을 때만 산식 규칙군을 읽는다(D28·D29). 없으면 규칙을 한 건도
+  //      건드리지 않으므로 근거 목록도 예전과 같다 — 읽지 않은 규칙을 싣지 않는다.
+  const isaReturn = resolveIsaReturn(access, {
+    assumption: request.profile.isa_return_assumption,
+  });
+
   const boundaries = boundariesFrom(access, {
     birthDate: request.profile.birth_date,
     taxYear: request.tax_year,
@@ -175,7 +212,8 @@ function computeScenario(scenarioId, request, rulesets) {
     capResult.cap === null ||
     startDateResult.entries === null ||
     ageReckoning === null ||
-    withoutCreditFacts === null
+    withoutCreditFacts === null ||
+    isaReturn === null
   ) {
     return { errors: dedupeErrors(missing.length > 0 ? missing : [ruleMissingFallback()]) };
   }
@@ -195,6 +233,9 @@ function computeScenario(scenarioId, request, rulesets) {
     access,
     withdrawalOrder,
     withoutCreditFacts,
+    isaReturn,
+    isaEstimateDisplay: request.options.assumption_based_isa_estimate,
+    isaCumulativeContributionKrw: request.accounts.isa.cumulative_contribution_krw,
     options: request.options,
     horizon: request.profile.fund_use_horizon,
     months,
@@ -244,6 +285,7 @@ function computeScenario(scenarioId, request, rulesets) {
   notices.push(
     notice(NOTICE.PENSION_HOLDING_NOT_EVALUATED, 'info', null, {}, [RULE.PENSION_WITHDRAWAL_ELIGIBILITY]),
   );
+  notices.push(...isaReturnNotices(isaReturn, plans, request.options));
 
   const isProposed = scenarioId === SCENARIO.PROPOSED;
   if (isProposed) {
@@ -254,6 +296,7 @@ function computeScenario(scenarioId, request, rulesets) {
 
   return {
     ageReckoning,
+    isaReturn,
     creditRateBracket: {
       income_tax_rate: rates.incomeTaxRate,
       local_tax_rate: rates.surtaxRate,
@@ -306,6 +349,67 @@ function computeScenario(scenarioId, request, rulesets) {
   };
 }
 
+/**
+ * 수익률 가정에 딸린 안내들.
+ *
+ * **가정을 받지 않았다는 사실도 안내로 낸다.** 조용히 빈 자리를 남기면 화면은
+ * "ISA 효과가 없다"와 "묻지 않았다"를 구별할 수 없다(D19).
+ */
+function isaReturnNotices(isaReturn, plans, options) {
+  if (!isaReturn.supplied) {
+    return [notice(NOTICE.ISA_RETURN_NOT_SUPPLIED, 'info', 'profile.isa_return_assumption')];
+  }
+
+  const out = [];
+  const estimates = plans.map((plan) => plan.assumption_based_isa_estimate);
+
+  if (options.assumption_based_isa_estimate === ISA_ESTIMATE_DISPLAY.SUPPRESS) {
+    // 표시가 꺼진 상태가 조용하면 안 된다 — 계산은 돌았고 금액만 감춘 것이다.
+    out.push(
+      notice(NOTICE.ISA_RETURN_ESTIMATE_SUPPRESSED, 'info', 'options.assumption_based_isa_estimate'),
+    );
+  }
+
+  const notComputable = estimates.find(
+    (estimate) => estimate.state === ISA_ESTIMATE_STATE.NOT_COMPUTABLE,
+  );
+  if (notComputable) {
+    out.push(
+      notice(NOTICE.ISA_RETURN_ESTIMATE_NOT_COMPUTABLE, 'warning', 'profile.isa_return_assumption', {
+        reason_code: notComputable.not_computable_reason_code,
+      }),
+    );
+  }
+
+  if (estimates.some((estimate) => estimate.state === ISA_ESTIMATE_STATE.COMPUTED)) {
+    // 이 금액은 정산 기간 전체의 값이다. 연 환산은 비과세 한도를 해마다 새로 주는
+    // 계산이 되어 최대 1.75배 과대다(`isa.benefit.settlement_period`).
+    out.push(
+      notice(NOTICE.ISA_RETURN_ESTIMATE_NOT_ANNUAL, 'info', null, {
+        settlement_years: estimates.find((e) => e.state === ISA_ESTIMATE_STATE.COMPUTED)
+          .settlement_years,
+      }, [RULE.ISA_BENEFIT_SETTLEMENT_PERIOD]),
+    );
+    if (estimates.some((estimate) => estimate.point_estimate_krw === null)) {
+      out.push(
+        notice(NOTICE.ISA_RETURN_ESTIMATE_RANGE, 'info', 'profile.isa_return_assumption', {}, [
+          RULE.ISA_BENEFIT_INCOME_CHARACTER,
+        ]),
+      );
+    }
+  }
+
+  // ISA 칸에만 금액이 보이는 것을 "ISA가 더 낫다"로 읽으면 안 된다. 연금계좌 쪽 효과는
+  // 꺼내는 시점에 정해지므로 지금 계산할 수 없고, 부호까지 가정에 달려 있다.
+  out.push(
+    notice(NOTICE.PENSION_TAX_DEFERRAL_NOT_QUANTIFIED, 'info', null, {}, [
+      RULE.PENSION_TAX_DEFERRAL_WITH_RETURN,
+    ]),
+  );
+
+  return out;
+}
+
 function collectBillStages(access) {
   const stages = new Set();
   for (const [, { rule }] of access.usedEntries()) {
@@ -341,7 +445,7 @@ function unappliedReason(ruleId, request) {
   return UNAPPLIED_REASON[ruleId] ?? DEFAULT_UNAPPLIED_REASON;
 }
 
-function buildAssumptions(request, ageReckoning) {
+function buildAssumptions(request, ageReckoning, isaReturn) {
   const scenarios = request.scenarios;
   const out = [];
   const add = (code, params = {}, basisRuleIds = []) =>
@@ -410,13 +514,51 @@ function buildAssumptions(request, ageReckoning) {
   add(ASSUMPTION.OTHER_DEDUCTIONS_EXCLUDED);
   // 원 미만 버림은 룰셋 근거가 아니라 엔진의 표시 규칙이다. 그래서 근거 규칙이 비어 있다.
   add(ASSUMPTION.ROUNDING_FLOOR);
-  add(ASSUMPTION.ISA_BENEFIT_NOT_QUANTIFIED, {}, [RULE.ISA_TAX_FREE_LIMIT]);
+  // 수익률 가정이 들어오면 이 가정은 거짓이 된다 — 그때는 금액이 실제로 나간다.
+  // 선언과 동작이 어긋나는 것을 막는 자리이고, 같은 조건이 `isa_tax_free_headroom`에도 걸린다.
+  if (isaReturn === null || !isaReturn.supplied) {
+    add(ASSUMPTION.ISA_BENEFIT_NOT_QUANTIFIED, {}, [RULE.ISA_TAX_FREE_LIMIT]);
+  }
   add(ASSUMPTION.HORIZON_EXCLUDED_FROM_AMOUNTS);
   add(ASSUMPTION.EARLY_EXIT_NOT_QUANTIFIED, {}, [
     RULE.ISA_CLAWBACK,
     RULE.PENSION_EARLY_WITHDRAWAL_RATE,
   ]);
   add(ASSUMPTION.PENSION_HOLDING_NOT_EVALUATED, {}, [RULE.PENSION_WITHDRAWAL_ELIGIBILITY]);
+
+  // ── 수익률 가정 위의 계산이 서 있는 가정들 (D28 지켜야 할 선 ②·③) ──
+  // 가정을 받지 않았으면 이 계산 자체가 없으므로 한 건도 붙지 않는다.
+  if (isaReturn !== null && isaReturn.supplied) {
+    // **이 서비스는 수익률을 제시하지 않는다.** 그 구분이 D31이 남긴 방어선 전부다.
+    add(ASSUMPTION.ISA_RETURN_RATE_USER_SUPPLIED, {
+      annual_return_rate: request.profile.isa_return_assumption.annual_return_rate,
+    });
+    // 복리·단리를 세법이 정하지 않는다. 혜택이 수익률에 단조 증가하므로 단리가 과소 방향이다.
+    add(ASSUMPTION.ISA_RETURN_SIMPLE_INTEREST, {}, [RULE.ISA_BENEFIT_SETTLEMENT_PERIOD]);
+    // 원금을 잔액이 아니라 납입액으로 본다 — 이미 난 운용수익이 빠져 과소 방향이다.
+    add(ASSUMPTION.ISA_RETURN_PRINCIPAL_FROM_CONTRIBUTIONS, {}, [RULE.ISA_BENEFIT_FORMULA]);
+    if (isaReturn.settlementSource === ISA_ESTIMATE.SETTLEMENT_SOURCE_RULESET) {
+      // 수익률에는 조문에 닻이 없어 기본값을 만들 수 없지만 계약기간 하한은 조문이 정한 값이다.
+      // 실제 계약기간이 더 길면 결과가 달라지므로 대체값을 썼다는 사실이 나가야 한다.
+      add(ASSUMPTION.ISA_SETTLEMENT_YEARS_DEFAULTED, { settlement_years: isaReturn.settlementYears }, [
+        RULE.ISA_ACCOUNT_REQUIREMENTS,
+        RULE.ISA_BENEFIT_SETTLEMENT_PERIOD,
+      ]);
+    }
+    if (!request.profile.isa_return_assumption.loss_provided) {
+      // `L`을 지어내면 과대가 된다. 0으로 두면 손익통산 축이 0이 되어 과소 방향이다.
+      add(ASSUMPTION.ISA_LOSS_ZERO, {}, [RULE.ISA_BENEFIT_FORMULA, RULE.ISA_LOSS_OFFSET]);
+    }
+    // 비교 기준을 14% 원천징수 종결(case A)로 둔다. 금융소득종합과세 대상이면 실제
+    // 혜택이 더 크므로 이 값은 **하한**이다 — 조문에서 나오는 귀결이고 서비스의 편의가 아니다.
+    add(ASSUMPTION.ISA_COMPARISON_BASELINE_WITHHOLDING, {}, [
+      RULE.ISA_BENEFIT_FORMULA,
+      RULE.ISA_BENEFIT_QUANTIFICATION,
+    ]);
+    // 정산 시점까지 계약을 유지하는 것을 전제한다. 중도해지 추징은 미래의 선택이고
+    // 요청에 그 입력이 없으므로, 선언한 자금 사용 시점에서 추론하지 않는다.
+    add(ASSUMPTION.ISA_RETURN_HELD_TO_SETTLEMENT, {}, [RULE.ISA_CLAWBACK]);
+  }
 
   return out;
 }
