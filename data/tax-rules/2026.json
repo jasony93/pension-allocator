@@ -2014,6 +2014,382 @@
         "verified_on": "2026-08-10",
         "verified_by": "tax-domain"
       }
+    },
+    {
+      "id": "pension.withdrawal.annual_cap",
+      "title": "연금수령한도 — 「연금으로 받는가」는 방식의 이름이 아니라 한 해에 얼마를 꺼내는가의 함수다",
+      "conditions": [
+        { "field": "account.type", "op": "in", "value": ["연금저축계좌", "퇴직연금계좌"] },
+        { "field": "withdrawal.kind", "op": "eq", "value": "연금수령" }
+      ],
+      "value": {
+        "type": "formula",
+        "fills": "pension.withdrawal.eligibility의 requirements[2](annual_cap)가 '미확인'으로 비워 둔 자리를 이 규칙이 채운다. 그 규칙의 다른 값은 바뀌지 않았다.",
+        "expression": "연금수령한도 = 연금계좌의 평가액 ÷ (11 − 연금수령연차) × 120/100",
+        "variables": {
+          "연금계좌의 평가액": "과세기간 개시일 현재의 평가액. 다만 연금수령 개시를 신청한 날이 속하는 과세기간에는 그 신청일 현재의 평가액이다(제3항 제3호 본문).",
+          "연금수령연차": "최초로 연금수령할 수 있는 날이 속하는 과세기간을 기산연차로 하여 그 다음 과세기간을 누적 합산한 연차."
+        },
+        "cap_disappears": {
+          "rule": "연금수령연차가 11년 이상이면 이 계산식을 적용하지 아니한다.",
+          "consequence": "그 이후에는 얼마를 꺼내도 연금수령 요건의 한도 부분이 걸리지 않는다."
+        },
+        "effect_of_exceeding": {
+          "rule": "한도를 초과해 인출한 금액은 연금수령 요건(시행령 제40조의2 제3항 제3호)을 충족하지 못하므로 연금수령이 아니다.",
+          "consequence": "그 초과분 중 세액공제받은 납입액과 운용수익은 연금외수령으로서 기타소득 15%(개인지방소득세 포함 16.5%)로 과세된다.",
+          "related_rules": ["pension.early_withdrawal.other_income_rate", "pension.withdrawal.eligibility"],
+          "note": "즉 55세를 넘겨 계좌를 5년 이상 유지했더라도, 한 해에 많이 꺼내면 그 초과분에는 저율의 연금소득세율이 걸리지 않는다."
+        },
+        "derived_ratios": {
+          "what_this_is": "위 산식에 연금수령연차를 넣어 계산한 값이다. 조문에 표로 적혀 있는 값이 아니다.",
+          "formula": "그 해에 꺼낼 수 있는 최대 비율 = 1.2 ÷ (11 − 연금수령연차)",
+          "table": [
+            { "연금수령연차": 1, "평가액 대비 한도 비율": "12%" },
+            { "연금수령연차": 2, "평가액 대비 한도 비율": "약 13.33%" },
+            { "연금수령연차": 3, "평가액 대비 한도 비율": "15%" },
+            { "연금수령연차": 4, "평가액 대비 한도 비율": "약 17.14%" },
+            { "연금수령연차": 5, "평가액 대비 한도 비율": "20%" },
+            { "연금수령연차": 6, "평가액 대비 한도 비율": "24%" },
+            { "연금수령연차": 7, "평가액 대비 한도 비율": "30%" },
+            { "연금수령연차": 8, "평가액 대비 한도 비율": "40%" },
+            { "연금수령연차": 9, "평가액 대비 한도 비율": "60%" },
+            { "연금수령연차": 10, "평가액 대비 한도 비율": "120%" }
+          ],
+          "boundary": "첫 해의 한도는 평가액의 12%다. 첫 해에 평가액의 12%를 넘겨 인출하면 그 초과분은 연금수령이 아니다."
+        },
+        "why_this_rule_matters_to_the_question": {
+          "question": "「연금계좌 저율과세로 얼마를 아꼈는가」를 금액으로 내려면 무엇이 필요한가.",
+          "answer": "이 규칙이 그 답에 두 개의 입력을 강제한다 — 수령 기간(연금수령연차를 정한다)과 연금계좌의 평가액(한도의 분자다). 둘 다 지금 요청에 없다.",
+          "related_rule": "pension.rate_gap.quantifiability"
+        },
+        "unverified": "제3항 제3호의 계산식이 국가법령정보센터 조문 본문에 이미지 파일로 실려 있어 1차 출처의 문언을 그대로 대조하지 못했다. 국세청 「연금소득의 범위」와 법제처 「찾기 쉬운 생활법령정보」가 같은 형태('연금계좌의 평가액 ÷ (11 − 연금수령연차) × 120/100')로 적는 것을 2026-08-11에 각각 확인했고 두 곳의 표기가 일치한다. 이 유닛은 그 일치를 근거로 산식을 적었으며, 조문 이미지와의 대조는 하지 못했다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 시행령 제40조의2 제3항 제3호 및 제4항",
+        "law_version": "대통령령 제36343호(2026.5.22. 일부개정, 2026.7.1. 시행). 제3항 제3호 본문의 '과세기간 개시일(연금수령 개시를 신청한 날이 속하는 과세기간에는 연금수령 개시를 신청한 날로 한다) 현재 다음의 계산식에 따라 계산된 금액' 문언과 제4항의 연금수령연차 정의를 2026-08-11에 확인했다. 계산식 자체는 이미지다 — value.unverified 참조.",
+        "url": "https://www.law.go.kr/법령/소득세법시행령/제40조의2",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6449&cntntsId=7885",
+        "corroborating_url_2": "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=2056&ccfNo=3&cciNo=1&cnpClsNo=1",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.rate_gap.quantifiability",
+      "title": "연금계좌 저율과세로 아낀 금액 — 지금은 낼 수 없다. 무엇을 받으면 낼 수 있고, 받아도 무엇이 남는가",
+      "conditions": [
+        { "field": "account.type", "op": "in", "value": ["연금저축계좌", "퇴직연금계좌"] },
+        { "field": "isa.taxable_income_supplied_by_user", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "quantifiability",
+        "question": "소유자가 「연금저축·IRP도 저율 과세를 통해 얼마나 아꼈는지」를 사용자가 입력한 수익률로 내라고 했다. 낼 수 있는가.",
+        "answer": "지금 요청의 입력만으로는 낼 수 없다. 새 입력 여섯을 받으면 구간을 낼 수 있으나 그 구간이 0을 가로지르므로 「아낀 금액」 막대의 재료가 되지 못하고, 점을 내려면 사용자가 답할 수 없는 사실이 더 필요하다.",
+        "this_does_not_overturn_the_earlier_ruling": {
+          "what_was_ruled_before": "pension.tax_deferral.with_return_rate가 「연금계좌 과세이연은 금액으로 낼 수 없다」고 두 번 판정했다.",
+          "what_is_new_here": "그 판정의 대상은 「과세이연」 전체였다. 이번에 그것을 두 축으로 쪼갰다 — 시점 축(과세이연 자체)과 세율 축(같은 소득에 걸리는 두 세율의 차이). 앞은 할인율 없이는 성립하지 않고 세법이 할인율을 정하지 않으므로 여전히 낼 수 없다. 뒤는 할인율이 필요 없다 — 같은 과세 대상에 걸리는 두 세율의 차이이므로, 계약이 ISA에서 이미 쓰고 있는 명목 비교 규약을 그대로 쓸 수 있다.",
+          "so_what": "즉 「못 낸다」의 이유가 할인율에서 세율의 미결정으로 옮겨졌다. 결론은 같으나 막힌 자리가 다르고, 그래서 무엇을 받으면 뚫리는지를 이번에 적을 수 있다."
+        },
+        "the_formula_if_the_rate_were_known": {
+          "benefit": "혜택 = (계좌 밖 세액) − (계좌 안 세액) = G_p × r_outside − G_p × r_inside",
+          "G_p": "연금계좌 안에서 발생한 운용수익. 소득세법 제20조의3 제1항 제2호 다목이 '연금계좌의 운용실적에 따라 증가된 금액'을 통째로 연금소득의 재료로 삼는다.",
+          "r_outside": "이자·배당 성격이면 0.154(소득세법 제129조 제1항 제1호 라목·제2호 나목 + 지방세법 제103조의13). 소액주주의 장내 국내 상장주식 양도차익 성격이면 0(소득세법 제94조 제1항 제3호 가목·나목).",
+          "r_inside": "인출 시점·방식·연령이 정한다. 아래 rate_table.",
+          "why_no_discount_rate_is_needed_here": "두 세액이 같은 과세 대상 G_p에 걸린다. 명목 기준으로 비교하면 할인율이 소거된다. 명목 비교가 놓치는 것(늦게 내는 이득, 계좌 밖에서 매년 세금이 빠져 복리 기반이 줄어드는 것)은 전부 연금계좌에 유리한 방향이므로, 이자·배당 성격에서는 명목 비교가 과소 방향이다. 계좌 밖 세율이 0인 성격에서는 이 방향 논증이 성립하지 않는다."
+        },
+        "rate_table": {
+          "what_this_is": "조문이 그대로 정하는 세율이다. 금액이 아니므로 어떤 가정도 얹혀 있지 않다. 개인지방소득세 10%를 포함한 실효율을 함께 적었다.",
+          "rows": [
+            { "situation_code": "outside_account_interest_dividend", "설명": "계좌 밖에서 얻는 이자·배당소득", "income_tax_rate": 0.14, "effective_rate": 0.154, "law": "소득세법 제129조 제1항 제1호 라목·제2호 나목, 지방세법 제103조의13" },
+            { "situation_code": "outside_account_listed_equity_capital_gain", "설명": "계좌 밖 소액주주의 장내 국내 상장주식 양도차익", "income_tax_rate": 0.0, "effective_rate": 0.0, "law": "소득세법 제94조 제1항 제3호 가목·나목 (과세대상이 아니다)" },
+            { "situation_code": "pension_annuity_under_70", "설명": "연금수령, 수령 당시 70세 미만", "income_tax_rate": 0.05, "effective_rate": 0.055, "law": "소득세법 제129조 제1항 제5호의2 가목" },
+            { "situation_code": "pension_annuity_70_to_79", "설명": "연금수령, 70세 이상 80세 미만", "income_tax_rate": 0.04, "effective_rate": 0.044, "law": "소득세법 제129조 제1항 제5호의2 가목" },
+            { "situation_code": "pension_annuity_80_or_over", "설명": "연금수령, 80세 이상", "income_tax_rate": 0.03, "effective_rate": 0.033, "law": "소득세법 제129조 제1항 제5호의2 가목" },
+            { "situation_code": "pension_annuity_lifetime", "설명": "시행령이 정한 종신계약에 따른 연금수령", "income_tax_rate": 0.03, "effective_rate": 0.033, "law": "소득세법 제129조 제1항 제5호의2 다목" },
+            { "situation_code": "pension_non_annuity", "설명": "연금외수령(연금수령한도 초과분 포함)", "income_tax_rate": 0.15, "effective_rate": 0.165, "law": "소득세법 제129조 제1항 제6호 나목" },
+            { "situation_code": "pension_annuity_over_separate_threshold", "설명": "연금수령이나 그 해의 사적연금소득 합계가 15,000,000원을 넘는 경우", "income_tax_rate": null, "effective_rate": null, "law": "소득세법 제14조 제3항 제9호, 제64조의4", "note": "종합과세와 15% 분리과세 중 납세자가 낮은 쪽을 고른다. 상한은 0.165이나 하한은 그 시점의 종합소득 과세표준이 정하므로 조문만으로는 닫히지 않는다." }
+          ],
+          "selection_rule": "연령별 세율과 종신계약 세율이 함께 적용될 수 있으면 낮은 세율을 적용한다(pension.income.withholding_rate.by_age.value.selection_rule).",
+          "the_rates_are_current_law": "위 세율은 전부 현행 조문이며 수십 년 뒤 인출 시점의 세율이 아니다. ISA는 정산까지 3~5년이라 이 가정의 무게가 작으나 연금계좌는 그렇지 않다."
+        },
+        "minimum_input_set": {
+          "purpose": "점 하나를 내려면 무엇이 더 필요한가. 각 항목이 세율의 어느 자리를 정하는지 조문으로 짚었다.",
+          "items": [
+            {
+              "name": "수령 방식 (연금수령 / 연금외수령)",
+              "determines": "소득의 종류 자체를 가른다. 연금수령이면 소득세법 제20조의3 제1항 제2호의 연금소득이고, 아니면 제21조 제1항 제21호의 기타소득이다. 세율이 3.3~5.5%와 16.5%로 갈린다.",
+              "cannot_be_derived": "다른 입력에서 도출할 수 없다. profile.fund_use_horizon의 at_or_after_pension_age는 '연금 수령 개시 연령까지 둘 수 있다'는 진술이지 '연금으로 받겠다'가 아니다. 55세와 5년 요건을 갖춘 사람도 일시금으로 꺼내면 연금외수령이다. 그것으로 방식을 추론하면 침묵에서 답을 만드는 것이다."
+            },
+            {
+              "name": "인출 개시 연령",
+              "determines": "소득세법 제129조 제1항 제5호의2 가목의 연령 구간(70세 미만 5% / 70세 이상 80세 미만 4% / 80세 이상 3%). 생년월일과 함께 납입부터 인출까지의 기간도 정한다.",
+              "note": "55세 미만이면 연금수령 요건 자체를 못 갖춘다(시행령 제40조의2 제3항 제1호)."
+            },
+            {
+              "name": "수령 기간(연수)",
+              "determines": "셋을 동시에 정한다 — (a) 연금수령연차를 통해 연금수령한도(pension.withdrawal.annual_cap), (b) 한 해의 연금소득 크기를 통해 15,000,000원 기준금액 판정(소득세법 제14조 제3항 제9호), (c) 수령 각 해의 연령을 통해 적용 세율."
+            },
+            {
+              "name": "종신계약 여부",
+              "determines": "소득세법 제129조 제1항 제5호의2 다목의 단일 세율 3%(3.3%). 연령 구간과 함께 적용될 수 있으면 낮은 쪽이 걸린다."
+            },
+            {
+              "name": "연금계좌의 평가액(또는 누적 납입액)",
+              "determines": "G_p의 원금이다. 이것 없이는 수익률을 곱할 대상이 없다. 연금수령한도의 분자이기도 하다.",
+              "not_collected_today": "지금 계약은 연금계좌에 대해 해당 과세연도의 납입액(ytd_contribution_krw)만 받는다. ISA에는 cumulative_contribution_krw가 있으나 연금계좌에는 대응하는 칸이 없다."
+            },
+            {
+              "name": "인출 시점의 다른 사적연금소득",
+              "determines": "제14조 제3항 제9호의 판정 대상은 그 사람의 사적연금소득 '합계액'이다. 이 계좌 하나만으로는 판정되지 않는다.",
+              "cannot_really_be_answered": "수십 년 뒤의 다른 연금계좌 수령액을 사용자가 지금 답할 수 없다."
+            }
+          ],
+          "already_collected_but_not_transferable": {
+            "items": ["수익률(annual_return_rate)", "수익의 성격(income_character)"],
+            "why": "두 값은 profile.isa_return_assumption 안에 있고 ISA 계좌에 대한 사용자의 진술이다. 연금계좌에 그대로 옮겨 쓰는 것은 조문이 아니라 추론이며, ISA에 담을 수 있는 자산과 연금계좌에 담을 수 있는 자산이 같지 않다(isa.benefit.income_character.value.statutory_mapping.unconfirmed 세 번째 항목, pension.tax_deferral.with_return_rate). 옮겨 쓰려면 별도의 진술로 받아야 한다."
+          }
+        },
+        "what_remains_unknown_even_with_all_of_them": [
+          {
+            "id": "withdrawal_order",
+            "what": "운용수익이 몇 살에 과세되는지",
+            "why": "소득세법 시행령 제40조의3 제1항이 인출 순서를 과세제외금액 → 이연퇴직소득 → 제20조의3 제1항 제2호 나목부터 라목까지의 금액으로 정한다. 운용수익(다목)은 가장 나중에 나온다. 그 시점을 알려면 계좌 안 네 덩어리(과세제외금액·이연퇴직소득·공제받은 원금·운용수익)의 잔액을 전부 알아야 하고, 사용자가 답할 수 있는 값이 아니다.",
+            "residual": "세율이 {3.3%, 4.4%, 3.3~5.5%} 안으로 좁혀질 뿐 하나로 정해지지 않는다. 방향은 유리한 쪽이다 — 나중에 나올수록 나이가 많고 세율이 낮다."
+          },
+          {
+            "id": "over_threshold_branch",
+            "what": "기준금액을 넘는 해의 세율",
+            "why": "소득세법 제64조의4가 종합소득 결정세액과 '15%를 곱한 금액 + 그 연금소득을 제외한 종합소득 결정세액' 중 납세자가 선택하게 한다. 종합과세 쪽을 계산하려면 그 시점의 종합소득 과세표준과 기본세율표가 필요하다. 기본세율표는 이 룰셋의 범위 밖이고 미래의 과세표준은 입력으로 받을 수 없다.",
+            "residual": "상한은 16.5%로 닫히나 하한이 열려 있다."
+          },
+          {
+            "id": "future_rates",
+            "what": "인출 시점의 세율",
+            "why": "위 rate_table은 현행 조문이다. 세법이 미래의 세율을 정하지 않는다.",
+            "residual": "가정으로 드러내는 것 외에 방법이 없다. ISA와 달리 기간이 수십 년이므로 이 가정의 무게가 다르다."
+          },
+          {
+            "id": "deferral_axis",
+            "what": "과세이연 자체의 가치",
+            "why": "현재가치 비교이므로 할인율이 필요하고 세법이 정하지 않는다.",
+            "residual": "이 축은 이번에도 낼 수 없다. pension.tax_deferral.with_return_rate의 판정 그대로다."
+          }
+        ],
+        "the_sign": {
+          "why_this_is_the_decisive_point": "ISA에서 구간을 낼 수 있었던 것은 isa.benefit.formula.bounds_from_the_statute.nonnegative가 '어떤 입력에서도 혜택이 음수가 될 수 없다'를 증명했기 때문이다. 그래서 구간이 [0, 상한]이 되고 '최소 0원, 최대 ○원을 덜 낸다'로 읽힌다. 연금계좌에는 그 정리가 성립하지 않는다.",
+          "cases": [
+            { "성격": "이자·배당", "인출": "연금수령 · 기준금액 이하", "계좌 밖": "15.4%", "계좌 안": "3.3~5.5%", "부호": "양수", "폭": "+9.9%p ~ +12.1%p" },
+            { "성격": "이자·배당", "인출": "연금외수령 또는 연금수령한도 초과분", "계좌 밖": "15.4%", "계좌 안": "16.5%", "부호": "음수", "폭": "−1.1%p" },
+            { "성격": "이자·배당", "인출": "연금수령 · 기준금액 초과", "계좌 밖": "15.4%", "계좌 안": "상한 16.5%, 하한 미정", "부호": "정해지지 않는다" },
+            { "성격": "국내 상장주식 양도차익(소액주주·장내)", "인출": "어느 방식이든", "계좌 밖": "0%", "계좌 안": "3.3~16.5%", "부호": "언제나 음수", "note": "계좌 밖이었다면 없었을 세금이 계좌 안에서 새로 생긴다. 다만 연금계좌에 국내 상장주식을 직접 담을 수 있는지는 근로자퇴직급여 보장법과 금융감독규정이 정하며 이 룰셋의 범위 밖이다." },
+            { "성격": "mixed_or_unknown", "인출": "미정", "부호": "구간이 0을 가로지른다" }
+          ],
+          "consequence": "구간을 내는 것 자체는 여전히 추정이 아니다. 그러나 0을 가로지르는 구간은 '아낀 금액' 막대의 재료가 되지 못한다 — 막대는 길이로 크기를 말하는데 그 길이가 이득인지 손해인지를 말하지 못하기 때문이다. 화면이 그것을 '아꼈다'로만 적으면 거짓이다."
+        },
+        "the_half_ledger_problem": {
+          "finding": "세율 축만 내면 화면이 인출 단계 장부의 유리한 절반만 보인다. 이 유닛이 이번 회차에 가장 강하게 지적하는 것이다.",
+          "basis": "소득세법 제20조의3 제1항 제2호는 다목(운용실적에 따라 증가된 금액)과 나목(제59조의3에 따라 세액공제를 받은 연금계좌 납입액)을 같은 호 안에 나란히 둔다. 즉 인출 시점에 연금소득이 되는 것은 운용수익만이 아니라 세액공제를 받은 원금 자체다.",
+          "what_it_means_for_the_bar": "막대에 확정 금액으로 서 있는 세액공제액은 그 원금에 대해 주어진 것이고, 같은 원금이 인출 시점에 3.3~16.5%로 다시 과세된다. 다목만 열고 나목을 열지 않으면 합계가 과대가 된다.",
+          "net_sign_of_the_principal_axis": "연금수령이면 순효과는 여전히 양수다(공제율 13.2% 또는 16.5% 대 인출 세율 3.3~5.5%). 연금외수령이면 0에 가깝다(16.5% 대 16.5%). 이 유닛은 어느 쪽이 유리한지 정하지 않는다 — 세법이 정하지 않는다.",
+          "rule": "인출 단계를 열기로 한다면 다목만 열 수 없다. 나목을 함께 열어야 하고, 그러면 '올해 확정된 세액공제액'이라는 막대 항목이 더 이상 자기완결적이지 않게 된다. 화면 전체의 의미가 바뀐다.",
+          "what_can_be_said_without_opening_it": "문장으로는 적을 수 있다 — '세액공제를 받은 납입액은 나중에 연금으로 받을 때 다시 과세됩니다(소득세법 제20조의3 제1항 제2호 나목).' 이 문장에는 금액이 없으므로 인출 단계를 여는 것이 아니다."
+        },
+        "scope_ruling": {
+          "question": "이 요청이 게이트 1 D3이 v2로 미룬 인출 단계의 경계를 넘는가.",
+          "ruling": "넘는다.",
+          "why": "위 minimum_input_set 여섯 중 넷(수령 방식·개시 연령·수령 기간·종신 여부)이 전부 인출 시점의 선택이고, withdrawal_order를 풀려면 다년 잔액 시뮬레이션이 필요하다. D3이 v2로 미룬 것이 정확히 그것이다.",
+          "who_decides": "범위를 넓힐지는 관리자와 소유자가 정한다. 이 유닛은 정하지 않는다. 이 규칙이 하는 일은 넓히면 무엇을 받아야 하고 받아도 무엇이 남는지를 값으로 적어 두는 것이다."
+        },
+        "what_can_be_produced_today": [
+          {
+            "id": "statutory_rates_only",
+            "what": "위 rate_table을 그대로 낸다. 금액이 아니라 세율이다.",
+            "new_inputs_required": 0,
+            "assumptions": "없다. 조문이 그대로 정하는 값이다.",
+            "display_rule": "막대에 넣지 않는다. 막대는 금액의 자리이고 이것은 세율이다. 표나 문장으로 낸다.",
+            "why_this_answers_the_owner": "소유자가 알고 싶은 것은 '연금계좌에도 저율과세라는 이득이 있다는 사실'을 화면이 말하는가이다. 세율표는 그 사실을 조문 그대로 말하면서 없는 금액을 만들지 않는다."
+          },
+          {
+            "id": "sign_statement",
+            "what": "부호의 조건부 판정. pension.tax_deferral.with_return_rate.value.the_sign_is_now_conditionally_determinable가 이미 낸다.",
+            "new_inputs_required": 0
+          },
+          {
+            "id": "no_amount",
+            "what": "금액은 없다.",
+            "how_to_display": "'지금 계산할 수 없음'이라고 적는다. 0원으로 적으면 '효과가 없다'는 뜻이 되고 그것은 사실이 아니다.",
+            "related": "pension.tax_deferral.with_return_rate.value.what_the_screen_must_say.forbidden_sentences"
+          }
+        ],
+        "forbidden_sentences": [
+          "'연금계좌 저율과세로 ○○원을 아꼈습니다' — 세율이 정해지지 않았고 부호가 음수일 수 있다.",
+          "'연금계좌도 ISA와 같은 방식으로 계산했습니다' — 계산하지 않았다.",
+          "연금계좌 칸에 0원을 적는 것 — 0은 '효과가 없다'는 뜻이 된다.",
+          "수령 방식을 fund_use_horizon에서 추론해 '연금으로 받으실 테니'라고 전제하는 것."
+        ],
+        "derived_from": "소득세법 제20조의3 제1항 제2호 나목·다목, 제21조 제1항 제21호, 제129조 제1항 제1호 라목·제2호 나목·제5호의2 가목·다목·제6호 나목, 제14조 제3항 제9호, 제64조의4, 제94조 제1항 제3호 가목·나목, 같은 법 시행령 제40조의2 제3항·제40조의3 제1항, 지방세법 제103조의13을 결합해 도출했다. 세율은 전부 이 룰셋의 기존 규칙에서 가져왔고 새로 넣은 수치가 없다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제20조의3 제1항 제2호 나목·다목, 제21조 제1항 제21호, 제14조 제3항 제9호, 제64조의4, 제94조 제1항 제3호 가목·나목, 제129조 제1항 제1호 라목·제2호 나목·제5호의2 가목·다목·제6호 나목, 같은 법 시행령 제40조의2 제3항 및 제40조의3 제1항, 지방세법 제103조의13",
+        "law_version": "확인 시점의 현행 조문. 제20조의3 제1항 제2호 나목·다목이 같은 호 안에 나란히 있다는 것(the_half_ledger_problem의 근거)과 시행령 제40조의3 제1항의 인출 순서를 2026-08-11에 다시 확인했다. 제64조의4의 선택 구조는 pension.income.separate_taxation.elective_rate에서 확인한 것을 그대로 쓴다.",
+        "url": "https://www.law.go.kr/법령/소득세법/제20조의3",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6608&cntntsId=7888",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "isa.benefit.axis_display",
+      "title": "ISA 혜택의 세 축을 화면에 따로 낼 때 지켜야 하는 것 — 축은 이미 있고, 새로 정할 것은 그 축이 점인가 끝인가와 0의 뜻이다",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "개인종합자산관리계좌" },
+        { "field": "isa.taxable_income_supplied_by_user", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "display_rule",
+        "the_axes_already_exist": {
+          "finding": "소유자가 요구한 ①비과세로 아낀 금액과 ②저율 분리과세로 아낀 금액은 isa.benefit.formula.value.axis_decomposition이 이미 항등식으로 낸 것이고, 계약 5.14절의 IsaAxisBreakdown이 이미 필드로 갖고 있다. 새로 산출할 값이 없다.",
+          "mapping": [
+            { "소유자가 말한 것": "ISA 비과세로 얼마나 아꼈는지", "축": "tax_free_axis", "필드": "axis_breakdown.tax_free_krw", "산식": "min(N, C) × 0.14 × 1.1", "조문": "조세특례제한법 제91조의18 제1항·제2항" },
+            { "소유자가 말한 것": "저율 분리과세를 통해 얼마를 아꼈는지", "축": "rate_gap_axis", "필드": "axis_breakdown.rate_gap_krw", "산식": "max(0, N − C) × (0.14 − 0.09) × 1.1", "조문": "조세특례제한법 제91조의18 제1항" },
+            { "소유자가 말한 것": "(들지 않았으나 지울 수 없다)", "축": "loss_offset_axis", "필드": "axis_breakdown.loss_offset_krw", "산식": "(G − N) × 0.14 × 1.1", "조문": "조세특례제한법 제91조의18 제1항·제5항" }
+          ]
+        },
+        "the_third_axis_must_not_be_dropped": {
+          "rule": "소유자가 둘만 들었다고 해서 손익통산 축과 절사 잔차 칸을 지우면 안 된다.",
+          "why": "넷의 합이 upper_bound_krw와 같다는 항등식이 깨진다. 두 축만 보이면 합계와 부분의 차이가 설명되지 않는 자리로 남고, 손익통산이 혜택의 일부라는 사실이 사라진다(isa.benefit.formula.value.axis_decomposition.display_note).",
+          "how_to_show_it": "화면이 두 축만 강조하되 나머지 둘을 같은 블록 안에 두는 것은 무방하다. 합계와 부분이 어긋나 보이지만 않으면 된다."
+        },
+        "each_axis_is_the_upper_end_when_the_point_is_null": {
+          "finding": "IsaAxisBreakdown은 upper_bound_krw의 분해다. point_estimate_krw가 null인 요청(income_character가 listed_equity_capital_gain 또는 mixed_or_unknown)에서는 세 축 금액도 전부 구간의 위 끝이다.",
+          "why": "축은 과세 비율 s의 위 끝(taxable_share_max)에서 계산된다. 아래 끝은 s = taxable_share_min이고, 그 값이 0이면 G = 0이 되어 세 축이 모두 0이 된다.",
+          "lower_end_of_each_axis": "taxable_share_min이 0인 두 선택지에서는 세 축의 아래 끝이 전부 0이다. 이 값은 조문에서 나오므로 구간을 적는 것은 추정이 아니다(isa.benefit.formula.value.bounds_from_the_statute.monotone_in_taxable_share).",
+          "display_rule": "point_estimate_krw가 null이면 축 금액을 점으로 적으면 안 된다. '최대 ○원'으로 적거나 구간의 두 끝을 함께 적는다. 점으로 적으면 과대다.",
+          "requested_field": "화면이 point_estimate_krw === null을 보고 이 판단을 스스로 하게 두면 세법 판단이 화면 코드로 새어 들어간다. 계약에 axis_breakdown_bound_code를 두고 'point' 또는 'upper_bound'를 싣기를 요청한다."
+        },
+        "what_zero_means_in_each_axis": {
+          "why_this_matters": "세 축 중 둘은 흔히 0이다. 0이 '혜택이 없다'로 읽히면 사용자가 잘못 읽는다. 0의 이유가 축마다 다르다.",
+          "rate_gap_zero": {
+            "when": "N ≤ C. 즉 계약기간 전체의 순소득이 비과세 한도금액을 넘지 않을 때.",
+            "meaning": "'저율 분리과세 혜택이 없다'가 아니라 '아직 비과세 한도 안이라 저율과세가 걸릴 자리가 없다'이다. 그 소득은 9%가 아니라 0%로 과세되고 있다 — 더 유리한 쪽이다.",
+            "boundary": "N = C에서 정확히 0이고, N이 C를 넘는 순간부터 (N − C) × 0.099로 자란다. 정수 원 단위로 1원이 되려면 N − C가 11원 이상이어야 한다(0.099 × 11 = 1.089 → 절사 1원). 이 수치는 두 세율에서 계산한 것이다.",
+            "requested_notice_code": "isa_rate_gap_axis_zero_because_within_tax_free_limit"
+          },
+          "tax_free_zero": {
+            "when": "N = 0. 손실이 이익을 전부 상쇄했거나 이자·배당으로 과세될 이익 자체가 없을 때.",
+            "meaning": "혜택이 없는 것이 아니라 손익통산 축으로 옮겨 간 것이다. G > 0이고 N = 0이면 loss_offset_krw가 G × 0.154 전액이 된다."
+          },
+          "loss_offset_zero": {
+            "when": "L을 주지 않아 0으로 둔 경우가 대부분이다(계약 3.6절 loss_amount_krw의 기본 취급).",
+            "meaning": "'손익통산 혜택이 없다'가 아니라 '손실 규모를 받지 않아 계산에 넣지 않았다'이다. 이미 isa_loss_assumed_zero 가정이 나가고 있다."
+          }
+        },
+        "the_axes_do_not_change_their_nature": {
+          "rule": "세 축을 따로 보이더라도 그 합은 여전히 가정 위의 계산이다. 축을 나눈다고 어느 축이 확정 금액이 되지 않는다.",
+          "why": "세 축이 전부 같은 G에서 나오고 G는 사용자가 제시한 수익률에서 나온다.",
+          "related": "benefit.wording.determined_vs_assumption"
+        },
+        "derived_from": "isa.benefit.formula.value.axis_decomposition의 항등식과 bounds_from_the_statute.monotone_in_taxable_share의 단조성에서 도출했다. 경계 수치 11원은 두 세율에서 계산한 것이며 조문에 적힌 값이 아니다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "조세특례제한법 제91조의18 제1항·제2항·제5항, 소득세법 제129조 제1항 제1호 라목·제2호 나목, 지방세법 제103조의13",
+        "law_version": "isa.benefit.formula가 2026-08-10에 확인한 조문과 같다. 이 규칙은 그 산식의 표시 규약만 정하며 새로운 조문 확인을 필요로 하지 않는다.",
+        "url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "benefit.wording.determined_vs_assumption",
+      "title": "「절세액」이 가리키는 대상이 넓어졌다 — 부기를 지우되 두 축의 성격 차이는 기간 표기와 조건절이 진다",
+      "conditions": [
+        { "field": "display.shows_both_tax_credit_and_isa_estimate", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "wording_rule",
+        "problem": "한 막대에 성격이 다른 두 금액이 함께 오른다. 소유자가 「(세액공제 아님)」 부기를 없애도 된다고 했으므로, 그 구분을 다른 방법으로 유지해야 한다.",
+        "what_the_statute_says_is_different": [
+          {
+            "id": "period_unit",
+            "확정 축": "세액공제액은 과세기간 단위다. 소득세법 제59조의3 제1항이 '해당 과세기간에 연금계좌에 납입한 금액'에 대해 공제액을 정한다.",
+            "가정 축": "ISA 금액은 계약 단위다. 조세특례제한법 제91조의18 제2항이 비과세 한도금액을 '가입일 또는 연장일을 기준으로' 정하고, 과세는 계약기간 동안 발생한 이자소득등의 합계액에 걸린다.",
+            "consequence": "ISA 금액을 연 단위로 환산하면 최대 1.75배 과대다(isa.benefit.settlement_period). 두 금액은 애초에 같은 기간의 값이 아니다."
+          },
+          {
+            "id": "when_it_is_fixed",
+            "확정 축": "그 과세기간의 사실만으로 정해진다 — 납입액, 총급여액 또는 종합소득금액, 직전 과세연도 결정세액.",
+            "가정 축": "계약 종료 시점의 소득이 정한다. 아직 발생하지 않은 사실이다."
+          },
+          {
+            "id": "what_fixes_the_number",
+            "확정 축": "조문이 정한다.",
+            "가정 축": "조문과 사용자가 제시한 수익률이 함께 정한다. 수익률은 세법에 없다."
+          }
+        ],
+        "the_rule": {
+          "principle": "부기 대신 기간 표기와 조건절이 구분을 진다. 둘 다 세법에서 나오므로 없앨 수 없는 표기다.",
+          "requirements": [
+            "확정 축의 금액에는 그 금액이 걸리는 과세기간을 적는다(예: '올해'). 조건절을 붙이지 않는다.",
+            "가정 축의 금액에는 정산 기간을 적는다(예: '3년 동안'). 계약의 is_annual이 false 상수이고 settlement_years가 실린다.",
+            "가정 축의 금액에는 조건절을 붙인다(예: '수익률이 연 ○%라면'). 계약의 echo.isa_return_assumption이 그 재료다.",
+            "정산 기간이 사용자가 준 값이 아니라 룰셋의 계약기간 하한이면(settlement_years_source가 ruleset_min_contract_years) 그 사실도 함께 적는다."
+          ],
+          "why_this_survives_the_removal_of_the_parenthetical": "「(세액공제 아님)」은 무엇이 아닌지를 말했다. 기간과 조건절은 무엇인지를 말한다. 뒤쪽이 조문에서 나오므로 더 강하다."
+        },
+        "vocabulary": {
+          "확정 축": {
+            "허용": ["세액공제액", "올해 줄어드는 세금", "절세액"],
+            "근거": "소득세법 제59조의3이 그 과세기간에 대해 정하는 금액이다. 헌장이 「절세」를 계산 결과에 쓰도록 한 자리가 여기다."
+          },
+          "가정 축": {
+            "금지": ["절세액", "아낀 돈", "혜택 금액"],
+            "왜": "가정 위의 계산을 확정 금액과 같은 낱말로 부르면 두 축이 뭉개진다. 헌장의 「절세」는 계산 결과를 가리키는 말이고, 이 값은 사용자가 제시한 수익률이 바뀌면 함께 바뀐다.",
+            "허용": ["○년 동안 덜 내게 되는 세금(가정)", "수익률이 연 ○%라면 ○년 동안 덜 내는 세금"],
+            "note": "낱말을 정하는 것은 이 유닛이 아니라 화면이다. 이 규칙이 정하는 것은 그 낱말이 기간과 조건을 반드시 담아야 한다는 것이다."
+          },
+          "연금계좌 저율과세 축": {
+            "금지": ["금액을 적는 것 전부", "0원"],
+            "허용": ["지금 계산할 수 없음"],
+            "근거": "pension.rate_gap.quantifiability"
+          }
+        },
+        "no_total": {
+          "rule": "두 축의 합계를 적지 않는다.",
+          "basis": "isa.benefit.formula.value.must_not_be_summed_with_the_tax_credit이 이미 금지한다. 성립 조건이 다른 두 값이므로 같은 저울에 올릴 수 없다."
+        },
+        "the_common_absolute_axis_conflicts_with_that_prohibition": {
+          "what_the_owner_asked": "게이트 D35 2번이 막대 길이를 '계좌 한도 대비 비율'이 아니라 공통 절대 축으로 바꾸라고 했다. 예로 든 148.5만원은 그 사람의 최대 세액공제액이다.",
+          "the_conflict": "공통 절대 축은 두 금액을 같은 자로 재는 것이다. 확정 축과 가정 축을 하나의 절대 축에 올리면 길이가 직접 비교되고, 그것은 위 no_total이 금지한 '같은 저울'과 같은 일을 형태로 하는 것이다. 형태 구분(꽉 참 / 테두리만)만으로는 길이 비교를 막지 못한다.",
+          "readings": [
+            { "id": "가", "내용": "축을 완전히 분리한다. 세액공제 막대들끼리만 공통 절대 축(그 사람의 최대 세액공제액)을 쓰고, ISA 가정 금액은 그 축에 올리지 않는다.", "근거": "isa.benefit.formula.value.must_not_be_summed_with_the_tax_credit", "이 유닛의 권고": true },
+            { "id": "나", "내용": "하나의 절대 축을 쓰되 가정 축 막대를 별도 구역에 두고 축 라벨을 각기 단다.", "근거": "소유자가 행 사이 길이 비교를 명시적으로 요구했다.", "이 유닛의 권고": false }
+          ],
+          "escalation": "이 유닛은 (가)를 권한다. (나)를 택하는 것은 위 확정 규칙을 덮는 결정이므로 관리자·소유자의 판정으로 게이트 기록에 남아야 한다. 세법 해석이 갈리는 사안이 아니라 표시 판단이므로 이 유닛이 단독으로 정하지 않는다."
+        },
+        "one_sentence_that_must_not_disappear": {
+          "sentence": "세액공제를 받은 납입액은 나중에 연금으로 받을 때 다시 과세됩니다.",
+          "basis": "소득세법 제20조의3 제1항 제2호 나목",
+          "why_it_belongs_here": "세액공제액을 '돌려받는 돈'이라고만 적으면 이 사실이 사라진다. 금액이 없는 문장이므로 인출 단계를 여는 것이 아니다(pension.rate_gap.quantifiability.value.the_half_ledger_problem).",
+          "what_must_not_be_added": "그 재과세의 금액이나 순효과를 적는 것. 세율이 3.3~16.5%로 벌어지고 그 폭은 인출 시점의 선택이 정한다."
+        },
+        "derived_from": "소득세법 제59조의3 제1항과 조세특례제한법 제91조의18 제2항의 단위 기간 차이, 그리고 이 룰셋의 isa.benefit.settlement_period·isa.benefit.formula가 이미 정한 금지에서 도출했다. 새로 넣은 수치가 없다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조의3 제1항 및 제20조의3 제1항 제2호 나목, 조세특례제한법 제91조의18 제1항·제2항",
+        "law_version": "확인 시점의 현행 조문. 제59조의3 제1항의 '해당 과세기간에 연금계좌에 납입한 금액' 문언과 제91조의18 제2항의 '가입일 또는 연장일을 기준으로' 문언은 각각 pension.credit.rate와 isa.benefit.settlement_period에서 확인한 것을 그대로 쓴다.",
+        "url": "https://www.law.go.kr/법령/소득세법/제59조의3",
+        "corroborating_url": "https://www.law.go.kr/법령/조세특례제한법/제91조의18",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
     }
   ]
 }
