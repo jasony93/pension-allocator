@@ -39,6 +39,12 @@ const NONE = { [PENSION_POOL]: 0, [ISA_POOL]: 0 };
 
 const monthlyOf = (result, id) => result.buckets.find((b) => b.id === id).monthlyKrw;
 const totalMonthly = (result) => result.buckets.reduce((sum, b) => sum + b.monthlyKrw, 0);
+/**
+ * 그 갈래가 **연 배분에서 벗어난 정도**(원/연). `월 × 개월수 − 연 배분`과 같은 값이고,
+ * 반환값만으로 계산된다 — `조정액 × 개월수 − 나머지`가 항등적으로 그것이기 때문이다.
+ */
+const deviationOf = (bucket, months) =>
+  bucket.roundingAdjustmentMonthlyKrw * months - bucket.remainderKrw;
 
 test('나누어떨어지면 아무것도 얹지 않는다', () => {
   const result = apportionMonthly({
@@ -252,7 +258,77 @@ test('인자를 변형하지 않는다 — 같은 인자로 두 번 부르면 �
   assert.deepEqual(first, second);
 });
 
-test('어느 갈래도 연 배분에서 개월수 이상 벗어나지 않는다', () => {
+test('한 갈래가 세 원까지 받는다 — 이탈의 위쪽 끝이 여기서 나온다', () => {
+  // 나머지: 연금 11, 연금저축 11, ISA 11, 미배분 3. 합 36 = 3 × 12 → 세 원을 얹어야 한다.
+  // 세 계좌가 전부 막혀 있으므로 **한도 조건이 없는 미배분이 셋을 다 떠안는다.**
+  const months = 12;
+  const result = apportionMonthly({
+    months,
+    capacityMonthlyKrw: 1_000_000,
+    buckets: bucketsOf({
+      pension: 3_000_011,
+      annuity: 3_000_011,
+      isa: 3_000_011,
+      unallocated: 12 * 1_000_000 - 3 * 3_000_011,
+    }),
+    poolHeadroomKrw: NONE,
+  });
+
+  const unallocated = result.buckets.find((b) => b.id === 'unallocated');
+  assert.equal(unallocated.roundingAdjustmentMonthlyKrw, 3);
+  assert.equal(result.unassignedMonthlyKrw, 0);
+  assert.equal(totalMonthly(result), 1_000_000);
+
+  // **이탈이 `3 × (개월수 − 1)`에 정확히 닿는다.** 계약 0.12절이 적는 위쪽 끝이 이 값이고,
+  // 그 자리가 여기다 — 남은 셋의 나머지가 전부 최대(11)일 때 이 갈래의 나머지가 3이 되고
+  // 이탈은 `3 × 12 − 3 = 33`이 된다. 넷째 갈래가 생기면 이 끝도 함께 넓어진다.
+  const deviation = deviationOf(unallocated, months);
+  assert.equal(deviation, 3 * months - unallocated.remainderKrw);
+  assert.equal(deviation, (bucketsOf({}).length - 1) * (months - 1));
+});
+
+test('이탈은 언제나 −(개월수 − 1) 이상 (갈래 수 − 1) × (개월수 − 1) 이하다', () => {
+  // 계약 0.12절이 `±(개월수 − 1)`로 적었던 자리다. 위쪽이 틀렸고, 아래쪽만 맞았다.
+  //
+  // 증명(`invariants.test.mjs` I12.1(d)에도 적었다): 얹어야 할 총량 k에 대해
+  // Σ나머지 = k·m 이고 어느 갈래의 조정액도 k 이하이므로,
+  // 이탈_X = 조정액_X·m − r_X ≤ k·m − (k·m − (갈래 수 − 1)(m − 1)) = (갈래 수 − 1)(m − 1).
+  const branchCount = bucketsOf({}).length;
+  for (const months of [2, 3, 7, 11, 12]) {
+    for (const headroom of [WIDE, NONE, { [PENSION_POOL]: 0, [ISA_POOL]: 1_000_000 }]) {
+      for (let offset = 0; offset < 40; offset += 1) {
+        const capacity = 1_000_000;
+        const pension = 1_000 + offset;
+        const annuity = 2_000 + offset * 3;
+        const isa = 3_000 + offset * 7;
+        const result = apportionMonthly({
+          months,
+          capacityMonthlyKrw: capacity,
+          buckets: bucketsOf({
+            pension,
+            annuity,
+            isa,
+            unallocated: capacity * months - pension - annuity - isa,
+          }),
+          poolHeadroomKrw: headroom,
+        });
+
+        for (const bucket of result.buckets) {
+          const deviation = deviationOf(bucket, months);
+          assert.ok(
+            deviation >= -(months - 1) && deviation <= (branchCount - 1) * (months - 1),
+            `m=${months} offset=${offset} ${bucket.id}: 이탈 ${deviation}`,
+          );
+        }
+      }
+    }
+  }
+});
+
+test('한도 여유가 넓으면 어느 갈래도 개월수 이상 벗어나지 않는다 — 조정을 한 번씩만 받기 때문이다', () => {
+  // **이 이름의 조건을 16차에 붙였다.** 조건 없이 적혀 있었으나 참이 아니다 — 여유가
+  // 막힌 좌표에서는 한 갈래가 조정을 둘·셋 받고 이탈이 개월수를 넘는다(바로 위 두 시험).
+  // 여유가 넓으면 나머지가 있는 갈래가 전부 후보라서 각자 한 번씩만 받는다.
   const months = 12;
   for (let offset = 0; offset < 60; offset += 1) {
     const pension = 3_000_000 + offset;
@@ -447,4 +523,76 @@ test('미배분이 있는 배분안에서는 잔차가 미배분으로 간다', 
 
 test('미배분 갈래의 id는 계좌 id와 겹치지 않는다', () => {
   assert.equal(Object.values(ACCOUNT).includes(MONTHLY_BUCKET.UNALLOCATED), false);
+});
+
+// ── 3부. 조정을 둘 이상 받는 갈래가 **응답에서도** 나온다 ────────────────────
+//
+// 산술로는 진작 가능했으나(1부) **엔진의 실제 좌표에서 나오는지**는 아무 데도 적혀 있지
+// 않았다. 계약 0.12절이 이탈 범위를 `±(개월수 − 1)`로 적은 것이 그 공백에서 나왔다.
+// **아래 두 좌표가 그 서술을 반증한다.** 여기 있는 금액은 세법 수치가 아니라 그 좌표를
+// 짚는 입력이고, 기대값은 응답 자신의 나머지·조정액에서 나온다.
+
+/** 그 배분안에서 조정을 가장 많이 받은 갈래. 계좌와 미배분을 함께 본다. */
+function heaviestBranch(plan, months) {
+  const branches = [
+    ...plan.allocations.map((a) => ({
+      id: a.account,
+      adjustment: a.monthly_rounding_adjustment_krw,
+      deviation: a.monthly_annualized_krw - a.annual_krw,
+    })),
+    {
+      id: MONTHLY_BUCKET.UNALLOCATED,
+      adjustment: plan.unallocated_monthly_rounding_adjustment_krw,
+      deviation: plan.unallocated_monthly_krw * months - plan.unallocated_annual_krw,
+    },
+  ];
+  return branches.reduce((best, branch) => (branch.adjustment > best.adjustment ? branch : best));
+}
+
+test('연금 여유가 0인 안에서는 ISA가 조정을 두 번 받는다 — 이탈이 개월수를 넘는다', () => {
+  // 연금 납입 한도를 **ISA보다 먼저** 채우는 안에서만 나오는 좌표다. 그 안은 연금 여유를
+  // 0으로 만든 뒤 ISA를 채우므로, 연금 두 갈래가 막히고 ISA만 후보로 남는다.
+  // 기납입액 1원씩이 두 연금 갈래의 나머지를 11로 만든다.
+  const months = 12;
+  const request = baseRequest({
+    profile: { monthly_capacity_krw: 1_700_000, months_remaining_in_tax_year: months },
+    accounts: {
+      annuity_savings: { ytd_contribution_krw: 1 },
+      retirement_pension: { ytd_contribution_krw: 1 },
+    },
+    options: { plan_variants: ['pension_contribution_before_isa'] },
+  });
+  const plan = planOf(scenarioOf(compute(request, rulesets)), 'pension_contribution_before_isa');
+
+  const heaviest = heaviestBranch(plan, months);
+  assert.equal(heaviest.id, ACCOUNT.ISA);
+  assert.equal(heaviest.adjustment, 2, '한 갈래가 조정을 둘 받는 좌표가 실재한다');
+  assert.ok(
+    heaviest.deviation > months - 1,
+    `이탈 ${heaviest.deviation}이 개월수 − 1(${months - 1}) 이하로 남았다 — ` +
+      '계약 0.12절의 옛 서술이 참이 되어 이 시험이 아무것도 반증하지 못한다',
+  );
+  // 위쪽 끝은 여전히 지킨다. 넘는 것은 옛 서술이지 새 범위가 아니다.
+  assert.ok(heaviest.deviation <= 3 * (months - 1));
+});
+
+test('세 계좌가 다 막힌 기본안에서는 미배분이 조정을 셋 받는다 — 위쪽 끝에 닿는다', () => {
+  // 예산이 모든 한도의 합을 넘어 미배분이 남고, 세 계좌는 전부 한도에 닿아 여유가 0이다.
+  const months = 12;
+  const request = baseRequest({
+    profile: { monthly_capacity_krw: 10_000_000, months_remaining_in_tax_year: months },
+    accounts: {
+      annuity_savings: { ytd_contribution_krw: 1 },
+      retirement_pension: { ytd_contribution_krw: 1 },
+      isa: { cumulative_contribution_krw: 9, ytd_contribution_krw: 9, years_since_opening: 3 },
+    },
+  });
+  const plan = planOf(scenarioOf(compute(request, rulesets)), 'max_tax_credit');
+
+  assert.ok(plan.unallocated_annual_krw > 0, '이 입력에는 미배분이 있어야 한다');
+  const heaviest = heaviestBranch(plan, months);
+  assert.equal(heaviest.id, MONTHLY_BUCKET.UNALLOCATED);
+  assert.equal(heaviest.adjustment, 3);
+  // 남은 세 갈래의 나머지가 전부 최대(개월수 − 1)일 때 이 갈래가 위쪽 끝에 정확히 닿는다.
+  assert.equal(heaviest.deviation, 3 * (months - 1));
 });

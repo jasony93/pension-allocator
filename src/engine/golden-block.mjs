@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 
 import {
   ACCOUNT_ORDER,
+  NON_QUANTIFIED,
   PENSION_ACCOUNT_KEYS,
   PLAN,
   PLAN_ORDER,
@@ -90,6 +91,42 @@ export const SCENARIO_KEYS = [
 ];
 /** 반영하지 않은 규칙 하나에 대해 주장할 수 있는 것. */
 export const UNAPPLIED_KEYS = ['present', 'reason_code'];
+/** 비정량 효과 하나(코드 × 계좌)에 대해 주장할 수 있는 것. */
+export const NON_QUANTIFIED_KEYS = [
+  /** 이 계좌에 이 효과가 붙었는가. `false`면 나머지를 적을 수 없다 */
+  'present',
+  /** 왜 금액을 못 내는가. 「과세이연으로 ○○원 이득」을 대신 쓰지 못하게 하는 자리다 */
+  'reason_code',
+  /** 이 효과에 딸린 참·거짓 사실들. `null`은 「이 코드에는 붙지 않는다」는 주장이다 */
+  'facts',
+];
+/** 알려진 비정량 효과 코드. 오타를 값이 아니라 형식 단계에서 잡는다. */
+const NON_QUANTIFIED_CODES = [NON_QUANTIFIED.ISA_HEADROOM, NON_QUANTIFIED.PENSION_WITHOUT_CREDIT];
+/** `facts`가 붙는 코드. 계약 5.6절이 이 하나로 한정한다. */
+const CODE_WITH_FACTS = NON_QUANTIFIED.PENSION_WITHOUT_CREDIT;
+/**
+ * `facts`가 실을 수 있는 것. 계약 5.6절의 여섯 키 그대로다.
+ *
+ * **아래 넷은 함께 적어야 한다**(`NON_QUANTIFIED_REQUIRED_FACTS`). 계약이 「셋 중 하나라도
+ * 빠지면 화면 문장이 거짓이 된다」고 적은 그 셋이 이 넷으로 표현되기 때문이다 —
+ * 원금 비과세 · 확인서 절차와 그 불소급 · 수익 과세. 하나만 적을 수 있게 두면
+ * 「facts를 적었으니 검사됐다」로 보이면서 정작 그 문장을 떠받치는 사실이 빠질 수 있다.
+ */
+export const NON_QUANTIFIED_FACT_KEYS = [
+  'credit_this_year_krw',
+  'contribution_without_credit_krw',
+  'principal_taxed_on_withdrawal',
+  'principal_tax_free_requires_confirmation',
+  'principal_tax_free_confirmation_prospective_only',
+  'returns_taxed_on_withdrawal',
+];
+const NON_QUANTIFIED_REQUIRED_FACTS = [
+  'principal_taxed_on_withdrawal',
+  'principal_tax_free_requires_confirmation',
+  'principal_tax_free_confirmation_prospective_only',
+  'returns_taxed_on_withdrawal',
+];
+const NON_QUANTIFIED_FACT_AMOUNTS = ['credit_this_year_krw', 'contribution_without_credit_krw'];
 /** `legal_basis` 항목 하나가 주장할 수 있는 것. */
 export const LEGAL_BASIS_KEYS = [
   /** 이 규칙이 근거 목록에 실렸는가. `false`면 나머지를 적을 수 없다 */
@@ -125,6 +162,20 @@ export const PLAN_KEYS = [
   'credit_remaining_after_plan_krw',
   // 이 안이 어떤 비정량 효과를 달고 나가는가. 공제 없는 연금 납입이 그 자리다.
   'non_quantified_codes',
+  /**
+   * D32 후속 — **효과 하나의 속살.** 코드 목록만으로는 그 효과에 딸린 사실들이 실제로
+   * 나가는지 아무도 보지 않는다. `pension_contribution_without_credit`의 `facts`가 그 자리다.
+   *
+   * **왜 이번에 열었나.** D32가 이 효과를 기본안으로 옮겨 대다수 사용자가 보게 됐고,
+   * 계약 5.6절은 **셋 중 하나라도 빠지면 화면 문장이 거짓이 된다**고 적는다. 특히
+   * `principal_tax_free_requires_confirmation`이 빠지면 「나중에 비과세로 돌아옵니다」가
+   * 절차를 말하지 않는 거짓 문장이 된다. 그런데 그 사실이 응답에서 값을 바꿔도
+   * **정답지가 그것을 주장할 어휘가 없었다.**
+   *
+   * 두 겹으로 연다 — **효과 코드 → 계좌**. 같은 코드가 두 연금계좌에 각각 붙고
+   * 계좌마다 금액이 다르므로, 한 겹으로 접으면 그 구분이 사라진다.
+   */
+  'non_quantified_effects',
   'monthly_rounding_residual_krw',
   'delta_vs_baseline_krw',
   'credit_eligible_krw',
@@ -521,6 +572,96 @@ function validateUnapplied(value, where, errors) {
   }
 }
 
+/**
+ * 비정량 효과와 그 사실들(D32 후속). **자기모순은 대조 전에 거절한다.**
+ *
+ * 여기서 값을 단정하지 않는 것이 중요하다 — 네 사실의 참·거짓은 **룰셋에서 읽는 값**이고
+ * (`limits.mjs`의 `resolvePensionWithoutCreditFacts`), 조문이 바뀌면 따라 바뀐다.
+ * 형식이 잡는 것은 **구조**뿐이다. 단정하는 둘(`credit_this_year_krw`가 0이라는 것,
+ * 금액이 0보다 크다는 것)은 세법 수치가 아니라 이 효과의 정의 자체다 —
+ * 「공제를 낳지 않는 납입」이 올해 공제를 낳는다고 적으면 그것은 이름과의 모순이다.
+ */
+function validateNonQuantified(value, where, errors) {
+  if (!requireNonEmptyObject(value, where, errors)) return;
+  unknownKeys(value, NON_QUANTIFIED_CODES, where, errors);
+
+  for (const [code, byAccount] of Object.entries(value)) {
+    if (!NON_QUANTIFIED_CODES.includes(code)) continue;
+    const atCode = `${where}.${code}`;
+    if (!requireNonEmptyObject(byAccount, atCode, errors)) continue;
+    unknownKeys(byAccount, ACCOUNTS, atCode, errors);
+
+    for (const [account, entry] of Object.entries(byAccount)) {
+      if (!ACCOUNTS.includes(account)) continue;
+      const at = `${atCode}.${account}`;
+      if (!requireNonEmptyObject(entry, at, errors)) continue;
+      unknownKeys(entry, NON_QUANTIFIED_KEYS, at, errors);
+
+      if ('present' in entry) requireBoolean(entry.present, `${at}.present`, errors);
+      if ('reason_code' in entry) requireStringOrNull(entry.reason_code, `${at}.reason_code`, errors);
+      // 붙지 않았다고 적어 놓고 그 효과의 내용을 적을 수는 없다.
+      if (entry.present === false && Object.keys(entry).length > 1) {
+        errors.push(`${at}: present:false인데 다른 항목을 주장한다 — 없는 효과의 내용을 적을 수 없다`);
+      }
+
+      if (!('facts' in entry) || entry.facts === null) {
+        // `facts: null`은 「이 코드에는 사실이 붙지 않는다」는 주장이다. 붙는 코드에 적으면 모순이다.
+        if (entry.facts === null && code === CODE_WITH_FACTS) {
+          errors.push(`${at}.facts: 이 코드에는 언제나 facts가 붙는다 — null로 적을 수 없다(계약 5.6절)`);
+        }
+        continue;
+      }
+      if (code !== CODE_WITH_FACTS) {
+        errors.push(
+          `${at}.facts: "${code}"에는 facts가 붙지 않는다 — 계약 5.6절이 "${CODE_WITH_FACTS}" 하나로 한정한다`,
+        );
+        continue;
+      }
+
+      const atFacts = `${at}.facts`;
+      if (!requireNonEmptyObject(entry.facts, atFacts, errors)) continue;
+      unknownKeys(entry.facts, NON_QUANTIFIED_FACT_KEYS, atFacts, errors);
+
+      // **함께 나가야 하는 사실을 하나만 적을 수 없다.** 하나만 적히면 "facts를 주장했다"로
+      // 보이면서 정작 화면 문장을 떠받치는 사실이 검사되지 않는다.
+      const missing = NON_QUANTIFIED_REQUIRED_FACTS.filter((key) => !(key in entry.facts));
+      if (missing.length > 0 && missing.length < NON_QUANTIFIED_REQUIRED_FACTS.length) {
+        errors.push(
+          `${atFacts}: 함께 나가야 하는 사실이 빠졌다 (${missing.join(', ')}) — ` +
+            '셋 중 하나라도 빠지면 화면 문장이 거짓이 된다(계약 5.6절). 넷을 함께 적는다',
+        );
+      }
+      if (missing.length === NON_QUANTIFIED_REQUIRED_FACTS.length) {
+        errors.push(
+          `${atFacts}: 금액만 적고 사실을 하나도 적지 않았다 — ` +
+            '이 키가 열린 이유가 그 사실들이므로 넷을 함께 적는다(계약 5.6절)',
+        );
+      }
+      for (const key of NON_QUANTIFIED_REQUIRED_FACTS) {
+        if (key in entry.facts) requireBoolean(entry.facts[key], `${atFacts}.${key}`, errors);
+      }
+      for (const key of NON_QUANTIFIED_FACT_AMOUNTS) {
+        if (key in entry.facts) requireInt(entry.facts[key], `${atFacts}.${key}`, errors);
+      }
+      // 이름과의 모순. 「공제를 낳지 않는 납입」이 올해 공제를 낳을 수는 없다.
+      if ('credit_this_year_krw' in entry.facts && entry.facts.credit_this_year_krw !== 0) {
+        errors.push(
+          `${atFacts}.credit_this_year_krw: 언제나 0이다 — ` +
+            '이 효과는 「올해의 세액공제를 낳지 않는 납입」이고, 그것이 이 값의 뜻이다',
+        );
+      }
+      if (Number.isInteger(entry.facts.contribution_without_credit_krw)) {
+        if (entry.facts.contribution_without_credit_krw <= 0) {
+          errors.push(
+            `${atFacts}.contribution_without_credit_krw: 0보다 커야 한다 — ` +
+              '그 몫이 0이면 이 효과 자체가 붙지 않는다. 붙지 않는다고 적으려면 present:false다',
+          );
+        }
+      }
+    }
+  }
+}
+
 /** 가정 기반 ISA 정산액. 상태와 금액이 어긋나면 대조 전에 거절한다. */
 function validateIsaEstimate(value, where, errors) {
   if (!requireNonEmptyObject(value, where, errors)) return;
@@ -677,6 +818,9 @@ function validatePlan(plan, where, errors) {
   }
   if ('non_quantified_codes' in plan) {
     requireStringArray(plan.non_quantified_codes, `${where}.non_quantified_codes`, errors);
+  }
+  if ('non_quantified_effects' in plan) {
+    validateNonQuantified(plan.non_quantified_effects, `${where}.non_quantified_effects`, errors);
   }
   if ('warning_count' in plan) requireInt(plan.warning_count, `${where}.warning_count`, errors);
   if ('warning_codes' in plan) requireStringArray(plan.warning_codes, `${where}.warning_codes`, errors);
@@ -870,6 +1014,8 @@ export const VOCABULARY = [
   ...PENSION_START_KEYS.map((k) => `pension_withdrawal_start.${k}`),
   ...LEGAL_BASIS_KEYS.map((k) => `legal_basis.${k}`),
   ...UNAPPLIED_KEYS.map((k) => `unapplied_proposed_rules.${k}`),
+  ...NON_QUANTIFIED_KEYS.map((k) => `non_quantified_effect.${k}`),
+  ...NON_QUANTIFIED_FACT_KEYS.map((k) => `non_quantified_facts.${k}`),
   ...PLAN_KEYS.map((k) => `plan.${k}`),
   ...PLAN_TAX_CAP_KEYS.map((k) => `tax_liability_cap.${k}`),
   ...UNALLOCATED_KEYS.map((k) => `unallocated_breakdown.${k}`),
@@ -904,6 +1050,12 @@ export function vocabularyUsedBy(parsed) {
       }
       for (const key of Object.keys(plan.unallocated_breakdown ?? {})) {
         used.add(`unallocated_breakdown.${key}`);
+      }
+      for (const byAccount of Object.values(plan.non_quantified_effects ?? {})) {
+        for (const entry of Object.values(byAccount ?? {})) {
+          for (const key of Object.keys(entry ?? {})) used.add(`non_quantified_effect.${key}`);
+          for (const key of Object.keys(entry?.facts ?? {})) used.add(`non_quantified_facts.${key}`);
+        }
       }
       for (const key of Object.keys(plan.assumption_based_isa_estimate ?? {})) {
         used.add(`assumption_based_isa_estimate.${key}`);
@@ -1121,6 +1273,9 @@ function checkPlan(plan, expected, label) {
       `${label} 비정량 효과 코드`,
     );
   }
+  if (expected.non_quantified_effects) {
+    checkNonQuantified(plan, expected.non_quantified_effects, label);
+  }
   if ('monthly_rounding_residual_krw' in expected) {
     assert.equal(
       plan.monthly_rounding_residual_krw,
@@ -1149,6 +1304,50 @@ function checkPlan(plan, expected, label) {
   }
   if (expected.assumption_based_isa_estimate) {
     checkIsaEstimate(plan, expected.assumption_based_isa_estimate, label);
+  }
+}
+
+/**
+ * 비정량 효과와 그 사실들. **적힌 키는 하나도 건너뛰지 않는다.**
+ *
+ * 이것이 계약 5.6절의 「셋 중 하나라도 빠지면 화면 문장이 거짓이 된다」를 정답지가 무는
+ * 자리다. 응답에서 사실 하나가 사라지거나 값이 뒤집히면 여기서 **그 사실의 이름과 함께**
+ * 실패한다 — 라벨에 케이스·시나리오·배분안이 이미 실려 있고, 여기서 코드·계좌·항목이 붙는다.
+ */
+function checkNonQuantified(plan, expected, label) {
+  for (const [code, byAccount] of Object.entries(expected)) {
+    for (const [account, entry] of Object.entries(byAccount)) {
+      const actual = plan.non_quantified_effects.find(
+        (effect) => effect.code === code && effect.account === account,
+      );
+      const seen = plan.non_quantified_effects.map((e) => `${e.code}/${e.account}`).join(', ');
+
+      if ('present' in entry) {
+        assert.equal(
+          actual !== undefined,
+          entry.present,
+          `${label} 비정량 효과 실림 여부(${code}/${account}) (나온 것: ${seen || '없음'})`,
+        );
+        if (entry.present === false) continue;
+      }
+      assert.ok(actual, `${label} 비정량 효과에 "${code}/${account}"가 없다 (있는 것: ${seen || '없음'})`);
+
+      if ('reason_code' in entry) {
+        assert.equal(actual.reason_code, entry.reason_code, `${label} 비정량 효과 사유(${code}/${account})`);
+      }
+      if (entry.facts === null) {
+        assert.equal(actual.facts, null, `${label} 비정량 효과 사실(${code}/${account})이 null이 아니다`);
+        continue;
+      }
+      for (const [key, value] of Object.entries(entry.facts ?? {})) {
+        assert.equal(
+          actual.facts?.[key],
+          value,
+          `${label} 비정량 효과 사실(${code}/${account}.${key})` +
+            (actual.facts === null ? ' — 응답의 facts가 null이다' : ''),
+        );
+      }
+    }
   }
 }
 

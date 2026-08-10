@@ -412,6 +412,74 @@ const ISA_RANGE = {
   },
 };
 
+// ── 공제를 낳지 않는 연금 납입의 사실들 (D26·D32 후속) ──
+//
+// **여기 적은 값의 출처를 하나씩 밝힌다.** 이 블록은 형식이 도는 것만 보이면 되므로
+// 엔진을 돌려 나온 값을 옮겨 오지 않는다.
+//   · 금액 둘 — 룰셋에서 읽는다(`납입 한도 − 합산 공제한도`가 공제를 낳지 않는 몫이다).
+//   · 사실 넷 — **`pension-contribution-fill.test.mjs`가 이미 고정해 둔 값**이다.
+//     그 파일이 같은 넷을 응답에서 직접 확인하고 있고, 값의 출처는 룰셋이다.
+//   · 사유 코드 — 계약 5.6절이 열거한 둘 중 하나다.
+
+const PENSION_CONTRIBUTION_LIMIT = confirmedRule('pension.contribution.annual_limit').value.amount_krw;
+/** 연금 납입 한도까지 채웠을 때 **공제를 낳지 않는** 몫. 두 한도의 차이다. */
+const WITHOUT_CREDIT = PENSION_CONTRIBUTION_LIMIT - COMBINED_LIMIT;
+const MONTHS = 12;
+
+/**
+ * 예산을 연금 납입 한도에 딱 맞추고 ISA 자격을 막는다. 그러면 배분이 룰셋 값 셋으로
+ * 정해지고, 인출이 자유로운 연금저축이 3단계 몫을 전부 받는다 — **IRP에는 이 효과가
+ * 붙지 않는다는 것도 이 블록의 주장이다.**
+ */
+const WITHOUT_CREDIT_FACTS = {
+  case: 'GC-98',
+  request: baseRequest({
+    profile: {
+      monthly_capacity_krw: PENSION_CONTRIBUTION_LIMIT / MONTHS,
+      months_remaining_in_tax_year: MONTHS,
+      financial_income_taxpayer_last_3_years: true,
+    },
+  }),
+  expect: {
+    current: {
+      isa_eligible: false,
+      plans: {
+        max_tax_credit: {
+          allocation: {
+            annuity_savings: ANNUITY_LIMIT + WITHOUT_CREDIT,
+            retirement_pension: COMBINED_LIMIT - ANNUITY_LIMIT,
+            isa: 0,
+          },
+          tax_credit: creditOf(Math.floor(COMBINED_LIMIT * CREDIT_RATE)),
+          warning_count: 0,
+          non_quantified_codes: ['pension_contribution_without_credit'],
+          non_quantified_effects: {
+            pension_contribution_without_credit: {
+              annuity_savings: {
+                present: true,
+                // 세법이 유불리를 정하지 않는다는 사실. 「과세이연으로 ○○원 이득」을
+                // 대신 쓰지 못하게 하는 자리다(계약 5.6절 「쓰면 안 되는 문장」).
+                reason_code: 'benefit_depends_on_return_horizon_and_withdrawal_form_not_in_ruleset',
+                facts: {
+                  credit_this_year_krw: 0,
+                  contribution_without_credit_krw: WITHOUT_CREDIT,
+                  // 넷이 함께 나가야 화면 문장이 참이 된다(계약 5.6절).
+                  principal_taxed_on_withdrawal: false,
+                  principal_tax_free_requires_confirmation: true,
+                  principal_tax_free_confirmation_prospective_only: true,
+                  returns_taxed_on_withdrawal: true,
+                },
+              },
+              // 이 안에서 IRP는 공제 한도 안쪽에서 멈춘다. **붙지 않는다는 것도 주장이다.**
+              retirement_pension: { present: false },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 const BLOCKS = [
   CAP_APPLIED,
   CAP_ZERO,
@@ -421,6 +489,7 @@ const BLOCKS = [
   CREDIT_RATE_FALLBACK,
   ISA_POINT,
   ISA_RANGE,
+  WITHOUT_CREDIT_FACTS,
 ];
 
 const runBlock = (block) => checkCase(block, compute(buildRequest(block), rulesets));
@@ -452,6 +521,10 @@ const S = (account, key) => ['expect', 'current', 'pension_withdrawal_start', ac
 const L = (ruleId, key) => ['expect', 'current', 'legal_basis', ruleId, key];
 const CR = (key) => ['credit_rate', key];
 const E = (...rest) => P('max_tax_credit', 'assumption_based_isa_estimate', ...rest);
+/** 비정량 효과 — 코드 × 계좌 두 겹을 지나 항목까지. */
+const NQ = (account, ...rest) =>
+  P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credit', account, ...rest);
+const NQF = (key) => NQ('annuity_savings', 'facts', key);
 
 const UNCAPPED = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
 
@@ -565,6 +638,30 @@ const INJECTIONS = [
   // ── 반영하지 않은 개정예고 규칙 (D32 후속) ──
   { via: 'compare', block: LEGAL_BASIS, name: 'unapplied (없는데 있다고 적음)', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction'], value: { present: true }, mentions: ['GC-94', '미반영 규칙 실림 여부'] },
   { via: 'format', block: LEGAL_BASIS, name: 'present:false인데 사유를 주장', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction'], value: { present: false, reason_code: 'out_of_product_scope' }, token: '없는 항목의 사유' },
+
+  // ── 공제 없는 연금 납입의 사실들 (D26·D32 후속) ──
+  // **네 사실이 하나씩 다 물리는지를 본다.** 하나라도 건너뛰어지면 그 사실은 응답에서
+  // 값이 뒤집혀도 정답지가 통과하고, 그때 화면 문장이 거짓이 된다(계약 5.6절).
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'principal_tax_free_requires_confirmation', path: NQF('principal_tax_free_requires_confirmation'), value: false, mentions: ['GC-98', 'current', 'max_tax_credit', 'principal_tax_free_requires_confirmation'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'principal_tax_free_confirmation_prospective_only', path: NQF('principal_tax_free_confirmation_prospective_only'), value: false, mentions: ['GC-98', 'principal_tax_free_confirmation_prospective_only'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'principal_taxed_on_withdrawal', path: NQF('principal_taxed_on_withdrawal'), value: true, mentions: ['GC-98', 'principal_taxed_on_withdrawal'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'returns_taxed_on_withdrawal', path: NQF('returns_taxed_on_withdrawal'), value: false, mentions: ['GC-98', 'returns_taxed_on_withdrawal'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'contribution_without_credit_krw', path: NQF('contribution_without_credit_krw'), value: WITHOUT_CREDIT + 1, mentions: ['GC-98', 'contribution_without_credit_krw'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'reason_code', path: NQ('annuity_savings', 'reason_code'), value: 'depends_on_investment_return_not_in_ruleset', mentions: ['GC-98', '비정량 효과 사유'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'present (붙었는데 아니라고 적음)', path: NQ('annuity_savings'), value: { present: false }, mentions: ['GC-98', '비정량 효과 실림 여부', 'annuity_savings'] },
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: 'present (안 붙었는데 붙었다고 적음)', path: NQ('retirement_pension'), value: { present: true }, mentions: ['GC-98', '비정량 효과 실림 여부', 'retirement_pension'] },
+  // 두 연금계좌를 구분해서 본다 — 한쪽의 사실을 다른 쪽에 적어도 걸려야 한다.
+  { via: 'compare', block: WITHOUT_CREDIT_FACTS, name: '계좌 교차(IRP에 연금저축의 사실을 적음)', path: NQ('retirement_pension'), value: { present: true, facts: { contribution_without_credit_krw: WITHOUT_CREDIT, principal_taxed_on_withdrawal: false, principal_tax_free_requires_confirmation: true, principal_tax_free_confirmation_prospective_only: true, returns_taxed_on_withdrawal: true } }, mentions: ['GC-98', 'retirement_pension'] },
+
+  // 형식이 먼저 무는 자리 — **옮겨 적다 한쪽만 고친 블록을 대조까지 보내지 않는다.**
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '세 사실 중 하나를 빼고 적음', path: NQ('annuity_savings', 'facts'), value: { principal_taxed_on_withdrawal: false, principal_tax_free_confirmation_prospective_only: true, returns_taxed_on_withdrawal: true }, token: '함께 나가야 하는 사실이 빠졌다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '금액만 적고 사실을 하나도 안 적음', path: NQ('annuity_savings', 'facts'), value: { contribution_without_credit_krw: WITHOUT_CREDIT }, token: '사실을 하나도 적지 않았다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: 'present:false인데 사실을 주장', path: NQ('retirement_pension'), value: { present: false, facts: { principal_taxed_on_withdrawal: false, principal_tax_free_requires_confirmation: true, principal_tax_free_confirmation_prospective_only: true, returns_taxed_on_withdrawal: true } }, token: '없는 효과의 내용을 적을 수 없다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '올해 공제액을 0이 아니라고 적음', path: NQF('credit_this_year_krw'), value: 1, token: '언제나 0이다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '공제 없는 몫이 0', path: NQF('contribution_without_credit_krw'), value: 0, token: '0보다 커야 한다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: 'facts가 붙지 않는 코드에 facts를 적음', path: P('max_tax_credit', 'non_quantified_effects', 'isa_tax_free_headroom'), value: { isa: { present: true, facts: { principal_taxed_on_withdrawal: false, principal_tax_free_requires_confirmation: true, principal_tax_free_confirmation_prospective_only: true, returns_taxed_on_withdrawal: true } } }, token: 'facts가 붙지 않는다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '붙는 코드에 facts:null', path: NQ('annuity_savings', 'facts'), value: null, token: '언제나 facts가 붙는다' },
+  { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '사실 자리에 참·거짓이 아닌 값', path: NQF('principal_tax_free_requires_confirmation'), value: 'true', token: '참/거짓이어야 한다' },
 ];
 
 for (const injection of INJECTIONS) {
@@ -615,6 +712,11 @@ const TYPOS = [
   { where: 'ISA 정산액', path: E('upper_bound'), block: ISA_POINT },
   { where: 'ISA 정산액 축', path: E('axis_breakdown', 'tax_free'), block: ISA_POINT },
   { where: '미반영 규칙 항목', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction', 'reason'], block: LEGAL_BASIS },
+  { where: '비정량 효과', path: P('max_tax_credit', 'non_quantified_effect'), block: WITHOUT_CREDIT_FACTS },
+  { where: '비정량 효과 코드', path: P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credits'), block: WITHOUT_CREDIT_FACTS },
+  { where: '비정량 효과 계좌', path: P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credit', 'pension'), block: WITHOUT_CREDIT_FACTS },
+  { where: '비정량 효과 항목', path: NQ('annuity_savings', 'reason'), block: WITHOUT_CREDIT_FACTS },
+  { where: '비정량 효과 사실', path: NQF('principal_tax_free_requires_confirmations'), block: WITHOUT_CREDIT_FACTS },
 ];
 
 for (const { where, path, block } of TYPOS) {
@@ -640,6 +742,11 @@ test('빈 객체로 적으면 형식 검사가 거절한다', () => {
     [LEGAL_BASIS, ['credit_rate']],
     [ISA_POINT, E()],
     [ISA_POINT, E('axis_breakdown')],
+    // 이번에 넓힌 세 겹에도 같은 못을 박는다.
+    [WITHOUT_CREDIT_FACTS, P('max_tax_credit', 'non_quantified_effects')],
+    [WITHOUT_CREDIT_FACTS, P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credit')],
+    [WITHOUT_CREDIT_FACTS, NQ('annuity_savings')],
+    [WITHOUT_CREDIT_FACTS, NQ('annuity_savings', 'facts')],
   ];
 
   for (const [block, path] of cases) {
@@ -649,4 +756,127 @@ test('빈 객체로 적으면 형식 검사가 거절한다', () => {
       `빈 객체가 통과했다: ${path.join('.')}\n${errors.join('\n')}`,
     );
   }
+});
+
+// ── 5. **응답** 쪽 결함 주입 — 이 어휘를 연 이유가 이 절이다 ─────────────────
+//
+// 위의 주입은 전부 **블록**을 비틀었고, 그것이 보이는 것은 "적으면 검사된다"까지다.
+// 이번 회차의 물음은 반대 방향이다 — **응답에서 그 사실이 사라지면 정답지가 무는가.**
+// 그래서 여기서는 블록을 그대로 두고 응답을 비튼다.
+//
+// **왜 이 절이 필요한가.** 계약 5.6절이 「셋 중 하나라도 빠지면 화면 문장이 거짓이 된다」고
+// 적고 D32가 그 효과를 기본안으로 옮겼는데, 넓히기 전 어휘로는 `non_quantified_codes`
+// (코드 목록)만 적을 수 있었다. **코드는 그대로 두고 사실만 뒤집으면 정답지가 통과한다** —
+// 아래 마지막 시험이 그 상태를 재현해 이 절이 실제로 그 구멍을 메웠음을 보인다.
+
+const BASE_RESPONSE = compute(buildRequest(WITHOUT_CREDIT_FACTS), rulesets);
+
+/** 응답 사본에서 문제의 효과를 찾아 돌려준다. 원본은 건드리지 않는다. */
+const brokenResponse = (mutate) => {
+  const copy = structuredClone(BASE_RESPONSE);
+  const plan = copy.scenarios
+    .find((s) => s.scenario_id === 'current')
+    .plans.find((p) => p.plan_id === 'max_tax_credit');
+  mutate(plan);
+  return copy;
+};
+
+const effectOf = (plan) =>
+  plan.non_quantified_effects.find(
+    (e) => e.code === 'pension_contribution_without_credit' && e.account === 'annuity_savings',
+  );
+
+const RESPONSE_INJECTIONS = [
+  {
+    name: '확인 절차 사실을 응답에서 **지운다**',
+    mutate: (plan) => {
+      delete effectOf(plan).facts.principal_tax_free_requires_confirmation;
+    },
+    mentions: ['GC-98', 'current', 'max_tax_credit', 'principal_tax_free_requires_confirmation'],
+  },
+  {
+    name: '확인 절차 사실의 값을 뒤집는다',
+    mutate: (plan) => {
+      effectOf(plan).facts.principal_tax_free_requires_confirmation = false;
+    },
+    mentions: ['GC-98', 'max_tax_credit', 'principal_tax_free_requires_confirmation'],
+  },
+  {
+    name: '불소급 사실을 지운다',
+    mutate: (plan) => {
+      delete effectOf(plan).facts.principal_tax_free_confirmation_prospective_only;
+    },
+    mentions: ['GC-98', 'principal_tax_free_confirmation_prospective_only'],
+  },
+  {
+    name: '수익 과세 사실을 지운다',
+    mutate: (plan) => {
+      delete effectOf(plan).facts.returns_taxed_on_withdrawal;
+    },
+    mentions: ['GC-98', 'returns_taxed_on_withdrawal'],
+  },
+  {
+    name: 'facts를 통째로 null로 만든다',
+    mutate: (plan) => {
+      effectOf(plan).facts = null;
+    },
+    mentions: ['GC-98', 'facts가 null이다'],
+  },
+  {
+    name: '효과를 통째로 지운다',
+    mutate: (plan) => {
+      plan.non_quantified_effects = plan.non_quantified_effects.filter(
+        (e) => e.code !== 'pension_contribution_without_credit',
+      );
+    },
+    mentions: ['GC-98', '비정량 효과'],
+  },
+  {
+    name: '효과를 IRP 쪽으로 옮긴다 (코드 목록은 그대로다)',
+    mutate: (plan) => {
+      effectOf(plan).account = 'retirement_pension';
+    },
+    mentions: ['GC-98', '비정량 효과 실림 여부'],
+  },
+];
+
+for (const injection of RESPONSE_INJECTIONS) {
+  test(`결함 주입[response]: GC-98 ${injection.name}`, () => {
+    let error = null;
+    try {
+      checkCase(WITHOUT_CREDIT_FACTS, brokenResponse(injection.mutate));
+    } catch (thrown) {
+      error = thrown;
+    }
+    assert.ok(
+      error,
+      `응답에서 사실을 비틀었는데 정답지가 통과했다 — 그 사실은 사라져도 아무도 모른다: ${injection.name}`,
+    );
+    for (const token of injection.mentions) {
+      assert.ok(
+        error.message.includes(token),
+        `실패 메시지에 "${token}"이 없다. 어디가 깨졌는지 읽을 수 없다:\n${error.message}`,
+      );
+    }
+  });
+}
+
+/**
+ * **넓히기 전 어휘로는 못 잡는다는 것을 같은 자리에서 보인다.**
+ *
+ * 코드 목록만 적은 블록은 사실이 뒤집혀도 통과한다 — `non_quantified_codes`가 보는 것은
+ * 코드의 집합뿐이고 그 집합은 이 주입으로 한 글자도 바뀌지 않기 때문이다. 이 시험이
+ * 실패한다면 그것은 좋은 소식이다(다른 축이 그 구멍을 메웠다는 뜻이므로 여기를 고쳐 적는다).
+ */
+test('코드 목록만 적은 블록은 사실이 뒤집혀도 통과한다 — 이 회차가 메운 구멍', () => {
+  const codesOnly = structuredClone(WITHOUT_CREDIT_FACTS);
+  delete codesOnly.expect.current.plans.max_tax_credit.non_quantified_effects;
+
+  assert.deepStrictEqual(validateBlock(codesOnly, codesOnly.case), []);
+  checkCase(
+    codesOnly,
+    brokenResponse((plan) => {
+      effectOf(plan).facts.principal_tax_free_requires_confirmation = false;
+    }),
+  );
 });

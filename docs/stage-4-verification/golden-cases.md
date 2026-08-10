@@ -101,11 +101,21 @@ open_questions:
 
 **시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · `pension_withdrawal_start` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent` · **`legal_basis`**. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
 
-**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `unallocated_breakdown` · `credit_remaining_after_plan_krw` · `non_quantified_codes` · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline` · **`assumption_based_isa_estimate`**. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
+**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `unallocated_breakdown` · `credit_remaining_after_plan_krw` · `non_quantified_codes` · **`non_quantified_effects`** · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline` · **`assumption_based_isa_estimate`**. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
 
 **`legal_basis`에 쓸 수 있는 키 (13차에 열렸다)** — 규칙 id를 키로 두고 그 아래에 `present` · `status` · `bill_stage` · `has_uncertainty_note` · `uncertainty_note_count` · `uncertainty_kinds` · `uncertainty_paths` · `applied_to`. **`uncertainty_paths`의 경로는 규칙의 `value`를 뿌리로 하며 `value.` 접두를 붙이지 않는다**(계약 5.7.1절). `uncertainty_kinds`는 종류의 집합이고 사전순이다. `present: false`로 **읽지 않았다는 주장**도 할 수 있다 — 다만 그것은 세법 사실이 아니라 엔진 동작에 대한 주장이므로, 이 문서는 **같은 블록이 이미 그 규칙에서 나온 숫자를 주장하고 있을 때에만** `present: true`를 적는다.
 
 **`assumption_based_isa_estimate`에 쓸 수 있는 키 (13차에 열렸다)** — `state` · `not_computable_reason_code` · `is_annual` · `settlement_years` · `settlement_years_source` · `taxable_share_min` · `taxable_share_max` · `principal_krw` · `total_return_krw` · `taxable_income_krw` · `loss_offset_applied_krw` · `net_income_krw` · `tax_free_limit_krw` · `comparison_side_tax_krw` · `isa_side_tax_krw` · `point_estimate_krw` · `lower_bound_krw` · `upper_bound_krw` · `axis_breakdown` · `comparison_baseline_code`. **점을 낼 수 없는 케이스에서는 `point_estimate_krw`가 `null`이고 두 끝만 적는다**(12.2절).
+
+**`non_quantified_effects`에 쓸 수 있는 키 (16차에 열렸다)** — **효과 코드 → 계좌 id**의 두 겹이고, 그 아래에 `present` · `reason_code` · `facts`를 적는다. 효과 코드는 `pension_contribution_without_credit` / `isa_tax_free_headroom` 둘이며, 계좌 id는 `retirement_pension` / `annuity_savings` / `isa`다. 같은 코드가 두 연금계좌에 각각 붙고 **계좌마다 금액이 다르므로** 두 겹으로 둔다. `present: false`로 **그 계좌에는 붙지 않는다는 주장**도 할 수 있고, 그때는 다른 항목을 적을 수 없다.
+
+**`facts`에 쓸 수 있는 키** — `credit_this_year_krw` · `contribution_without_credit_krw` · `principal_taxed_on_withdrawal` · `principal_tax_free_requires_confirmation` · `principal_tax_free_confirmation_prospective_only` · `returns_taxed_on_withdrawal`. **`facts`는 `pension_contribution_without_credit`에만 붙는다** — 다른 코드에 적으면 형식 검사가 거절한다(계약 5.6절).
+
+> **뒤의 네 항목은 함께 적어야 한다.** 계약 5.6절이 「셋 중 하나라도 빠지면 화면 문장이 거짓이 된다」고 적은 그 셋이 이 넷으로 표현되기 때문이다 — 원금이 인출 시 비과세라는 것, 그 성격을 인정받으려면 **세무서 확인서를 금융회사에 내야 하고 확인받은 날부터 적용된다**는 것(둘로 나뉜다), 그 원금이 번 **수익에는 인출 시 세금이 붙는다**는 것. 넷 중 일부만 적으면 「facts를 적었으니 검사됐다」로 보이면서 정작 그 문장을 떠받치는 사실이 검사되지 않으므로, **형식 검사가 빠진 항목의 이름을 대며 거절한다.** 금액 둘은 선택이다.
+>
+> **네 값의 참·거짓을 실행기가 단정하지 않는다.** 값은 룰셋(`pension.contribution.beyond_credit_limit`의 `effects`와 `pension.withdrawal.non_deducted_principal`의 `confirmation_procedure`)에서 나오고, 이 문서가 조문에서 산출해 적는다. 형식이 단정하는 것은 둘뿐이다 — `credit_this_year_krw`는 **언제나 `0`**(「공제를 낳지 않는 납입」이라는 이름 자체가 그 뜻이다), `contribution_without_credit_krw`는 **0보다 크다**(0이면 그 효과가 붙지 않으므로 `present: false`로 적는다).
+>
+> **왜 16차에 열렸나.** D32가 이 효과를 **기본안으로** 옮겨 대다수 사용자가 보게 됐는데, 그전까지 블록이 적을 수 있는 것은 `non_quantified_codes`(코드의 집합)뿐이었다. **코드는 그대로 두고 사실만 뒤집으면 정답지가 통과한다** — 특히 `principal_tax_free_requires_confirmation`이 빠지면 「나중에 비과세로 돌아옵니다」가 절차를 말하지 않는 거짓 문장이 된다. 실행기가 그 상태를 **응답 쪽 결함 주입**으로 재현해 이 어휘가 실제로 무는 것을 확인했다(`src/engine/golden-block-format.test.mjs` 5절).
 
 **`credit_rate`에 쓸 수 있는 키** — `income_tax` · `local_tax` · `effective` · `basis` · `measured_amount` · `fallback_applied` · `fallback_direction`. **13차에 `effective`를 뺀 나머지를 GC-40~46이 전부 쓴다.** `effective`만 남긴 이유는 그 값이 두 비율의 부동소수점 곱이라 **정답지가 자릿수까지 단정할 근거가 없기** 때문이다 — 근거 없는 값을 적지 않는다는 원칙이 여기에도 걸린다.
 

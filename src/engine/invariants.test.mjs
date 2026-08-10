@@ -119,6 +119,23 @@ const PROFILES = [
     patch: { accounts: { isa: { cumulative_contribution_krw: 5_000_000, years_since_opening: 2 } } },
   },
   {
+    // **월 환산 잔차가 한 갈래에 몰리는 좌표다.** 다른 프로필은 한도·예산이 전부 개월수로
+    // 나누어떨어져 조정이 한 번도 일어나지 않고, 그러면 I12.1(d)의 범위 검사가 통과하면서
+    // 아무것도 막지 못한다. 기납입 1원·9원이 네 갈래의 나머지를 0이 아니게 만들고,
+    // 예산이 모든 한도를 넘어 세 계좌가 막히므로 미배분이 잔차를 혼자 떠안는다.
+    // **여기서 조정액이 2를 넘고 이탈이 개월수를 넘는다** — 계약 `7.0.0`이 그 범위를
+    // `±(개월수 − 1)`로 적었던 자리이고, 그 서술이 틀렸다는 것이 이 좌표로 드러난다.
+    label: '월 환산 잔차가 미배분에 몰린다 (계약 0.12절)',
+    patch: {
+      profile: { monthly_capacity_krw: 10_000_000 },
+      accounts: {
+        annuity_savings: { ytd_contribution_krw: 1 },
+        retirement_pension: { ytd_contribution_krw: 1 },
+        isa: { cumulative_contribution_krw: 9, ytd_contribution_krw: 9, years_since_opening: 3 },
+      },
+    },
+  },
+  {
     label: 'ISA 배제 (금융소득종합과세)',
     patch: { profile: { financial_income_taxpayer_last_3_years: true } },
   },
@@ -460,8 +477,30 @@ function checkScenario(scenario, response, request, at) {
   //   (c) 각 계좌의 월 × 개월수 ≤ **그 계좌의 납입 잔여 한도.** 연 배분이 아니라 한도다 —
   //       둘을 다 지키면서 합을 맞추는 것은 불가능하고(monthly.mjs 머리말의 증명),
   //       넘으면 안 되는 것은 조문이 정한 한도 쪽이다.
-  //   (d) 벗어남의 크기가 갈래당 개월수 미만이고, 배분이 0인 갈래는 월 금액도 0이다.
+  //   (d) 벗어남이 **잔차 몫으로 정확히 설명되고** 그 범위 안에 있다. 배분이 0인 갈래는
+  //       월 금액도 0이다.
+  //
+  // ── (d)의 범위를 16차에 고쳤다. 전에 적혀 있던 「갈래당 개월수 미만」은 틀렸다 ──
+  //
+  // 이탈 = `조정액 × 개월수 − (연 배분 mod 개월수)`이고, **조정액이 2 이상인 갈래가 실재한다**
+  // (`monthly.test.mjs`의 「한 갈래가 조정을 둘 이상 받는다」와 아래 회귀 좌표). 그래서
+  // 위쪽 범위는 개월수가 아니라 **(갈래 수 − 1) × (개월수 − 1)**이다. 증명은 두 줄이다.
+  //
+  //   얹어야 할 총량을 k라 하면 Σ(연 배분 mod m) = k·m 이고, 어느 갈래의 조정액도 k 이하다.
+  //   갈래 X의 나머지는 r_X = k·m − Σ_{Y≠X} r_Y ≥ k·m − (갈래 수 − 1)(m − 1) 이므로
+  //   이탈_X = 조정액_X·m − r_X ≤ k·m − r_X ≤ (갈래 수 − 1)(m − 1).
+  //
+  // 아래쪽은 조정액이 0이고 나머지가 최대일 때이므로 −(m − 1) 그대로다. **두 끝 다 실제로
+  // 닿는다** — 계약 0.12절에 좌표를 적었다.
   const capacity = response.echo.monthly_capacity_krw;
+  // 세 계좌 + 미배분. 세법 수치가 아니라 갈래의 개수다.
+  const branchCount = ACCOUNT_ORDER.length + 1;
+  const deviationRange = (deviation, where) => {
+    assert.ok(
+      deviation >= -(months - 1) && deviation <= (branchCount - 1) * (months - 1),
+      `${where}: 월 환산 이탈 ${deviation}이 범위 [${-(months - 1)}, ${(branchCount - 1) * (months - 1)}]를 벗어났다`,
+    );
+  };
   for (const plan of plans) {
     const allocatedMonthly = plan.allocations.reduce((sum, a) => sum + a.monthly_krw, 0);
     assert.equal(
@@ -496,6 +535,10 @@ function checkScenario(scenario, response, request, at) {
         allocation.monthly_rounding_adjustment_krw * months - (allocation.annual_krw % months),
         `${at} I12.1(d): 월 환산의 벗어남이 잔차 몫으로 설명되지 않는다`,
       );
+      deviationRange(
+        allocation.monthly_annualized_krw - allocation.annual_krw,
+        `${at} I12.1(d): ${plan.plan_id}/${allocation.account}`,
+      );
       if (allocation.account === 'isa') {
         assert.ok(
           allocation.monthly_annualized_krw <= limitOf('isa').contribution_limit_remaining_krw,
@@ -520,6 +563,12 @@ function checkScenario(scenario, response, request, at) {
     if (plan.unallocated_annual_krw === 0) {
       assert.equal(plan.unallocated_monthly_krw, 0, `${at} I12.1(d): 미배분 0인데 월 미배분이 붙었다`);
     }
+    // 미배분 갈래도 같은 범위 안이다. **위쪽 끝에 실제로 닿는 것이 이 갈래다** —
+    // 한도 조건이 없어 세 계좌가 전부 막힌 좌표에서 잔차를 혼자 다 떠안는다.
+    deviationRange(
+      plan.unallocated_monthly_krw * months - plan.unallocated_annual_krw,
+      `${at} I12.1(d): ${plan.plan_id}/미배분`,
+    );
     // 얹은 몫 + 못 얹은 몫 = 내림으로 잃은 총량 ÷ 개월수. **갈래가 넷이므로 3을 넘지 못한다.**
     const flooringLoss =
       plan.allocations.reduce((sum, a) => sum + (a.annual_krw % months), 0) +

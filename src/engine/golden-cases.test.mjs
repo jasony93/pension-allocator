@@ -260,6 +260,25 @@ const VOCABULARY_DEBT = [
   // 여기서만 주장될 수 있다.
   'plan.non_quantified_codes',
 
+  // ── 공제 없는 연금 납입에 딸린 사실들 (D32 후속). ──
+  // **이 열 건은 다른 빚과 성격이 다르다.** 나머지는 "값을 갖고도 못 적던" 축이지만,
+  // 이 축은 **적을 자리 자체가 이번 회차에 처음 생겼다.** D32가 그 효과를 기본안으로
+  // 옮겼으므로 이제 대다수 사용자가 그것을 보고, 계약 5.6절은 셋 중 하나라도 빠지면
+  // 화면 문장이 거짓이 된다고 적는다. **값의 저자는 `tax-domain`이다** — 넷의 참·거짓은
+  // 룰셋(`pension.contribution.beyond_credit_limit`·`pension.withdrawal.non_deducted_principal`)이
+  // 정하고, 금액은 그 안의 배분에서 나온다. 형식이 실제로 무는 것은
+  // `golden-block-format.test.mjs`가 응답 쪽 결함 주입으로 확인해 두었다.
+  'plan.non_quantified_effects',
+  'non_quantified_effect.present',
+  'non_quantified_effect.reason_code',
+  'non_quantified_effect.facts',
+  'non_quantified_facts.credit_this_year_krw',
+  'non_quantified_facts.contribution_without_credit_krw',
+  'non_quantified_facts.principal_taxed_on_withdrawal',
+  'non_quantified_facts.principal_tax_free_requires_confirmation',
+  'non_quantified_facts.principal_tax_free_confirmation_prospective_only',
+  'non_quantified_facts.returns_taxed_on_withdrawal',
+
   // 전환 특례에 붙은 조건 둘. `contribution_carryover_available`이라는 이름이
   // 감추고 있던 것이고, 정답지가 그 이름만 봐서는 이 조건들을 검사하지 못한다.
   'tax_liability_cap.carryover_shares_future_year_credit_limit',
