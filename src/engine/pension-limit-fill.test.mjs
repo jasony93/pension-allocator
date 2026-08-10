@@ -154,9 +154,17 @@ test('이 안의 근거 이름이 세액공제를 말하지 않는다', () => {
     !/credit|tax/.test(fill.priority_basis.code),
     '이름이 실제 근거를 말해야 한다 — 이 안의 근거는 납입 한도다(D17·tie_break의 연장)',
   );
-  assert.deepStrictEqual(
-    [...fill.priority_basis.basis_rule_ids].sort(),
-    ['pension.contribution.annual_limit', 'pension.contribution.beyond_credit_limit'],
+  assert.deepStrictEqual([...fill.priority_basis.basis_rule_ids].sort(), [
+    'pension.contribution.annual_limit',
+    'pension.contribution.beyond_credit_limit',
+    // 무엇을 채우는가가 아니라 **그 안에서 어느 계좌를 먼저 채우는가**의 근거다.
+    // 세액공제와 무관한 축이므로 D26의 이름 제약을 어기지 않는다.
+    'pension.withdrawal.midterm_restriction',
+  ]);
+  assert.equal(
+    fill.priority_basis.basis_rule_ids.includes('pension.credit.limit.combined'),
+    false,
+    '세액공제 한도를 이 안의 근거로 들지 않는다',
   );
   // 공제 한도가 상한이 아니었으므로 그렇게 보고해서도 안 된다.
   for (const allocation of fill.allocations) {
@@ -190,21 +198,71 @@ test('더 넣는다고 올해 세액공제가 늘지는 않는다 — 그 사실
   );
 });
 
-test('인출 편의를 위해 확정 세액을 깎지 않는다', () => {
-  // 동점 규칙은 "비용이 0"일 때만 옳다. 이 안은 연금저축 단독 공제한도를 넘겨 채우므로
-  // 연금저축을 앞세우면 인정 납입액이 실제로 줄어든다 — 동점이 아니다.
+test('비용이 0인 구간에서는 인출이 자유로운 계좌를 먼저 채운다', () => {
+  // **비용이 0인 구간이 실재하고 그 폭이 넓다.** 조문 산식
+  // `대상액 = min( min(연금저축, 단독한도) + 퇴직연금, 합산한도 )`에서, 퇴직연금이
+  // `합산한도 − 단독한도`만큼만 받으면 나머지를 전부 연금저축에 넣어도 인정액이 최대다.
+  // 그 구간에서는 세액이 순서를 정하지 못하므로 D18의 원칙(인출 자유 우선)이 선다.
   const scenario = scenarioFor();
   const fill = planOf(scenario, FILL);
+  const maxCredit = planOf(scenario, 'max_tax_credit');
 
-  assert.equal(fill.priority_basis.tie_break.code, 'not_applicable');
+  assert.equal(fill.priority_basis.tie_break.code, 'withdrawal_flexibility_first');
   assert.deepStrictEqual(fill.priority_basis.fill_sequence, [
-    'retirement_pension',
     'annuity_savings',
+    'retirement_pension',
     'isa',
   ]);
+
+  // 세액은 최대공제안과 같다 — 인출 편의를 위해 확정 세액을 깎지 않았다.
   assert.equal(
     fill.deterministic_benefit.pension_credit_total_krw,
-    planOf(scenario, 'max_tax_credit').deterministic_benefit.pension_credit_total_krw,
+    maxCredit.deterministic_benefit.pension_credit_total_krw,
+  );
+  assert.equal(
+    fill.deterministic_benefit.credit_eligible_contribution_krw,
+    maxCredit.deterministic_benefit.credit_eligible_contribution_krw,
+    '인정 납입액도 같아야 비용이 0이다',
+  );
+
+  // 그러면서 인출이 자유로운 계좌에 더 많이 들어간다.
+  assert.ok(
+    allocationOf(fill, 'annuity_savings').annual_krw >
+      allocationOf(maxCredit, 'annuity_savings').annual_krw,
+    '비용이 0인데 인출이 어려운 쪽을 고르면 아무 대가 없이 나쁜 선택이다',
+  );
+});
+
+test('비용이 0인 구간의 경계를 조문 산식으로 다시 잰다', () => {
+  // 경계는 연금저축 단독 공제한도가 아니라 **납입한도 − (합산한도 − 단독한도)**다.
+  // 엔진이 그 경계를 정확히 짚는지, 그리고 한 원만 넘겨도 세액이 깎이는지 본다.
+  const scenario = scenarioFor();
+  const limits = scenario.limits;
+  const annuityCreditLimit = limits.by_account.find((l) => l.account === 'annuity_savings')
+    .credit_eligible_limit_remaining_krw;
+  const combined = limits.pension_combined_credit_limit_krw;
+  const pool = limits.pension_contribution_limit_remaining_krw;
+
+  const fill = planOf(scenario, FILL);
+  const annuity = allocationOf(fill, 'annuity_savings').annual_krw;
+  const irp = allocationOf(fill, 'retirement_pension').annual_krw;
+
+  assert.equal(annuity + irp, pool, '연금 납입 총액은 순서와 무관하게 납입 한도다');
+  assert.equal(
+    irp,
+    combined - annuityCreditLimit,
+    'IRP는 연금저축이 단독 한도 때문에 흡수하지 못하는 몫만 받는다',
+  );
+  assert.equal(annuity, pool - (combined - annuityCreditLimit), '나머지는 전부 연금저축이다');
+
+  // 경계 밖 — 조문 산식으로 직접 계산해 세액이 실제로 깎이는 것을 확인한다.
+  const eligibleFor = (a) => Math.min(Math.min(a, annuityCreditLimit) + (pool - a), combined);
+  assert.equal(eligibleFor(annuity), combined, '경계 위에서는 인정액이 최대다');
+  assert.ok(eligibleFor(annuity + 1) < combined, '경계를 한 원 넘기면 인정액이 줄어든다');
+  assert.equal(
+    fill.deterministic_benefit.credit_eligible_contribution_krw,
+    combined,
+    '엔진이 낸 인정액이 그 최대값과 같다',
   );
 });
 

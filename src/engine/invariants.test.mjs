@@ -50,6 +50,19 @@ const overBoundary = (request) => request.profile.current_year_total_salary_krw 
  * **총급여액만으로 고른 구간의 비율.** I28의 기대값이고, 종합소득 입력이 들어오기 전
  * 엔진이 하던 판정 그대로다. 룰셋에서 직접 고르므로 엔진의 답을 엔진에게 되묻지 않는다.
  */
+/**
+ * 부분 인출이 법정 사유 없이 가능한 연금계좌. **룰셋에서 읽는다** — 엔진이 고른 답을
+ * 엔진에게 되묻지 않기 위해서다(I36의 기대값).
+ */
+const FLEXIBLE_PENSION_ACCOUNT = (() => {
+  const byAccount = rulesets[CONFIRMED_FILE].rules.find(
+    (r) => r.id === 'pension.withdrawal.midterm_restriction',
+  ).value.by_account;
+  return byAccount['연금저축계좌'].partial_withdrawal_without_statutory_cause
+    ? 'annuity_savings'
+    : 'retirement_pension';
+})();
+
 function rateByTotalSalaryOnly(totalSalary) {
   const bracket = CREDIT_BRACKETS.find(
     (b) => (b.total_salary_only_max_krw ?? null) === null || totalSalary <= b.total_salary_only_max_krw,
@@ -507,10 +520,8 @@ function checkScenario(scenario, response, request, at) {
   const tied = !(request.profile.declared_youth === true && scenario.scenario_id === 'proposed' && overBoundary(request));
   for (const plan of plans) {
     const tieBreak = plan.priority_basis.tie_break;
-    // 순서가 고정된 안 둘. `annuity_savings_first`는 이름이 순서를 고정하고,
-    // `pension_contribution_limit_fill`은 단독 공제한도 때문에 순서의 비용이 0이 아니다.
-    if ([PLAN.ANNUITY_FIRST, PLAN.PENSION_LIMIT_FILL].includes(plan.plan_id)) {
-      assert.equal(tieBreak.code, 'not_applicable', `${at} I19: 순서가 고정된 안에 동점 판정이 붙었다`);
+    if (plan.plan_id === PLAN.ANNUITY_FIRST) {
+      assert.equal(tieBreak.code, 'not_applicable', `${at} I19: 이름이 순서를 고정한 안에 동점 판정이 붙었다`);
       continue;
     }
     assert.equal(
@@ -520,12 +531,17 @@ function checkScenario(scenario, response, request, at) {
     );
     if (tieBreak.code === 'withdrawal_flexibility_first') {
       assert.ok(tieBreak.basis_rule_ids.length > 0, `${at} I19: 동점 판정에 근거 규칙이 없다`);
-      const pensionPart = plan.priority_basis.fill_sequence.filter((a) => a !== 'isa');
-      assert.deepStrictEqual(
-        pensionPart,
-        ['annuity_savings', 'retirement_pension'],
-        `${at} I19: 동점인데 더 묶이는 계좌를 먼저 채운다`,
-      );
+      // **보고되는 순서는 실제로 돈이 들어간 순서다.** 연금 쌍을 두 단계로 도는
+      // 납입한도 충당안에서는 1차에 공제 여력이 0이던 계좌가 2차에 더 많이 받으면서도
+      // 순서상 뒤에 올 수 있다. 그 안에서 동점 규칙이 지켜졌는지는 순서가 아니라
+      // **공제를 낳지 않는 몫이 어느 계좌에 있는가**로 본다(I36).
+      if (CREDIT_BOUNDED_PLANS.has(plan.plan_id)) {
+        assert.deepStrictEqual(
+          plan.priority_basis.fill_sequence.filter((a) => a !== 'isa'),
+          ['annuity_savings', 'retirement_pension'],
+          `${at} I19: 동점인데 더 묶이는 계좌를 먼저 채운다`,
+        );
+      }
     }
   }
 
@@ -791,6 +807,41 @@ function checkScenario(scenario, response, request, at) {
         allocation.limited_by,
         'credit_limit',
         `${at} I34: ${plan.plan_id}가 공제 한도에 막혔다고 보고한다 — 그 안의 상한이 아니다`,
+      );
+    }
+  }
+
+  // I35 — **납입한도 충당안은 확정 세액을 한 원도 깎지 않는다.**
+  // 조문 산식상 연금 납입 총액을 두 계좌에 어떻게 쪼개든, 퇴직연금이 `합산한도 − 단독한도`
+  // 만큼만 받으면 인정액이 최대다. 그러므로 이 안의 인정액과 공제액은 최대공제안과
+  // **같아야 한다.** 같지 않다면 순서를 잘못 골라 세액을 버린 것이다.
+  const fillPlan = plans.find((p) => p.plan_id === PLAN.PENSION_LIMIT_FILL);
+  if (fillPlan && maxCreditPlan) {
+    assert.equal(
+      fillPlan.deterministic_benefit.credit_eligible_contribution_krw,
+      maxCreditPlan.deterministic_benefit.credit_eligible_contribution_krw,
+      `${at} I35: 납입한도 충당안이 인정 납입액을 잃었다`,
+    );
+    assert.equal(
+      fillPlan.deterministic_benefit.pension_credit_total_krw,
+      maxCreditPlan.deterministic_benefit.pension_credit_total_krw,
+      `${at} I35: 납입한도 충당안이 확정 세액을 깎았다 — 그 대가는 0이어야 한다`,
+    );
+  }
+
+  // I36 — **공제를 낳지 않는 몫은 인출이 자유로운 계좌에 있다.**
+  // 그 몫은 어느 계좌에 넣어도 세액이 같으므로 세금이 순서를 정하지 못하고,
+  // 남는 축은 인출 가능성뿐이다(D18·계약 0.4절). 대가 없이 더 묶이는 쪽을 고르지 않는다.
+  if (fillPlan) {
+    const withoutCredit = fillPlan.non_quantified_effects.filter(
+      (e) => e.code === NON_QUANTIFIED.PENSION_WITHOUT_CREDIT,
+    );
+    for (const effect of withoutCredit) {
+      if (!eligibleOf(FLEXIBLE_PENSION_ACCOUNT)) continue;
+      assert.equal(
+        effect.account,
+        FLEXIBLE_PENSION_ACCOUNT,
+        `${at} I36: 공제를 낳지 않는 납입을 대가 없이 더 묶이는 계좌에 넣었다`,
       );
     }
   }

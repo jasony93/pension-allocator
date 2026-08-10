@@ -242,9 +242,16 @@ export const PRIORITY_BASIS = {
   // **이름이 세액공제를 말하지 않는다.** D17·tie_break 때 세운 "이름이 실제 근거를
   // 말해야 한다"의 연장이다 — 이 안이 채우는 것은 납입 한도이고, 그 납입이 유리한지는
   // 세법이 정하지 않는다(규칙의 not_determined_by_tax_law).
+  // 세 번째 규칙은 **무엇을 채우는가**가 아니라 **그 안에서 어느 계좌를 먼저 채우는가**의
+  // 근거다. 이 안은 연금 납입 총액이 순서와 무관하게 같아지는 구간을 갖고, 그 구간에서
+  // 세액이 순서를 정하지 못하므로 인출 가능성이 정한다. 세액공제와 무관한 근거다.
   [PLAN.PENSION_LIMIT_FILL]: {
     code: 'pension_contribution_limit_first',
-    basis_rule_ids: [RULE.PENSION_CONTRIBUTION_LIMIT, RULE.PENSION_BEYOND_CREDIT_LIMIT],
+    basis_rule_ids: [
+      RULE.PENSION_CONTRIBUTION_LIMIT,
+      RULE.PENSION_BEYOND_CREDIT_LIMIT,
+      RULE.PENSION_MIDTERM_RESTRICTION,
+    ],
   },
 };
 

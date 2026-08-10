@@ -36,26 +36,15 @@ function creditRatesAreTied(rates) {
 }
 
 /**
- * 동점 판정을 적용하지 않는 안.
- *
- * - `annuity_savings_first` — 이름이 순서를 이미 고정한다.
- * - `pension_contribution_limit_fill` — **동점의 전제가 이 안에서 무너진다.** 동점 규칙을
- *   정당화한 근거는 "비용이 0"이었는데(계약 0.4절), 이 안은 연금계좌를 **납입** 한도까지
- *   채우므로 배분액이 연금저축 단독 공제한도를 넘어선다. 그 구간에서 연금저축을 앞세우면
- *   단독 한도에 막혀 **세액공제 대상 인정액이 실제로 줄어든다.** 한계 공제율이 같아도
- *   비용이 0이 아니므로 동점이 아니고, 인출 편의를 위해 확정 세액을 깎지 않는다.
- */
-const FIXED_ORDER_PLANS = new Set([PLAN.ANNUITY_FIRST, PLAN.PENSION_LIMIT_FILL]);
-
-/**
  * 이 배분안이 실제로 쓰는 충당 순서.
  *
- * 나머지 안은 연금 쌍의 순서가 이름에 매여 있지 않으므로, **세제상 동점 구간에서만**
+ * `annuity_savings_first`는 이름이 순서를 이미 고정하므로 손대지 않는다.
+ * 나머지는 연금 쌍의 순서가 이름에 매여 있지 않으므로, **세제상 동점 구간에서만**
  * 인출이 자유로운 계좌를 앞세운다(engine-design.md 3.3절).
  */
 function fillSequenceFor(planId, { rates, withdrawalOrder }) {
   const standard = FILL_SEQUENCE[planId];
-  if (FIXED_ORDER_PLANS.has(planId) || withdrawalOrder === null) return standard;
+  if (planId === PLAN.ANNUITY_FIRST || withdrawalOrder === null) return standard;
   if (!creditRatesAreTied(rates)) return standard;
 
   const pensionPart = [...withdrawalOrder];
@@ -66,13 +55,77 @@ function fillSequenceFor(planId, { rates, withdrawalOrder }) {
 
 function tieBreakOf(planId, ctx) {
   const applied =
-    !FIXED_ORDER_PLANS.has(planId) &&
+    planId !== PLAN.ANNUITY_FIRST &&
     ctx.withdrawalOrder !== null &&
     creditRatesAreTied(ctx.rates);
 
   return applied
     ? { code: TIE_BREAK.WITHDRAWAL_FLEXIBILITY, basis_rule_ids: [RULE.PENSION_MIDTERM_RESTRICTION] }
     : { code: TIE_BREAK.NOT_APPLICABLE, basis_rule_ids: [] };
+}
+
+/**
+ * 충당 단계 목록. 계좌 하나가 두 번 나올 수 있으므로 순서 배열과 따로 만든다.
+ *
+ * **공제 한도까지만 채우는 세 안**은 단계가 곧 순서다 — 한 계좌씩 한 번.
+ *
+ * **납입한도 충당안은 연금 쌍을 두 번 돈다.** 왜 그래야 하는지가 이 함수의 요점이다.
+ *
+ * 그 안이 채우는 연금 납입 총액은 순서와 무관하게 같다(납입 한도까지 채운다). 달라지는
+ * 것은 **그 총액을 두 계좌에 어떻게 쪼개는가**뿐이고, 조문 산식
+ * `대상액 = min( min(연금저축, 단독한도) + 퇴직연금, 합산한도 )`에서 인정액은
+ * **퇴직연금이 `합산한도 − 단독한도`만큼을 받는 한** 쪼개기와 무관하게 최대다.
+ * 연금저축이 단독 한도 때문에 흡수하지 못하는 몫이 정확히 그만큼이기 때문이다.
+ *
+ * 즉 **비용이 0인 구간이 실재하고 그 폭이 넓다.** 그 구간 안에서는 세액이 완전히
+ * 같으므로 D18·계약 0.4절이 세운 원칙이 그대로 선다 — **비용이 0이면 인출이 자유로운
+ * 계좌를 먼저 채운다.** 그래서 단계를 이렇게 나눈다.
+ *
+ *   1차 — 연금 쌍을 **세액공제 대상 한도까지** 채운다. 순서는 다른 안과 같은 규칙
+ *          (동점이면 인출 자유 우선, 갈리면 세액공제 최대화)을 따른다.
+ *   2차 — 남은 **납입** 한도를 인출이 자유로운 계좌부터 채운다. 이 몫은 어느 계좌에
+ *          넣어도 공제를 낳지 않으므로 세액이 순서를 정하지 못하고, 인출 가능성만 남는다.
+ *   3차 — ISA. **연금 납입 한도를 다 채운 뒤다** — 그것이 이 안의 이름이 말하는 바다.
+ *
+ * 1차를 빼고 2차만 돌리면(연금저축부터 납입 한도까지) 연금저축이 단독 한도를 넘겨
+ * 채워져 인정액이 줄고 **확정 세액이 실제로 깎인다.** 그것이 이 두 단계 구조의 이유다.
+ */
+function fillStepsFor(planId, ctx) {
+  const sequence = fillSequenceFor(planId, ctx);
+  if (CREDIT_BOUNDED_PLANS.has(planId)) {
+    return sequence.map((account) => ({ account, creditBounded: true }));
+  }
+
+  const pensionPart = sequence.filter((account) => PENSION_ACCOUNTS.has(account));
+  // 2차의 순서를 정하는 것은 세액이 아니라 인출 가능성이다. 규칙을 읽지 못했으면
+  // 1차와 같은 순서를 쓴다 — 없는 근거로 순서를 정하지 않는다.
+  const flexibleFirst = ctx.withdrawalOrder ?? pensionPart;
+
+  return [
+    ...pensionPart.map((account) => ({ account, creditBounded: true })),
+    ...flexibleFirst.map((account) => ({ account, creditBounded: false })),
+    ...sequence
+      .filter((account) => !PENSION_ACCOUNTS.has(account))
+      .map((account) => ({ account, creditBounded: false })),
+  ];
+}
+
+/**
+ * 응답에 실을 충당 순서. 실제로 돈이 들어간 순서를 앞에 두고, 한 푼도 받지 못한 계좌를
+ * 단계 목록의 순서대로 뒤에 붙여 길이 3을 채운다. 계좌 하나를 두 번 적지 않는다.
+ */
+function observedSequence(fillOrder, planId, ctx) {
+  // 한 단계씩만 도는 안은 단계 목록이 곧 순서다. 기존 세 안의 보고를 바꾸지 않는다.
+  if (CREDIT_BOUNDED_PLANS.has(planId)) return fillSequenceFor(planId, ctx);
+
+  const filled = ACCOUNT_ORDER.filter((account) => fillOrder[account] !== undefined).sort(
+    (a, b) => fillOrder[a] - fillOrder[b],
+  );
+  const rest = [];
+  for (const { account } of fillStepsFor(planId, ctx)) {
+    if (fillOrder[account] === undefined && !rest.includes(account)) rest.push(account);
+  }
+  return [...filled, ...rest];
 }
 
 /** 한 배분안의 금액. 자금 사용 시점을 읽지 않는다. */
@@ -119,7 +172,7 @@ function allocate(planId, ctx) {
     return clampToZero(Math.min(state.annuityLimit - annuityCounted, combinedRoom));
   };
 
-  for (const account of fillSequenceFor(planId, ctx)) {
+  for (const { account, creditBounded: stepIsCreditBounded } of fillStepsFor(planId, ctx)) {
     if (!eligible[account]) {
       limitedBy[account] = LIMITED_BY.NOT_ELIGIBLE;
       continue;
@@ -129,12 +182,12 @@ function allocate(planId, ctx) {
     const creditRoom = isPension ? creditCapacity(account) : 0;
 
     // 순서가 곧 우선순위다. budget → credit_limit → contribution_limit 순으로
-    // 무엇이 막았는지를 판정한다. 납입한도 충당안에는 공제 한도가 상한이 아니므로
-    // 그 항이 빠진다 — `limited_by`가 `credit_limit`으로 나가면 그것이 거짓말이 된다.
+    // 무엇이 막았는지를 판정한다. **2차 단계에는 공제 한도 항이 빠진다** — 그 단계의
+    // 상한이 아니므로 `limited_by`가 `credit_limit`으로 나가면 그것이 거짓말이 된다.
     const caps = isPension
       ? [
           [LIMITED_BY.BUDGET, remainingBudget],
-          ...(creditBounded ? [[LIMITED_BY.CREDIT_LIMIT, creditRoom]] : []),
+          ...(stepIsCreditBounded ? [[LIMITED_BY.CREDIT_LIMIT, creditRoom]] : []),
           [LIMITED_BY.CONTRIBUTION_LIMIT, pensionPool],
         ]
       : [
@@ -143,12 +196,18 @@ function allocate(planId, ctx) {
         ];
 
     const amount = Math.min(...caps.map(([, value]) => value));
+    // 뒤 단계가 앞 단계의 판정을 덮는다. **마지막에 실제로 막은 것**이 사실이기 때문이고,
+    // 그래서 납입한도 충당안에는 `credit_limit`이 끝까지 남지 않는다.
     limitedBy[account] = caps.find(([, value]) => value === amount)[0];
 
     if (amount > 0) {
-      order += 1;
-      fillOrder[account] = order;
-      amounts[account] = amount;
+      // 계좌가 두 단계에 걸쳐 채워질 수 있다. 순서는 **처음 받은 시점**이다 —
+      // 그래야 fill_sequence가 말하는 순서와 어긋나지 않는다.
+      if (fillOrder[account] === undefined) {
+        order += 1;
+        fillOrder[account] = order;
+      }
+      amounts[account] += amount;
       remainingBudget -= amount;
 
       if (account === ACCOUNT.ISA) {
@@ -161,7 +220,7 @@ function allocate(planId, ctx) {
         const counted = Math.min(amount, creditRoom);
         if (account === ACCOUNT.ANNUITY) annuityCounted += counted;
         else pensionCounted += counted;
-        withoutCredit[account] = amount - counted;
+        withoutCredit[account] += amount - counted;
       }
     }
   }
@@ -170,6 +229,10 @@ function allocate(planId, ctx) {
     amounts,
     limitedBy,
     fillOrder,
+    // **보고하는 순서는 실제로 돈이 들어간 순서다.** 두 단계로 도는 안에서는 계좌 하나가
+    // 두 번 나오므로 단계 목록을 그대로 실을 수 없고, 무엇보다 1차에서 공제 여력이 0이라
+    // 아무것도 못 받은 계좌를 "먼저 채웠다"고 적으면 그것이 거짓 보고다.
+    observedSequence: observedSequence(fillOrder, planId, ctx),
     annuityCounted,
     pensionCounted,
     remainingBudget,
@@ -547,10 +610,12 @@ export function buildPlans(ctx) {
         code: PRIORITY_BASIS[planId].code,
         // 표준 순서가 아니라 **실제로 쓴 순서**를 낸다. 순서 보고가 거짓말하면
         // 화면이 근거를 잘못 설명한다.
-        fill_sequence: fillSequenceFor(planId, ctx),
+        fill_sequence: result.observedSequence,
         basis_rule_ids: [
-          ...PRIORITY_BASIS[planId].basis_rule_ids,
-          ...tieBreakOf(planId, ctx).basis_rule_ids,
+          ...new Set([
+            ...PRIORITY_BASIS[planId].basis_rule_ids,
+            ...tieBreakOf(planId, ctx).basis_rule_ids,
+          ]),
         ].sort(),
         tie_break: tieBreakOf(planId, ctx),
         objective_degenerate: objectiveDegenerate(planId, ctx),

@@ -255,16 +255,55 @@ test('한 규칙 안의 여러 표시가 하나로 뭉개지지 않는다', () =
 
 // ── 배분안 자체 ──────────────────────────────────────────────────
 
-test('납입 한도를 줄이면 납입한도 충당안의 배분이 따라 줄어든다', () => {
-  const fillOf = (bundle) =>
+test('납입 한도를 줄이면 납입한도 충당안의 연금 배분이 따라 줄어든다', () => {
+  // 줄어드는 쪽은 **연금 두 계좌의 합계**다. IRP의 몫은 `합산 공제한도 − 연금저축 단독
+  // 한도`로 고정되고(그만큼만 연금저축이 흡수하지 못한다), 납입 한도의 변화는 전부
+  // 인출이 자유로운 계좌가 흡수한다.
+  const pensionTotalOf = (bundle) => {
+    const plan = planOf(
+      scenarioOf(compute(baseRequest(FULL), bundle)),
+      'pension_contribution_limit_fill',
+    );
+    return plan.allocations
+      .filter((a) => a.account !== 'isa')
+      .reduce((sum, a) => sum + a.annual_krw, 0);
+  };
+
+  const before = pensionTotalOf(rulesets);
+  const reduced = Math.floor((before * 3) / 4);
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'pension.contribution.annual_limit').value.amount_krw = reduced;
+  });
+
+  assert.equal(pensionTotalOf(mutated), reduced, '납입 한도가 코드에 박혀 있으면 값이 안 변한다');
+});
+
+test('납입 한도가 공제 대상 한도까지 좁아지면 이 안이 사라진다', () => {
+  // 두 한도가 같으면 "공제를 낳지 않는 납입"이라는 구간 자체가 없어지므로 배분 벡터가
+  // 최대공제안과 같아지고 하나로 합쳐진다. **선택지가 없는데 있는 척하지 않는다.**
+  const combined = findRule(rulesets, CONFIRMED_FILE, 'pension.credit.limit.combined').value.amount_krw;
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'pension.contribution.annual_limit').value.amount_krw = combined;
+  });
+
+  const planIds = scenarioOf(compute(baseRequest(FULL), mutated)).plans.map((p) => p.plan_id);
+  assert.equal(planIds.includes('pension_contribution_limit_fill'), false, planIds.join(', '));
+});
+
+test('연금저축 단독 공제한도가 IRP의 몫을 정한다 — 비용 0 경계가 룰셋에서 온다', () => {
+  const irpOf = (bundle) =>
     planOf(scenarioOf(compute(baseRequest(FULL), bundle)), 'pension_contribution_limit_fill')
       .allocations.find((a) => a.account === 'retirement_pension').annual_krw;
 
-  const before = fillOf(rulesets);
-  const mutated = withMutation((clone) => {
-    const rule = findRule(clone, CONFIRMED_FILE, 'pension.contribution.annual_limit');
-    rule.value.amount_krw = Math.floor(rule.value.amount_krw / 2);
-  });
+  const combined = findRule(rulesets, CONFIRMED_FILE, 'pension.credit.limit.combined').value.amount_krw;
+  const annuity = findRule(rulesets, CONFIRMED_FILE, 'pension.credit.limit.annuity_savings').value
+    .amount_krw;
+  assert.equal(irpOf(rulesets), combined - annuity, 'IRP는 연금저축이 흡수 못 하는 몫만 받는다');
 
-  assert.equal(fillOf(mutated), Math.floor(before / 2), '납입 한도가 코드에 박혀 있으면 값이 안 변한다');
+  // 단독 한도를 넓히면 연금저축이 더 많이 흡수하므로 IRP의 몫이 그만큼 줄어야 한다.
+  const widened = annuity + 1_000_000;
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'pension.credit.limit.annuity_savings').value.amount_krw = widened;
+  });
+  assert.equal(irpOf(mutated), combined - widened, '경계가 코드에 박혀 있으면 값이 안 변한다');
 });

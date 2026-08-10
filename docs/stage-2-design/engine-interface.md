@@ -609,7 +609,7 @@ accounts.isa               : IsaAccountState
 | 필드 | 자료형 | 설명 |
 |---|---|---|
 | `code` | string | `"tax_credit_maximization"` / `"annuity_savings_limit_first"` / `"isa_liquidity_first"` / `"pension_contribution_limit_first"` |
-| `fill_sequence` | 계좌 id[] | **실제로 쓴 충당 순서.** 길이 3. `max_tax_credit`·`isa_first`에서는 연금 쌍의 순서가 `tie_break`에 따라 달라지므로 **고정 배열로 가정하지 말고 이 값을 읽어라** |
+| `fill_sequence` | 계좌 id[] | **실제로 쓴 충당 순서.** 길이 3, 계좌 중복 없음. `max_tax_credit`·`isa_first`에서는 연금 쌍의 순서가 `tie_break`에 따라 달라지므로 **고정 배열로 가정하지 말고 이 값을 읽어라.** `pension_contribution_limit_fill`은 연금 쌍을 두 단계로 돌므로 이 값이 **돈이 실제로 들어간 순서**이고, 그 순서만으로 "무엇을 우선했는지"를 설명할 수 없다(아래) |
 | `basis_rule_ids` | string[] | 이 우선순위를 뒷받침하는 규칙 id. 동점 판정이 적용됐으면 그 근거 규칙도 포함된다 |
 | `tie_break` | TieBreak | 세제상 동점을 무엇으로 깼는가. 아래 |
 | `objective_degenerate` | boolean | **이 안이 이름으로 내세운 목적함수가 이 입력에서 순위를 정하지 못하는가.** 세액 한도가 0이면 연금계좌에 얼마를 넣든 공제액이 0이라 최대값이 유일하지 않다. **이름이 세액공제를 근거로 든 두 안**(`max_tax_credit`·`annuity_savings_first`)에서만 `true`가 될 수 있다. `isa_first`(근거는 인출 가능성)와 `pension_contribution_limit_fill`(근거는 납입 한도)은 언제나 `false`다 — 한도가 0이어도 그 근거는 그대로 성립하므로 이름이 거짓말하지 않는다. 5.12절 |
@@ -623,7 +623,9 @@ accounts.isa               : IsaAccountState
 
 **이 표가 `tie_break.code`의 정의 자리다**(8.0절). 다른 절과 `engine-design.md`는 조건을 다시 적지 않고 여기를 가리킨다.
 
-**`pension_contribution_limit_fill`에 동점 규칙을 적용하지 않는 이유.** 동점 규칙을 정당화한 근거는 "비용이 0"이었다(0.4절). 그 안은 연금계좌를 **납입** 한도까지 채우므로 배분액이 연금저축 단독 공제한도를 넘어서고, 그 구간에서 연금저축을 앞세우면 단독 한도에 막혀 **세액공제 대상 인정액이 실제로 줄어든다.** 한계 공제율이 같아도 비용이 0이 아니므로 동점이 아니다. **인출 편의로 확정 세액을 깎지 않는다**는 선(0.4절 지킨 선 1)이 여기서 그대로 걸린다.
+**`pension_contribution_limit_fill`에는 동점 규칙이 두 번 걸린다.** 그 안은 연금 쌍을 두 단계로 돈다(`engine-design.md` 3.4.1절). 1차(세액공제 대상 한도까지)는 다른 안과 같은 규칙을 따르고, 2차(남은 납입 한도)는 **공제를 낳지 않는 몫**이라 세액이 순서를 정하지 못하므로 언제나 인출이 자유로운 계좌부터 채운다.
+
+**그 안의 `fill_sequence`만 관측 순서로 낸다.** 계좌 하나가 두 단계에 걸쳐 채워지므로 단계 목록을 그대로 실을 수 없고, 1차에서 공제 여력이 0이라 아무것도 받지 못한 계좌를 "먼저 채웠다"고 적으면 거짓 보고다. **그러므로 이 안에서는 `fill_sequence`가 반드시 인출 자유 순서로 나오지 않는다** — 화면이 그 순서로 "무엇을 우선했는지"를 설명하려면 `priority_basis.code`와 `basis_rule_ids`를 함께 읽어야 한다. 나머지 세 안의 `fill_sequence`는 종전과 같다.
 
 **확정 시나리오에서는 언제나 `withdrawal_flexibility_first`다.** 확정 룰셋에는 계좌에 따라 공제율이 갈리는 규칙이 없어 두 연금계좌의 한계 공제율이 **언제나** 같다. 따라서 `pension.withdrawal.midterm_restriction`이 룰셋에 있는 한(확정 룰셋에 있다) 확정 시나리오의 `max_tax_credit`·`isa_first`는 소득 구간·나이·`fund_use_horizon`과 무관하게 `tie_break.code`가 `withdrawal_flexibility_first`다. 공제율이 갈리는 것은 개정안 시나리오의 청년 우대뿐이고, 그때만 `not_applicable`이 된다.
 
@@ -681,6 +683,8 @@ accounts.isa               : IsaAccountState
 | `basis_rule_ids` | string[] | — | |
 
 **`pension_contribution_without_credit` — 세액공제를 낳지 않는 연금계좌 납입 (D26).** `pension_contribution_limit_fill` 배분안에서만 나온다. `headroom_krw`는 그 안을 실행한 뒤 남는 **연금계좌 합산 납입 여력**이고 두 계좌가 나눠 쓴다.
+
+**`account`는 인출이 자유로운 연금계좌다**(그 계좌에 납입할 수 있는 한). 이 몫은 어느 계좌에 넣어도 공제를 낳지 않아 세액이 순서를 정하지 못하고, 남는 축이 인출 가능성뿐이기 때문이다 — 0.4절이 세운 "비용이 0이면 인출이 자유로운 쪽"이 그대로 걸린다. **화면이 이 계좌를 "세금 때문에 고른 것"으로 설명하면 근거를 잘못 말하는 것이다.**
 
 **`facts` — 셋 중 하나라도 빠지면 화면 문장이 거짓이 된다.** 값은 전부 룰셋에서 읽는다.
 
