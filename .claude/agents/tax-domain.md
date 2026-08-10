@@ -1,7 +1,7 @@
 ---
 name: tax-domain
 description: 세법 룰셋 조사·작성, 개정 선행조사, 그리고 4단계 계산 결과 독립 교차검증이 필요할 때 호출한다.
-tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
+tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, Bash
 model: opus
 ---
 

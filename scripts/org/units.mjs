@@ -15,7 +15,11 @@ export const UNITS = [
   {
     name: 'tax-domain',
     model: 'opus',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
+    // D24와 같은 이유로 Bash를 준다. 이 유닛의 완료 기준이 `node scripts/org/validate.mjs`와
+    // 골든 케이스 실행인데 셸이 없어 두 번 연속으로 "돌리지 못했다"고 보고했다.
+    // 확인이 사라진 것이 아니라 관리자에게 조용히 옮겨왔을 뿐이다.
+    // **`src/engine/`을 읽지 않는 4단계 금지는 그대로다** — 도구가 아니라 규약이 막는다.
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'Bash'],
     writeScope: [
       'docs/stage-1-discovery/tax-rules-report.md',
       'data/tax-rules/',
