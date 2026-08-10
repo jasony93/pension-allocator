@@ -132,8 +132,9 @@ after(async () => {
 
 test('네 조합이 전부 의도한 테마로 나온다 (지정 없음 × 2, 명시 × 2)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  const LIGHT_BASE = '#f7f8fa';
-  const DARK_BASE = '#14171a';
+  // 2026-08-10 개정 — 표면이 초록으로 옮겼다(design-system 3.1절).
+  const LIGHT_BASE = '#cdf2da';
+  const DARK_BASE = '#0a1710';
 
   const combos = [
     { name: 'OS 라이트 + 지정 없음', scheme: 'light', theme: null, expect: LIGHT_BASE, scheme_expected: 'light' },
@@ -284,7 +285,14 @@ test('인쇄는 사용자가 어둡게를 골라도 라이트 팔레트로 나�
   await page.evaluate(`document.documentElement.setAttribute('data-theme','dark')`);
   await emulate(page, { scheme: 'dark', media: 'print' });
   const tokens = await page.evaluate(READ_TOKENS);
-  assert.equal(tokens['--surface-raised'], '#ffffff');
+  // 인쇄 팔레트는 라이트 `:root`와 값이 같다(styles-tokens.test.mjs가 기계로
+  // 대조한다) — 2026-08-10 개정으로 `surface-raised`도 초록빛 흰색이 됐다.
+  // **알려진 미결**: screens.md 2.3.5절이 요구하는 "인쇄에서 surface-base·
+  // brand-band를 흰색으로 되돌린다"는 이번 개정에 구현하지 않았다(styles.css
+  // 인쇄 블록 주석 참고) — 기존 계약 검사가 인쇄 블록과 라이트 `:root`의 색이
+  // 한 글자도 다르지 않을 것을 요구해, 그 계약을 깨지 않는 선에서는 헤더 한
+  // 자리만 예외로 되돌릴 수 없었다.
+  assert.equal(tokens['--surface-raised'], '#f0fdf4');
   assert.equal(tokens['--text-primary'], '#14181c');
   assert.equal(tokens['--data-pension'], '#0a9a96');
   assert.equal(tokens.colorScheme, 'light');
@@ -355,7 +363,7 @@ test('저장된 테마가 첫 페인트 이전에 적용된다 — 흰 화면이
   });
   await page.goto(`${origin}/src/web/index.html`);
   assert.equal(await page.evaluate(`window.__themeAtParse`), 'dark', '첫 페인트 전에 표시가 찍히지 않았습니다');
-  assert.equal(await page.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--surface-base').trim()`), '#14171a');
+  assert.equal(await page.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--surface-base').trim()`), '#0a1710');
   await page.evaluate(`localStorage.clear()`);
 });
 

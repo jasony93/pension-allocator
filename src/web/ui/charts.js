@@ -174,8 +174,17 @@ export const DONUT_OUTER_DIAMETER = { labelled: 260, legend: 200 };
 export const LABEL_GUTTER = 176;
 export const LABEL_TEXT_BUDGET = 132;
 const LABEL_VPAD = 26;
-/** 라벨을 그리지 않는 모드에서 도넛 둘레에 남기는 여백(압출 그림자·안티에일리어싱). */
-const LEGEND_PAD = 8;
+/**
+ * 라벨을 그리지 않는 모드에서 도넛 둘레에 남기는 여백(압출 그림자·안티에일리어싱
+ * · 조각 번호).
+ *
+ * **결함 ②의 수정으로 8→10이 됐다**(design-system 3.5.5절 규약 6). 조각 순번은
+ * 이제 계좌 색 위가 아니라 고리 **바깥**에 그린다 — 계좌 색은 정의상 표면 대비
+ * 3:1 대역에서 뽑히므로 4.5:1이 필요한 작은 글자를 그 위에 얹을 수 없다. 번호가
+ * 상자 밖으로 잘리지 않으려면 여백이 조금 더 필요하고, `wasted <= 20`(테스트)
+ * 안에서 최대로 늘린 값이 10이다.
+ */
+const LEGEND_PAD = 10;
 const LABEL_LINE_GAP = 56; // 세 줄짜리 라벨 블록의 최소 세로 간격
 /**
  * 라벨의 y는 **첫 줄의 기준선**이고 아래로 두 줄이 더 붙는다. 이 값을 계산에
@@ -389,13 +398,25 @@ export function donutChart({
   });
 
   // 모바일 — 라벨 블록이 겹치므로 아래 리스트로 내리고 조각과는 색 + 번호로
-  // 잇는다(screens.md 5.7절). 번호는 조각 위에, 리스트는 SVG 밖에 둔다.
-  const sliceNumbers = arcs.map((a, i) => {
+  // 잇는다(screens.md 5.7절). 리스트는 SVG 밖에 둔다.
+  //
+  // **번호는 계좌 색 위에 직접 얹지 않는다**(결함 ② 수정, design-system 3.5.5절
+  // 규약 6). 계좌 색은 정의상 표면 대비 3:1 대역에서 뽑혔고 글자는 4.5:1이
+  // 필요해 애초에 자격이 없다 — 초판은 `surface-raised` 글자를 조각 위에 바로
+  // 얹어 라이트 3.46/3.28, 다크 5.02/5.06으로 두 계좌가 미달이었다. **표면 색
+  // 배지를 조각 바깥 테두리에 얹고 그 위에 번호를 놓는다** — 배지 자체가
+  // `surface-raised`(마크 표면, 계좌 색과 무관하게 항상 밝다)이므로 번호는
+  // 언제나 카드 표면 위의 `text-primary`가 되어 대비가 조각 색과 분리된다.
+  const NUMBER_BADGE_RADIUS = 9;
+  const sliceNumbers = arcs.flatMap((a, i) => {
     const mid = (a.start + a.end) / 2;
-    const [nx, ny] = polar(cx, cy, (R + rInner) / 2, ((R + rInner) / 2) * RY_RATIO, mid);
-    return svgEl('text', { class: 'donut-slice-index', x: nx, y: ny, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, [
-      CIRCLED_NUMBERS[i] ?? String(i + 1),
-    ]);
+    const [nx, ny] = polar(cx, cy, R, R * RY_RATIO, mid); // 고리 바깥 테두리의 한 점
+    return [
+      svgEl('circle', { class: 'donut-slice-index-badge', cx: nx, cy: ny, r: NUMBER_BADGE_RADIUS }),
+      svgEl('text', { class: 'donut-slice-index', x: nx, y: ny, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, [
+        CIRCLED_NUMBERS[i] ?? String(i + 1),
+      ]),
+    ];
   });
 
   // 중앙 값 — **월 배분 총액**(screens.md 5.8절이 절감세액을 여기 두지 않기로

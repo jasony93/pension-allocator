@@ -667,3 +667,33 @@ export const AMOUNT_CARD_CAPTION_ZERO_CLAUSE = `입력한 ${PRIOR_TAX_LABEL}이 
 export const STACKBAR_CAP_APPLIED_NOTE = '아래 금액은 낼 세금까지만 반영한 값입니다.';
 /** C-3 위 한 줄 — 한 화면에서 같은 성격의 금액이 한쪽만 상한 표기이면 안 된다(4.8절 (1) 규칙). */
 export const STACKBAR_BOUNDED_NOTE = `${PRIOR_TAX_LABEL}을 받지 않아 아래 금액도 상한으로 계산된 값입니다.`;
+
+// ---------------------------------------------------------------------------
+// `AccountBenefitStrip` — 계좌별 세제혜택 (design-system 5.31절 · screens.md
+// 5.14절 · tax-rules-report.md 15절)
+//
+// **화면이 계좌별 숫자를 나누어 만들지 않는다.** 연금 두 계좌는 계약이 합산
+// 값만 내므로 `pooled`로 묶고, ISA는 세액공제 대상이 아니라는 사실을 서술로
+// 전한다 — 15.4.5절이 그대로 쓸 수 있다고 확인한 문장이다.
+// ---------------------------------------------------------------------------
+
+export const ACCOUNT_BENEFIT_STRIP_TITLE = '계좌별 세제혜택';
+/** `[4-B]`가 같은 화면 위쪽에 전체 캡션을 이미 갖고 있으므로 전문을 다시 적지 않는다(P1). */
+export function accountBenefitStripRefCaption(taxYear) {
+  return `위 절세액과 같은 조건 — ${taxYear ? `${taxYear} 과세연도` : '이 과세연도'} 기준`;
+}
+/** 연금 두 계좌가 묶여 있다는 사실 자체를 문구가 메운다(`open_questions`). */
+export const ACCOUNT_BENEFIT_POOLED_NOTE = '합산 세액공제';
+export const ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE = '세액공제액으로는 계좌 간 차이가 없음';
+export const ACCOUNT_BENEFIT_REDUCED_NOTE = '일부는 낼 세금 한도로 반영되지 않음';
+
+/**
+ * ISA 행 서술. **금액이 아니다.** tax-rules-report.md 15.4.1·15.4.2절의 근거를
+ * 그대로 옮긴다 — 세액공제 대상이 아니라는 사실과 혜택이 놓인 축(비과세·저율
+ * 분리과세)을 함께 적어, "빈칸 = 혜택 없음"으로 오독되지 않게 한다(15.4.5절).
+ */
+export const ACCOUNT_BENEFIT_ISA_NARRATIVE = '비과세 한도 적용';
+/** 절세액과 구분됨을 항상 병기한다 — 이 괄호를 빼면 서술도 금액이라고 오독한다. */
+export const ACCOUNT_BENEFIT_ISA_SUFFIX = '(세액공제 아님)';
+
+export const ACCOUNT_BENEFIT_EXCLUDED_LABEL = '배분 대상 아님';

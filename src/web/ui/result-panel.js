@@ -48,6 +48,14 @@ import {
   AMOUNT_CARD_CAPTION_ZERO_CLAUSE,
   STACKBAR_CAP_APPLIED_NOTE,
   STACKBAR_BOUNDED_NOTE,
+  ACCOUNT_BENEFIT_STRIP_TITLE,
+  accountBenefitStripRefCaption,
+  ACCOUNT_BENEFIT_POOLED_NOTE,
+  ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE,
+  ACCOUNT_BENEFIT_REDUCED_NOTE,
+  ACCOUNT_BENEFIT_ISA_NARRATIVE,
+  ACCOUNT_BENEFIT_ISA_SUFFIX,
+  ACCOUNT_BENEFIT_EXCLUDED_LABEL,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
@@ -66,6 +74,7 @@ import {
 } from './charts.js';
 import {
   accountLimitView,
+  accountBenefitRows,
   excludedAccounts,
   fillOrderTieBreak,
   lawEntriesFor,
@@ -146,6 +155,20 @@ function focusField(key) {
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     target.focus();
   }
+}
+
+/**
+ * `LawChip`·`AccountBenefitStrip` 행이 공유하는 "누르면 그 항목으로 스크롤 +
+ * 1.2초 하이라이트" 동작(design-system 5.9·5.31절). 포커스를 주지 않는다 —
+ * 목적지가 버튼이 아니라 표의 행이라 포커스 이동은 스크린리더 사용자에게
+ * 없던 조작 초점을 만든다.
+ */
+function scrollAndHighlight(id) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  target.classList.add('row-highlight');
+  setTimeout(() => target.classList.remove('row-highlight'), 1200);
 }
 
 /**
@@ -503,10 +526,16 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut' } = {}) {
   const singleSlice = donutSingleSliceAccount(plan, excluded);
 
   return el('div', { class: 'chart-area' }, [
-    el('div', { class: 'donut-wrap' }, [donut]),
-    // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
-    // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
-    donutLegend(donutArgs),
+    el('div', { class: 'donut-with-strip' }, [
+      el('div', { class: 'donut-wrap' }, [donut]),
+      // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
+      // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
+      donutLegend(donutArgs),
+      // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
+      // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
+      // 정렬, 절반 크기.
+      accountBenefitStrip(scenario, plan),
+    ]),
     singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
     el('p', { class: 'field-help chart-note' }, ['같은 값을 납입 잔여 한도와 함께 —']),
     barSection,
@@ -547,6 +576,94 @@ function isaTaxFreeBlock(scenario, view) {
   return el('div', { class: 'headroom-note' }, [
     el('p', { class: 'type-body-s' }, [isaTaxFreeCaption(view.taxFreeLimitKrw)]),
     lawChipRow(lawEntriesForPath(scenario, 'limits.by_account[isa].tax_free_limit_krw'), 'note-laws'),
+  ]);
+}
+
+/**
+ * `AccountBenefitStrip` — design-system 5.31절 · screens.md 5.14절. 도넛 바로
+ * 아래, 우측 정렬로 붙는 절반 크기 위젯. `[4-D]` 표를 대체하지 않고 요약만
+ * 앞으로 끌어온다 — 근거(`LawChip`)는 이 위젯이 아니라 표에 있고, 행을 누르면
+ * 그 행으로 스크롤 + 하이라이트한다(P2, 5.31절 "근거" 규약).
+ *
+ * **새 데이터를 만들지 않는다.** `accountBenefitRows`가 계약이 이미 낸 값만
+ * 고르고, 이 함수는 그것을 그리기만 한다.
+ */
+function accountBenefitStrip(scenario, plan) {
+  const rows = accountBenefitRows(scenario, plan);
+
+  const pensionRow = () => {
+    const p = rows.pension;
+    const dots = p.accounts.map((a) =>
+      el('span', { class: 'benefit-dot', style: { background: `var(--data-${a === 'annuity_savings' ? 'pension' : 'irp'})` } }),
+    );
+    const names = p.accounts.map((a) => ACCOUNT_LABEL[a]).join(' · ');
+    const onClick = () => scrollAndHighlight(`account-row-${p.accounts[0]}`);
+
+    if (p.state === 'excluded') {
+      return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+        el('span', { class: 'benefit-row-dots' }, dots.length ? dots : [el('span', { class: 'benefit-dot' })]),
+        el('span', { class: 'benefit-row-body' }, [
+          el('span', { class: 'benefit-row-names type-body-s' }, [names]),
+          el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_EXCLUDED_LABEL]),
+        ]),
+      ]);
+    }
+
+    // pooled — 낼 세금 상태와 동기화한다(모름 → 최대 / 잘림 → 축약 문구 /
+    // 0 → 0원 + 차이 없음 문구, 5.31절 "낼 세금 상태와 동기화한다").
+    const view = taxCreditHeadlineView(plan);
+    const amountText =
+      view.mode === HEADLINE_MODE.BOUNDED
+        ? `${BOUNDED_AMOUNT_PREFIX} ${formatKrwAbbreviated(view.totalKrw)}`
+        : formatKrwAbbreviated(view.totalKrw);
+    const subNote =
+      view.mode === HEADLINE_MODE.ZERO
+        ? ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE
+        : view.mode === HEADLINE_MODE.REDUCED
+          ? ACCOUNT_BENEFIT_REDUCED_NOTE
+          : null;
+
+    return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+      el('span', { class: 'benefit-row-dots' }, dots),
+      el('span', { class: 'benefit-row-body' }, [
+        el('span', { class: 'benefit-row-names type-body-s' }, [names]),
+        p.accounts.length > 1 ? el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_POOLED_NOTE]) : null,
+        el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
+        subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
+      ]),
+    ]);
+  };
+
+  const isaRow = () => {
+    const i = rows.isa;
+    const onClick = () => scrollAndHighlight('account-row-isa');
+    if (i.state === 'excluded') {
+      return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+        el('span', { class: 'benefit-row-dots' }, [el('span', { class: 'benefit-dot benefit-dot-excluded' })]),
+        el('span', { class: 'benefit-row-body' }, [
+          el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
+          el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_EXCLUDED_LABEL]),
+        ]),
+      ]);
+    }
+    // narrative — **금액을 쓰지 않는다.** ISA는 세액공제 대상이 아닐 뿐 혜택이
+    // 없는 것이 아니다(tax-rules-report.md 15.4.5절). 서술과 절세액이
+    // 다른 축이라는 것을 괄호로 항상 병기한다.
+    return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+      el('span', { class: 'benefit-row-dots' }, [el('span', { class: 'benefit-dot', style: { background: 'var(--data-isa)' } })]),
+      el('span', { class: 'benefit-row-body' }, [
+        el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
+        el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_ISA_NARRATIVE]),
+        el('span', { class: 'benefit-row-suffix' }, [ACCOUNT_BENEFIT_ISA_SUFFIX]),
+      ]),
+    ]);
+  };
+
+  return el('div', { class: 'account-benefit-strip' }, [
+    el('h4', { class: 'type-title-s' }, [ACCOUNT_BENEFIT_STRIP_TITLE]),
+    el('p', { class: 'benefit-strip-ref-caption' }, [accountBenefitStripRefCaption(scenario.ruleset?.tax_year)]),
+    pensionRow(),
+    isaRow(),
   ]);
 }
 
@@ -633,7 +750,10 @@ function accountTable(plan, scenario) {
     if (view.excluded) {
       const laws = lawEntriesFor(scenario, view.basisRuleIds);
       rows.push(
-        el('tr', { class: 'table-row-excluded' }, [
+        // id — `AccountBenefitStrip`의 행을 눌렀을 때 스크롤 + 하이라이트할
+        // 대상이다(design-system 5.31절: "근거가 없는 것이 아니라 한 단계
+        // 아래에 있다").
+        el('tr', { class: 'table-row-excluded', id: `account-row-${a.account}` }, [
           el('td', {}, [ACCOUNT_LABEL[a.account]]),
           el('td', {}, [EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER]),
           el('td', {}, ['—']),
@@ -652,7 +772,7 @@ function accountTable(plan, scenario) {
     const lawIds = a.basis_rule_ids;
     const lawEntry = scenario.legal_basis.find((l) => lawIds.includes(l.rule_id));
     rows.push(
-      el('tr', {}, [
+      el('tr', { id: `account-row-${a.account}` }, [
         el('td', {}, [ACCOUNT_LABEL[a.account]]),
         el('td', { class: 'type-num' }, [formatKrw(a.monthly_krw)]),
         el('td', { class: 'type-num' }, [formatKrw(a.annual_krw)]),

@@ -168,6 +168,54 @@ export function fillOrderTieBreak(plan) {
 }
 
 /**
+ * `AccountBenefitStrip`(design-system 5.31절 · screens.md 5.14절)이 그릴 행 둘을
+ * 낸다 — 연금계좌 묶음(`pension`)과 ISA(`isa`). **계산하지 않는다.** 계약이 이미
+ * 낸 값(`deterministic_benefit`은 pooled 합산값뿐이고, `non_quantified_effects`가
+ * ISA의 비과세 한도를 담는다)을 고르고 배제 여부로 상태만 가른다.
+ *
+ * **연금 두 계좌를 갈라 보여주지 않는다.** 계약(`engine-interface.md` 5.6절)의
+ * `DeterministicBenefit`이 계좌별 필드를 갖지 않는다 — 세액 한도가 걸리면
+ * 계좌별 몫이라는 개념 자체가 조문에 없고(`tax-rules-report.md` 15.3절), 합산
+ * 한도가 걸리면 세법이 정하는 것은 구간뿐이다(15.2.3절). 화면이 임의로 나누면
+ * 조문에 없는 배분을 만드는 것이라 `pooled` 하나로 묶어 둔다. `calc-engine-dev`
+ * ·`tax-domain`이 나중에 계좌별 분리 값을 내면 그 계좌만 `amount`로 승격하면
+ * 되고, 이 함수의 나머지는 바뀌지 않는다(design-system 5.31절 forward-compat).
+ *
+ * **ISA 칸에 0원을 쓰지 않는다.** ISA는 세액공제 대상이 아닐 뿐 혜택이 없는
+ * 것이 아니다(`tax-rules-report.md` 15.4.5절) — 그래서 ISA 행은 배제되지 않는
+ * 한 언제나 `narrative`다. `non_quantified_effects`에 값이 없어도(계좌 유형
+ * 미확정 등) 서술 자체는 성립하므로 행을 감추지 않는다.
+ */
+export function accountBenefitRows(scenario, plan) {
+  const pensionEligible = PENSION_ACCOUNTS.filter((account) => !accountExclusion(scenario, account));
+  const pension =
+    pensionEligible.length === 0
+      ? {
+          state: 'excluded',
+          accounts: PENSION_ACCOUNTS,
+          reasonCodes: PENSION_ACCOUNTS.flatMap((a) => accountExclusion(scenario, a)?.reasonCodes ?? []),
+          basisRuleIds: PENSION_ACCOUNTS.flatMap((a) => accountExclusion(scenario, a)?.basisRuleIds ?? []),
+        }
+      : {
+          state: 'pooled',
+          accounts: pensionEligible,
+          basisRuleIds: plan?.deterministic_benefit?.basis_rule_ids ?? [],
+        };
+
+  const isaExclusion = accountExclusion(scenario, 'isa');
+  const isaEffect = (plan?.non_quantified_effects ?? []).find((e) => e.account === 'isa' && e.code === 'isa_tax_free_headroom');
+  const isa = isaExclusion
+    ? { state: 'excluded', reasonCodes: isaExclusion.reasonCodes, basisRuleIds: isaExclusion.basisRuleIds }
+    : {
+        state: 'narrative',
+        headroomKrw: isaEffect?.headroom_krw ?? null,
+        basisRuleIds: isaEffect?.basis_rule_ids ?? [],
+      };
+
+  return { pension, isa };
+}
+
+/**
  * 규칙 id 목록에 해당하는 `legal_basis` 항목들. 배제 사유 옆에 붙일 `LawChip`의
  * 출처다 — 헌장 "계산에 쓴 법령 조항을 결과 화면에 노출한다"와 `screens.md`
  * 8.4(b) "차단 사유에 반드시 LawChip을 붙인다"를 같은 방식으로 지킨다.

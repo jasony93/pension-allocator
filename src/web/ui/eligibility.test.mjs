@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   accountExclusion,
   accountLimitView,
+  accountBenefitRows,
   excludedAccounts,
   fillOrderTieBreak,
   lawEntriesFor,
@@ -360,4 +361,95 @@ test('the explanation carries the rule ids the engine cited, so the screen can s
 test('a plan with no priority_basis at all does not crash the screen', () => {
   assert.equal(fillOrderTieBreak({ allocations: [] }), null);
   assert.equal(fillOrderTieBreak(null), null);
+});
+
+// --- `AccountBenefitStrip` 행 (design-system 5.31절 · screens.md 5.14절) -----
+//
+// 계좌별 세제혜택 위젯이 5개 상태 중 무엇을 고르는지. **화면이 계좌별 세액공제를
+// 계산하지 않는다** — 계약이 이미 낸 값(합산 `deterministic_benefit`,
+// `non_quantified_effects`)을 고르기만 한다.
+
+function planWithBenefit({ pooledIncomeTax = 900000, isaHeadroom = 2000000, isaBasisRuleIds = ['isa.tax_free_limit'] } = {}) {
+  return {
+    deterministic_benefit: {
+      pension_credit_income_tax_krw: pooledIncomeTax,
+      pension_credit_local_tax_krw: 0,
+      pension_credit_total_krw: pooledIncomeTax,
+      basis_rule_ids: ['pension.credit.rate'],
+      tax_liability_cap: { known: true, cap_krw: 50000000, applied: false },
+    },
+    non_quantified_effects: isaHeadroom == null
+      ? []
+      : [
+          {
+            code: 'isa_tax_free_headroom',
+            account: 'isa',
+            headroom_krw: isaHeadroom,
+            quantifiable: false,
+            reason_code: 'depends_on_investment_return_not_in_ruleset',
+            basis_rule_ids: isaBasisRuleIds,
+          },
+        ],
+  };
+}
+
+function scenarioAllEligible() {
+  return {
+    account_eligibility: [
+      { account: 'retirement_pension', eligible: true, reason_codes: [], basis_rule_ids: [] },
+      { account: 'annuity_savings', eligible: true, reason_codes: [], basis_rule_ids: [] },
+      { account: 'isa', eligible: true, reason_codes: [], basis_rule_ids: [] },
+    ],
+  };
+}
+
+test('the pension pair is always pooled — the contract has no per-account split', () => {
+  const rows = accountBenefitRows(scenarioAllEligible(), planWithBenefit());
+  assert.equal(rows.pension.state, 'pooled');
+  assert.deepEqual(rows.pension.accounts, ['annuity_savings', 'retirement_pension']);
+});
+
+test('ISA is narrative, never a bare amount — the report bars a "0원" cell', () => {
+  const rows = accountBenefitRows(scenarioAllEligible(), planWithBenefit());
+  assert.equal(rows.isa.state, 'narrative');
+  assert.equal(rows.isa.headroomKrw, 2000000);
+});
+
+test('ISA stays narrative even when the engine has not sent a headroom amount yet (type undeclared)', () => {
+  // ISA는 세액공제 대상이 아닐 뿐 혜택이 없는 것이 아니다(tax-rules-report.md
+  // 15.4.5절) — 한도 금액이 없어도 서술 자체는 성립하므로 행을 감추지 않는다.
+  const rows = accountBenefitRows(scenarioAllEligible(), planWithBenefit({ isaHeadroom: null }));
+  assert.equal(rows.isa.state, 'narrative');
+  assert.equal(rows.isa.headroomKrw, null);
+});
+
+test('an excluded ISA becomes the excluded row, with its reason and law carried through', () => {
+  const scenario = scenarioAllEligible();
+  scenario.account_eligibility.find((e) => e.account === 'isa').eligible = false;
+  scenario.account_eligibility.find((e) => e.account === 'isa').reason_codes = ['isa_excluded_age'];
+  scenario.account_eligibility.find((e) => e.account === 'isa').basis_rule_ids = ['isa.eligibility'];
+  const rows = accountBenefitRows(scenario, planWithBenefit());
+  assert.equal(rows.isa.state, 'excluded');
+  assert.deepEqual(rows.isa.reasonCodes, ['isa_excluded_age']);
+  assert.deepEqual(rows.isa.basisRuleIds, ['isa.eligibility']);
+});
+
+test('both pension accounts excluded collapses the pooled row to excluded, not a pooled zero', () => {
+  const scenario = scenarioAllEligible();
+  for (const account of ['retirement_pension', 'annuity_savings']) {
+    const entry = scenario.account_eligibility.find((e) => e.account === account);
+    entry.eligible = false;
+    entry.reason_codes = ['pension_contribution_blocked_annuity_started'];
+  }
+  const rows = accountBenefitRows(scenario, planWithBenefit());
+  assert.equal(rows.pension.state, 'excluded');
+  assert.deepEqual(rows.pension.accounts, ['annuity_savings', 'retirement_pension']);
+});
+
+test('one pension account excluded still pools the remaining one — no phantom split', () => {
+  const scenario = scenarioAllEligible();
+  scenario.account_eligibility.find((e) => e.account === 'retirement_pension').eligible = false;
+  const rows = accountBenefitRows(scenario, planWithBenefit());
+  assert.equal(rows.pension.state, 'pooled');
+  assert.deepEqual(rows.pension.accounts, ['annuity_savings']);
 });

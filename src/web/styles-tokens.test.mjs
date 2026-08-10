@@ -131,10 +131,21 @@ for (const [themeName, tokens] of Object.entries(THEMES)) {
   const raised = tokens.get('--surface-raised');
   const base = tokens.get('--surface-base');
   const sunken = tokens.get('--surface-sunken');
+  const overlay = tokens.get('--surface-overlay');
+  const track = tokens.get('--data-track');
 
-  test(`[${themeName}] 값을 나르는 색은 표면 대비 3:1 이상이다`, () => {
+  // 2026-08-10 개정 — 표면이 초록으로 옮기면서 계좌 색 3:1 제약이 **마크
+  // 표면에만** 걸리는 것으로 바뀌었다(design-system 3.1.1절). 마크 표면은
+  // `surface-raised`·`surface-overlay`·`data-track` 셋뿐이다 — 데이터 마크
+  // (도넛·막대·표 색 칸)는 이 셋 위에만 놓이고, `surface-base`(페이지) 위에는
+  // 놓이지 않는다. 반례 실측(설계 문서 3.1.1절): 계좌 색을 페이지 배경에 직접
+  // 올리면 연금저축 2.82 / IRP 2.68로 3:1 미달이다 — **페이지는 검사 대상이
+  // 아니다.** 이 절이 바뀌기 전에는 카드·페이지 둘만 검사했는데, 그 규칙은
+  // 이제 설계와 어긋난다(design-system 3.5.4절 검증기 출력이 카드·모달·트랙
+  // 셋을 마크 표면으로 확정했다).
+  test(`[${themeName}] 값을 나르는 색은 마크 표면(카드·모달·트랙) 대비 3:1 이상이다`, () => {
     for (const name of ['--data-pension', '--data-irp', '--data-isa', '--data-unallocated']) {
-      for (const [surfaceName, surface] of [['카드', raised], ['페이지', base]]) {
+      for (const [surfaceName, surface] of [['카드', raised], ['모달', overlay], ['트랙', track]]) {
         const ratio = contrast(tokens.get(name), surface);
         assert.ok(ratio >= 3, `${name} vs ${surfaceName} = ${ratio.toFixed(2)} (< 3)`);
       }
@@ -143,9 +154,15 @@ for (const [themeName, tokens] of Object.entries(THEMES)) {
 
   test(`[${themeName}] 뜻을 나르는 경계(data-excluded)가 3:1 이상이다 — WCAG 1.4.11`, () => {
     // 배제 계좌의 점선은 "이 계좌는 계산 대상이 아니다"를 나르는 경계다.
-    // 초판은 `border-subtle`(대비 1.27)이었다.
-    const ratio = contrast(tokens.get('--data-excluded'), raised);
-    assert.ok(ratio >= 3, `--data-excluded vs 카드 = ${ratio.toFixed(2)}`);
+    // 초판은 `border-subtle`(대비 1.27)이었다. **이 토큰은 데이터 마크와 달리
+    // 카드·페이지·트랙 세 방향 모두에서 3:1을 진다**(design-system 3.5.3절 —
+    // 라이트 카드 3.62 / 페이지 3.12 / 트랙 3.49). `AllocationBar`의 점선
+    // 윤곽이 트랙 위에, `AccountBenefitStrip`의 배제 점이 카드 위에 놓이는
+    // 것처럼 이 색이 놓이는 표면이 마크 표면으로 한정되지 않기 때문이다.
+    for (const [surfaceName, surface] of [['카드', raised], ['페이지', base], ['트랙', track]]) {
+      const ratio = contrast(tokens.get('--data-excluded'), surface);
+      assert.ok(ratio >= 3, `--data-excluded vs ${surfaceName} = ${ratio.toFixed(2)}`);
+    }
   });
 
   test(`[${themeName}] 아무것도 나르지 않는 색은 2:1 미만이다 — 자리표시자는 값의 잉크를 입을 수 없다`, () => {
