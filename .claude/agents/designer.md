@@ -1,7 +1,7 @@
 ---
 name: designer
 description: 2단계 설계에서 디자인 시스템, 화면 설계, 결과 시각화 스펙이 필요할 때 호출한다.
-tools: Read, Write, Edit, Glob, Grep
+tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch
 model: sonnet
 ---
 
