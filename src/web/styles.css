@@ -367,10 +367,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .provisional-note-title { margin: 0; font-size: 14px; font-weight: 700; }
 .provisional-note .checkbox-row { margin-bottom: 0; }
 
-.segment-group { display: flex; gap: var(--space-2); }
+.segment-group { display: flex; gap: var(--space-2); align-items: stretch; }
+/* `min-height`(고정 `height`가 아니다) — 터치 타깃 44px는 지키되, 이번 회차
+   (D28 수익 성격 3택)처럼 라벨이 한 줄을 넘으면 버튼이 늘어나 아래 요소와
+   겹치지 않는다. 실측에서 고정 높이가 텍스트를 밀어내 다음 문단과 겹치는
+   것을 잡았다. */
 .segment-option {
-  flex: 1; height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-m);
+  flex: 1; min-height: 44px; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-m);
   background: var(--surface-sunken); color: var(--text-secondary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  white-space: normal; line-height: 1.3;
 }
 .segment-option-selected { background: var(--accent-subtle); border-color: var(--accent); color: var(--text-primary); font-weight: 600; }
 
@@ -548,6 +554,30 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 /* ISA `narrative` 행의 괄호 — 절세액과 구분됨을 항상 병기한다. 이 괄호를
    빼면 서술도 금액이라고 오독한다(design-system 5.31절 `narrative` 행). */
 .benefit-row-suffix { font-size: 12.5px; color: var(--text-secondary); }
+
+/* `BenefitMeter`(design-system 5.31절) — `AllocationBar`의 트랙-채움 대비
+   표를 그대로 물려받는다(3.5.4절, 새 색을 만들지 않으므로 재검증이 필요
+   없다). 높이 6px — `AllocationBar` 20px의 절반 굵기 미만. */
+.benefit-meter-track {
+  height: 6px; border-radius: var(--radius-full); background: var(--data-track);
+  border: 1px solid var(--border-subtle); overflow: visible; width: 100%; margin: 2px 0;
+}
+.benefit-meter-fill { height: 100%; border-radius: var(--radius-full); min-width: 3px; }
+/* 확정(solid) — 계좌색 솔리드 채움. */
+.benefit-meter-fill-solid { border: none; }
+/* 가정(assumption) — 채움 없이 값의 위치까지 계좌색 **윤곽선만**(D28). 속은
+   표면색이라 트랙 배경 위에서 "잉크가 비어 있다"는 사실이 그대로 보인다.
+   실선이다 — 점선은 `data-excluded`(배제)가 이미 쓰고 있어 겹치면 안 된다. */
+.benefit-meter-fill-outline {
+  box-sizing: border-box; background: var(--surface-raised); border: 1.5px solid; margin: -1px 0;
+}
+/* `가정 기반` 칩 — ProvisionalStatusNote·note-tag-product와 같은 state-info 색 규약. */
+.benefit-row-assumption-chip {
+  display: inline-block; margin-bottom: 2px; padding: 1px 6px; border-radius: var(--radius-s);
+  font-size: 12.5px; font-weight: 600; background: var(--state-info-subtle);
+  border: 1px solid var(--state-info); color: var(--state-info);
+}
+.benefit-row-assumption-caption { font-size: 12.5px; color: var(--text-secondary); }
 @media (max-width: 767px) {
   .account-benefit-strip { align-self: stretch; max-width: none; width: 100%; }
 }

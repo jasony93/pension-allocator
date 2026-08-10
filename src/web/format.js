@@ -27,6 +27,16 @@ export function formatPercent(ratio, digits = 0) {
   return `${(ratio * 100).toFixed(digits)}%`;
 }
 
+/**
+ * 비율 → 백분율, 불필요한 소수 0을 잘라낸다("5.50%"가 아니라 "5.5%"). D28
+ * 수익률처럼 사용자가 소수로 입력할 수 있는 값에 쓴다 — `formatPercent`의
+ * 고정 자릿수는 "7.00%"처럼 없는 정밀도를 만들어낸다.
+ */
+export function formatPercentTrimmed(ratio) {
+  const text = (ratio * 100).toFixed(4).replace(/\.?0+$/, '');
+  return `${text}%`;
+}
+
 export function formatYears(n) {
   return `${n}년`;
 }

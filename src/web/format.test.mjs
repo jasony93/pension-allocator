@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatKrw, formatKrwAbbreviated, formatDelta, formatPlanRowAmount, formatPercent } from './format.js';
+import { formatKrw, formatKrwAbbreviated, formatDelta, formatPlanRowAmount, formatPercent, formatPercentTrimmed } from './format.js';
 
 test('formatKrw adds thousands separators and the 원 suffix', () => {
   assert.equal(formatKrw(1234567), '1,234,567원');
@@ -67,4 +67,12 @@ test('formatPlanRowAmount: with two non-baseline rows sharing delta 0, both read
 test('formatPercent renders a ratio as a whole-number percentage by default', () => {
   assert.equal(formatPercent(0.3333), '33%');
   assert.equal(formatPercent(1), '100%');
+});
+
+test('formatPercentTrimmed drops trailing zeros instead of printing false precision', () => {
+  assert.equal(formatPercentTrimmed(0.07), '7%');
+  assert.equal(formatPercentTrimmed(0.055), '5.5%');
+  assert.equal(formatPercentTrimmed(0.0225), '2.25%');
+  assert.equal(formatPercentTrimmed(0), '0%');
+  assert.equal(formatPercentTrimmed(1), '100%');
 });

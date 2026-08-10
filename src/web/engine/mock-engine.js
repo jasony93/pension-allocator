@@ -1,11 +1,11 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 5.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 5.1.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `5.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `5.1.0`으로 맞췄다.
  *
  * **4.0.0에서 따라온 것.** 요청에 `profile.birth_date`·`profile.prior_year_tax`·
  * `accounts.*.annuity_start_status`가 필수로 들어오고 `profile.age_years`가
@@ -18,6 +18,15 @@
  * 둘로 나뉜다(0.7절). 배분안이 셋에서 넷으로 늘고(`pension_contribution_limit_fill`),
  * `Plan`에 `unallocated_breakdown`·`pension_combined_credit_remaining_after_plan_krw`가,
  * `NonQuantifiedEffect`에 `facts`·`headroom_shared_with`가 붙는다.
+ *
+ * **5.1.0에서 따라온 것(D28·D29·D31, minor).** 요청에 선택 필드
+ * `profile.isa_return_assumption`과 `options.assumption_based_isa_estimate`가
+ * 붙는다. 둘 다 보내지 않으면(=`null`) 기존 필드가 한 원도 달라지지 않는다 — 그래서
+ * minor다(0.9절). 응답에는 `echo.isa_return_assumption`·`echo.isa_return_affects`
+ * (네 값이 전부 `false`인 고정 객체 — D28이 그은 선 ①을 자료형으로 강제한다)와
+ * `Plan.assumption_based_isa_estimate`가 새로 붙는다. **이 화면(`web-dev`)은
+ * 수익률을 제안하거나 미리 채우지 않는다** — 목이 기본값을 만들지 않는 것이
+ * 그 방어선의 절반이고, 나머지 절반은 입력 폼이 진다(0.10절).
  *
  * 이 파일은 `calc-engine-dev`의 실제 엔진(`src/engine/`)이 나오기 전까지 UI를
  * 독립적으로 확인하기 위한 대체물이다. 세법 수치는 전부 인자로 주입되는
@@ -41,9 +50,13 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_limit_fill'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
 const KNOWN_SCHEMA_MAJOR = '5';
-export const MOCK_SCHEMA_VERSION = '5.0.0';
+export const MOCK_SCHEMA_VERSION = '5.1.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
+// 5.1.0(D28·D29) — 수익이 어떤 형태로 들어오는가. 자산군이 아니다(계약 3.6절).
+const ISA_INCOME_CHARACTERS = ['interest_dividend', 'listed_equity_capital_gain', 'mixed_or_unknown'];
+// 5.1.0(D31) — 되돌리는 길. 계산과 입력은 그대로 두고 표시만 끈다(0.11절).
+const ISA_ESTIMATE_DISPLAYS = ['include', 'suppress'];
 
 // ---------------------------------------------------------------------------
 // 날짜 — 순수 함수다. 현재 시각을 읽지 않는다(계약 1절).
@@ -136,6 +149,199 @@ function toLegalBasisEntry(rule, appliedTo) {
     has_uncertainty_note: uncertaintyNotes.length > 0,
     uncertainty_notes: uncertaintyNotes,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 가정 기반 ISA 정산액 (5.1.0, D28·D29·D31 / 계약 3.6·5.14절)
+//
+// **이 값은 확정된 세액공제와 성질이 다르다.** 사용자가 제시한 수익률·소득 성격·
+// 정산 기간이라는 가정 위의 계산이고, 이름에 `benefit`을 쓰지 않고
+// `assumption_based`를 넣은 이유가 그것이다. 목적함수(배분·세액공제·순서·경고)는
+// 이 절을 한 번도 읽지 않는다 — `echo.isa_return_affects`의 네 `false`가 그 선언이다.
+// 세법 수치는 하나도 코드에 없다. 전부 룰셋에서 읽는다.
+// ---------------------------------------------------------------------------
+
+/** 십진 소수를 정수 분수로 바꾼다. 부동소수점 오차 없이 원 미만을 버리기 위해서다. */
+function toRatio(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  const text = String(value);
+  if (/e/i.test(text)) return null;
+  const decimals = (text.split('.')[1] ?? '').length;
+  const den = 10 ** decimals;
+  const num = Math.round(value * den);
+  if (!Number.isSafeInteger(num) || !Number.isSafeInteger(den)) return null;
+  return { num, den };
+}
+
+/** 금액에 비율을 적용하고 원 미만을 버린다. */
+function applyRate(amountKrw, rate) {
+  const ratio = toRatio(rate);
+  if (ratio === null) return null;
+  const product = amountKrw * ratio.num;
+  if (!Number.isSafeInteger(product)) return null;
+  return Math.floor(product / ratio.den);
+}
+
+const clampToZero = (value) => (value < 0 ? 0 : value);
+
+/**
+ * 소득 성격이 정하는 과세 비율 `s`의 구간을 룰셋 문자열에서 읽는다(계약 3.6절).
+ * **선택지가 정하는 것은 값이 아니라 구간이다** — 점을 낼 수 있는 것은 `point`가
+ * 참일 때뿐이다. 형식을 읽지 못하면 `null`을 돌려 계산을 멈춘다.
+ */
+function parseTaxableShareRange(text) {
+  if (typeof text !== 'string') return null;
+  const head = text.split(/\.(?:\s|$)/)[0].trim();
+  const NUM = String.raw`(\d+(?:\.\d+)?)`;
+  const point = new RegExp(`^s\\s*=\\s*${NUM}$`).exec(head);
+  if (point) return { min: Number(point[1]), max: Number(point[1]), point: true };
+  const range = new RegExp(`^${NUM}\\s*[≤<]\\s*s\\s*[≤<]\\s*${NUM}$`).exec(head);
+  if (range) {
+    const min = Number(range[1]);
+    const max = Number(range[2]);
+    return min <= max ? { min, max, point: false } : null;
+  }
+  return null;
+}
+
+/** 계좌 밖 이자·배당의 원천징수율. `isa.benefit.quantification.statable_amounts`에서 읽는다. */
+function readGeneralWithholdingRate(quantRule) {
+  const items = quantRule?.value?.statable_amounts;
+  if (!Array.isArray(items)) return undefined;
+  const gap = items.find((item) => item?.id === 'rate_gap');
+  return typeof gap?.income_tax?.general === 'number' ? gap.income_tax.general : undefined;
+}
+
+/**
+ * 과세 비율 `s` 하나에 대한 정산. `혜택 = G×일반세율×(1+부가율) − max(0,N−C)×ISA세율×(1+부가율)`.
+ * 비교 기준의 과세표준이 `N`이 아니라 `G`인 것이 손익통산 축을 살리는 알맹이다.
+ */
+function settlementAt({ totalReturnKrw, taxableShare, lossKrw, taxFreeLimitKrw, generalRate, isaRate, surtaxRate }) {
+  const grossKrw = applyRate(totalReturnKrw, taxableShare);
+  if (grossKrw === null) return null;
+  const netKrw = clampToZero(grossKrw - lossKrw);
+  const excessKrw = clampToZero(netKrw - taxFreeLimitKrw);
+
+  const taxOf = (amountKrw, rate) => {
+    const incomeTax = applyRate(amountKrw, rate);
+    if (incomeTax === null) return null;
+    const localTax = applyRate(incomeTax, surtaxRate);
+    if (localTax === null) return null;
+    return incomeTax + localTax;
+  };
+
+  const comparisonTax = taxOf(grossKrw, generalRate);
+  const isaTax = taxOf(excessKrw, isaRate);
+  const lossOffsetAxis = taxOf(grossKrw - netKrw, generalRate);
+  const taxFreeAxis = taxOf(Math.min(netKrw, taxFreeLimitKrw), generalRate);
+  const excessAtGeneral = taxOf(excessKrw, generalRate);
+  if ([comparisonTax, isaTax, lossOffsetAxis, taxFreeAxis, excessAtGeneral].includes(null)) return null;
+
+  const rateGapAxis = excessAtGeneral - isaTax;
+  const settlementKrw = comparisonTax - isaTax;
+  return {
+    grossKrw,
+    netKrw,
+    excessKrw,
+    comparisonTaxKrw: comparisonTax,
+    isaTaxKrw: isaTax,
+    settlementKrw,
+    axes: {
+      loss_offset_krw: lossOffsetAxis,
+      tax_free_krw: taxFreeAxis,
+      rate_gap_krw: rateGapAxis,
+      rounding_residual_krw: settlementKrw - (lossOffsetAxis + taxFreeAxis + rateGapAxis),
+    },
+  };
+}
+
+/** 상태만 다르고 형태는 같은 껍데기 — 금액 칸이 조용히 사라지지 않게 전부 적는다. */
+function isaEstimateShell(state, ctx, extra = {}) {
+  return {
+    state,
+    not_computable_reason_code: null,
+    // **상수다.** 이 금액은 정산 기간 전체의 값이고 1년치가 아니다(계약 5.14절).
+    is_annual: false,
+    settlement_years: ctx.settlementYears,
+    settlement_years_source: ctx.settlementSource,
+    taxable_share_min: ctx.share.min,
+    taxable_share_max: ctx.share.max,
+    principal_krw: null,
+    principal_basis_code: 'cumulative_contribution_plus_plan_allocation',
+    return_accrual_code: 'simple_interest',
+    total_return_krw: null,
+    taxable_income_krw: null,
+    loss_offset_applied_krw: null,
+    net_income_krw: null,
+    tax_free_limit_krw: null,
+    comparison_side_tax_krw: null,
+    isa_side_tax_krw: null,
+    point_estimate_krw: null,
+    lower_bound_krw: null,
+    upper_bound_krw: null,
+    axis_breakdown: null,
+    comparison_baseline_code: 'withholding_at_general_rate',
+    is_lower_bound_for_aggregate_taxpayer: true,
+    assumes_contract_held_to_settlement: true,
+    basis_rule_ids: ctx.basisRuleIds,
+    ...extra,
+  };
+}
+
+/**
+ * 배분안 하나에 붙는 가정 기반 ISA 정산액. **원금은 「가입 이후 누적 납입액 + 이
+ * 배분안의 ISA 배분액」이다** — 잔액이 아니라 납입액이므로 이미 난 운용수익이
+ * 빠져 과소 방향이다(계약 5.14절).
+ */
+function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw, surtaxRate }) {
+  if (!context.supplied) return null;
+  // D31 — 계산과 입력은 그대로 두고 표시만 끈다. state가 "값이 없다"가 아니라
+  // "값을 감췄다"를 말한다(D19).
+  if (display === 'suppress') {
+    return isaEstimateShell('display_suppressed', context);
+  }
+  if (taxFreeLimitKrw == null) {
+    return isaEstimateShell('not_computable', context, { not_computable_reason_code: 'isa_tax_free_limit_unknown' });
+  }
+
+  const exposure = principalKrw * context.settlementYears;
+  const totalReturnKrw = Number.isSafeInteger(exposure) ? applyRate(exposure, context.assumption.annual_return_rate) : null;
+  if (totalReturnKrw === null) {
+    return isaEstimateShell('not_computable', context, { not_computable_reason_code: 'amount_not_representable' });
+  }
+
+  const at = (taxableShare) =>
+    settlementAt({
+      totalReturnKrw,
+      taxableShare,
+      lossKrw: context.assumption.loss_amount_krw ?? 0,
+      taxFreeLimitKrw,
+      generalRate: context.generalRate,
+      isaRate: context.isaRate,
+      surtaxRate,
+    });
+
+  const upper = at(context.share.max);
+  const lower = context.share.point ? upper : at(context.share.min);
+  if (upper === null || lower === null) {
+    return isaEstimateShell('not_computable', context, { not_computable_reason_code: 'amount_not_representable' });
+  }
+
+  return isaEstimateShell('computed', context, {
+    principal_krw: principalKrw,
+    total_return_krw: totalReturnKrw,
+    taxable_income_krw: upper.grossKrw,
+    loss_offset_applied_krw: context.assumption.loss_amount_krw ?? 0,
+    net_income_krw: upper.netKrw,
+    tax_free_limit_krw: taxFreeLimitKrw,
+    comparison_side_tax_krw: upper.comparisonTaxKrw,
+    isa_side_tax_krw: upper.isaTaxKrw,
+    // **점은 소득 성격이 확정적일 때만 낸다.** 구간 안의 한 점을 고르는 근거가 조문에 없다.
+    point_estimate_krw: context.share.point ? upper.settlementKrw : null,
+    lower_bound_krw: lower.settlementKrw,
+    upper_bound_krw: upper.settlementKrw,
+    axis_breakdown: upper.axes,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +532,51 @@ function validateProfile(p) {
     errors.push(err('invalid_enum', 'profile.declared_youth', {}));
   }
 
+  if (p.isa_return_assumption != null) {
+    errors.push(...validateIsaReturnAssumption(p.isa_return_assumption));
+  }
+
+  return errors;
+}
+
+/**
+ * 계약 3.6절 `IsaReturnAssumption` (D28·D29). **객체 자체가 선택이다** — 여기 없으면
+ * ISA 금액을 한 원도 내지 않는다. **보냈으면 수익률과 소득 성격은 둘 다 필수다** —
+ * 성격 없이 수익률만 받으면 없는 혜택을 있다고 말하게 된다(과대 방향).
+ */
+function validateIsaReturnAssumption(node) {
+  const errors = [];
+  const field = 'profile.isa_return_assumption';
+  if (node == null || typeof node !== 'object' || Array.isArray(node)) {
+    errors.push(err('invalid_enum', field, { value: String(node) }));
+    return errors;
+  }
+
+  const rate = node.annual_return_rate;
+  if (rate == null) {
+    errors.push(err('missing_required', `${field}.annual_return_rate`, {}));
+  } else if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    errors.push(err('not_integer', `${field}.annual_return_rate`, { value: String(rate) }));
+  } else if (rate < 0) {
+    // 음(−)의 수익률은 손실이고, 손실은 loss_amount_krw가 받는다.
+    errors.push(err('negative_value', `${field}.annual_return_rate`, { value: rate }));
+  }
+
+  if (node.income_character == null) {
+    errors.push(err('missing_required', `${field}.income_character`, {}));
+  } else if (!ISA_INCOME_CHARACTERS.includes(node.income_character)) {
+    errors.push(err('invalid_enum', `${field}.income_character`, { value: node.income_character }));
+  }
+
+  if (node.settlement_years != null) {
+    if (!isInt(node.settlement_years)) errors.push(err('not_integer', `${field}.settlement_years`, {}));
+    else if (node.settlement_years < 1) errors.push(err('out_of_range', `${field}.settlement_years`, {}));
+  }
+  if (node.loss_amount_krw != null) {
+    if (!isInt(node.loss_amount_krw)) errors.push(err('not_integer', `${field}.loss_amount_krw`, {}));
+    else if (node.loss_amount_krw < 0) errors.push(err('negative_value', `${field}.loss_amount_krw`, {}));
+  }
+
   return errors;
 }
 
@@ -479,6 +730,9 @@ function validateOptions(o) {
   }
   if (o.include_legal_basis != null && typeof o.include_legal_basis !== 'boolean') {
     errors.push(err('invalid_enum', 'options.include_legal_basis', {}));
+  }
+  if (o.assumption_based_isa_estimate != null && !ISA_ESTIMATE_DISPLAYS.includes(o.assumption_based_isa_estimate)) {
+    errors.push(err('invalid_enum', 'options.assumption_based_isa_estimate', { value: o.assumption_based_isa_estimate }));
   }
   return errors;
 }
@@ -760,6 +1014,60 @@ function computeScenario(scenario, request, rulesets) {
     }
   } else if (accounts.isa.exists && accounts.isa.account_type == null) {
     notices.push({ code: 'isa_type_not_declared', severity: 'info', field: 'accounts.isa.account_type', params: {}, basis_rule_ids: [] });
+  }
+
+  // -- 가정 기반 ISA 정산액의 재료 (5.1.0, D28·D29 / 계약 3.6절) -------------
+  //
+  // **객체를 보내지 않으면 규칙을 한 건도 읽지 않는다** — 읽지 않은 규칙을 근거로
+  // 싣지 않는다는 규약이 여기에도 걸린다. 룰셋이 실제로 읽히지 않으면(개발 서버
+  // 데이터 결함 등) `use()`가 이미 missingRules에 기록하므로 이 시나리오는
+  // ok:false로 조기 반환된다 — 대체값을 만들지 않는다.
+  const isaReturnAssumptionInput = profile.isa_return_assumption ?? null;
+  const isaEstimateDisplay = request.options?.assumption_based_isa_estimate ?? 'include';
+  let isaReturnContext = { supplied: false };
+  if (isaReturnAssumptionInput != null) {
+    const quantRule = use('isa.benefit.quantification', 'plans[].assumption_based_isa_estimate');
+    const isaExcessRule = use('isa.excess.separate_tax_rate', 'plans[].assumption_based_isa_estimate');
+    const accountReqRuleForReturn = use('isa.account.requirements', 'plans[].assumption_based_isa_estimate');
+    const incomeCharacterRule = use('isa.benefit.income_character', 'plans[].assumption_based_isa_estimate');
+    const formulaRule = use('isa.benefit.formula', 'plans[].assumption_based_isa_estimate');
+    const settlementPeriodRule = use('isa.benefit.settlement_period', 'plans[].assumption_based_isa_estimate');
+    const lossOffsetRule = use('isa.net_income.loss_offset', 'plans[].assumption_based_isa_estimate');
+    // 연금계좌 칸이 비어 있는 것을 "효과가 없다"로 읽지 않게 하는 근거(D28 18.5절).
+    use('pension.tax_deferral.with_return_rate', 'notices[pension_tax_deferral_not_quantified]');
+
+    if (quantRule && isaExcessRule && accountReqRuleForReturn && incomeCharacterRule && formulaRule && settlementPeriodRule && lossOffsetRule) {
+      const generalRate = readGeneralWithholdingRate(quantRule);
+      const isaRate = isaExcessRule.value.rate;
+      const minContractYears = accountReqRuleForReturn.value.min_contract_years;
+      const options = incomeCharacterRule.value?.what_to_ask_instead?.options ?? [];
+      const option = options.find((item) => item?.id === isaReturnAssumptionInput.income_character);
+      const share = parseTaxableShareRange(option?.s_range);
+
+      if (generalRate !== undefined && isaRate != null && minContractYears != null && share !== null) {
+        const settlementFromUser = isaReturnAssumptionInput.settlement_years != null;
+        isaReturnContext = {
+          supplied: true,
+          assumption: isaReturnAssumptionInput,
+          share,
+          generalRate,
+          isaRate,
+          settlementYears: settlementFromUser ? isaReturnAssumptionInput.settlement_years : minContractYears,
+          settlementSource: settlementFromUser ? 'user' : 'ruleset_min_contract_years',
+          basisRuleIds: [
+            accountReqRuleForReturn.id,
+            formulaRule.id,
+            incomeCharacterRule.id,
+            quantRule.id,
+            settlementPeriodRule.id,
+            isaExcessRule.id,
+            lossOffsetRule.id,
+            ...(isaTaxFreeRule ? [isaTaxFreeRule.id] : []),
+            ...(surtaxRule ? [surtaxRule.id] : []),
+          ].sort(),
+        };
+      }
+    }
   }
 
   // -- ISA 연간 납입 가능액 -----------------------------------------------
@@ -1045,7 +1353,11 @@ function computeScenario(scenario, request, rulesets) {
     }[p.planId];
 
     const nonQuantified = [];
-    if (taxFreeLimit != null) {
+    // 5.1.0(D28) — **수익률 가정이 들어오면 이 효과는 더 이상 "금액으로 낼 수
+    // 없는 것"이 아니다.** 가정이 있는데도 이 항목을 그대로 내보내면 응답이
+    // 자기 자신과 어긋난다 — `assumption_based_isa_estimate`가 그 자리를 대신한다
+    // (계약 4.2절 "두 곳에서 기존 출력이 줄어든다").
+    if (taxFreeLimit != null && !isaReturnContext.supplied) {
       nonQuantified.push({
         code: 'isa_tax_free_headroom',
         account: 'isa',
@@ -1192,6 +1504,16 @@ function computeScenario(scenario, request, rulesets) {
       },
       delta_vs_baseline_krw: 0, // baseline 선정 후 채운다
       non_quantified_effects: nonQuantified,
+      // 5.1.0(D28·D29·D31) — **`DeterministicBenefit`과 같은 축에 놓거나 더하지
+      // 않는다.** 원금이 이 안의 ISA 배분액을 포함하므로 안마다 값이 다를 수
+      // 있다(계약 5.14절). 가정을 보내지 않았으면 `null`이다.
+      assumption_based_isa_estimate: isaEstimateFor({
+        context: isaReturnContext,
+        display: isaEstimateDisplay,
+        taxFreeLimitKrw: taxFreeLimit,
+        principalKrw: accounts.isa.cumulative_contribution_krw + (p.allocByAccount.isa ?? 0),
+        surtaxRate: localRateOfIncomeTax,
+      }),
       _allocationVector: ACCOUNTS.map((a) => p.allocByAccount[a] ?? 0).join('|'),
       _totalCredit: totalCreditKrw,
     };
@@ -1261,6 +1583,72 @@ function computeScenario(scenario, request, rulesets) {
   if (capKnown && capKrw === 0) comparisonNoteCodes.push('tax_credit_axis_not_discriminating');
   if (orderedPlans.some((p) => p.deterministic_benefit.tax_liability_cap.applied)) {
     notices.push({ code: 'tax_liability_cap_applied', severity: 'info', field: null, params: {}, basis_rule_ids: capBasisRuleIds });
+  }
+
+  // -- 가정 기반 ISA 정산액에 딸린 안내 (5.1.0, D28·D29·D31 / 계약 8.2절) --------
+  //
+  // **가정을 받지 않았다는 사실도 안내로 낸다.** 조용히 빈 자리를 남기면 화면은
+  // "ISA 효과가 없다"와 "묻지 않았다"를 구별할 수 없다(D19).
+  if (!isaReturnContext.supplied) {
+    notices.push({
+      code: 'isa_return_assumption_not_supplied',
+      severity: 'info',
+      field: 'profile.isa_return_assumption',
+      params: {},
+      basis_rule_ids: [],
+    });
+  } else {
+    if (isaEstimateDisplay === 'suppress') {
+      // 표시가 꺼진 상태가 조용하면 안 된다 — 계산은 돌았고 금액만 감춘 것이다.
+      notices.push({
+        code: 'isa_return_estimate_display_suppressed',
+        severity: 'info',
+        field: 'options.assumption_based_isa_estimate',
+        params: {},
+        basis_rule_ids: [],
+      });
+    }
+    const estimates = orderedPlans.map((p) => p.assumption_based_isa_estimate).filter(Boolean);
+    const notComputable = estimates.find((e) => e.state === 'not_computable');
+    if (notComputable) {
+      notices.push({
+        code: 'isa_return_estimate_not_computable',
+        severity: 'warning',
+        field: 'profile.isa_return_assumption',
+        params: { reason_code: notComputable.not_computable_reason_code },
+        basis_rule_ids: [],
+      });
+    }
+    const computedEstimate = estimates.find((e) => e.state === 'computed');
+    if (computedEstimate) {
+      // 이 금액은 정산 기간 전체의 값이다. 연 환산은 비과세 한도를 해마다 새로
+      // 주는 계산이 되어 최대 1.75배 과대다(`isa.benefit.settlement_period`).
+      notices.push({
+        code: 'isa_return_estimate_is_not_annual',
+        severity: 'info',
+        field: null,
+        params: { settlement_years: computedEstimate.settlement_years },
+        basis_rule_ids: [use('isa.benefit.settlement_period')?.id].filter(Boolean),
+      });
+      if (estimates.some((e) => e.state === 'computed' && e.point_estimate_krw === null)) {
+        notices.push({
+          code: 'isa_return_estimate_reported_as_range',
+          severity: 'info',
+          field: 'profile.isa_return_assumption',
+          params: {},
+          basis_rule_ids: [use('isa.benefit.income_character')?.id].filter(Boolean),
+        });
+      }
+    }
+    // ISA 칸에만 금액이 보이는 것을 "ISA가 더 낫다"로 읽으면 안 된다 — 연금계좌
+    // 쪽 과세이연 효과는 꺼내는 시점에 정해지므로 지금 계산할 수 없다.
+    notices.push({
+      code: 'pension_tax_deferral_not_quantified',
+      severity: 'info',
+      field: null,
+      params: {},
+      basis_rule_ids: [use('pension.tax_deferral.with_return_rate')?.id].filter(Boolean),
+    });
   }
 
   if (profile.fund_use_horizon === 'unknown') {
@@ -1604,7 +1992,13 @@ export function compute(request, rulesets) {
   assumptions.push({ code: 'single_tax_year_only', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   assumptions.push({ code: 'other_deductions_excluded', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   assumptions.push({ code: 'rounding_floor_to_won', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
-  assumptions.push({ code: 'isa_benefit_not_quantified', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: ['isa.tax_free_limit'] });
+  // 5.1.0(D28, 계약 0.9절) — **가정을 보내면 이 진술이 거짓이 된다.** 그 계산에서는
+  // ISA 효과가 실제로 금액으로 나가므로(`Plan.assumption_based_isa_estimate`), 선언과
+  // 동작이 어긋나지 않게 가정을 보내지 않은 요청에서만 낸다.
+  const isaReturnAssumptionSupplied = request.profile.isa_return_assumption != null;
+  if (!isaReturnAssumptionSupplied) {
+    assumptions.push({ code: 'isa_benefit_not_quantified', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: ['isa.tax_free_limit'] });
+  }
   assumptions.push({ code: 'fund_use_horizon_excluded_from_amounts', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   assumptions.push({
     code: 'early_exit_penalty_not_quantified',
@@ -1639,6 +2033,71 @@ export function compute(request, rulesets) {
       params: {},
       applies_to_scenarios: applyAll,
       basis_rule_ids: [creditRateBasisRule.id],
+    });
+  }
+
+  // -- 수익률 가정 위의 계산이 서 있는 가정들 (5.1.0, D28의 선 ②·③) -----------
+  // 가정을 받지 않았으면 이 계산 자체가 없으므로 한 건도 붙지 않는다.
+  if (isaReturnAssumptionSupplied) {
+    const isaReturnAssumption = request.profile.isa_return_assumption;
+    // **이 서비스는 수익률을 제시하지 않는다.** 그 구분이 D31이 남긴 방어선 전부다.
+    assumptions.push({
+      code: 'isa_return_rate_user_supplied',
+      params: { annual_return_rate: isaReturnAssumption.annual_return_rate },
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: [],
+    });
+    // 복리·단리를 세법이 정하지 않는다. 혜택이 수익률에 단조 증가하므로 단리가 과소 방향이다.
+    assumptions.push({
+      code: 'isa_return_simple_interest',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: ['isa.benefit.settlement_period'],
+    });
+    // 원금을 잔액이 아니라 납입액으로 본다 — 이미 난 운용수익이 빠져 과소 방향이다.
+    assumptions.push({
+      code: 'isa_return_principal_from_contributions',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: ['isa.benefit.formula'],
+    });
+    if (isaReturnAssumption.settlement_years == null) {
+      // 수익률에는 조문에 닻이 없어 기본값을 만들 수 없지만, 계약기간 하한은
+      // 조문이 정한 값이다. 실제 계약기간이 더 길면 결과가 달라지므로 대체값을
+      // 썼다는 사실이 나가야 한다.
+      const accountReqRuleTop = findRule(rulesets, 'isa.account.requirements', ['2026.json']).rule;
+      assumptions.push({
+        code: 'isa_settlement_years_defaulted_to_min_contract_years',
+        params: { settlement_years: accountReqRuleTop.value.min_contract_years },
+        applies_to_scenarios: applyAll,
+        basis_rule_ids: ['isa.account.requirements', 'isa.benefit.settlement_period'],
+      });
+    }
+    if (isaReturnAssumption.loss_amount_krw == null) {
+      // `L`을 지어내면 과대가 된다. 0으로 두면 손익통산 축이 0이 되어 과소 방향이다.
+      assumptions.push({
+        code: 'isa_loss_assumed_zero',
+        params: {},
+        applies_to_scenarios: applyAll,
+        basis_rule_ids: ['isa.benefit.formula', 'isa.net_income.loss_offset'],
+      });
+    }
+    // 비교 기준을 14% 원천징수 종결(case A)로 둔다. 금융소득종합과세 대상이면
+    // 실제 혜택이 더 크므로 이 값은 하한이다 — 서비스의 편의가 아니라 조문에서
+    // 나오는 귀결이다.
+    assumptions.push({
+      code: 'isa_comparison_baseline_is_withholding_only',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: ['isa.benefit.formula', 'isa.benefit.quantification'],
+    });
+    // 정산 시점까지 계약을 유지하는 것을 전제한다. 중도해지 추징은 미래의 선택이고
+    // 요청에 그 입력이 없으므로, 선언한 자금 사용 시점에서 추론하지 않는다.
+    assumptions.push({
+      code: 'isa_return_assumes_contract_held_to_settlement',
+      params: {},
+      applies_to_scenarios: applyAll,
+      basis_rule_ids: ['isa.early_termination.clawback'],
     });
   }
 
@@ -1678,6 +2137,26 @@ export function compute(request, rulesets) {
         age_years: ageAtReferenceDate(parseIsoDate(request.profile.birth_date), referenceDateFor(request.tax_year)),
         reference_date: referenceDateFor(request.tax_year),
         reference_date_from_ruleset: false,
+      },
+      // 5.1.0(D28) — 사용자가 준 가정을 **그대로** 되돌린다. 실제로 적용된 정산
+      // 기간은 여기가 아니라 `Plan.assumption_based_isa_estimate.settlement_years`에
+      // 있다 — "무엇을 주었는가"와 "무엇을 썼는가"를 한 칸에 뭉치지 않는다.
+      isa_return_assumption: isaReturnAssumptionSupplied
+        ? {
+            annual_return_rate: request.profile.isa_return_assumption.annual_return_rate,
+            income_character: request.profile.isa_return_assumption.income_character,
+            settlement_years: request.profile.isa_return_assumption.settlement_years ?? null,
+            loss_amount_krw: request.profile.isa_return_assumption.loss_amount_krw ?? null,
+          }
+        : null,
+      // **네 값이 전부 `false`인 고정 객체다.** D28이 그은 선 ①(확정 세액공제와
+      // 가정 기반 추정치를 한 목적함수에 더하지 않는다)을 규약이 아니라 자료형과
+      // 회귀 테스트로 강제한다(계약 4.2절).
+      isa_return_affects: {
+        allocation_amounts: false,
+        tax_credit_amounts: false,
+        plan_ordering: false,
+        warnings: false,
       },
       // 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지 — 값이 고정이라 `qa`가
       // 실제 동작과 대조할 수 있다(계약 4.2절).

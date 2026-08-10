@@ -200,6 +200,11 @@ export function accountBenefitRows(scenario, plan) {
           state: 'pooled',
           accounts: pensionEligible,
           basisRuleIds: plan?.deterministic_benefit?.basis_rule_ids ?? [],
+          // `BenefitMeter`(design-system 5.31절)의 확정 등급 재료 — 트랙은
+          // 한도 적용 전, 채움은 적용 후다. 계산하지 않는다, 계약이 이미 낸
+          // 두 값을 고를 뿐이다.
+          beforeCapKrw: plan?.deterministic_benefit?.pension_credit_total_before_cap_krw ?? null,
+          afterCapKrw: plan?.deterministic_benefit?.pension_credit_total_krw ?? null,
         };
 
   const isaExclusion = accountExclusion(scenario, 'isa');
@@ -210,6 +215,11 @@ export function accountBenefitRows(scenario, plan) {
         state: 'narrative',
         headroomKrw: isaEffect?.headroom_krw ?? null,
         basisRuleIds: isaEffect?.basis_rule_ids ?? [],
+        // 5.1.0(D28·D29·D31) — 가정 기반 ISA 정산액. 계약이 `profile.isa_return_assumption`을
+        // 받지 않은 요청에는 `null`이다. **`state`는 그대로 `narrative`다** —
+        // ISA는 여전히 `DeterministicBenefit`을 갖지 않는다. 렌더 등급만
+        // (없음 → `assumption`) 이 값으로 승격된다(design-system 5.31절 표).
+        estimate: plan?.assumption_based_isa_estimate ?? null,
       };
 
   return { pension, isa };

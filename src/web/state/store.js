@@ -16,7 +16,7 @@
  * `analytics.js`의 화이트리스트가 지킨다.
  */
 
-import { validateForm, parseManwonToWon } from './validation.js';
+import { validateForm, parseManwonToWon, parsePercentToRate, ISA_INCOME_CHARACTERS } from './validation.js';
 import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 const DEBOUNCE_MS = 400;
@@ -59,8 +59,24 @@ export function initialForm() {
     isaTransferAmount: '',
     isaTransferDestination: 'retirement_pension',
     isaTransferPriorApplied: '',
+    // D28·D29·D31 — 수익률 가정. **기본값도, 미리 채운 값도 없다.** 꺼진
+    // 상태로 시작하고, 사용자가 스스로 켜고 스스로 숫자를 적어야 한다 — 이
+    // 서비스가 수익률을 제안하지 않는다는 구분이 D31 이후 남은 방어선
+    // 전부다(계약 0.10절). `field_name`은 어디서도 값을 담지 않는다.
+    isaReturnEnabled: false,
+    isaReturnRatePercent: '',
+    isaIncomeCharacter: null,
+    isaSettlementYears: '',
+    isaLossAmount: '',
   };
 }
+
+/**
+ * D31이 남긴 되돌리는 길. 규제 검토를 나중에 하기로 하면 `'suppress'`로
+ * 바꾼다 — 계산과 입력은 그대로 두고 표시만 끈다(0.11절). 사용자에게 노출된
+ * 토글이 아니라 조직이 되돌릴 자리이므로 코드에 상수 하나로 둔다.
+ */
+export const ASSUMPTION_BASED_ISA_ESTIMATE_DISPLAY = 'include';
 
 /**
  * 화면 경계의 단위 변환 — **모든 금액 입력란은 만원 단위다**(소유자 지시).
@@ -118,6 +134,33 @@ export function annuityStartStatus(form) {
   return 'unknown';
 }
 
+/**
+ * 계약 3.6절 `IsaReturnAssumption`. **객체 자체가 선택이고, 값을 지어내지
+ * 않는다.** 켜지 않았거나 필수 짝(수익률·소득 성격)이 온전하지 않으면
+ * `null`을 보낸다 — 그러면 엔진은 이 규칙군을 한 건도 읽지 않는다(계약
+ * 0.9절). `validateForm`이 이 상태를 막아 `readyToCompute`를 꺼뜨리므로
+ * 실제로는 이 함수가 반쪽짜리 객체를 만들 일이 없지만, 방어적으로도 반쪽을
+ * 보내지 않는다.
+ */
+export function buildIsaReturnAssumption(form) {
+  if (!form.isaExists || !form.isaReturnEnabled) return null;
+  const rate = parsePercentToRate(form.isaReturnRatePercent);
+  if (Number.isNaN(rate) || rate < 0) return null;
+  if (!ISA_INCOME_CHARACTERS.includes(form.isaIncomeCharacter)) return null;
+
+  const yearsText = (form.isaSettlementYears ?? '').trim();
+  const settlementYears = /^\d+$/.test(yearsText) && Number(yearsText) >= 1 ? Number(yearsText) : null;
+
+  return {
+    annual_return_rate: rate,
+    income_character: form.isaIncomeCharacter,
+    // 모르면 채우지 않는다 — 룰셋의 계약기간 하한을 엔진이 가정으로 세운다.
+    settlement_years: settlementYears,
+    // 모르면 0으로 본다(과소 방향) — 지어내면 과대가 된다(계약 3.6절).
+    loss_amount_krw: manwonToWonOrNull(form.isaLossAmount),
+  };
+}
+
 function financialIncomeTaxpayer(form) {
   if (!form.isaExists) return null;
   if (form.isaFinancialIncomeTaxpayer === 'yes') return true;
@@ -162,6 +205,10 @@ export function buildEngineRequest(form, scenarios) {
       fund_use_horizon: form.fundUseHorizon ?? 'unknown',
       monthly_capacity_krw: manwonToWonOrZero(form.monthlyCapacity),
       months_remaining_in_tax_year: null, // 사용자에게 묻지 않는다 — 엔진이 12로 기본 처리
+      // D28·D31 — 객체 자체가 선택이다. 켜지 않았으면(또는 짝이 온전하지
+      // 않으면) `null`을 보낸다. **이 화면은 수익률을 제안하거나 미리 채우지
+      // 않는다** — `initialForm`이 빈 문자열로 시작하는 것이 그 방어선의 절반이다.
+      isa_return_assumption: buildIsaReturnAssumption(form),
     },
     accounts: {
       annuity_savings: pensionAccount(form.annuitySavingsYtd),
@@ -184,7 +231,9 @@ export function buildEngineRequest(form, scenarios) {
             prior_multi_year_applied_extra_credit_krw: null,
           }
         : null,
-    options: null,
+    // D31 — 되돌리는 길. 표시를 끌 때는 이 상수 하나만 `"suppress"`로 바꾼다
+    // (계산과 입력은 그대로 두고 표시만 끈다, 0.11절).
+    options: { assumption_based_isa_estimate: ASSUMPTION_BASED_ISA_ESTIMATE_DISPLAY },
   };
 }
 

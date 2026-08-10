@@ -9,7 +9,7 @@
  * 채운다(엔진의 `fund_use_horizon_boundaries`, `legal_basis`, 각 필드의 실제 값).
  */
 
-import { formatKrw, formatPercent, formatYears } from './format.js';
+import { formatKrw, formatKrwAbbreviated, formatPercent, formatPercentTrimmed, formatYears } from './format.js';
 
 export const SERVICE_NAME = '[가칭] 납입배분 계산기';
 
@@ -152,6 +152,26 @@ const NOTICE_MESSAGE = {
   // 화면 코드에 박으면 제품 원칙 1을 어긴다. "적어도"라는 방향만 말한다.
   credit_rate_global_income_missing: () =>
     '해당 과세기간 종합소득금액을 받지 않아, 우대 공제율 구간을 적용하지 않고 계산했습니다. 종합소득금액이 우대 구간에 들면 세액공제액은 이보다 클 수 있습니다.',
+
+  // -- 계약 5.1.0(D28·D29·D31)으로 들어온 안내 코드 — 수익률 가정 ---------------
+  // **이 서비스는 수익률을 제시하지 않는다.** 아래 문구는 전부 "무엇을 입력받아
+  // 무엇을 했는가"만 말하고, 수익률을 권하거나 전망하는 문장을 쓰지 않는다(0.10절).
+  isa_return_assumption_not_supplied: () =>
+    'ISA 계좌의 예상 수익률을 입력하지 않아 ISA의 가정 기반 정산액을 계산하지 않았습니다.',
+  isa_return_estimate_is_not_annual: (params) =>
+    `이 금액은 ${
+      params.settlement_years != null ? formatYears(params.settlement_years) : '입력한 정산 기간'
+    } 전체의 값이며, 1년치 금액이 아닙니다.`,
+  isa_return_estimate_reported_as_range: () =>
+    '입력한 소득 성격으로는 단일 금액을 정할 수 없어, 구간으로 계산했습니다.',
+  isa_return_estimate_not_computable: (params) =>
+    params.reason_code === 'isa_tax_free_limit_unknown'
+      ? 'ISA 계좌 유형을 입력하지 않아 가정 기반 정산액을 계산하지 못했습니다.'
+      : '입력한 값으로는 가정 기반 정산액을 계산할 수 없었습니다.',
+  isa_return_estimate_display_suppressed: () =>
+    'ISA 가정 기반 정산액의 계산은 그대로 두고, 화면에는 금액을 표시하지 않았습니다.',
+  pension_tax_deferral_not_quantified: () =>
+    '연금계좌의 과세이연 효과는 인출 시점에 따라 달라져 금액으로 계산하지 않았습니다. ISA 칸에만 금액이 보이는 것이 ISA가 더 유리하다는 뜻은 아닙니다.',
 };
 
 export function noticeMessage(notice) {
@@ -216,6 +236,26 @@ const ASSUMPTION_MESSAGE = {
   // -- 계약 5.0.0(D27)으로 들어온 가정 코드 -----------------------------------
   credit_rate_wage_only_excludes_separately_taxed_income: () =>
     '근로소득 외에 다른 종합소득이 없다고 답하셔서 총급여액 기준으로 공제율을 판정했습니다. 분리과세로 끝난 소득만 따로 있는 경우도 이 판정에 포함됩니다.',
+
+  // -- 계약 5.1.0(D28·D29)으로 들어온 가정 코드 — 수익률 가정 위의 계산 --------
+  // **값을 지어내지 않는다.** 아래 문구는 무엇을 입력받았고 그 위에서 무엇을
+  // 가정했는지만 말한다 — 수익률의 크기나 전망은 어디에도 없다.
+  isa_return_rate_user_supplied: (params) =>
+    params.annual_return_rate != null
+      ? `입력한 연 수익률 ${formatPercent(params.annual_return_rate)}을 그대로 세법 산식에 넣어 계산했습니다. 이 수익률은 이 서비스가 제시한 값이 아닙니다.`
+      : '입력한 연 수익률을 그대로 세법 산식에 넣어 계산했습니다. 이 수익률은 이 서비스가 제시한 값이 아닙니다.',
+  isa_return_simple_interest: () => '수익률에서 총수익을 계산할 때 복리가 아니라 단리로 계산했습니다.',
+  isa_return_principal_from_contributions: () =>
+    '원금은 계좌 잔액이 아니라 지금까지의 누적 납입액과 이 배분의 ISA 배분액을 더한 값으로 보고 계산했습니다.',
+  isa_settlement_years_defaulted_to_min_contract_years: (params) =>
+    `정산 기간을 입력하지 않아 세법이 정한 계약기간 하한${
+      params.settlement_years != null ? `(${formatYears(params.settlement_years)})` : ''
+    }으로 계산했습니다.`,
+  isa_loss_assumed_zero: () => '통산 대상 손실 금액을 입력하지 않아 0으로 보고 계산했습니다.',
+  isa_comparison_baseline_is_withholding_only: () =>
+    '비교 기준은 같은 소득을 ISA 밖에서 얻어 원천징수로 끝나는 경우로 보고 계산했습니다.',
+  isa_return_assumes_contract_held_to_settlement: () =>
+    '정산 시점까지 계약을 유지하는 것을 전제로 계산했습니다. 의무가입기간 안에 해지하면 결과가 달라집니다.',
 
   // 화면이 직접 만드는 조건부 항목(엔진 notice가 아니라 입력 상태에서 파생) —
   // screens.md 4.5절 표의 나머지 행.
@@ -830,3 +870,81 @@ export const ACCOUNT_BENEFIT_ISA_NARRATIVE = '비과세 한도 적용';
 export const ACCOUNT_BENEFIT_ISA_SUFFIX = '(세액공제 아님)';
 
 export const ACCOUNT_BENEFIT_EXCLUDED_LABEL = '배분 대상 아님';
+
+// ---------------------------------------------------------------------------
+// D28·D29·D31 — 수익률 가정 입력 · `AccountBenefitStrip`의 가정 등급
+//
+// **이 서비스는 수익률을 제시하지 않는다.** 아래 문구 어디에도 예시 숫자·
+// 기본값·"보통 ○%" 같은 힌트가 없다 — 그 구분이 D31 이후 남은 방어선
+// 전부다(0.10절).
+// ---------------------------------------------------------------------------
+
+export const ISA_RETURN_SECTION_TITLE = '⑤ ISA 예상 수익률 (선택)';
+export const ISA_RETURN_TOGGLE_LABEL = '예상 수익률로 ISA 정산액을 계산합니다';
+export const ISA_RETURN_SECTION_HELP =
+  '입력한 수익률을 세법 산식에 그대로 넣어 계산합니다. 이 서비스가 수익률을 제시하거나 전망하지 않습니다 — 직접 예상하는 값을 넣어야 합니다.';
+export const ISA_RETURN_RATE_LABEL = '연 수익률';
+export const ISA_RETURN_INCOME_CHARACTER_LABEL = '수익이 들어오는 형태';
+export const ISA_RETURN_INCOME_CHARACTER_HELP =
+  '자산군이 아니라 수익의 성격을 묻습니다. 같은 종목이라도 매매차익과 배당금은 세제상 취급이 다릅니다.';
+export const ISA_RETURN_SETTLEMENT_YEARS_LABEL = '정산 기간 (선택)';
+export const ISA_RETURN_SETTLEMENT_YEARS_HELP = '비워 두면 세법이 정한 계약기간 하한으로 계산합니다.';
+export const ISA_RETURN_LOSS_LABEL = '통산 대상 손실액 (선택)';
+export const ISA_RETURN_LOSS_HELP = '비워 두면 0으로 봅니다.';
+
+/**
+ * 「수익이 어떤 형태로 들어오는가」— 자산군이 아니다(계약 3.6절 · D29 1절).
+ * **버튼 라벨은 짧게 두고 예시는 `ISA_INCOME_CHARACTER_EXAMPLE`로 뺀다** —
+ * `segmentToggle`은 "예/아니오" 길이의 라벨을 전제로 만들어졌고, 문장 전체를
+ * 버튼 안에 넣으면 줄바꿈이 아래 도움말과 겹친다(실측으로 잡았다).
+ * **「해외주식」이라는 낱말을 쓰지 않는다** — ISA에 담을 수 있는 자산의 범위를
+ * 정하는 조문을 1차 출처로 확인하지 못했다(`tax-rules-report.md` 18.8절 3).
+ */
+export const ISA_INCOME_CHARACTER_LABEL = {
+  interest_dividend: '이자·배당처럼 받는 형태',
+  listed_equity_capital_gain: '국내 상장주식 가격 상승',
+  mixed_or_unknown: '섞여 있거나 모르겠음',
+};
+
+/** 위 라벨 아래에 붙는 한 줄 예시 — 버튼 밖에서 자산 범주를 구체화한다. */
+export const ISA_INCOME_CHARACTER_EXAMPLE = {
+  interest_dividend: '예: 예금·적금 이자, 채권 이자, 펀드·ETF 분배금, 주식 배당금',
+  listed_equity_capital_gain: '가격 상승분만이며, 같은 종목의 배당금은 위 항목이 답입니다',
+  mixed_or_unknown: '위 둘이 섞여 있거나 아직 정하지 않은 경우',
+};
+
+/** 금액 옆 캡션에 쓸 짧은 이름 — 위 라벨은 입력 화면용으로 길다. */
+const ISA_INCOME_CHARACTER_SHORT_LABEL = {
+  interest_dividend: '이자·배당 성격',
+  listed_equity_capital_gain: '국내 상장주식 시세차익 성격',
+  mixed_or_unknown: '성격 혼재·미정',
+};
+
+/** `BenefitMeter`의 가정 등급 옆에 붙는 칩. 확정(`solid`)과 모양으로 구분한다(design-system 5.31절). */
+export const ISA_RETURN_ASSUMPTION_CHIP_LABEL = '가정 기반';
+
+/**
+ * 가정 기반 ISA 정산액의 금액 표시. **점을 낼 수 없으면 구간을 그대로 보인다**
+ * — 가운데값을 만드는 순간 조문에 없는 점을 고르는 것이다(D28·D31).
+ */
+export function isaReturnEstimateAmountText(estimate) {
+  if (estimate.point_estimate_krw != null) return formatKrwAbbreviated(estimate.point_estimate_krw);
+  return `${formatKrwAbbreviated(estimate.lower_bound_krw)} ~ ${formatKrwAbbreviated(estimate.upper_bound_krw)}`;
+}
+
+/**
+ * 가정을 금액과 같은 화면에 붙인다(D28 선 ②). 수익률·소득 성격·정산 기간
+ * 셋을 한 줄로 — 각주나 접힌 블록으로 밀지 않는다.
+ */
+export function isaReturnAssumptionCaption({ annualReturnRate, incomeCharacter, settlementYears, settlementYearsSource }) {
+  const rateText = formatPercentTrimmed(annualReturnRate);
+  const characterLabel = ISA_INCOME_CHARACTER_SHORT_LABEL[incomeCharacter] ?? incomeCharacter;
+  const yearsText = settlementYears != null ? formatYears(settlementYears) : '';
+  const sourceNote = settlementYearsSource === 'ruleset_min_contract_years' ? ' · 정산 기간 미입력, 계약기간 하한 적용' : '';
+  return `가정 — 연 수익률 ${rateText} · ${characterLabel} · 정산 기간 ${yearsText}${sourceNote}`;
+}
+
+/** 계산은 돌았으나 필요한 값을 얻지 못했을 때(`not_computable`)의 짧은 서술. */
+export const ISA_RETURN_NOT_COMPUTABLE_NOTE = '예상 수익률 정산액을 계산하지 못함';
+/** 계산과 입력은 그대로 두고 표시만 껐을 때(`display_suppressed`)의 짧은 서술 — 조용한 빈칸을 만들지 않는다(D19). */
+export const ISA_RETURN_SUPPRESSED_NOTE = '예상 수익률 정산액 표시를 껐음';

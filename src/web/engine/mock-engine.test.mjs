@@ -614,3 +614,200 @@ test('the mock stops rather than inventing a reference date when the rule is abs
   assert.ok(mockRes.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === 'age.reckoning.reference_date'));
   assert.ok(realRes.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === 'age.reckoning.reference_date'));
 });
+
+// ---------------------------------------------------------------------------
+// 계약 5.1.0 — 수익률 가정 (D28·D29·D31). 목적함수를 오염시키지 않는다는 선언과
+// 확정/구간/가정의 구분이 자료형으로 지켜지는지를 본다.
+// ---------------------------------------------------------------------------
+
+function isaReturnRequest(assumption, overrides = {}) {
+  return baseRequest({
+    scenarios: ['current'],
+    profile: {
+      ...baseRequest().profile,
+      isa_return_assumption: assumption,
+    },
+    accounts: {
+      ...baseRequest().accounts,
+      isa: {
+        exists: true,
+        account_type: 'general',
+        cumulative_contribution_krw: 5000000,
+        ytd_contribution_krw: 0,
+        years_since_opening: 2,
+        other_savings_contract_krw: null,
+      },
+    },
+    ...overrides,
+  });
+}
+
+test('without isa_return_assumption, the estimate is null everywhere and the screen is told nothing was asked', () => {
+  const res = compute(isaReturnRequest(null), rulesets);
+  assert.equal(res.ok, true);
+  assert.equal(res.echo.isa_return_assumption, null);
+  assert.deepEqual(res.echo.isa_return_affects, {
+    allocation_amounts: false,
+    tax_credit_amounts: false,
+    plan_ordering: false,
+    warnings: false,
+  });
+  const scenario = res.scenarios[0];
+  for (const plan of scenario.plans) {
+    assert.equal(plan.assumption_based_isa_estimate, null);
+  }
+  assert.ok(scenario.notices.some((n) => n.code === 'isa_return_assumption_not_supplied'));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_benefit_not_quantified'));
+});
+
+test('a supplied assumption never moves allocation, tax credit, plan ordering, or warnings — I37', () => {
+  const withoutAssumption = compute(isaReturnRequest(null), rulesets);
+  const withAssumption = compute(
+    isaReturnRequest({ annual_return_rate: 0.07, income_character: 'interest_dividend', settlement_years: null, loss_amount_krw: null }),
+    rulesets,
+  );
+  assert.equal(withoutAssumption.ok, true);
+  assert.equal(withAssumption.ok, true);
+  const a = withoutAssumption.scenarios[0];
+  const b = withAssumption.scenarios[0];
+  assert.deepEqual(
+    a.plans.map((p) => ({ id: p.plan_id, allocations: p.allocations.map((x) => x.annual_krw), credit: p.deterministic_benefit.pension_credit_total_krw, warnings: p.warnings.length })),
+    b.plans.map((p) => ({ id: p.plan_id, allocations: p.allocations.map((x) => x.annual_krw), credit: p.deterministic_benefit.pension_credit_total_krw, warnings: p.warnings.length })),
+  );
+});
+
+test('a certain income character (interest/dividend) produces a point estimate, never an annual one', () => {
+  const res = compute(
+    isaReturnRequest({ annual_return_rate: 0.07, income_character: 'interest_dividend', settlement_years: 3, loss_amount_krw: null }),
+    rulesets,
+  );
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.echo.isa_return_assumption, {
+    annual_return_rate: 0.07,
+    income_character: 'interest_dividend',
+    settlement_years: 3,
+    loss_amount_krw: null,
+  });
+  const scenario = res.scenarios[0];
+  const estimate = scenario.plans[0].assumption_based_isa_estimate;
+  assert.equal(estimate.state, 'computed');
+  assert.equal(estimate.is_annual, false, 'D28 — 정산 기간 전체의 값이지 연간이 아니다');
+  assert.equal(estimate.settlement_years, 3);
+  assert.equal(estimate.settlement_years_source, 'user');
+  assert.notEqual(estimate.point_estimate_krw, null, '확정적 성격은 점을 낸다');
+  assert.equal(estimate.lower_bound_krw, estimate.upper_bound_krw);
+  assert.ok(scenario.notices.some((n) => n.code === 'isa_return_estimate_is_not_annual'));
+  assert.ok(!scenario.notices.some((n) => n.code === 'isa_return_estimate_reported_as_range'), '점을 낼 수 있으면 구간 안내를 내지 않는다');
+  assert.ok(scenario.notices.some((n) => n.code === 'pension_tax_deferral_not_quantified'));
+  // 가정을 보내면 이 진술은 거짓이 된다 — 그 계산에서 나가지 않는다.
+  assert.ok(!res.assumptions.some((a) => a.code === 'isa_benefit_not_quantified'));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_return_rate_user_supplied' && a.params.annual_return_rate === 0.07));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_return_simple_interest'));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_return_principal_from_contributions'));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_comparison_baseline_is_withholding_only'));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_return_assumes_contract_held_to_settlement'));
+  // 정산 기간을 사용자가 줬으므로 계약기간 하한 대체 가정은 나가지 않는다.
+  assert.ok(!res.assumptions.some((a) => a.code === 'isa_settlement_years_defaulted_to_min_contract_years'));
+  // ISA 배분액이 있으면 narrative 효과는 이 값으로 대체되어야 한다.
+  const isaPlanWithAllocation = scenario.plans.find((p) => p.allocations.find((a) => a.account === 'isa').annual_krw > 0);
+  if (isaPlanWithAllocation) {
+    assert.ok(!isaPlanWithAllocation.non_quantified_effects.some((e) => e.code === 'isa_tax_free_headroom'));
+  }
+});
+
+test('a mixed or unlisted income character produces a range, never a picked point', () => {
+  const res = compute(
+    isaReturnRequest({ annual_return_rate: 0.07, income_character: 'mixed_or_unknown', settlement_years: null, loss_amount_krw: null }),
+    rulesets,
+  );
+  assert.equal(res.ok, true);
+  const scenario = res.scenarios[0];
+  const estimate = scenario.plans[0].assumption_based_isa_estimate;
+  assert.equal(estimate.state, 'computed');
+  assert.equal(estimate.point_estimate_krw, null, '구간만 정할 수 있을 때 점을 만들지 않는다');
+  assert.notEqual(estimate.lower_bound_krw, null);
+  assert.notEqual(estimate.upper_bound_krw, null);
+  assert.ok(estimate.lower_bound_krw <= estimate.upper_bound_krw);
+  assert.ok(scenario.notices.some((n) => n.code === 'isa_return_estimate_reported_as_range'));
+  // 정산 기간을 주지 않았으므로 계약기간 하한을 썼다는 가정이 함께 나간다.
+  assert.equal(estimate.settlement_years_source, 'ruleset_min_contract_years');
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_settlement_years_defaulted_to_min_contract_years'));
+  assert.ok(res.assumptions.some((a) => a.code === 'isa_loss_assumed_zero'));
+});
+
+test('suppressing the display keeps the computation and the input, but blanks every amount', () => {
+  const included = compute(
+    isaReturnRequest(
+      { annual_return_rate: 0.07, income_character: 'interest_dividend', settlement_years: 3, loss_amount_krw: null },
+      { options: { assumption_based_isa_estimate: 'include' } },
+    ),
+    rulesets,
+  );
+  const suppressed = compute(
+    isaReturnRequest(
+      { annual_return_rate: 0.07, income_character: 'interest_dividend', settlement_years: 3, loss_amount_krw: null },
+      { options: { assumption_based_isa_estimate: 'suppress' } },
+    ),
+    rulesets,
+  );
+  assert.equal(included.ok, true);
+  assert.equal(suppressed.ok, true);
+  const estimate = suppressed.scenarios[0].plans[0].assumption_based_isa_estimate;
+  assert.equal(estimate.state, 'display_suppressed');
+  for (const key of ['principal_krw', 'total_return_krw', 'point_estimate_krw', 'lower_bound_krw', 'upper_bound_krw', 'axis_breakdown']) {
+    assert.equal(estimate[key], null, `${key}는 표시를 끄면 null이어야 한다`);
+  }
+  assert.ok(suppressed.scenarios[0].notices.some((n) => n.code === 'isa_return_estimate_display_suppressed'));
+  // 계산은 그대로 돈다 — 배분·세액공제액은 표시 여부와 무관하다(0.11절).
+  assert.deepEqual(
+    included.scenarios[0].plans.map((p) => p.deterministic_benefit.pension_credit_total_krw),
+    suppressed.scenarios[0].plans.map((p) => p.deterministic_benefit.pension_credit_total_krw),
+  );
+});
+
+test('an undeclared ISA type cannot price the estimate — not_computable, never a silent zero', () => {
+  const req = isaReturnRequest({ annual_return_rate: 0.07, income_character: 'interest_dividend', settlement_years: 3, loss_amount_krw: null });
+  req.accounts.isa.account_type = null;
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, true);
+  const estimate = res.scenarios[0].plans[0].assumption_based_isa_estimate;
+  assert.equal(estimate.state, 'not_computable');
+  assert.equal(estimate.not_computable_reason_code, 'isa_tax_free_limit_unknown');
+  assert.ok(res.scenarios[0].notices.some((n) => n.code === 'isa_return_estimate_not_computable' && n.params.reason_code === 'isa_tax_free_limit_unknown'));
+});
+
+test('the annual_return_rate is required and cannot be negative — the screen must not float a default', () => {
+  const missingRate = isaReturnRequest({ income_character: 'interest_dividend' });
+  const resMissing = compute(missingRate, rulesets);
+  assert.equal(resMissing.ok, false);
+  assert.ok(resMissing.errors.some((e) => e.code === 'missing_required' && e.field === 'profile.isa_return_assumption.annual_return_rate'));
+
+  const negativeRate = isaReturnRequest({ annual_return_rate: -0.01, income_character: 'interest_dividend' });
+  const resNegative = compute(negativeRate, rulesets);
+  assert.equal(resNegative.ok, false);
+  assert.ok(resNegative.errors.some((e) => e.code === 'negative_value' && e.field === 'profile.isa_return_assumption.annual_return_rate'));
+});
+
+test('income_character is required when a rate is supplied — the screen cannot ask for a rate without asking what kind of income it is', () => {
+  const req = isaReturnRequest({ annual_return_rate: 0.05 });
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, false);
+  assert.ok(res.errors.some((e) => e.code === 'missing_required' && e.field === 'profile.isa_return_assumption.income_character'));
+});
+
+test('the mock and the real engine agree on the estimate shape for a supplied assumption', () => {
+  const req = isaReturnRequest({ annual_return_rate: 0.07, income_character: 'interest_dividend', settlement_years: 3, loss_amount_krw: 100000 });
+  const mockRes = compute(req, rulesets);
+  const realRes = realCompute(req, rulesets);
+  assert.equal(mockRes.ok, true);
+  assert.equal(realRes.ok, true, JSON.stringify(realRes.errors));
+  assert.deepEqual(
+    Object.keys(mockRes.echo.isa_return_assumption).sort(),
+    Object.keys(realRes.echo.isa_return_assumption).sort(),
+  );
+  assert.deepEqual(Object.keys(mockRes.echo.isa_return_affects).sort(), Object.keys(realRes.echo.isa_return_affects).sort());
+  assert.deepEqual(
+    Object.keys(mockRes.scenarios[0].plans[0].assumption_based_isa_estimate).sort(),
+    Object.keys(realRes.scenarios[0].plans[0].assumption_based_isa_estimate).sort(),
+  );
+});

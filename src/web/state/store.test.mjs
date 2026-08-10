@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStore, buildEngineRequest, initialForm, buildPriorYearTax, annuityStartStatus } from './store.js';
+import {
+  createStore,
+  buildEngineRequest,
+  initialForm,
+  buildPriorYearTax,
+  annuityStartStatus,
+  buildIsaReturnAssumption,
+  ASSUMPTION_BASED_ISA_ESTIMATE_DISPLAY,
+} from './store.js';
 import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 /**
@@ -311,6 +319,83 @@ test('the financial-income answer maps to a tri-state, with unknown staying null
 });
 
 // ---------------------------------------------------------------------------
+// D28·D29·D31 — 수익률 가정. 화면이 제안하거나 미리 채우지 않는다는 것이
+// 계약이 막을 수 없고 이 유닛이 지는 방어선이다(0.10절).
+// ---------------------------------------------------------------------------
+
+test('the screen never proposes or prefills a return rate — the form starts empty and off', () => {
+  const form = initialForm();
+  assert.equal(form.isaReturnEnabled, false);
+  assert.equal(form.isaReturnRatePercent, '', '예시 숫자를 입력칸에 넣지 않는다');
+  assert.equal(form.isaIncomeCharacter, null);
+  assert.equal(form.isaSettlementYears, '');
+  assert.equal(form.isaLossAmount, '');
+});
+
+test('untouched or turned-off, the request carries no assumption at all — the engine reads zero return rules', () => {
+  assert.equal(buildEngineRequest(initialForm(), ['current']).profile.isa_return_assumption, null);
+  const filledButOff = {
+    ...initialForm(),
+    isaExists: true,
+    isaReturnEnabled: false,
+    isaReturnRatePercent: '7',
+    isaIncomeCharacter: 'interest_dividend',
+  };
+  assert.equal(
+    buildEngineRequest(filledButOff, ['current']).profile.isa_return_assumption,
+    null,
+    '토글이 꺼져 있으면 나머지 값이 있어도 보내지 않는다',
+  );
+});
+
+test('turning the toggle on without ISA held still sends nothing — the assumption is ISA-only', () => {
+  const form = { ...initialForm(), isaExists: false, isaReturnEnabled: true, isaReturnRatePercent: '7', isaIncomeCharacter: 'interest_dividend' };
+  assert.equal(buildIsaReturnAssumption(form), null);
+});
+
+test('a fully answered toggle sends the rate as a ratio, not a percent, and the exact character id', () => {
+  const form = {
+    ...initialForm(),
+    isaExists: true,
+    isaReturnEnabled: true,
+    isaReturnRatePercent: '5.5',
+    isaIncomeCharacter: 'mixed_or_unknown',
+  };
+  const assumption = buildIsaReturnAssumption(form);
+  assert.equal(assumption.annual_return_rate, 0.055, '퍼센트가 아니라 비율(0~1)이다');
+  assert.equal(assumption.income_character, 'mixed_or_unknown');
+  assert.equal(assumption.settlement_years, null, '입력하지 않으면 null — 엔진이 계약기간 하한을 가정으로 세운다');
+  assert.equal(assumption.loss_amount_krw, null, '입력하지 않으면 null — 엔진이 0으로 본다');
+});
+
+test('settlement years and loss amount pass through when the user actually supplies them', () => {
+  const form = {
+    ...initialForm(),
+    isaExists: true,
+    isaReturnEnabled: true,
+    isaReturnRatePercent: '5',
+    isaIncomeCharacter: 'interest_dividend',
+    isaSettlementYears: '5',
+    isaLossAmount: '10', // 100,000원
+  };
+  const assumption = buildIsaReturnAssumption(form);
+  assert.equal(assumption.settlement_years, 5);
+  assert.equal(assumption.loss_amount_krw, 100000);
+});
+
+test('an incomplete pair (rate without a declared character, or vice versa) sends nothing rather than half an object', () => {
+  const rateOnly = { ...initialForm(), isaExists: true, isaReturnEnabled: true, isaReturnRatePercent: '5', isaIncomeCharacter: null };
+  assert.equal(buildIsaReturnAssumption(rateOnly), null);
+  const characterOnly = { ...initialForm(), isaExists: true, isaReturnEnabled: true, isaReturnRatePercent: '', isaIncomeCharacter: 'interest_dividend' };
+  assert.equal(buildIsaReturnAssumption(characterOnly), null);
+});
+
+test('the display-suppress switch is a single code-level constant, not a per-request user toggle, and defaults to shown', () => {
+  assert.equal(ASSUMPTION_BASED_ISA_ESTIMATE_DISPLAY, 'include');
+  assert.equal(buildEngineRequest(initialForm(), ['current']).options.assumption_based_isa_estimate, 'include');
+});
+
+// ---------------------------------------------------------------------------
 // 갱신 규약 (design-system 6.1절)
 // ---------------------------------------------------------------------------
 
@@ -512,6 +597,22 @@ test('no analytics event ever carries a value the user typed', async () => {
     assert.ok(!serialized.includes(secret), `계측 이벤트에 입력값이 실렸다: ${secret}\n${serialized}`);
   }
   assert.ok(!serialized.includes('declaredYouth'), serialized);
+});
+
+test('the return-rate assumption fields never leak a value into analytics either — same mechanism, D28 does not get a carve-out', () => {
+  const analytics = fakeAnalytics();
+  const store = createStore({ engineClient: fakeEngine(), analytics, onChange: () => {} });
+  store.setField('isaExists', true, { immediate: true });
+  store.setField('isaReturnEnabled', true, { immediate: true });
+  store.setField('isaReturnRatePercent', '7.25');
+  store.setField('isaIncomeCharacter', 'mixed_or_unknown', { immediate: true });
+  store.setField('isaSettlementYears', '5');
+  store.setField('isaLossAmount', '300');
+
+  const serialized = JSON.stringify(analytics.events);
+  for (const secret of ['7.25', 'mixed_or_unknown', '300']) {
+    assert.ok(!serialized.includes(secret), `계측 이벤트에 입력값이 실렸다: ${secret}\n${serialized}`);
+  }
 });
 
 test('touching the youth checkbox first does not become an analytics event', () => {

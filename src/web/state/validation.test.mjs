@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateForm, validateBirthDate, formDerivedAssumptionCodes, CORE_REQUIREMENTS, parseManwonToWon } from './validation.js';
+import {
+  validateForm,
+  validateBirthDate,
+  formDerivedAssumptionCodes,
+  CORE_REQUIREMENTS,
+  parseManwonToWon,
+  parsePercentToRate,
+} from './validation.js';
 import { assumptionMessage } from '../copy.js';
 import { initialForm } from './store.js';
 
@@ -313,6 +320,39 @@ test('음수·문자·빈 문자열은 형식 오류이거나 형식대로 처�
   assert.ok(Number.isNaN(parseManwonToWon('abc')));
   assert.ok(Number.isNaN(parseManwonToWon('1,000'))); // 쉼표는 표시 형식이지 입력 형식이 아니다
   assert.equal(parseManwonToWon('-5'), -50000, '음수 형식 자체는 파싱되고, 범위 검증은 validateForm이 한다');
+});
+
+// ---------------------------------------------------------------------------
+// D28 — 수익률은 퍼센트로 받고 비율(0~1)로 바꾼다. `parsePercentToRate`가
+// 화면 경계의 유일한 변환이다. 나눗셈이 아니라 자릿수 이동으로 바꾼다 —
+// `parseManwonToWon`과 같은 규율(부동소수점 나눗셈을 쓰지 않는다).
+// ---------------------------------------------------------------------------
+
+test('a whole percent converts to the exact ratio', () => {
+  assert.equal(parsePercentToRate('5'), 0.05);
+  assert.equal(parsePercentToRate('0'), 0);
+  assert.equal(parsePercentToRate('100'), 1);
+});
+
+test('a decimal percent converts without float drift', () => {
+  assert.equal(parsePercentToRate('5.5'), 0.055);
+  assert.equal(parsePercentToRate('2.25'), 0.0225);
+  assert.equal(parsePercentToRate('12.34'), 0.1234);
+});
+
+test('empty, non-numeric, and negative percent strings are format errors — the input has no sign key at all', () => {
+  assert.ok(Number.isNaN(parsePercentToRate('')));
+  assert.ok(Number.isNaN(parsePercentToRate('abc')));
+  assert.ok(Number.isNaN(parsePercentToRate('-5')), '음의 수익률은 이 필드의 형식이 아니다 — loss_amount_krw가 손실을 받는다');
+});
+
+test('the round trip through String() never grows extra digits — toRatio in the engine depends on this', () => {
+  // 엔진의 toRatio가 String(rate)로 십진 자릿수를 다시 읽는다. 나눗셈으로
+  // 만들었다면 이 자리에서 이진 오차가 새어 나올 수 있다.
+  for (const v of ['5', '5.5', '7', '0.5', '12.34', '3.3', '2.25', '33.33']) {
+    const rate = parsePercentToRate(v);
+    assert.ok(!/e/i.test(String(rate)), `${v} -> ${rate}: 지수 표기가 나오면 toRatio가 읽지 못한다`);
+  }
 });
 
 test('the too_precise error is distinct from a plain format error, so the message can be specific', () => {

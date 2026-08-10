@@ -276,6 +276,13 @@ test('every code the 4.0.0 contract can send has a sentence — no raw code reac
     'isa_lock_in_already_elapsed',
     // 계약 5.0.0(D27) — 공제율 판정 축의 대체값 적용 notice.
     'credit_rate_global_income_missing',
+    // 계약 5.1.0(D28·D29·D31) — 수익률 가정.
+    'isa_return_assumption_not_supplied',
+    'isa_return_estimate_is_not_annual',
+    'isa_return_estimate_reported_as_range',
+    'isa_return_estimate_not_computable',
+    'isa_return_estimate_display_suppressed',
+    'pension_tax_deferral_not_quantified',
   ];
   for (const code of noticeCodes) {
     assert.notEqual(noticeMessage({ code, params: {} }), code, `${code}에 대응하는 문구가 없다`);
@@ -288,6 +295,14 @@ test('every code the 4.0.0 contract can send has a sentence — no raw code reac
     'local_tax_follows_income_tax_cap',
     // 계약 5.0.0(D27) — 1단계 질문을 좁혀 물은 것이 채택한 해석.
     'credit_rate_wage_only_excludes_separately_taxed_income',
+    // 계약 5.1.0(D28·D29) — 수익률 가정 위의 계산이 서 있는 가정들.
+    'isa_return_rate_user_supplied',
+    'isa_return_simple_interest',
+    'isa_return_principal_from_contributions',
+    'isa_settlement_years_defaulted_to_min_contract_years',
+    'isa_loss_assumed_zero',
+    'isa_comparison_baseline_is_withholding_only',
+    'isa_return_assumes_contract_held_to_settlement',
   ];
   for (const code of assumptionCodes) {
     assert.notEqual(assumptionMessage(code, {}), code, `${code}에 대응하는 문구가 없다`);
@@ -296,6 +311,21 @@ test('every code the 4.0.0 contract can send has a sentence — no raw code reac
   for (const code of ['pension_contribution_blocked_annuity_started', 'pension_annuity_start_unknown']) {
     assert.notEqual(exclusionReasonMessage(code), code);
   }
+});
+
+test('the return-rate assumption sentence echoes the user\'s own number and disclaims that the service does not propose one — D28/D31', () => {
+  // 0.10절 — "이 서비스는 수익률을 제시하지 않는다"가 남은 방어선 전부다.
+  // 문구가 사용자 값을 그대로 되비추는지(하드코딩된 숫자가 아닌지)를 본다.
+  const seven = assumptionMessage('isa_return_rate_user_supplied', { annual_return_rate: 0.07 });
+  const three = assumptionMessage('isa_return_rate_user_supplied', { annual_return_rate: 0.03 });
+  assert.notEqual(seven, three, '문구가 실제 입력이 아니라 고정된 숫자를 말하고 있다');
+  assert.match(seven, /제시한 값이 아닙니다/);
+});
+
+test('isa_return_estimate_is_not_annual never says "연" — the amount is a settlement-period total, not annual', () => {
+  const text = noticeMessage({ code: 'isa_return_estimate_is_not_annual', params: { settlement_years: 3 } });
+  assert.ok(!/연\s*\d/.test(text), text);
+  assert.match(text, /1년치 금액이 아닙니다/);
 });
 
 test('the age-reference assumption states how it computed, not what the age is', () => {
@@ -370,12 +400,32 @@ test('every assumption sentence survives an empty params object without leaving 
     'isa_tenure_zero_assumed',
     'other_savings_zero_assumed',
     'prior_transfer_credit_zero_assumed',
+    // 계약 5.1.0 — 수익률 가정 위의 계산.
+    'isa_return_rate_user_supplied',
+    'isa_return_simple_interest',
+    'isa_return_principal_from_contributions',
+    'isa_settlement_years_defaulted_to_min_contract_years',
+    'isa_loss_assumed_zero',
+    'isa_comparison_baseline_is_withholding_only',
+    'isa_return_assumes_contract_held_to_settlement',
   ];
   for (const code of codes) {
     const text = assumptionMessage(code, {});
     assert.notEqual(text, code, `${code}에 대응하는 문구가 없다`);
     assert.ok(!/^\s/.test(text), `${code}: 공백으로 시작한다 — ${JSON.stringify(text)}`);
     assert.ok(!/\(\)/.test(text), `${code}: 빈 괄호가 남았다 — ${text}`);
+    assert.ok(!/undefined|null|NaN/.test(text), `${code}: 값이 없는 자리가 그대로 새어 나왔다 — ${text}`);
+    assert.ok(!/\s{2,}/.test(text), `${code}: 값이 빠진 자리에 공백이 두 칸 남았다 — ${JSON.stringify(text)}`);
+  }
+
+  const noticeCodesForRobustness = [
+    'isa_return_estimate_is_not_annual',
+    'isa_return_estimate_not_computable',
+  ];
+  for (const code of noticeCodesForRobustness) {
+    const text = noticeMessage({ code, params: {} });
+    assert.notEqual(text, code, `${code}에 대응하는 문구가 없다`);
+    assert.ok(!/^\s/.test(text), `${code}: 공백으로 시작한다 — ${JSON.stringify(text)}`);
     assert.ok(!/undefined|null|NaN/.test(text), `${code}: 값이 없는 자리가 그대로 새어 나왔다 — ${text}`);
     assert.ok(!/\s{2,}/.test(text), `${code}: 값이 빠진 자리에 공백이 두 칸 남았다 — ${JSON.stringify(text)}`);
   }

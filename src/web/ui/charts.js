@@ -669,6 +669,61 @@ export function allocationBar({
   return track;
 }
 
+// ---------------------------------------------------------------------------
+// `BenefitMeter` — `AccountBenefitStrip`(design-system 5.31절 · screens.md
+// 5.14절) 행 안의 미니 막대. `AllocationBar`와 같은 마크 언어를 절반 굵기로
+// 재사용한다(D31 ①).
+//
+// **세 등급은 색이 아니라 모양으로 갈린다**(D28) — 꽉 찬 채움(`solid`) ·
+// 윤곽만(`assumption`). `range` 등급은 계약에 필드가 아직 없어 이 회차에서도
+// 그리지 않는다(design-system 5.31절 "지금 그릴 수 있는 것과 없는 것").
+// ---------------------------------------------------------------------------
+
+/**
+ * 확정(solid) 등급의 채움 비율. 트랙 = 한도 적용 **전** 금액, 채움 = 적용
+ * **후** 금액 — 화면이 뺄셈을 하지 않는다(design-system 5.31절 "값의 출처").
+ * `beforeCapKrw`가 0 이하면 채울 대상 자체가 없으므로 0을 낸다.
+ *
+ * **값이 0보다 크면 최소한 보이게 한다**(design-system 5.31절 "값이 0보다
+ * 크면 최소 3px는 보이게 한다" — 도넛의 "최소 2°"와 같은 정신). 절대 px이므로
+ * 여기서는 만들지 않고 CSS(`.benefit-meter-fill`)의 `min-width: 3px`로
+ * 지킨다 — 퍼센트 폭만으로는 작은 값이 화면에서 사라질 수 있다.
+ */
+export function benefitMeterFillPercent(afterCapKrw, beforeCapKrw) {
+  if (!(beforeCapKrw > 0)) return 0;
+  return Math.min(100, Math.max(0, (afterCapKrw / beforeCapKrw) * 100));
+}
+
+/**
+ * 행 안의 막대 하나. **막대는 `aria-hidden`이다** — 행 전체(버튼)의 접근
+ * 이름이 계좌명·금액·비율을 말한다(design-system 5.31절 "접근성").
+ *
+ * `grade`:
+ * - `'solid'` — 확정. 채움을 계좌색으로 칠한다.
+ * - `'assumption'` — 가정(D28). 채움을 비우고 값의 위치까지 계좌색 **윤곽선만**
+ *   그린다. 트랙은 이 값 자신을 100%로 자기정규화한다(다른 계좌·다른 행과
+ *   길이를 비교하지 않는다 — `AllocationBar`의 "각자 자기 before_cap이
+ *   100%"와 같은 원칙).
+ */
+export function benefitMeter({ account, grade, fillPercent }) {
+  const track = el('div', { class: 'benefit-meter-track', 'aria-hidden': 'true' });
+  if (fillPercent > 0) {
+    // 완성된 클래스 이름을 그대로 문자열 리터럴로 쓴다 — 접두사와 보간을
+    // 한 템플릿에서 잇지 않는다(정적 클래스 일치성 검사기가 완성된 이름만
+    // 본다, `css-class-consistency.test.mjs`).
+    const isAssumption = grade === 'assumption';
+    const fillClass = isAssumption ? 'benefit-meter-fill-outline' : 'benefit-meter-fill-solid';
+    const fill = el('div', {
+      class: `benefit-meter-fill ${fillClass}`,
+      style: isAssumption
+        ? { width: `${fillPercent}%`, borderColor: ACCOUNT_COLOR[account] }
+        : { width: `${fillPercent}%`, background: ACCOUNT_COLOR[account] },
+    });
+    track.append(fill);
+  }
+  return track;
+}
+
 /** C-3 스택바 한 행의 조각들(계좌색 + 미배분). 배제된 계좌는 조각을 만들지 않는다. */
 export function stackBarSegments({ allocations, unallocatedAnnualKrw, totalBudgetKrw, excludedAccounts = [] }) {
   const denom = totalBudgetKrw > 0 ? totalBudgetKrw : 1;

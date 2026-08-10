@@ -63,6 +63,28 @@ function isOverPrecise(v) {
 }
 
 /**
+ * D28 수익률 입력 — **퍼센트 문자열 → 비율(0~1)**. `annual_return_rate`는 계약상
+ * 0 이상이면 되고 상한이 없다(100% 초과도 형식상 유효). 음수는 형식 자체가
+ * 받지 않는다 — 계약이 "음의 수익률이 아니라 `loss_amount_krw`가 손실을
+ * 받는다"고 정했으므로 부호 입력란을 아예 만들지 않는다.
+ *
+ * **나눗셈을 쓰지 않는다.** `parseManwonToWon`과 같은 규율 — 소수점을 문자열
+ * 그대로 두 칸 옮겨 짓고 `Number()`를 **한 번만** 부른다. `Number(v) / 100`은
+ * 이진 부동소수점 나눗셈을 거치므로, 결과를 `String()`으로 되돌릴 때(엔진의
+ * `toRatio`가 그렇게 한다) 다른 자릿수가 새어 나올 여지가 남는다.
+ */
+export function parsePercentToRate(v) {
+  if (typeof v !== 'string' || v.trim() === '') return NaN;
+  const m = /^(\d+)(?:\.(\d{1,4}))?$/.exec(v.trim());
+  if (!m) return NaN;
+  const [, intPart, fracPart = ''] = m;
+  const digits = intPart + fracPart;
+  const pointPos = intPart.length - 2; // 퍼센트→비율은 소수점을 왼쪽으로 두 칸.
+  const text = pointPos <= 0 ? `0.${'0'.repeat(-pointPos)}${digits}` : `${digits.slice(0, pointPos)}.${digits.slice(pointPos)}`;
+  return Number(text);
+}
+
+/**
  * 필수 항목의 정의 자리. 라벨·초점 대상·충족 판정이 한 곳에 모여 있어야
  * 항목이 하나 늘거나 빠져도 체크리스트·진행 막대·검증이 함께 움직인다
  * (`screens.md` 0.4절이 이번 개정에서 세운 규약).
@@ -98,6 +120,13 @@ export const CORE_REQUIREMENTS = [
 ];
 
 export const CORE_REQUIRED_FIELDS = CORE_REQUIREMENTS.map((r) => r.key);
+
+/**
+ * D29 — 「수익이 어떤 형태로 들어오는가」의 세 답. 계약 3.6절이 고정한 문자열
+ * 그대로다. **자산군으로 묻지 않는다** — 한 자산군 안에도 매매차익(혜택 0)과
+ * 배당금(혜택 있음)이 섞인다.
+ */
+export const ISA_INCOME_CHARACTERS = ['interest_dividend', 'listed_equity_capital_gain', 'mixed_or_unknown'];
 
 function isBlank(v) {
   return v === '' || v === null || v === undefined;
@@ -250,6 +279,34 @@ export function validateForm(form, { today } = {}) {
       }
       const priorAppliedErr = validateNonNegativeAmount(form.isaTransferPriorApplied, { required: false });
       if (priorAppliedErr) errors.isaTransferPriorApplied = priorAppliedErr;
+    }
+
+    // D28·D31 — 수익률 가정은 전부 선택이다. 객체를 보내려면 수익률과 소득
+    // 성격이 **둘 다** 있어야 한다는 계약 3.6절의 짝 요구를 화면도 지킨다.
+    // **여기서 막힌다고 나머지 계산이 막히지 않는다** — `buildIsaReturnAssumption`
+    // (state/store.js)이 이 값들이 전부 유효할 때만 요청에 싣고, 그렇지 않으면
+    // 조용히 `null`을 보내 주 계산과 분리한다.
+    if (form.isaReturnEnabled) {
+      if (isBlank(form.isaReturnRatePercent)) {
+        errors.isaReturnRatePercent = { code: 'missing', message: '값을 입력해 주세요.' };
+      } else {
+        const rate = parsePercentToRate(form.isaReturnRatePercent);
+        if (Number.isNaN(rate)) {
+          errors.isaReturnRatePercent = { code: 'not_a_number', message: '0 이상의 숫자로 넣어 주세요.' };
+        }
+        // 음수는 형식 자체가 만들 수 없다(정규식이 부호를 받지 않는다) — 별도
+        // "negative" 분기가 없는 이유다.
+      }
+      if (!ISA_INCOME_CHARACTERS.includes(form.isaIncomeCharacter)) {
+        errors.isaIncomeCharacter = { code: 'missing', message: '수익이 어떤 형태로 들어오는지 선택해 주세요.' };
+      }
+      if (!isBlank(form.isaSettlementYears)) {
+        if (!/^\d+$/.test(form.isaSettlementYears.trim()) || Number(form.isaSettlementYears) < 1) {
+          errors.isaSettlementYears = { code: 'out_of_range', message: '1 이상의 정수(년)가 필요합니다.' };
+        }
+      }
+      const lossErr = validateNonNegativeAmount(form.isaLossAmount, { required: false });
+      if (lossErr) errors.isaLossAmount = lossErr;
     }
   }
 

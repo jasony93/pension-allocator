@@ -57,6 +57,11 @@ import {
   ACCOUNT_BENEFIT_ISA_NARRATIVE,
   ACCOUNT_BENEFIT_ISA_SUFFIX,
   ACCOUNT_BENEFIT_EXCLUDED_LABEL,
+  ISA_RETURN_ASSUMPTION_CHIP_LABEL,
+  ISA_RETURN_NOT_COMPUTABLE_NOTE,
+  ISA_RETURN_SUPPRESSED_NOTE,
+  isaReturnEstimateAmountText,
+  isaReturnAssumptionCaption,
 } from '../copy.js';
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
@@ -67,6 +72,8 @@ import {
   allocationBar,
   stackBarSegments,
   computeTrackScalePercent,
+  benefitMeter,
+  benefitMeterFillPercent,
   placeholderRing,
   prefersReducedMotion,
   nextSeatStep,
@@ -448,7 +455,7 @@ function fillOrderNote(plan, scenario) {
   ]);
 }
 
-function chartArea(plan, scenario, months, { seatDraw = 'donut' } = {}) {
+function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssumption = null } = {}) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
@@ -550,7 +557,7 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut' } = {}) {
       // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
       // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
       // 정렬, 절반 크기.
-      accountBenefitStrip(scenario, plan),
+      accountBenefitStrip(scenario, plan, isaReturnAssumption),
     ]),
     singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
     el('p', { class: 'field-help chart-note' }, ['같은 값을 납입 잔여 한도와 함께 —']),
@@ -612,7 +619,7 @@ function isaTaxFreeBlock(scenario, view) {
  * **새 데이터를 만들지 않는다.** `accountBenefitRows`가 계약이 이미 낸 값만
  * 고르고, 이 함수는 그것을 그리기만 한다.
  */
-function accountBenefitStrip(scenario, plan) {
+function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
   const rows = accountBenefitRows(scenario, plan);
 
   const pensionRow = () => {
@@ -647,11 +654,21 @@ function accountBenefitStrip(scenario, plan) {
           ? ACCOUNT_BENEFIT_REDUCED_NOTE
           : null;
 
-    return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+    // 확정(solid) 등급 — 트랙 = 한도 적용 전, 채움 = 적용 후(design-system
+    // 5.31절 "값의 출처"). `beforeCapKrw`가 없으면(방어적으로만) 막대를 생략한다.
+    const fillPercent = p.beforeCapKrw != null ? benefitMeterFillPercent(p.afterCapKrw ?? 0, p.beforeCapKrw) : null;
+    const meter =
+      fillPercent != null
+        ? benefitMeter({ account: p.accounts[0], grade: 'solid', fillPercent })
+        : null;
+    const ariaLabel = `${names}, ${amountText}${fillPercent != null ? `, 세액공제 한도 대비 ${formatPercent(fillPercent / 100)}` : ''}`;
+
+    return el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
       el('span', { class: 'benefit-row-dots' }, dots),
       el('span', { class: 'benefit-row-body' }, [
         el('span', { class: 'benefit-row-names type-body-s' }, [names]),
         p.accounts.length > 1 ? el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_POOLED_NOTE]) : null,
+        meter,
         el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
         subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
       ]),
@@ -670,15 +687,61 @@ function accountBenefitStrip(scenario, plan) {
         ]),
       ]);
     }
+
+    const dot = el('span', { class: 'benefit-dot', style: { background: 'var(--data-isa)' } });
+
+    // 5.1.0(D28·D29·D31) — 가정 기반 정산액이 **계산되어 있을 때만** 가정
+    // 등급으로 승격한다. 그 외(가정 자체가 없음 / 계산 못 함 / 표시 끔)는
+    // 여전히 narrative다 — ISA는 계약상 `DeterministicBenefit`을 갖지 않는다.
+    if (i.estimate?.state === 'computed') {
+      const est = i.estimate;
+      const referenceKrw = est.point_estimate_krw ?? est.upper_bound_krw ?? 0;
+      // 자기정규화 — 다른 계좌·다른 행과 길이를 비교하지 않는다(값이 있으면
+      // 윤곽이 트랙 전체를 잇는다. 0이면 빈 트랙만 — 0을 채움으로 그리지 않는다).
+      const fillPercent = referenceKrw > 0 ? 100 : 0;
+      const meter = benefitMeter({ account: 'isa', grade: 'assumption', fillPercent });
+      const amountText = isaReturnEstimateAmountText(est);
+      const caption = isaReturnAssumption
+        ? isaReturnAssumptionCaption({
+            annualReturnRate: isaReturnAssumption.annual_return_rate,
+            incomeCharacter: isaReturnAssumption.income_character,
+            settlementYears: est.settlement_years,
+            settlementYearsSource: est.settlement_years_source,
+          })
+        : null;
+      const ariaLabel = `${ACCOUNT_LABEL.isa}, ${ISA_RETURN_ASSUMPTION_CHIP_LABEL}, ${amountText}`;
+
+      return el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
+        el('span', { class: 'benefit-row-dots' }, [dot]),
+        el('span', { class: 'benefit-row-body' }, [
+          el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
+          el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
+          meter,
+          el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
+          el('span', { class: 'benefit-row-suffix' }, [ACCOUNT_BENEFIT_ISA_SUFFIX]),
+          caption ? el('span', { class: 'benefit-row-assumption-caption' }, [caption]) : null,
+        ]),
+      ]);
+    }
+
     // narrative — **금액을 쓰지 않는다.** ISA는 세액공제 대상이 아닐 뿐 혜택이
     // 없는 것이 아니다(tax-rules-report.md 15.4.5절). 서술과 절세액이
     // 다른 축이라는 것을 괄호로 항상 병기한다.
+    const subNote =
+      i.estimate?.state === 'not_computable'
+        ? ISA_RETURN_NOT_COMPUTABLE_NOTE
+        : i.estimate?.state === 'display_suppressed'
+          ? ISA_RETURN_SUPPRESSED_NOTE
+          : null;
     return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
-      el('span', { class: 'benefit-row-dots' }, [el('span', { class: 'benefit-dot', style: { background: 'var(--data-isa)' } })]),
+      el('span', { class: 'benefit-row-dots' }, [dot]),
       el('span', { class: 'benefit-row-body' }, [
         el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
         el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_ISA_NARRATIVE]),
         el('span', { class: 'benefit-row-suffix' }, [ACCOUNT_BENEFIT_ISA_SUFFIX]),
+        // **표시를 끈 상태를 조용한 빈칸으로 두지 않는다**(D19) — 왜 안
+        // 보이는지 말한다.
+        subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
       ]),
     ]);
   };
@@ -1119,7 +1182,13 @@ function resultPanelForScenario(
     creditRateFallbackBanner(response.echo?.credit_rate_bracket),
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
-    chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, { seatDraw }),
+    chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
+      seatDraw,
+      // 5.1.0(D28) — "무엇을 주었는가"(echo)와 "무엇을 썼는가"(estimate)를 한
+      // 칸에 뭉치지 않는다. 정산 기간은 estimate에서, 수익률·소득 성격은
+      // echo에서 읽어 같은 캡션에 함께 적는다(계약 4.2절).
+      isaReturnAssumption: response.echo.isa_return_assumption,
+    }),
     fillOrderNote(plan, scenario),
     reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),

@@ -24,7 +24,35 @@ import {
   placeholderSliceAngles,
   nextSeatStep,
   shapeOf,
+  benefitMeterFillPercent,
 } from './charts.js';
+
+// ---------------------------------------------------------------------------
+// `BenefitMeter`(design-system 5.31절) — 확정 등급의 채움 비율. `benefitMeter`
+// 자체는 DOM을 만들므로(el()) 여기서는 다루지 않는다 — 브라우저 실측이
+// 기하(track/fill 폭·outline 여부)를 잡는다. 이 산수만 순수 함수로 고정한다.
+// ---------------------------------------------------------------------------
+
+test('a plan with no cap applied fills the whole track — before/after are equal', () => {
+  assert.equal(benefitMeterFillPercent(1188000, 1188000), 100);
+});
+
+test('a capped plan fills only the portion that survived the cap', () => {
+  assert.equal(benefitMeterFillPercent(594000, 1188000), 50);
+});
+
+test('a zero credit result is an empty track, not a 0%-wide fill someone might round up', () => {
+  assert.equal(benefitMeterFillPercent(0, 1188000), 0);
+});
+
+test('a before_cap of zero has nothing to fill, regardless of the after value — defensive, not a real contract state', () => {
+  assert.equal(benefitMeterFillPercent(0, 0), 0);
+  assert.equal(benefitMeterFillPercent(5, 0), 0);
+});
+
+test('the fill never exceeds 100% even if after somehow exceeds before', () => {
+  assert.equal(benefitMeterFillPercent(2000000, 1188000), 100);
+});
 
 test('the account with the largest remaining limit always scales to exactly 100%', () => {
   assert.equal(computeTrackScalePercent(18000000, 18000000), 100);

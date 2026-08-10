@@ -9,8 +9,12 @@
  * 조건부 노출(`ConditionalGroup`)을 대신 쓴다 — 접기와 조건부는 **여닫는 주체가
  * 다르다.** 접히는 것은 `SourceGuide` 하나뿐이고, 그것은 *답*이 아니라 *설명*이다.
  *
- * **그룹 수를 늘리지 않는다**(3.11.4절 (b)). 이번에 늘어난 입력 넷을 전부 기존 네
- * 그룹 안에 넣었다.
+ * **그룹 수를 늘리지 않는다는 3.11.4절 (b)를 이번 회차(5.1.0, D28·D29·D31 수익률
+ * 가정)에서 어겼다 — ⑤가 새로 생겼다.** 다섯 필드(토글·수익률·소득 성격·정산
+ * 기간·손실액)를 기존 네 그룹 어디에 넣어도 그 그룹의 주제와 어긋났고("④ ISA
+ * 만기 자금 전환"과는 별개의 질문이다), 억지로 끼워 넣는 쪽이 3.11.4(b)가 막으려던
+ * "사용자가 그룹의 성격을 못 읽는" 상태를 오히려 만든다고 판단했다. `designer`
+ * 확인이 필요한 이탈로 최종 보고에 남긴다.
  */
 
 import { el } from './dom.js';
@@ -48,11 +52,23 @@ import {
   RESET_CONFIRM_BODY,
   RESET_CONFIRM_ACCEPT,
   RESET_CONFIRM_CANCEL,
+  ISA_RETURN_SECTION_TITLE,
+  ISA_RETURN_TOGGLE_LABEL,
+  ISA_RETURN_SECTION_HELP,
+  ISA_RETURN_RATE_LABEL,
+  ISA_RETURN_INCOME_CHARACTER_LABEL,
+  ISA_RETURN_INCOME_CHARACTER_HELP,
+  ISA_RETURN_SETTLEMENT_YEARS_LABEL,
+  ISA_RETURN_SETTLEMENT_YEARS_HELP,
+  ISA_RETURN_LOSS_LABEL,
+  ISA_RETURN_LOSS_HELP,
+  ISA_INCOME_CHARACTER_LABEL,
+  ISA_INCOME_CHARACTER_EXAMPLE,
 } from '../copy.js';
 import { openConfirm } from './modal.js';
 import { formatYears, formatKrw } from '../format.js';
 import { isWithinYouthAgeRange } from '../engine/provisional-rules.js';
-import { parseManwonToWon } from '../state/validation.js';
+import { parseManwonToWon, ISA_INCOME_CHARACTERS } from '../state/validation.js';
 
 /** `SourceGuide`는 한 번 펼치면 그 세션 동안 펼침 상태를 유지한다(design-system 5.27절). */
 let sourceGuideOpen = false;
@@ -138,6 +154,66 @@ function wonPreviewNode(value, error) {
   const won = parseManwonToWon(value);
   if (Number.isNaN(won)) return null;
   return el('p', { class: 'field-won-preview' }, [`= ${formatKrw(won)}`]);
+}
+
+/**
+ * `percentField` — D28 수익률 입력. **`numberField`를 재사용하지 않는다** —
+ * `numberField`의 원화 미리보기(`wonPreviewNode`)가 `parseManwonToWon`으로
+ * 값을 만원 단위로 잘못 해석하게 된다. 이 필드는 퍼센트이지 금액이 아니다.
+ *
+ * **기본값도, placeholder에 예시 숫자도 넣지 않는다**(0.10절) — `value`는
+ * 사용자가 아직 아무것도 치지 않았으면 항상 빈 문자열이고, 이 함수가 그
+ * 자리에 아무 숫자도 채워 넣지 않는다.
+ */
+function percentField({ id, label, value, help, error, onInput, onBlur, renderGuard }) {
+  const inputEl = el('input', {
+    id,
+    class: `field-input${error ? ' field-input-error' : ''}`,
+    type: 'text',
+    inputmode: 'decimal',
+    value,
+    'aria-invalid': Boolean(error),
+    'aria-describedby': error ? `${id}-error` : help ? `${id}-help` : null,
+    oninput: (e) => onInput(e.target.value),
+    onblur: (e) => {
+      if (!renderGuard?.active) onBlur(e);
+    },
+  });
+  return el('div', { class: 'field' }, [
+    el('label', { for: id, class: 'field-label' }, [label]),
+    el('div', { class: 'field-control' }, [inputEl, el('span', { class: 'field-suffix' }, ['%'])]),
+    error
+      ? el('p', { id: `${id}-error`, class: 'field-error-msg', role: 'alert' }, [error])
+      : help
+        ? el('p', { id: `${id}-help`, class: 'field-help' }, [help])
+        : null,
+  ]);
+}
+
+/** `yearsField` — 정산 기간(선택, 년). 금액이 아니므로 `numberField`를 쓰지 않는다. */
+function yearsField({ id, label, value, help, error, onInput, onBlur, renderGuard }) {
+  const inputEl = el('input', {
+    id,
+    class: `field-input${error ? ' field-input-error' : ''}`,
+    type: 'text',
+    inputmode: 'numeric',
+    value,
+    'aria-invalid': Boolean(error),
+    'aria-describedby': error ? `${id}-error` : help ? `${id}-help` : null,
+    oninput: (e) => onInput(e.target.value),
+    onblur: (e) => {
+      if (!renderGuard?.active) onBlur(e);
+    },
+  });
+  return el('div', { class: 'field' }, [
+    el('label', { for: id, class: 'field-label' }, [label]),
+    el('div', { class: 'field-control' }, [inputEl, el('span', { class: 'field-suffix' }, ['년'])]),
+    error
+      ? el('p', { id: `${id}-error`, class: 'field-error-msg', role: 'alert' }, [error])
+      : help
+        ? el('p', { id: `${id}-help`, class: 'field-help' }, [help])
+        : null,
+  ]);
 }
 
 function segmentToggle({ id, label, value, options, onChange, help }) {
@@ -697,6 +773,86 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     ]);
   }
 
+  // ---- 그룹 ⑤ (ISA 보유 시에만) — 수익률 가정 (D28·D29·D31) -----------------
+  //
+  // **소유자 지시(screens.md 3.11.4(b))보다 이 필드군을 우선한다.** 그 규약은
+  // 이 계약(5.1.0)이 들어오기 전에 정해졌고, 이 다섯 필드(토글·수익률·소득
+  // 성격·정산 기간·손실액)를 기존 그룹 어디에 넣어도 그 그룹의 주제와
+  // 어긋난다 — "④ ISA 만기 자금 전환"과는 별개의 질문이다. 새 그룹을 만드는
+  // 판단은 `designer` 확인이 필요한 항목으로 최종 보고에 남긴다.
+  //
+  // **기본값도, placeholder 예시 숫자도 없다.** 토글은 꺼진 채로 시작하고
+  // (`initialForm`), 사용자가 스스로 켜야 나머지 넷이 나타난다 — 이 서비스가
+  // 수익률을 제안하지 않는다는 구분이 D31 이후 남은 방어선 전부다(0.10절).
+  let groupFive = null;
+  if (form.isaExists) {
+    const returnToggle = segmentToggle({
+      id: 'isaReturnEnabled',
+      label: ISA_RETURN_TOGGLE_LABEL,
+      value: form.isaReturnEnabled,
+      options: [
+        { value: false, label: '아니오' },
+        { value: true, label: '예' },
+      ],
+      onChange: (v) => store.setField('isaReturnEnabled', v, { immediate: true }),
+      help: ISA_RETURN_SECTION_HELP,
+    });
+
+    const rateField = percentField({
+      id: 'isaReturnRatePercent',
+      label: ISA_RETURN_RATE_LABEL,
+      value: form.isaReturnRatePercent,
+      error: fieldError(errors, 'isaReturnRatePercent', { showMissing: true }),
+      onInput: (v) => store.setField('isaReturnRatePercent', v),
+      onBlur: () => store.flush(),
+      renderGuard,
+    });
+    const characterToggle = segmentToggle({
+      id: 'isaIncomeCharacter',
+      label: ISA_RETURN_INCOME_CHARACTER_LABEL,
+      value: form.isaIncomeCharacter,
+      options: ISA_INCOME_CHARACTERS.map((id) => ({ value: id, label: ISA_INCOME_CHARACTER_LABEL[id] })),
+      onChange: (v) => store.setField('isaIncomeCharacter', v, { immediate: true }),
+      help: ISA_RETURN_INCOME_CHARACTER_HELP,
+    });
+    // 버튼 라벨은 짧다 — 고른 항목의 예시를 그 아래 한 줄로 구체화한다.
+    const characterExample = form.isaIncomeCharacter
+      ? el('p', { class: 'field-help' }, [ISA_INCOME_CHARACTER_EXAMPLE[form.isaIncomeCharacter]])
+      : null;
+    const settlementYearsFieldNode = yearsField({
+      id: 'isaSettlementYears',
+      label: ISA_RETURN_SETTLEMENT_YEARS_LABEL,
+      value: form.isaSettlementYears,
+      error: fieldError(errors, 'isaSettlementYears'),
+      help: ISA_RETURN_SETTLEMENT_YEARS_HELP,
+      onInput: (v) => store.setField('isaSettlementYears', v),
+      onBlur: () => store.flush(),
+      renderGuard,
+    });
+    const lossField = numberField({
+      id: 'isaLossAmount',
+      label: ISA_RETURN_LOSS_LABEL,
+      value: form.isaLossAmount,
+      error: fieldError(errors, 'isaLossAmount'),
+      help: ISA_RETURN_LOSS_HELP,
+      onInput: (v) => store.setField('isaLossAmount', v),
+      onBlur: () => store.flush(),
+      renderGuard,
+    });
+
+    const returnInner = conditionalGroup(
+      form.isaReturnEnabled,
+      [rateField, characterToggle, characterExample, settlementYearsFieldNode, lossField],
+      'isaReturnGroup',
+    );
+
+    groupFive = el('section', { class: 'input-group input-group-conditional', 'data-key': 'groupFive' }, [
+      el('h3', { class: 'input-group-title' }, [ISA_RETURN_SECTION_TITLE]),
+      returnToggle,
+      returnInner,
+    ]);
+  }
+
   const resetButton = el(
     'button',
     {
@@ -723,5 +879,6 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     groupTwo,
     groupThree,
     groupFour,
+    groupFive,
   ]);
 }
