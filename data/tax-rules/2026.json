@@ -71,6 +71,7 @@
         "parenthetical_is_stricter_not_a_conversion": {
           "finding": "총급여액 5,500만원이라는 대체 기준은 종합소득금액 4,500만원을 근로소득자용으로 환산한 값보다 좁다. 즉 근로소득만 있는 사람에게 이 소괄호는 완화가 아니라 강화로 작동한다.",
           "arithmetic": {
+            "single_definition_of_the_deduction": "근로소득공제의 정의 자리는 income.wage.deduction이다. 아래 산식은 그 규칙의 '4,500만원 초과 1억원 이하' 구간을 이 자리의 계산을 위해 옮겨 적은 것이며, 값이 바뀌면 그쪽을 고치고 이 자리를 함께 본다.",
             "wage_income_deduction_formula": "총급여액 4,500만원 초과 1억원 이하 구간의 근로소득공제 = 12,000,000 + (총급여액 − 45,000,000) × 0.05",
             "wage_income_amount_formula": "근로소득금액 = 총급여액 − 근로소득공제 = 0.95 × 총급여액 − 9,750,000",
             "equivalence_point_krw": 57631578,
@@ -427,6 +428,12 @@
         "exactness": "이 되더하기는 조문상 근사가 아니라 등식이다. 다만 두 가지 전제가 있다 — (1) 서식의 연금계좌 '세액공제액' 칸이 한도를 적용한 뒤의 실제 공제액이어야 하고, (2) 직전 과세기간 값으로 해당 과세기간을 추정하는 것이므로 소득·부양가족·다른 공제가 그대로여야 한다. (2)는 반드시 깨지므로 이 값은 언제나 추정의 기준값이지 확정값이 아니다.",
         "global_income_filers": "종합소득세 신고자는 종합소득세 과세표준확정신고 및 납부계산서의 대응 항목(산출세액 / 세액감면 / 세액공제 / 결정세액)에서 같은 값을 읽는다. 이 유닛은 그 서식의 항목 구성을 이번 조사에서 직접 확인하지 못했다. 이 서비스의 1차 출시 대상이 근로소득자로 좁혀져 있어(리포트 4.1절 A6) 범위 밖으로 두었다.",
         "item_numbers": "서식의 각 칸에는 원문자 번호가 붙어 있으나 그 번호는 서식이 개정될 때마다 바뀐다. 이 규칙은 번호가 아니라 칸 이름과 소속 구역(Ⅲ 세액명세)으로 지정한다. 확인한 서식은 2025.6.30. 개정본이며, 번호 자체는 서식 PDF에서 기계적으로 읽히지 않아 옮기지 않았다.",
+        "no_longer_the_service_input_path": {
+          "what_changed": "소유자가 직전 과세연도 결정세액 입력과 그 문구를 전부 없애기로 했다(D39). 이 서비스는 더 이상 이 서식의 값을 사용자에게 묻지 않는다.",
+          "what_did_not_change": "한도 자체는 그대로 걸린다. pension.credit.tax_liability_cap이 정하는 한도를 이제 pension.credit.tax_liability_cap.current_year_estimate가 해당 과세기간 총급여액에서 추정한다.",
+          "why_this_rule_stays": "이 규칙이 적은 것은 서식의 조문 사실(칸 이름·되더하기 등식)이고 그것은 여전히 참이다. 입력을 되살리기 위한 것이 아니라, 되더하기 등식이 조문상 근사가 아니라는 확인을 잃지 않기 위해 남긴다.",
+          "direction_comparison": "이 경로의 값은 그 사람의 실제 값이었으므로 오차가 소득·부양가족 변동에서만 나왔다. 새 경로의 값은 상한이므로 오차가 한 방향(과대)으로만 난다. 두 오차는 성질이 다르다."
+        },
         "unknown_value_policy": {
           "rule": "사용자가 이 값을 모르면 엔진이 지어내지 않는다. 추정치를 채워 넣지 않는다.",
           "direction_of_error": "결정세액을 모른 채 한도를 무시하고 계산하면 결과는 언제나 과대(overstated)다. 세액 한도는 절세액을 늘리는 방향으로 작용할 수 없고 깎는 방향으로만 작용하기 때문이다. 따라서 한도 미확인 상태의 숫자는 '최대 이만큼'이지 '이만큼'이 아니다.",
@@ -442,6 +449,251 @@
         "url": "https://taxlaw.nts.go.kr/downloadPDFFile.do?fleId=701000000001059462&fleSn=1",
         "corroborating_url": "https://www.law.go.kr/flDownload.do?gubun=&flSeq=126395891",
         "verified_on": "2026-08-09",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "income.wage.deduction",
+      "title": "근로소득공제 — 총급여액에서 근로소득금액을 구하는 법정 산식",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true },
+        { "field": "taxpayer.income_type", "op": "eq", "value": "근로소득" }
+      ],
+      "value": {
+        "type": "bracket_formula",
+        "quoted": "근로소득이 있는 거주자에 대해서는 해당 과세기간에 받는 총급여액에서 다음의 금액을 공제한다. 다만, 공제액이 2천만원을 초과하는 경우에는 2천만원을 공제한다.",
+        "output": "근로소득금액 = 총급여액 − 근로소득공제",
+        "formula_shape": "공제액 = base_krw + (총급여액 − threshold_krw) × rate_on_excess",
+        "brackets": [
+          { "total_salary_max_krw": 5000000, "threshold_krw": 0, "base_krw": 0, "rate_on_excess": 0.7 },
+          { "total_salary_max_krw": 15000000, "threshold_krw": 5000000, "base_krw": 3500000, "rate_on_excess": 0.4 },
+          { "total_salary_max_krw": 45000000, "threshold_krw": 15000000, "base_krw": 7500000, "rate_on_excess": 0.15 },
+          { "total_salary_max_krw": 100000000, "threshold_krw": 45000000, "base_krw": 12000000, "rate_on_excess": 0.05 },
+          { "total_salary_max_krw": null, "threshold_krw": 100000000, "base_krw": 14750000, "rate_on_excess": 0.02 }
+        ],
+        "overall_cap_krw": 20000000,
+        "floor_rule": "총급여액이 위 공제액에 미달하면 그 총급여액을 공제액으로 한다(제3항). 따라서 근로소득금액은 음수가 되지 않는다.",
+        "boundary_rule": "각 구간의 문언이 '이하'이므로 경계값(500만원·1,500만원·4,500만원·1억원)은 아래 구간에 속한다. 두 산식이 경계에서 같은 값을 내므로 이 룰셋의 산식으로는 경계 판정이 결과를 바꾸지 않는다.",
+        "no_election_required": "이 공제에는 신청·증빙·부양가족·지출 어떤 요건도 붙지 않는다. 총급여액이 정해지면 값이 하나로 정해진다. pension.credit.tax_liability_cap.current_year_estimate가 이 성질에 기대고 있다.",
+        "daily_worker": "일용근로자의 공제액은 1일 15만원이다(제2항). 이 룰셋의 범위 밖이다.",
+        "multiple_employers": "2인 이상에게서 근로소득을 받는 사람(일용근로자 제외)은 그 근로소득의 합계액을 총급여액으로 하여 계산한다(제5항)."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제47조(근로소득공제) 제1항·제2항·제3항·제5항",
+        "law_version": "2천만원 공제한도는 법률 제16834호(2019.12.31. 개정, 2020.1.1. 시행)로 신설된 후 유지.",
+        "url": "https://www.law.go.kr/법령/소득세법/제47조",
+        "corroborating_url": "https://casenote.kr/법령/소득세법/제47조",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "income.deduction.basic.self",
+      "title": "기본공제 중 본인분 — 요건 없이 주어지는 유일한 인적공제",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true },
+        { "field": "taxpayer.has_global_income", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "deduction",
+        "amount_krw": 1500000,
+        "quoted": "종합소득이 있는 거주자(자연인만 해당한다)에 대해서는 다음 각 호의 어느 하나에 해당하는 사람의 수에 1명당 연 150만원을 곱하여 계산한 금액을 그 거주자의 해당 과세기간의 종합소득금액에서 공제한다.",
+        "which_item": "제1호 '해당 거주자'. 즉 본인분이다.",
+        "why_unconditional": "제1호에는 소득요건·연령요건·생계요건이 없다. 제2호(배우자)와 제3호(부양가족)에만 '소득금액 합계액 100만원 이하' 등의 요건이 붙는다. 따라서 종합소득이 있는 거주자라면 누구나 최소 150만원의 종합소득공제를 받는다.",
+        "not_included_here": "배우자공제(제2호), 부양가족공제(제3호), 추가공제(제51조)는 요건이 붙으므로 이 규칙에 들어 있지 않다. 그 공제를 세지 않으면 과세표준이 실제보다 크게 나온다 — 방향은 pension.credit.tax_liability_cap.current_year_estimate에 적었다.",
+        "cap_interaction": "인적공제·연금보험료공제·특별소득공제 등의 합계가 종합소득금액을 초과하면 초과분은 없는 것으로 한다(제51조의3 등). 본인분 150만원 단독으로는 이 한도에 걸리지 않는 경우가 대부분이나, 종합소득금액이 150만원 미만이면 과세표준은 0에서 멈춘다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제50조(기본공제) 제1항 제1호",
+        "law_version": "1명당 연 150만원. 확인 시점의 현행 조문.",
+        "url": "https://www.law.go.kr/법령/소득세법/제50조",
+        "corroborating_url": "https://casenote.kr/법령/소득세법/제50조",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "tax.rate.basic",
+      "title": "종합소득 기본세율 — 과세표준에서 산출세액을 구하는 누진세율표",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true },
+        { "field": "taxpayer.has_global_income", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "progressive_rate_table",
+        "output": "종합소득산출세액 = 기본세율표를 종합소득 과세표준에 적용한 금액",
+        "formula_shape": "산출세액 = base_krw + (과세표준 − threshold_krw) × rate_on_excess",
+        "brackets": [
+          { "tax_base_max_krw": 14000000, "threshold_krw": 0, "base_krw": 0, "rate_on_excess": 0.06 },
+          { "tax_base_max_krw": 50000000, "threshold_krw": 14000000, "base_krw": 840000, "rate_on_excess": 0.15 },
+          { "tax_base_max_krw": 88000000, "threshold_krw": 50000000, "base_krw": 6240000, "rate_on_excess": 0.24 },
+          { "tax_base_max_krw": 150000000, "threshold_krw": 88000000, "base_krw": 15360000, "rate_on_excess": 0.35 },
+          { "tax_base_max_krw": 300000000, "threshold_krw": 150000000, "base_krw": 37060000, "rate_on_excess": 0.38 },
+          { "tax_base_max_krw": 500000000, "threshold_krw": 300000000, "base_krw": 94060000, "rate_on_excess": 0.40 },
+          { "tax_base_max_krw": 1000000000, "threshold_krw": 500000000, "base_krw": 174060000, "rate_on_excess": 0.42 },
+          { "tax_base_max_krw": null, "threshold_krw": 1000000000, "base_krw": 384060000, "rate_on_excess": 0.45 }
+        ],
+        "boundary_rule": "각 구간의 문언이 '이하'이므로 경계값은 아래 구간에 속한다. 두 산식이 경계에서 같은 값을 내므로 경계 판정이 결과를 바꾸지 않는다.",
+        "is_local_income_tax_excluded": "이 표는 소득세(국세)다. 개인지방소득세는 tax.local.personal_income_surtax로 따로 붙는다.",
+        "monotonicity": "이 표는 과세표준에 대해 단조증가하고 연속이다. pension.credit.tax_liability_cap.current_year_estimate의 오차 방향 증명이 이 성질을 쓴다 — 과세표준을 크게 잡으면 산출세액도 반드시 크거나 같다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제55조 제1항(세율)",
+        "law_version": "법률 제19196호(2022.12.31. 개정, 2023.1.1. 시행)로 개정된 8단계 표. 확인 시점까지 유지.",
+        "url": "https://www.law.go.kr/법령/소득세법/제55조",
+        "corroborating_url": "https://casenote.kr/법령/소득세법/제55조",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "credit.wage_income",
+      "title": "근로소득세액공제 — 근로소득이 있으면 요건 없이 산출세액에서 빠지는 세액공제",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true },
+        { "field": "taxpayer.income_type", "op": "eq", "value": "근로소득" }
+      ],
+      "value": {
+        "type": "credit_formula",
+        "quoted": "근로소득이 있는 거주자에 대해서는 그 근로소득에 대한 종합소득산출세액에서 다음의 금액을 공제한다.",
+        "why_unconditional": "제1항에 신청·증빙·부양가족·지출 요건이 없다. 근로소득이 있으면 적용된다. 이 성질이 income.wage.deduction·income.deduction.basic.self와 같아서 pension.credit.tax_liability_cap.current_year_estimate가 세 규칙만으로 값을 만든다.",
+        "amount_brackets": [
+          { "wage_income_tax_max_krw": 1300000, "threshold_krw": 0, "base_krw": 0, "rate_on_excess": 0.55 },
+          { "wage_income_tax_max_krw": null, "threshold_krw": 1300000, "base_krw": 715000, "rate_on_excess": 0.30 }
+        ],
+        "limit_brackets": [
+          { "total_salary_max_krw": 33000000, "limit_krw": 740000, "formula": "74만원" },
+          { "total_salary_max_krw": 70000000, "limit_krw": null, "formula": "740000 − (총급여액 − 33000000) × 8/1000", "floor_krw": 660000 },
+          { "total_salary_max_krw": 120000000, "limit_krw": null, "formula": "660000 − (총급여액 − 70000000) × 1/2", "floor_krw": 500000 },
+          { "total_salary_max_krw": null, "limit_krw": null, "formula": "500000 − (총급여액 − 120000000) × 1/2", "floor_krw": 200000 }
+        ],
+        "apply_order": "제1항으로 공제액을 구한 뒤 제2항의 한도로 자른다. 최종 공제액 = min(제1항 금액, 제2항 한도).",
+        "wage_portion_when_other_income_exists": "제1항이 재는 것은 '그 근로소득에 대한' 종합소득산출세액이다. 근로소득 외의 종합소득이 있으면 종합소득산출세액에 근로소득금액이 종합소득금액에서 차지하는 비율을 곱해 안분한다. 근로소득만 있는 사람은 그 비율이 1이므로 종합소득산출세액 전부가 대상이다.",
+        "daily_worker": "일용근로자의 원천징수 시에는 산출세액의 55%를 공제한다(제3항). 이 룰셋의 범위 밖이다.",
+        "monotonicity": "산출세액 x에 대해 (x − 근로소득세액공제(x))는 단조증가한다. 55% 구간에서 기울기 0.45, 30% 구간에서 0.7, 한도가 걸린 뒤 1이다. pension.credit.tax_liability_cap.current_year_estimate의 오차 방향 증명이 이 성질을 쓴다 — 산출세액을 크게 잡으면 근로소득세액공제를 뺀 잔여도 반드시 크거나 같다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조(근로소득세액공제) 제1항·제2항·제3항, 같은 법 시행령 제116조(근로소득에 대한 종합소득산출세액의 계산)",
+        "law_version": "제2항의 총급여액 구간별 한도는 법률 제19196호(2022.12.31. 개정, 2023.1.1. 시행) 이후 값.",
+        "url": "https://www.law.go.kr/법령/소득세법/제59조",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=7875&mi=6596",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.credit.tax_liability_cap.current_year_estimate",
+      "title": "해당 과세기간 총급여액에서 세액 한도를 산출하는 경로 — 값은 상한이며 하한은 존재하지 않는다",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true },
+        { "field": "taxpayer.income_type", "op": "eq", "value": "근로소득" }
+      ],
+      "value": {
+        "type": "derived_cap_estimate",
+        "question": "직전 과세연도 서류의 결정세액을 묻지 않고, 이미 받고 있는 해당 과세기간 총급여액만으로 pension.credit.tax_liability_cap의 한도를 낼 수 있는가. 낼 수 있다면 그 값의 오차는 어느 방향인가.",
+        "answer": "값은 낼 수 있다. 그러나 그 값은 언제나 실제 한도 이상(상한)이고, 실제 한도 이하임이 보장되는 값은 0 말고는 존재하지 않는다.",
+        "statutory_path": [
+          { "step": 1, "from": "총급여액", "to": "근로소득금액", "rule_id": "income.wage.deduction", "law": "소득세법 제47조" },
+          { "step": 2, "from": "근로소득금액", "to": "종합소득 과세표준", "rule_id": "income.deduction.basic.self", "law": "소득세법 제50조 제1항 제1호", "note": "본인 기본공제 150만원만 뺀다. 나머지 종합소득공제는 요건이 붙어 이 경로에 넣지 않았다." },
+          { "step": 3, "from": "종합소득 과세표준", "to": "종합소득산출세액", "rule_id": "tax.rate.basic", "law": "소득세법 제55조 제1항" },
+          { "step": 4, "from": "종합소득산출세액", "to": "연금계좌 세액공제의 한도", "rule_id": "credit.wage_income", "law": "소득세법 제59조, 제61조 제2항·제3항", "note": "산출세액에서 근로소득세액공제를 뺀 잔여가 한도다. 연금계좌세액공제가 초과분을 가장 먼저 흡수한다는 제61조 제3항 문언 때문에 잔여값이 곧 한도가 된다." }
+        ],
+        "cap_formula": "추정 한도 = max(0, 산출세액(max(0, 총급여액 − 근로소득공제 − 1,500,000)) − 근로소득세액공제)",
+        "error_direction": {
+          "code": "overstated_or_equal",
+          "statement": "이 규칙이 내는 값은 그 사람의 실제 세액 한도보다 크거나 같다. 절대로 작지 않다. 따라서 이 한도로 자른 연금계좌 세액공제액도 실제보다 크거나 같다 — 과대(overstated)다.",
+          "why_it_is_this_direction": "실제 납세자는 여기서 세지 않은 종합소득공제(연금보험료공제·건강보험료 등 특별소득공제·배우자와 부양가족의 기본공제·추가공제·신용카드 등 소득공제)를 더 빼므로 실제 과세표준은 이 값보다 작거나 같고, tax.rate.basic이 단조증가이므로 실제 산출세액도 작거나 같다. 또 여기서 세지 않은 세액공제(자녀세액공제·특별세액공제·표준세액공제·월세액 세액공제 등)를 더 빼므로 실제 잔여는 더 작다. 두 경로가 같은 방향으로 작용해 서로를 상쇄하지 않는다.",
+          "monotonicity_used": "credit.wage_income.monotonicity가 (x − 근로소득세액공제(x))의 단조증가를 보장하므로, 산출세액을 크게 잡은 것이 한도를 작게 만드는 일은 일어나지 않는다. 근로소득세액공제를 이 경로에 포함시켜도 상한 성질이 깨지지 않는다는 것이 이 성질의 뜻이다.",
+          "do_not_re_derive": "다음 사람이 이 방향을 다시 유도하지 않아도 되도록 여기에 적어 둔다. 이 경로에서 항목을 빼면 한도는 올라가고(더 과대), 항목을 넣으면 내려간다(과대가 줄고 결국 과소로 넘어간다). 방향은 이 한 문장으로 결정된다."
+        },
+        "no_lower_bound_exists": {
+          "claim": "총급여액만으로 만들 수 있는, 실제 한도 이하임이 보장되는 값은 0뿐이다. 0이 아닌 하한은 존재하지 않는다.",
+          "proof": "하한이 되려면 모든 납세자에 대해 추정값 ≤ 실제 한도여야 한다. 그런데 종합소득공제와 세액공제에는 법정 상한이 없다 — 기본공제는 부양가족 수에 비례하고(제50조 제1항 제3호), 의료비·기부금 세액공제 등은 지출액에 비례한다. 소득세법 제61조 제2항·제3항 자체가 '감면액 및 세액공제액의 합계액이 종합소득산출세액을 초과하는 경우'를 예정하고 그 초과분의 처리를 정하고 있다. 즉 같은 총급여액에서도 실제 한도가 0인 납세자가 조문상 언제나 존재한다. 따라서 모든 납세자를 덮는 하한의 상한은 0이다.",
+          "consequence": "'요건 없이 주어지는 공제만으로 하한을 만든다'는 방법은 성립하지 않는다. 요건 없는 공제만 세면 공제를 적게 빼는 것이므로 과세표준이 커지고 산출세액이 커져 한도가 헐거워진다 — 하한이 아니라 상한이 나온다.",
+          "the_only_safe_alternative_is_degenerate": "한도를 0으로 두면 하한이 되지만 모든 사용자의 연금계좌 세액공제가 0이 되어 이 서비스가 낼 수 있는 값이 사라진다. 그러므로 남는 선택은 '상한을 값으로 내되 상한임을 함께 낸다'뿐이다."
+        },
+        "exactly_provable_region": {
+          "rule": "총급여액이 5,000,000원 이하이면 이 경로의 값이 0이 되고, 상한이 0이므로 실제 한도도 0이다. 이 구간에서는 추정이 아니라 등식이다.",
+          "derivation": "총급여액 5,000,000원의 근로소득공제는 5,000,000 × 70% = 3,500,000원이므로 근로소득금액은 1,500,000원이고, 본인 기본공제 1,500,000원을 빼면 과세표준이 정확히 0이다. 과세표준이 0이면 산출세액이 0이고, 산출세액이 0이면 어떤 세액공제도 받을 수 없다.",
+          "boundary": "5,000,000원 정확히는 이 구간에 포함된다. 5,000,000원을 넘으면 과세표준 = 0.6 × 총급여액 − 3,000,000원이 되어 즉시 양수가 된다.",
+          "what_it_is_not": "이 구간 밖에서 값이 0이 아니라는 뜻은 아니다. 총급여액이 이보다 커도 실제 한도가 0인 사람은 얼마든지 있다. 이 규칙이 그것을 보이지 못할 뿐이다."
+        },
+        "included_items": [
+          { "item": "근로소득공제", "law": "소득세법 제47조", "unconditional_because": "총급여액 외의 어떤 요건도 없다" },
+          { "item": "본인 기본공제 150만원", "law": "소득세법 제50조 제1항 제1호", "unconditional_because": "제1호에는 소득·연령·생계 요건이 없다" },
+          { "item": "근로소득세액공제", "law": "소득세법 제59조", "unconditional_because": "근로소득이 있으면 적용되고 신청·증빙이 없다" }
+        ],
+        "excluded_items": [
+          { "item": "연금보험료공제(국민연금 등 개인부담금)", "law": "소득세법 제51조의3", "why_excluded": "요건이 붙는다 — 공적연금 관련법에 따른 가입자여야 하고 실제 납입이 있어야 한다. 국민연금 사업장가입자 자격에는 연령 요건이 있다. 또 공제액을 총급여액에서 계산하려면 소득세법 밖의 요율과 기준소득월액 상·하한이 필요한데 이 조사에서 확인하지 못했다.", "effect_if_added": "한도가 내려간다. 즉 과대가 줄어든다. 실무상 이 경로의 과대 중 가장 큰 몫이다." },
+          { "item": "건강보험료·고용보험료 등 특별소득공제", "law": "소득세법 제52조 제1항", "why_excluded": "직장가입자 요건과 실제 납입액이 필요하고, 요율이 소득세법 밖의 고시에 있어 이 조사에서 확인하지 못했다.", "effect_if_added": "한도가 내려간다. 과대가 줄어든다." },
+          { "item": "배우자공제·부양가족공제·추가공제", "law": "소득세법 제50조 제1항 제2호·제3호, 제51조", "why_excluded": "소득요건·연령요건·생계요건이 붙고 이 서비스는 가족 구성을 묻지 않는다.", "effect_if_added": "한도가 내려간다. 부양가족이 많을수록 이 경로의 과대가 커진다." },
+          { "item": "표준세액공제 13만원", "law": "소득세법 제59조의4 제9항", "why_excluded": "요건이 붙는다 — 특별소득공제·특별세액공제·월세액 세액공제를 신청하지 아니한 경우에만 적용된다. 신청한 사람이 그 대신 받는 금액이 13만원 이상이라고 조문이 보장하지는 않으므로, 이것을 넣으면 error_direction의 상한 보장이 깨진다.", "effect_if_added": "한도가 13만원 내려간다. 대다수에게 과대가 줄지만 상한 보장이 사라진다." },
+          { "item": "자녀세액공제·특별세액공제·기부금 세액공제 등", "law": "소득세법 제59조의2, 제59조의4", "why_excluded": "부양 자녀와 지출액이 필요하고 이 서비스는 묻지 않는다.", "effect_if_added": "한도가 내려간다. 이 항목들은 상한이 없으므로 실제 한도를 0까지 끌어내릴 수 있다 — no_lower_bound_exists의 근거다." }
+        ],
+        "competition_with_other_credits": {
+          "question": "산출세액 한도는 연금계좌 세액공제만의 한도가 아니다. 다른 세액공제와 같은 산출세액을 나눠 쓴다. 이 경합을 모델링하지 않는 것이 새 경로에서 오차 방향을 뒤집는가.",
+          "answer": "뒤집지 않는다. 강화한다.",
+          "why": "소득세법 제61조 제3항이 초과분을 연금계좌세액공제부터 밀어내므로, 다른 세액공제가 클수록 연금계좌 세액공제의 한도는 작아진다. 다른 세액공제를 세지 않으면 한도를 크게 잡는 것이고 이는 error_direction과 같은 방향이다. 서로 상쇄하는 두 힘이 아니라 같은 방향의 두 힘이다.",
+          "who_it_hurts_most": "자녀가 있거나 의료비·기부금이 큰 사람이다. 그런 사람은 실제 한도가 산출세액보다 훨씬 작은데 이 경로는 그 차이를 전혀 보지 못한다. 단신 근로자보다 과대가 크다.",
+          "one_more_separate_cap": "특별세액공제(제59조의4 제1항부터 제3항까지)와 조세특례제한법 제95조의2에 따른 세액공제에는 근로소득에 대한 종합소득산출세액을 기준으로 한 별도 한도가 하나 더 있다(소득세법 제61조 제1항). 이 경로는 그 단계도 보지 않는다. 방향은 역시 같다."
+        },
+        "branches": {
+          "wage_income_only": {
+            "when": "해당 과세기간에 근로소득 외에 종합소득과세표준에 합산되는 소득이 없다고 답한 경우",
+            "direction": "overstated_or_equal. 위 증명이 그대로 성립한다.",
+            "note": "이 서비스가 이미 받고 있는 두 입력(해당 과세기간 총급여액, 근로소득 외 합산 소득의 유무)으로 판정된다. 새 입력이 필요하지 않다."
+          },
+          "global_income_amount_supplied": {
+            "when": "근로소득 외 합산 소득이 있고 종합소득금액을 받은 경우",
+            "path": "과세표준 = max(0, 종합소득금액 − 1,500,000). 근로소득공제는 이미 종합소득금액 안에서 빠져 있으므로 다시 빼지 않는다. 근로소득세액공제는 종합소득산출세액 × (근로소득금액 ÷ 종합소득금액)으로 안분한 금액을 제1항에 넣는다.",
+            "direction": "overstated_or_equal. 종합소득금액이 조문상의 합산 기준 그 자체이고 종합소득공제는 150만원 이상이므로 상한 성질이 유지된다."
+          },
+          "global_income_amount_missing": {
+            "when": "근로소득 외 합산 소득이 있는데 종합소득금액을 받지 못한 경우",
+            "direction": "indeterminate. 다른 소득을 세지 않은 것은 산출세액을 작게 잡는 방향이고, 공제를 세지 않은 것은 크게 잡는 방향이다. 두 힘의 부호가 반대이므로 합의 부호가 정해지지 않는다.",
+            "bounded": "다만 과대의 크기는 wage_income_only의 과대보다 크지 않다. 다른 소득은 실제 산출세액을 올리기만 하므로 과대를 줄이거나 과소로 넘길 뿐이다. 즉 이 분기가 과대의 최댓값을 키우지는 않는다.",
+            "engine_note": "이 분기에서는 방향 코드를 overstated_or_equal로 내면 안 된다. 방향이 정해지지 않았음을 그대로 내야 한다."
+          }
+        },
+        "d37_sentence_recheck": {
+          "sentence": "한도에 걸린 사람에게 적는 '이 막대가 짧은 것은 덜 넣어서가 아니라 낼 세금이 이 한도보다 적기 때문입니다'.",
+          "verdict": "여전히 참이다. 다만 참인 이유가 바뀌었고, 반대 진술은 참이 아니게 되었다.",
+          "why_still_true": "이 경로의 값이 상한이므로, 추정 한도가 상한선(인정 납입액 × 공제율)보다 작으면 실제 한도는 그보다 더 작거나 같다. 따라서 실제로도 반드시 한도가 걸린다. 이 문장이 거짓으로 뜨는 경우는 없다.",
+          "what_changed": "이 문장은 이제 덜 뜬다. 실제로는 한도에 걸리는데 추정 한도가 상한선 이상이어서 문장이 뜨지 않는 사람이 생긴다. 누락은 error_direction과 같은 방향이다.",
+          "what_must_not_be_said": "'한도에 걸리지 않았습니다' 또는 '한도에 여유가 있습니다'는 이 경로에서 증명되지 않는다. 문장의 부재는 '걸리지 않음'을 뜻하지 않으므로, 화면이 그 반대 진술을 새로 적으면 그것은 거짓이 될 수 있다.",
+          "amount_display": "문장에 금액을 함께 적는다면 그 금액은 사용자의 서류에 적힌 수가 아니라 총급여액에서 계산한 추정값이며 상한이다. 서류에서 찾을 수 있는 수처럼 적으면 안 된다."
+        },
+        "required_display": {
+          "must_state": "이 한도가 총급여액에서 계산한 값이고 다른 소득공제·세액공제를 반영하지 않았으며, 그래서 실제 공제액은 이보다 적을 수 있다는 사실을 금액과 같은 화면에 적는다.",
+          "wording_direction": "'최대 이만큼'이지 '이만큼'이 아니다. pension.credit.rate.basis_determination의 대체값 안내('적어도 이만큼')와 방향이 반대이므로 같은 문장 틀을 쓰면 한쪽이 거짓이 된다.",
+          "what_it_replaces": "직전 과세연도 결정세액을 묻던 자리의 안내를 대체한다. 그 입력을 되살리는 것이 아니다."
+        },
+        "engine_note": "이 규칙은 pension.credit.tax_liability_cap을 대체하지 않는다. 한도의 정의는 그 규칙이 그대로 정하고, 이 규칙은 그 한도를 해당 과세기간 총급여액에서 어떻게 추정하는지와 그 추정의 오차 방향만 정한다. 한도가 배분을 바꾸지 않고 공제액만 자른다는 성질도 그대로다.",
+        "replaces_input_path": "pension.credit.tax_liability_cap.source_form이 정한 직전 과세연도 서류 입력 경로를 이 서비스에서 대체한다. 그 규칙 자체는 서식의 조문 사실이므로 남긴다.",
+        "derived_from": "이 규칙은 조문의 전사가 아니라 네 조문(제47조·제50조·제55조·제59조)과 제61조의 한도 정의를 결합해 만든 계산 규칙이다. 결합의 각 단계와 오차 방향의 증명을 위에 적어 관리자가 되돌릴 수 있게 했다.",
+        "unresolved": {
+          "for_manager": [
+            "연금보험료공제와 건강보험료 특별소득공제를 이 경로에 넣어 과대를 줄일 것인가. 넣으려면 소득세법 밖의 요율(국민연금법·국민건강보험법과 그 고시)을 룰셋 범위에 들여야 하고, 총급여액과 기준소득월액·보수월액의 기초가 달라 산식이 등식이 되지 않는다. 이 유닛은 그 요율을 확인하지 못했으므로 넣지 않았다.",
+            "표준세액공제 13만원을 넣을 것인가. 넣으면 대다수에게 과대가 줄지만 error_direction의 상한 보장이 깨진다. 보장이 있는 값과 더 정확한 값 중 무엇을 택할지는 이 유닛이 정할 일이 아니다."
+          ]
+        }
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제47조(근로소득공제), 제50조 제1항 제1호(기본공제), 제55조 제1항(세율), 제59조(근로소득세액공제), 제61조 제2항·제3항(세액감면액 및 세액공제액의 산출세액 초과 시의 적용방법 등), 같은 법 시행령 제116조",
+        "law_version": "위 각 조문의 확인 시점 현행 조문. 개별 조문의 확인 근거는 income.wage.deduction·income.deduction.basic.self·tax.rate.basic·credit.wage_income·pension.credit.tax_liability_cap의 source에 있다.",
+        "url": "https://www.law.go.kr/법령/소득세법/제61조",
+        "corroborating_url": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6594&cntntsId=7873",
+        "verified_on": "2026-08-11",
         "verified_by": "tax-domain"
       }
     },
