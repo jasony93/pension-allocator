@@ -37,10 +37,9 @@ export function initialForm() {
     globalIncomeAmount: '',
     priorSalaryEnabled: false,
     priorSalary: '',
-    // 직전 과세연도 결정세액 — `빈`(null) · `amount` · `unknown` 세 상태.
-    // 비어 있음과 모름이 다른 상태다(D14, screens.md 3.8.3절).
-    priorTaxState: null,
-    priorTaxAmount: '',
+    // **`priorTaxState`·`priorTaxAmount`가 여기 있었다**(D39로 폐기). 직전
+    // 과세연도 결정세액 입력을 소유자 지시로 없앴다 — 법정 한도는 사라지지
+    // 않는다. 엔진이 해당 과세기간 총급여액에서 직접 산출한다(3.5절, D40).
     // 현재 연금 수령 여부 — 기본 선택 없음(screens.md 3.10.1절).
     annuityStarted: null,
     // 청년 자기신고. 화면이 대신 켜지 않는다(screens.md 3.9.5절).
@@ -94,31 +93,10 @@ function manwonToWonOrZero(v) {
   return manwonToWonOrNull(v) ?? 0;
 }
 
-/**
- * 계약 3.5절 `PriorYearTax`. 화면의 세 상태를 계약의 열거형으로 옮긴다.
- *
- * 계약이 `designer`의 E1(정수 하나 + null)을 그대로 받지 않았다 — `null` 하나로는
- * **빈**과 **모름**을 구분할 수 없고, 되더하기가 두 칸을 짝으로 요구하기 때문이다.
- * 화면은 `모르겠습니다`를 `state: "unknown"`으로 **명시해서** 보낸다. 침묵을
- * 모름으로 추론하지 않는다.
- *
- * `pension_credit_applied_krw`는 묻지 않는다(D13 기준 3 — 값이 없어도 틀릴 방향과
- * 크기를 `[4-E]`가 한 문장으로 말할 수 있다). 계약이 `null`을 0으로 보고 그 사실을
- * `prior_pension_credit_zero_assumed` 가정으로 낸다. 한도가 과소로 나오는 방향이고
- * 과소한 한도는 절세액을 과대로 만들지 않는다.
- */
-export function buildPriorYearTax(form) {
-  if (form.priorTaxState === 'amount') {
-    return {
-      state: 'amount',
-      determined_tax_krw: manwonToWonOrZero(form.priorTaxAmount),
-      pension_credit_applied_krw: null,
-    };
-  }
-  // 아직 답하지 않았으면 계산 자체가 돌지 않는다(필수 항목이다). 그래도 요청을
-  // 만들게 되면 `unknown`을 보낸다 — 접는 방향의 오류가 과대이므로.
-  return { state: 'unknown', determined_tax_krw: null, pension_credit_applied_krw: null };
-}
+// **`buildPriorYearTax`가 여기 있었다**(D39·D40으로 폐기). 계약 3.5절
+// `PriorYearTax`가 `9.0.0`에서 사라졌다 — 소유자가 직전 과세연도 결정세액
+// 입력과 그 문구를 전부 없애라고 지시했고, 세액 한도는 이제 요청이 이미
+// 싣고 있는 `current_year_total_salary_krw`에서 엔진이 직접 산출한다.
 
 /**
  * 계약 3.2절 `annuity_start_status`. **기본값을 `not_started`로 두지 않는다**
@@ -198,7 +176,8 @@ export function buildEngineRequest(form, scenarios) {
     profile: {
       // 생년월일 원본을 그대로 넘긴다. 만 나이 환산은 엔진이 한다(D21).
       birth_date: form.birthDate || null,
-      prior_year_tax: buildPriorYearTax(form),
+      // 9.0.0(D39·D40) — `prior_year_tax`가 요청에서 사라졌다. 세액 한도는
+      // 이제 이 총급여액에서 엔진이 직접 산출한다.
       current_year_total_salary_krw: manwonToWonOrZero(form.currentSalary),
       // 5.0.0(D27) — 공제율 판정 축의 첫 물음은 **필수**다. `false`(또는 아직
       // 답하지 않음)면 두 번째 물음을 보내지 않는다 — 계약이 `false`인데
@@ -394,19 +373,12 @@ export function createStore({ engineClient, analytics, onChange }) {
     analytics.track('input_start', { field_name: fieldName });
   }
 
-  /**
-   * `KnownOrUnknownField`는 **두 값이 한 묶음으로 움직인다**(design-system 5.26절).
-   * 금액을 치면 `모르겠습니다`가 풀리고, `모르겠습니다`를 누르면 금액 칸이
-   * 비워진다 — 값을 남겨 두고 숨기지 않는다. 두 필드를 따로 세팅하면 그 사이에
-   * "금액도 있고 모름도 켜진" 상태가 잠깐 생기고, 그 상태는 계약에 없다.
-   */
-  const COMPOSITE = {
-    priorTax: (v) => ({ priorTaxState: v.state, priorTaxAmount: v.amount ?? '' }),
-  };
-
+  // **`COMPOSITE.priorTax`가 여기 있었다**(D39로 폐기). `KnownOrUnknownField`의
+  // 유일한 용례(직전 과세연도 결정세액)가 없어지면서 두 필드를 한 묶음으로
+  // 움직이던 장치도 함께 없앤다 — 그 형태를 쓰는 필드가 더 없다.
   function setField(name, value, { immediate = false } = {}) {
     reportInputStartIfNeeded(name);
-    const patch = COMPOSITE[name] ? COMPOSITE[name](value) : { [name]: value };
+    const patch = { [name]: value };
     form = { ...form, ...patch };
     validation = validateForm(form);
     notify();

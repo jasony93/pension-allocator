@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { taxCreditHeadlineView, isBoundedHeadline, anyPlanCapApplied, HEADLINE_MODE } from './tax-credit-view.js';
+import { taxCreditHeadlineView, anyPlanCapApplied, HEADLINE_MODE } from './tax-credit-view.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,16 +18,16 @@ function plan({ total = 1188000, beforeCap = 1188000, cap = {} } = {}) {
       pension_credit_total_before_cap_krw: beforeCap,
       credit_eligible_contribution_krw: 9000000,
       tax_liability_cap: {
-        known: true,
         cap_krw: 3000000,
         applied: false,
+        binding_code: 'binding_not_determined',
         reduced_income_tax_krw: 0,
         reduced_local_tax_krw: 0,
         reduced_total_krw: 0,
         threshold_income_tax_krw: 1080000,
         credit_carryforward: false,
         contribution_carryover_available: false,
-        error_direction_code: null,
+        error_direction_code: 'overstated_or_equal',
         basis_rule_ids: ['pension.credit.tax_liability_cap'],
         ...cap,
       },
@@ -40,33 +40,66 @@ test('a plan with room to spare is the plain state — 4.8절이 걸리지 않�
   assert.equal(taxCreditHeadlineView(plan()).mode, HEADLINE_MODE.PLAIN);
 });
 
-test('an unknown cap is the bounded state and carries the engine threshold', () => {
+// 9.0.0(D39·D40) — "모름" 상태가 사라졌다. 한도는 언제나 계산된 값이다.
+test('cap_krw is never null now — the view carries it and the upper-bound flag', () => {
   const view = taxCreditHeadlineView(
-    plan({ cap: { known: false, cap_krw: null, error_direction_code: 'overstated_or_equal', threshold_income_tax_krw: 1080000 } }),
+    plan({ cap: { cap_krw: 1350000, applied: false, error_direction_code: 'overstated_or_equal', binding_code: 'binding_not_determined' } }),
   );
-  assert.equal(view.mode, HEADLINE_MODE.BOUNDED);
-  assert.equal(view.thresholdIncomeTaxKrw, 1080000);
-  assert.equal(view.errorDirectionCode, 'overstated_or_equal');
+  assert.equal(view.mode, HEADLINE_MODE.PLAIN);
+  assert.equal(view.capKrw, 1350000);
+  assert.equal(view.isUpperBound, true);
+  assert.equal(view.directionIndeterminate, false);
 });
 
-test('a cap of exactly zero is the zero state, never the same as unknown', () => {
-  // 계약 10절 — `cap_krw: 0`과 `cap_krw: null`을 같게 다루지 않는다.
-  const zero = taxCreditHeadlineView(plan({ total: 0, beforeCap: 1188000, cap: { cap_krw: 0, applied: true, reduced_total_krw: 1188000 } }));
-  assert.equal(zero.mode, HEADLINE_MODE.ZERO);
-  const unknown = taxCreditHeadlineView(plan({ cap: { known: false, cap_krw: null } }));
-  assert.equal(unknown.mode, HEADLINE_MODE.BOUNDED);
-  assert.notEqual(zero.mode, unknown.mode);
+// D41 — 종합소득이 있는데 금액을 모르면 방향조차 정해지지 않는다. 이 분기에서는
+// binding_code가 언제나 `binding_not_determined`다(applied가 참이어도).
+test('a direction-indeterminate branch never claims the cap is provably binding', () => {
+  const view = taxCreditHeadlineView(
+    plan({
+      total: 500000,
+      beforeCap: 1188000,
+      cap: {
+        cap_krw: 500000,
+        applied: true,
+        error_direction_code: 'direction_indeterminate',
+        binding_code: 'binding_not_determined',
+        reduced_total_krw: 688000,
+      },
+    }),
+  );
+  assert.equal(view.mode, HEADLINE_MODE.REDUCED);
+  assert.equal(view.directionIndeterminate, true);
+  assert.equal(view.isUpperBound, false);
+  assert.equal(view.bindingCode, 'binding_not_determined');
+});
+
+test('a cap of exactly zero is absorbed into the reduced state, not a separate one', () => {
+  // 계약 5.10절 — 총급여 5,000,000원은 상한이자 등식인 검산 좌표다(D40).
+  const zero = taxCreditHeadlineView(
+    plan({
+      total: 0,
+      beforeCap: 1188000,
+      cap: { cap_krw: 0, applied: true, reduced_total_krw: 1188000, binding_code: 'binds_provably' },
+    }),
+  );
+  assert.equal(zero.mode, HEADLINE_MODE.REDUCED);
+  assert.equal(zero.totalKrw, 0);
 });
 
 test('a cap that bit is the reduced state and exposes both the before and the cut amount', () => {
   const view = taxCreditHeadlineView(
-    plan({ total: 900000, beforeCap: 1188000, cap: { cap_krw: 900000, applied: true, reduced_total_krw: 288000, contribution_carryover_available: true } }),
+    plan({
+      total: 900000,
+      beforeCap: 1188000,
+      cap: { cap_krw: 900000, applied: true, reduced_total_krw: 288000, contribution_carryover_available: true, binding_code: 'binds_provably' },
+    }),
   );
   assert.equal(view.mode, HEADLINE_MODE.REDUCED);
   assert.equal(view.totalKrw, 900000);
   assert.equal(view.beforeCapKrw, 1188000);
   assert.equal(view.reducedTotalKrw, 288000);
   assert.equal(view.contributionCarryoverAvailable, true);
+  assert.equal(view.bindingCode, 'binds_provably');
 });
 
 test('the view never subtracts — the cut amount comes from the engine, not from the two totals', () => {
@@ -86,15 +119,14 @@ test('a response without a cap block does not crash the screen', () => {
   const view = taxCreditHeadlineView({ deterministic_benefit: { pension_credit_total_krw: 5 } });
   assert.equal(view.mode, HEADLINE_MODE.PLAIN);
   assert.equal(view.totalKrw, 5);
+  assert.equal(view.capKrw, null);
 });
 
-test('the scenario-level helpers read every plan, because the cut can differ per plan', () => {
+test('the scenario-level helper reads every plan, because the cut can differ per plan', () => {
   // 계약 3.5절 E3 — 잘림은 배분안 단위로 나온다. 첫 안만 보면 놓친다.
   const scenario = { plans: [plan(), plan({ cap: { applied: true } })] };
   assert.equal(anyPlanCapApplied(scenario), true);
   assert.equal(anyPlanCapApplied({ plans: [plan(), plan()] }), false);
-  assert.equal(isBoundedHeadline(plan({ cap: { known: false } })), true);
-  assert.equal(isBoundedHeadline(plan()), false);
 });
 
 test('no tax figure is hardcoded in this module', () => {

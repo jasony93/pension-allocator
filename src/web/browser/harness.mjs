@@ -397,7 +397,7 @@ export const FILL_REQUIRED_FIELDS = `(() => {
   // 계약 5.0.0(D27) — 공제율 판정 축의 첫 물음. 대다수 사용자가 여기(아니오)다.
   document.getElementById('hasNonWageIncome-false').click();
   set('monthlyCapacity', '50');
-  document.getElementById('priorTaxUnknown').click();
+  // 9.0.0(D39) — 「직전 과세연도 결정세액」 입력이 사라졌다. 클릭할 대상이 없다.
   document.getElementById('annuityStarted-false').click();
   document.getElementById('fundUseHorizon-before_pension_age').click();
 })()`;

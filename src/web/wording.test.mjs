@@ -175,51 +175,41 @@ test('the donut centre is the sum of all four slices, not just the three account
 // ---------------------------------------------------------------------------
 
 import {
-  PRIOR_TAX_LABEL,
-  PRIOR_TAX_EFFECT_CAPTION,
   BOUNDED_AMOUNT_PREFIX,
-  boundedDirectionNote,
   capReducedNote,
   CAP_CARRYOVER_NOTE,
-  AMOUNT_CARD_LABEL_ZERO,
+  TAX_CAP_ESTIMATE_NOTE,
   BIRTH_DATE_HELP,
   YOUTH_DECLARED_RANGE_NOTE,
   YOUTH_AGE_UNDETERMINED_LINE,
   YOUTH_DECLARE_LABEL,
   ANNUITY_STARTED_HORIZON_NOTE,
-  SOURCE_GUIDE_ITEMS,
   noticeMessage,
   assumptionMessage,
   comparisonNoteMessage,
   exclusionReasonMessage,
 } from './copy.js';
 
-test('the label for the determined tax is the name on the form, not a colloquial one', () => {
-  // design-system 7.1절 — 사용자가 서류에서 찾아야 하는 값이므로 서류에 적힌
-  // 이름과 같아야 한다. `낼 세금` 같은 구어를 라벨로 쓰지 않는다.
-  assert.equal(PRIOR_TAX_LABEL, '직전 과세연도 결정세액');
-  assert.ok(!/^낼 세금$/.test(PRIOR_TAX_LABEL));
-});
-
-test('the effect caption of the determined tax says what it changes, and is not empty', () => {
-  // R1 — 효과 고지 캡션은 비울 수 없는 슬롯이다.
-  assert.ok(PRIOR_TAX_EFFECT_CAPTION.length > 0);
-  assert.match(PRIOR_TAX_EFFECT_CAPTION, /세액공제/);
-});
+// **직전 과세연도 결정세액의 라벨·효과 캡션을 검증하던 테스트가 여기 있었다**
+// (D39로 폐기). 그 입력·문구가 전부 없어졌다. `SourceGuide`(「이 값을 어디서
+// 찾나요」)를 검증하던 테스트도 함께 사라졌다 — 유일한 용례가 없어졌다.
 
 test('the bounded headline uses 최대 and nothing else as a hedge', () => {
-  // `최대`는 상한 변형에서만 쓰는 유일한 완화어다. `약`·`예상`과 섞어 쓰지 않는다.
+  // `최대`는 ISA 구간 표기에서만 쓰는 유일한 완화어다. `약`·`예상`과 섞어 쓰지 않는다.
   assert.equal(BOUNDED_AMOUNT_PREFIX, '최대');
   for (const banned of ['약', '예상']) {
     assert.ok(!BOUNDED_AMOUNT_PREFIX.includes(banned));
   }
 });
 
-test('the direction note names the threshold and opens in exactly one direction', () => {
-  const note = boundedDirectionNote(1080000);
-  assert.match(note, /1,080,000원/, '임계값이 문장에 있어야 사용자가 나중에 스스로 대조할 수 있다');
-  assert.match(note, /줄어듭니다/);
-  assert.match(note, /늘지는 않습니다/, '방향이 양쪽으로 열리면 상한 표기 자체가 성립하지 않는다');
+test('the tax-cap estimate note always states the direction — it may be less, never more', () => {
+  // D40 — 문구를 줄이라는 지시 한가운데서 늘어난 문장. 상한을 확정값으로
+  // 말하지 않는다는 것이 이 문장의 유일한 일이다.
+  assert.match(TAX_CAP_ESTIMATE_NOTE, /총급여/);
+  assert.match(TAX_CAP_ESTIMATE_NOTE, /적을 수 있습니다/);
+  for (const banned of ['걸리지 않았습니다', '여유가 있습니다', '전액 공제']) {
+    assert.ok(!TAX_CAP_ESTIMATE_NOTE.includes(banned), banned);
+  }
 });
 
 test('the reduced note states the fact and stops before deciding what happens next', () => {
@@ -237,11 +227,9 @@ test('the carryover note never says the money disappears', () => {
   for (const banned of ['사라', '소멸', '없어집니다']) assert.ok(!CAP_CARRYOVER_NOTE.includes(banned), banned);
 });
 
-test('the zero-cap headline puts the verb on the amount, not on the user', () => {
-  // `세액공제로 받을 수 있는 금액이 없습니다`는 주어가 사용자다(P3).
-  assert.equal(AMOUNT_CARD_LABEL_ZERO, '이 배분에서 계산되는 세액공제액');
-  assert.ok(!AMOUNT_CARD_LABEL_ZERO.includes('받'));
-});
+// **`AMOUNT_CARD_LABEL_ZERO`를 검증하던 테스트가 여기 있었다**(D39로 폐기).
+// 세액공제가 0원이 되는 것은 이제 「잘림」 상태의 극단일 뿐이라 별도 라벨이
+// 없다 — `AMOUNT_CARD_LABEL_CREDIT_ONLY`/`_COMPOSITE`를 그대로 쓴다(4.8절).
 
 test('the youth copy never states the user is a youth, and never prints an age', () => {
   for (const line of [YOUTH_DECLARED_RANGE_NOTE, YOUTH_AGE_UNDETERMINED_LINE, YOUTH_DECLARE_LABEL]) {
@@ -252,30 +240,23 @@ test('the youth copy never states the user is a youth, and never prints an age',
   assert.match(YOUTH_DECLARED_RANGE_NOTE, /아직 시행령으로 정해지지 않았습니다/, '②만 빠지면 확정된 것으로 읽힌다');
 });
 
-test('the birth date help promises what the code actually does', () => {
-  assert.match(BIRTH_DATE_HELP, /브라우저 밖으로 나가지 않습니다/);
+test('the birth date help states what the value is used for (12.2(b) — the "does not leave the browser" clause moved to the entry-wide disclosure)', () => {
+  assert.match(BIRTH_DATE_HELP, /만 나이/);
+  assert.ok(BIRTH_DATE_HELP.length < 20, '입력 캡션 하나가 진입 안내·PDF 고지가 이미 말하는 것을 되풀이하지 않는다');
 });
 
 test('the annuity-started note tells a fact and does not tell the user what to do', () => {
   assert.ok(!/하세요|해 주세요|권|추천/.test(ANNUITY_STARTED_HORIZON_NOTE), ANNUITY_STARTED_HORIZON_NOTE);
 });
 
-test('the source guide has the third way out, so it is not a dead end', () => {
-  // ①②만 두면 이 블록이 "가서 찾아오라"는 지시가 되고, 못 찾는 사용자에게는
-  // 막다른 길이다. 세 번째 줄이 그 사용자를 결과로 돌려보낸다(3.8.4절).
-  assert.equal(SOURCE_GUIDE_ITEMS.length, 3);
-  assert.match(SOURCE_GUIDE_ITEMS[2].heading, /지금 확인할 수 없다면/);
-  assert.match(SOURCE_GUIDE_ITEMS[2].body, /모르겠습니다/);
-  for (const banned of ['준비해 주세요', '진단']) {
-    for (const item of SOURCE_GUIDE_ITEMS) assert.ok(!item.body.includes(banned), banned);
-  }
-  // D19 — 자리표시자가 남아 있으면 그 사실이 드러나야 한다.
-  assert.ok(SOURCE_GUIDE_ITEMS.some((i) => i.placeholder), '확정되지 않은 경로가 조용히 확정된 척하고 있다');
-});
+// **`SourceGuide`("이 값을 어디서 찾나요")를 검증하던 테스트가 여기 있었다**
+// (D39로 폐기). 유일한 용례(직전 과세연도 결정세액)가 없어져 그릴 자리가 없다.
 
-test('every code the 4.0.0 contract can send has a sentence — no raw code reaches the screen', () => {
+test('every code the contract can send has a sentence — no raw code reaches the screen', () => {
   const noticeCodes = [
-    'tax_liability_cap_unknown',
+    // 9.0.0(D39·D40·D41) — `tax_liability_cap_unknown`을 대체했다.
+    'tax_liability_cap_estimated_from_total_salary',
+    'tax_liability_cap_direction_indeterminate',
     'tax_liability_cap_zero',
     'tax_liability_cap_applied',
     'pension_contribution_blocked_annuity_started',
@@ -298,7 +279,8 @@ test('every code the 4.0.0 contract can send has a sentence — no raw code reac
   }
   const assumptionCodes = [
     'age_reference_date_not_in_ruleset',
-    'prior_pension_credit_zero_assumed',
+    // 9.0.0(D39) — `prior_pension_credit_zero_assumed`가 사라졌다. 되더할
+    // 입력 자체가 없다.
     'retirement_transfer_counted_in_contribution_limit',
     'deferred_retirement_income_absent_assumed',
     'local_tax_follows_income_tax_cap',
@@ -394,7 +376,6 @@ test('every assumption sentence survives an empty params object without leaving 
   const codes = [
     'months_remaining_defaulted',
     'age_reference_date_not_in_ruleset',
-    'prior_pension_credit_zero_assumed',
     'local_tax_follows_income_tax_cap',
     'deferred_retirement_income_absent_assumed',
     'retirement_transfer_counted_in_contribution_limit',
@@ -430,6 +411,9 @@ test('every assumption sentence survives an empty params object without leaving 
   const noticeCodesForRobustness = [
     'isa_return_estimate_is_not_annual',
     'isa_return_estimate_not_computable',
+    'tax_liability_cap_estimated_from_total_salary',
+    'tax_liability_cap_direction_indeterminate',
+    'tax_liability_cap_zero',
   ];
   for (const code of noticeCodesForRobustness) {
     const text = noticeMessage({ code, params: {} });

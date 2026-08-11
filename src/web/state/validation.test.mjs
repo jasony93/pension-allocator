@@ -20,8 +20,6 @@ function baseForm(overrides = {}) {
     birthDate: '1988-03-15',
     currentSalary: '62000000',
     hasNonWageIncome: false,
-    priorTaxState: 'amount',
-    priorTaxAmount: '3000000',
     annuityStarted: false,
     fundUseHorizon: 'unknown',
     monthlyCapacity: '800000',
@@ -40,11 +38,12 @@ test('a fully valid core form is ready to compute', () => {
   const result = validate(baseForm());
   assert.equal(result.readyToCompute, true);
   assert.equal(result.hasErrors, false);
-  // 분모는 5.0.0(D27)에서 6에서 7이 됐다 — 생년월일 · 총급여액 · 근로소득 외
-  // 다른 종합소득 여부 · 결정세액 · 월 납입 여력 · 연금 수령 여부 · 자금 사용
-  // 시점(screens.md 3.6절).
-  assert.equal(result.requiredFilledCount, 7);
-  assert.equal(result.requiredTotal, 7);
+  // 분모는 5.0.0(D27)에서 6이 됐고(D27의 첫 물음이 추가), 9.0.0(D39)에서
+  // 「직전 과세연도 결정세액」이 빠지면서도 여전히 여섯이다 — 생년월일 ·
+  // 총급여액 · 근로소득 외 다른 종합소득 여부 · 월 납입 여력 · 연금 수령
+  // 여부 · 자금 사용 시점(screens.md 3.6절).
+  assert.equal(result.requiredFilledCount, 6);
+  assert.equal(result.requiredTotal, 6);
 });
 
 test('missing any of the core fields blocks computation without erroring the others', () => {
@@ -101,41 +100,15 @@ test('validation never derives an age — the reference date is a tax judgement 
   }
 });
 
-// --- 직전 과세연도 결정세액 (screens.md 3.8절) -------------------------------
+// **직전 과세연도 결정세액을 검증하던 테스트 블록이 여기 있었다**(D39로
+// 폐기). 소유자 지시로 그 입력 자체가 없어졌다 — 빈/모름 상태 구분, 총급여
+// 초과 확인 요청 모두 물을 필드가 없어 성립하지 않는다. 법정 한도는 이제
+// `pension.credit.tax_liability_cap.current_year_estimate`가 총급여액에서
+// 산출하고, 그 계산은 화면이 아니라 엔진의 책임이다(D40) — `mock-engine.js`가
+// `resolveTaxLiabilityCapMock`으로 이 계산을 옮겨 적었다.
 
-test('blank and unknown are different states — blank blocks, unknown computes', () => {
-  const blank = validate(baseForm({ priorTaxState: null, priorTaxAmount: '' }));
-  assert.equal(blank.readyToCompute, false, '비어 있는 것을 모름으로 간주하면 침묵에서 답을 추론하는 것이다(D14)');
-  assert.ok(!blank.errors.priorTaxAmount, '빈 상태는 오류가 아니다 — 체크리스트가 말한다');
-
-  const unknown = validate(baseForm({ priorTaxState: 'unknown', priorTaxAmount: '' }));
-  assert.equal(unknown.readyToCompute, true, '모름은 결과를 막지 않는다');
-});
-
-test('zero is a valid answer and is not the same as unknown', () => {
-  const zero = validate(baseForm({ priorTaxState: 'amount', priorTaxAmount: '0' }));
-  assert.equal(zero.readyToCompute, true);
-  assert.equal(zero.hasErrors, false);
-});
-
-test('a negative determined tax is an error; a decimal one is not — 만원 단위는 소수를 허용한다(6절)', () => {
-  assert.equal(validate(baseForm({ priorTaxAmount: '-1' })).errors.priorTaxAmount.code, 'negative');
-  // '3.5'만원 = 35,000원 — 만원으로 딱 떨어지지 않는 결정세액을 반올림 없이
-  // 받기 위한 것이므로 오류가 아니다.
-  assert.equal(validate(baseForm({ priorTaxAmount: '3.5' })).errors.priorTaxAmount, undefined);
-  assert.equal(validate(baseForm({ priorTaxAmount: 'abc' })).errors.priorTaxAmount.code, 'not_integer');
-  // 소수 넷째 자리(1원)까지만 받는다 — 다섯째 자리부터는 원 단위보다 잘게
-  // 쪼개는 것이라 의미가 없다.
-  assert.equal(validate(baseForm({ priorTaxAmount: '3.55555' })).errors.priorTaxAmount.code, 'too_precise');
-});
-
-test('a determined tax above the salary is a confirmation request, not a block', () => {
-  // 차단이 아니라 확인 요청이다(3.8.3절) — 이론적으로 불가능하다고 단정할 근거를
-  // 화면이 갖고 있지 않으므로 계산은 진행한다.
-  const result = validate(baseForm({ currentSalary: '10000000', priorTaxAmount: '20000000' }));
-  assert.equal(result.readyToCompute, true);
-  assert.ok(!result.errors.priorTaxAmount);
-  assert.equal(result.warnings.priorTaxAmount.code, 'exceeds_salary');
+test('CORE_REQUIREMENTS no longer asks for a prior-year determined tax', () => {
+  assert.ok(!CORE_REQUIREMENTS.some((r) => r.key === 'priorTax'));
 });
 
 // --- 현재 연금 수령 여부 (screens.md 3.10.1절) -------------------------------

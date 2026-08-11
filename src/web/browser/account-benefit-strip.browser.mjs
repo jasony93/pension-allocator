@@ -33,7 +33,9 @@ before(async () => {
   // 기다리는 것과 같은 이유다). 그래서 단계마다 라운드트립을 나눈다.
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await sleep(150);
-  await page.evaluate(SET('priorTaxAmount', '50')); // cap_below_ceiling을 실제로 보이게 한다
+  // 9.0.0(D39·D40) — 세액 한도는 이제 총급여액에서 계산된다. 낮은 총급여로
+  // 한도를 낮춰 `cap_below_ceiling`(및 `binds_provably`)을 실제로 보이게 한다.
+  await page.evaluate(SET('currentSalary', '2000'));
   await sleep(150);
   await page.evaluate(SET('monthlyCapacity', '150'));
   await sleep(150);
@@ -90,6 +92,10 @@ const MEASURE = `(() => {
     confirmedTrackRect: rect(confirmedTrack),
     confirmedFillRect: rect(confirmedFill),
     assumptionTrackRects: assumptionTracks.map(rect),
+    // 막대 없이 숫자만 내는 행(법정 상한 없음). 트랙 개수만 세면 "하나가
+    // 실수로 안 그려진 것"과 구분되지 않으므로 이 행이 실제로 있는지 함께 센다.
+    noCeilingRowCount: [...document.querySelectorAll('.benefit-axis-assumption *')]
+      .filter((e) => e.children.length === 0 && /법정 상한 없음/.test(e.textContent ?? '')).length,
     dividerRect: rect(divider),
     stripBackground: cs ? cs.backgroundColor : null,
     stripBorderColor: cs ? cs.borderColor : null,
@@ -100,6 +106,9 @@ const MEASURE = `(() => {
     c2AccountNameFontSize: c2AccountName ? getComputedStyle(c2AccountName).fontSize : null,
     referenceRowCount: document.querySelectorAll('.benefit-reference-table tbody tr').length,
     axisCaptions: [...document.querySelectorAll('.benefit-axis-caption')].map((e) => e.textContent),
+    // 축 **안의 모든 글자.** 캡션이 행으로 합쳐지든 다시 갈라지든 같은 것을 문다.
+    confirmedAxisText: (document.querySelector('.benefit-axis-confirmed') || {}).textContent || '',
+    assumptionAxisText: (document.querySelector('.benefit-axis-assumption') || {}).textContent || '',
     // 관리자가 지목한 두 번째 결함 — .benefit-row-body가 flex column인데
     // align-items 기본값이 stretch라 이 칩이 트랙 전체 폭으로 늘어났었다.
     assumptionChipRect: rect(assumptionChip),
@@ -153,13 +162,43 @@ test('두 축이 실제로 다른 배율을 쓴다 — 트랙 길이는 같아�
   const m = await page.evaluate(MEASURE);
   assert.ok(m.dividerRect.width > 0, '두 축 사이 구분선이 실제로 렌더되지 않았습니다');
   assert.ok(m.confirmedTrackRect.width > 0, '확정 축 트랙이 렌더되지 않았습니다');
-  assert.ok(m.assumptionTrackRects.length >= 2, '가정 축 트랙(ISA 비과세·저율분리)이 둘 이상이어야 합니다');
+  // **D38 7번으로 바뀐 자리다.** 여기는 원래 "가정 축 트랙이 둘 이상"을
+  // 요구했다 — 비과세와 저율분리 둘 다 막대를 가졌기 때문이다. 저율분리분에는
+  // 법정 상한이 없다는 것이 조문에서 확인되어(초과분에 뚜껑을 두는 문언이 없다)
+  // **그 행의 막대를 없앴다.** 분모가 없는 값에 트랙-채움 비율을 그리면 그
+  // 막대가 분모를 지어낸다.
+  //
+  // 그래서 이 검사는 개수를 **줄이지 않고 뒤집는다** — 트랙이 정확히 하나인
+  // 것만으로는 "실수로 하나가 안 그려진 것"과 구분되지 않으므로, 상한 없는
+  // 행이 **실제로 그 자리에 있으면서 막대만 없다는 것**을 함께 문다.
+  assert.equal(m.assumptionTrackRects.length, 1, `가정 축 트랙은 비과세 하나뿐이어야 한다(실측 ${m.assumptionTrackRects.length}개)`);
   for (const t of m.assumptionTrackRects) assert.ok(t.width > 0, '가정 축 트랙이 0폭이면 안 됩니다');
+  assert.ok(m.noCeilingRowCount >= 1, '법정 상한이 없는 행이 화면에서 사라졌습니다 — 막대를 없앤 것이지 행을 없앤 것이 아니다');
 
-  // 확정 축 캡션이 실제 원화 금액(지방소득세 포함 표기)을 담고 있는지 실측.
-  assert.match(m.axisCaptions[0], /세액공제 최대 한도 [\d,]+원\(소득세 [\d,]+원 \+ 지방소득세 [\d,]+원\)/, `확정 축 캡션: "${m.axisCaptions[0]}"`);
-  // 가정 축 캡션이 기간+조건절을 담고 있는지 실측(D36).
-  assert.match(m.axisCaptions[1], /\d+년 동안, 수익률이 연 [\d.]+%라면/, `가정 축 캡션: "${m.axisCaptions[1]}"`);
+  // **자리로 세지 않고 내용으로 센다.** 이 검사는 원래 `axisCaptions[0]`이
+  // 확정 축이라고 전제했는데, D38 2번이 확정 축 캡션을 「최대 ○ 중 ○」 한 줄로
+  // 행에 합치면서 그 자리에서 사라졌다. 그러자 [0]이 가정 축 캡션을 가리켰고
+  // 검사는 **엉뚱한 문자열을 확정 축이라 부르며** 실패했다.
+  //
+  // 자리는 설계가 바뀔 때마다 움직인다. 문장이 **어느 축 안에** 있는지를 물으면
+  // 합치든 나누든 같은 것을 문다.
+  assert.match(
+    m.confirmedAxisText,
+    /세액공제 최대 한도 [\d,]+원\(소득세 [\d,]+원 \+ 지방소득세 [\d,]+원\)/,
+    `확정 축에 지방소득세 분해 표기가 없다(D37): "${m.confirmedAxisText.slice(0, 160)}"`,
+  );
+  // 가정 축은 기간과 조건절을 함께 져야 한다(D36·D39) — 「가정 기반」 칩을
+  // 지운 승인이 이 둘에 걸려 있으므로, 하나라도 사라지면 여기서 걸린다.
+  assert.match(
+    m.assumptionAxisText,
+    /\d+년 동안, 수익률이 연 [\d.]+%라면/,
+    `가정 축에 기간·조건절이 없다: "${m.assumptionAxisText.slice(0, 160)}"`,
+  );
+  assert.match(
+    m.assumptionAxisText,
+    /\d+년 계약 전체에서/,
+    `ISA 비과세 축에 「계약 전체」가 없다 — 옆의 연간 축과 나란히 놓여 오독이 난다: "${m.assumptionAxisText.slice(0, 200)}"`,
+  );
 });
 
 test('연금 참고 구역이 일곱 행을 전부 낸다(D37 3번 — 자르지 않는다)', { skip: skipWithoutChrome }, async () => {
@@ -236,28 +275,38 @@ test('트랙 굵기는 12px다 — D33의 6px(취소된 지시의 잔재)로 되
   );
 });
 
-test('가정 축의 「가정 기반」 칩이 트랙 전체 폭으로 늘어나지 않는다(align-items: stretch 결함)', { skip: skipWithoutChrome }, async () => {
-  // 관리자가 스크린샷에서 잡은 결함 — `.benefit-row-body`가 flex column인데
-  // `align-items` 기본값 stretch 때문에 `display: inline-block` 칩이 행
-  // 전체 폭으로 늘어나 옅은 파란 사각형이 트랙을 덮고, 그 아래 가는 outline
-  // 막대보다 더 크고 확실해 보였다 — D28이 막으려던 것(가정이 확정보다
-  // 확실해 보임)을 정확히 뒤집는다.
+// **「가정 기반」 칩의 align-items: stretch 결함을 재던 테스트가 여기 있었다.**
+// [2026-08-11 D39 §2로 폐기] 소유자 지시("「가정기반」이라는 문구 없애줘")로
+// `ISA_RETURN_ASSUMPTION_CHIP_LABEL` 칩 자체를 지웠다(design-system 5.31.5절) —
+// 빗금(`benefitMeter`의 `assumption` 등급)과 가정 축 조건절이 이미 같은 뜻을
+// 진다. 칩이 없으니 늘어날 칩도 없다. **같은 부모(`.benefit-row-body`)의
+// align-items: stretch 결함이 남은 자리**(`.benefit-row-info-chip`, D36 —
+// `favorable_zero`일 때만 렌더된다)는 이 실측 픽스처의 ISA 입력으로는
+// 재현되지 않아 이번 회차에서 다시 걸지 못했다. 다음 회차에 그 상태를 만드는
+// 픽스처가 필요하다.
+test('가정 축에 「가정 기반」 칩이 더 이상 렌더되지 않는다(D39 §2)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await setViewport(page, 1440, 1400);
   const m = await page.evaluate(MEASURE);
-  assert.ok(m.assumptionChipRect, '「가정 기반」 칩을 찾지 못했습니다');
-  assert.ok(m.assumptionTrackForChipRect, '가정 축 트랙을 찾지 못했습니다');
-  assert.ok(
-    m.assumptionChipRect.width < m.assumptionTrackForChipRect.width * 0.5,
-    `칩 폭(${m.assumptionChipRect.width}px)이 트랙 폭(${m.assumptionTrackForChipRect.width}px)의 절반을 넘으면 늘어난 것이다 — 칩은 자기 글자 폭만 차지해야 한다`,
-  );
+  assert.equal(m.assumptionChipRect, null, '「가정 기반」 칩이 지워졌어야 하는데 여전히 렌더되고 있다');
 });
 
-test('헤더 위계가 C-2 계좌명과 같은 등급이다(D33 장치①)', { skip: skipWithoutChrome }, async () => {
+// **D33이 세웠던 「C-2 계좌명과 같은 등급」은 「반 사이즈로」 지시에서 나온
+// 것이고, 소유자가 그 지시를 취소했다(D35).** 그 뒤에도 같은 신고가 이어져
+// 실측해 보니, 그때의 강등은 17px→16px로 **거의 보이지 않는 차이**였고 진짜
+// 결함은 금액·계좌명이 C-2의 같은 자리보다 약한 것이었다(D38 4번).
+//
+// 그래서 이 검사는 「같아야 한다」를 「위여야 한다」로 뒤집는다. 같은 크기로
+// 되돌리는 회귀를 여기서 잡는다.
+test('헤더 위계가 C-2 계좌명보다 위다(D38 4번 — D33 장치①을 뒤집었다)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await setViewport(page, 1440, 1400);
   const m = await page.evaluate(MEASURE);
   assert.ok(m.c2AccountNameFontSize, 'C-2 계좌명 요소를 찾지 못했습니다');
-  assert.equal(m.headerFontSize, m.c2AccountNameFontSize, `헤더(${m.headerFontSize})가 C-2 계좌명(${m.c2AccountNameFontSize})과 같은 크기여야 한다`);
+  const px = (s) => Number.parseFloat(s);
+  assert.ok(
+    px(m.headerFontSize) > px(m.c2AccountNameFontSize),
+    `헤더(${m.headerFontSize})가 C-2 계좌명(${m.c2AccountNameFontSize})보다 커야 한다`,
+  );
   assert.equal(m.headerFontWeight, '600', '헤더는 굵게(strong)여야 한다');
 });

@@ -176,7 +176,6 @@ const SECRETS = {
   생년: '1988',
   월일: '03-15',
   총급여액: '62000000',
-  직전과세연도결정세액: '3141592',
   월납입여력: '812345',
   자금사용시점: 'within_isa_lock_in',
   ISA누적납입액: '17654321',
@@ -214,7 +213,7 @@ test('nothing the user typed reaches the wire — every new 4.0.0 input included
   const store = createStore({ engineClient, analytics, onChange: () => {} });
   store.setField('birthDate', SECRETS.생년월일);
   store.setField('currentSalary', SECRETS.총급여액);
-  store.setField('priorTax', { state: 'amount', amount: SECRETS.직전과세연도결정세액 });
+  // 9.0.0(D39) — `profile.prior_year_tax`가 사라졌다. 그 물음 자체가 없다.
   store.setField('monthlyCapacity', SECRETS.월납입여력);
   store.setField('annuityStarted', true);
   store.setField('declaredYouth', true);

@@ -4,7 +4,6 @@ import {
   createStore,
   buildEngineRequest,
   initialForm,
-  buildPriorYearTax,
   annuityStartStatus,
   buildIsaReturnAssumption,
   ASSUMPTION_BASED_ISA_ESTIMATE_DISPLAY,
@@ -12,12 +11,14 @@ import {
 import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 /**
- * **목이 계약 4.0.0을 따르는지가 이 파일의 전제다.** 목이 낡으면 테스트가
+ * **목이 계약을 따르는지가 이 파일의 전제다.** 목이 낡으면 테스트가
  * 통과해도 아무것도 증명하지 않는다 — 실제 페이지는 `schema_version_mismatch`로
  * 멈춰 있는데 테스트만 초록이 되는 상태가 정확히 그것이었다. 그래서 아래
- * `fakeScenario`는 계약 5절의 새 필드(`pension_credit_tax_liability_cap`,
+ * `fakeScenario`는 계약 5절의 필드(`pension_credit_tax_liability_cap`,
  * `pension_withdrawal_start`, `DeterministicBenefit`의 자르기 전 금액)를 전부
- * 갖고 있고, `fakeEngine`은 **요청이 계약 4.0.0인지 스스로 확인한다.**
+ * 갖고 있고, `fakeEngine`은 **요청이 계약이 아는 major인지 스스로 확인한다.**
+ * 9.0.0(D39·D40)부터 `pension_credit_tax_liability_cap`은 총급여액에서 계산한
+ * 상한이다 — `known`이 없고 `cap_krw`는 결코 `null`이 아니다.
  */
 
 function fakeEngine({ compute, computeFundUseHorizonBoundaries } = {}) {
@@ -43,16 +44,18 @@ function okResponse(overrides = {}) {
 
 export function fakeTaxLiabilityCap(overrides = {}) {
   return {
-    known: true,
     cap_krw: 3000000,
     applied: false,
+    // D40 — 자르지 않은 상태는 아무것도 증명하지 못한다. `binds_provably`는
+    // `applied && isUpperBound`일 때만이다(계약 8.7절).
+    binding_code: 'binding_not_determined',
     reduced_income_tax_krw: 0,
     reduced_local_tax_krw: 0,
     reduced_total_krw: 0,
     threshold_income_tax_krw: 1080000,
     credit_carryforward: false,
     contribution_carryover_available: false,
-    error_direction_code: null,
+    error_direction_code: 'overstated_or_equal',
     basis_rule_ids: ['pension.credit.tax_liability_cap'],
     ...overrides,
   };
@@ -112,14 +115,22 @@ export function fakeScenario(overrides = {}) {
       retirement_transfer_in_krw: 0,
       basis_rule_ids: [],
     },
+    // 9.0.0(D39·D40) — 총급여액에서 산출한 상한. `cap_krw`는 결코 `null`이 아니다.
     pension_credit_tax_liability_cap: {
-      known: true,
       cap_krw: 3000000,
-      determined_tax_krw: 3000000,
-      prior_pension_credit_krw: 0,
-      source_code: 'determined_tax_add_back',
-      declared_nonzero: true,
-      error_direction_code: null,
+      basis_code: 'current_year_total_salary',
+      branch_code: 'wage_income_only',
+      error_direction_code: 'overstated_or_equal',
+      is_upper_bound: true,
+      is_exact: false,
+      measured_total_salary_krw: 62000000,
+      measured_global_income_krw: null,
+      wage_income_deduction_krw: 0,
+      wage_income_amount_krw: 0,
+      basic_deduction_krw: 1500000,
+      tax_base_krw: 0,
+      computed_tax_krw: 0,
+      wage_income_credit_krw: 0,
       credit_carryforward: false,
       basis_rule_ids: [],
     },
@@ -164,20 +175,19 @@ function validForm(store) {
   store.setField('birthDate', '1988-03-15');
   store.setField('currentSalary', '62000000');
   store.setField('hasNonWageIncome', false);
-  store.setField('priorTax', { state: 'unknown', amount: '' });
   store.setField('monthlyCapacity', '800000');
   store.setField('annuityStarted', false);
   store.setField('fundUseHorizon', 'unknown');
 }
 
 // ---------------------------------------------------------------------------
-// 계약 4.0.0 — 요청의 형태
+// 계약 — 요청의 형태
 // ---------------------------------------------------------------------------
 
 test('the request carries the contract version the engine actually supports', () => {
   const req = buildEngineRequest(initialForm(), ['current']);
   assert.equal(req.schema_version, SCHEMA_VERSION);
-  assert.equal(SCHEMA_VERSION.split('.')[0], '8', '계약이 8.0.0(major)으로 올랐다(0.12·0.13절 — 월 환산 잔차 이탈 상한의 서술 정정)');
+  assert.equal(SCHEMA_VERSION.split('.')[0], '9', '계약이 9.0.0(major)으로 올랐다(D39·D40 — 세액 한도를 총급여액에서 산출)');
 });
 
 test('the request sends the raw birth date and no derived age at all (D21)', () => {
@@ -189,32 +199,13 @@ test('the request sends the raw birth date and no derived age at all (D21)', () 
   assert.ok(!JSON.stringify(req).includes('age_years'));
 });
 
-test('prior-year tax is sent as an explicit state, never inferred from a blank field', () => {
-  // 폼의 결정세액은 만원 단위다(소유자 지시, 6절) — `buildPriorYearTax`가
-  // 원 단위로 바꿔 계약에 싣는다.
-  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '300' }), {
-    state: 'amount',
-    determined_tax_krw: 3000000,
-    pension_credit_applied_krw: null,
-  });
-  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'unknown', priorTaxAmount: '' }), {
-    state: 'unknown',
-    determined_tax_krw: null,
-    pension_credit_applied_krw: null,
-  });
-  // `0`은 유효한 값이고 `모름`과 다르다(계약 3.5절).
-  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '0' }), {
-    state: 'amount',
-    determined_tax_krw: 0,
-    pension_credit_applied_krw: null,
-  });
-  // 결정세액은 만원으로 딱 떨어지지 않을 수 있다(예: 1,234,567원) — 소수
-  // 넷째 자리(1원)까지 정확히 원 단위로 변환된다. 반올림이 없다.
-  assert.deepEqual(buildPriorYearTax({ priorTaxState: 'amount', priorTaxAmount: '123.4567' }), {
-    state: 'amount',
-    determined_tax_krw: 1234567,
-    pension_credit_applied_krw: null,
-  });
+// **`buildPriorYearTax`를 검증하던 테스트가 여기 있었다**(D39로 폐기). 소유자
+// 지시로 직전 과세연도 결정세액 입력을 없앴다 — `profile.prior_year_tax`가
+// 요청에서 사라졌고 `store.js`의 `buildPriorYearTax`도 함께 지워졌다.
+
+test('the request no longer carries prior_year_tax at all', () => {
+  const req = buildEngineRequest(initialForm(), ['current']);
+  assert.ok(!('prior_year_tax' in req.profile), '9.0.0에서 이 필드는 계약에서 사라졌다');
 });
 
 test('annuity_start_status never defaults to not_started', () => {
@@ -415,7 +406,9 @@ test('starts blank and moves to input_incomplete as soon as one field is touched
   assert.equal(store.getState().status, 'input_incomplete');
 });
 
-test('never calls compute until all seven core fields are valid, then computes on the trailing field', async () => {
+test('never calls compute until all six core fields are valid, then computes on the trailing field', async () => {
+  // 9.0.0(D39) — 직전 과세연도 결정세액 항목이 분모에서 빠지면서 일곱에서
+  // 여섯으로 줄었다.
   let calls = 0;
   let seen = null;
   const engine = fakeEngine({
@@ -429,19 +422,17 @@ test('never calls compute until all seven core fields are valid, then computes o
   store.setField('birthDate', '1988-03-15');
   store.setField('currentSalary', '62000000');
   store.setField('hasNonWageIncome', false);
-  store.setField('priorTax', { state: 'unknown', amount: '' });
   store.setField('monthlyCapacity', '800000');
   store.setField('annuityStarted', false);
-  assert.equal(calls, 0, '일곱 항목이 다 차기 전에는 계산하지 않는다');
+  assert.equal(calls, 0, '여섯 항목이 다 차기 전에는 계산하지 않는다');
   store.setField('fundUseHorizon', 'unknown', { immediate: true });
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(calls, 1);
   assert.equal(store.getState().status, 'result');
-  assert.equal(seen.profile.prior_year_tax.state, 'unknown');
   assert.equal(seen.profile.has_non_wage_global_income_current_year, false);
 });
 
-test('the unknown determined tax still produces a result — it does not block the screen', async () => {
+test('a minimally valid form produces a result — no field is left blocking the screen', async () => {
   const store = createStore({ engineClient: fakeEngine(), analytics: fakeAnalytics(), onChange: () => {} });
   validForm(store);
   store.flush();
@@ -549,7 +540,6 @@ test('reset() returns to blank and clears the cached result', async () => {
   assert.equal(store.getState().result, null);
   assert.equal(store.getState().form.fundUseHorizon, null);
   assert.equal(store.getState().form.birthDate, '');
-  assert.equal(store.getState().form.priorTaxState, null);
   assert.equal(store.getState().form.annuityStarted, null);
 });
 
@@ -592,7 +582,6 @@ test('no analytics event ever carries a value the user typed', async () => {
   const store = createStore({ engineClient: fakeEngine(), analytics, onChange: () => {} });
   store.setField('birthDate', '1988-03-15');
   store.setField('currentSalary', '62000000');
-  store.setField('priorTax', { state: 'amount', amount: '3141592' });
   store.setField('monthlyCapacity', '800000');
   store.setField('annuityStarted', true);
   store.setField('declaredYouth', true);
@@ -602,7 +591,7 @@ test('no analytics event ever carries a value the user typed', async () => {
   store.reportAlternativeClick();
 
   const serialized = JSON.stringify(analytics.events);
-  for (const secret of ['1988-03-15', '1988', '03-15', '62000000', '3141592', '800000', 'within_isa_lock_in']) {
+  for (const secret of ['1988-03-15', '1988', '03-15', '62000000', '800000', 'within_isa_lock_in']) {
     assert.ok(!serialized.includes(secret), `계측 이벤트에 입력값이 실렸다: ${secret}\n${serialized}`);
   }
   assert.ok(!serialized.includes('declaredYouth'), serialized);

@@ -26,27 +26,21 @@ import {
   BIRTH_DATE_LABEL,
   BIRTH_DATE_PLACEHOLDER,
   BIRTH_DATE_HELP,
-  PRIOR_TAX_LABEL,
-  PRIOR_TAX_UNKNOWN_LABEL,
-  PRIOR_TAX_EFFECT_CAPTION,
   HAS_NON_WAGE_INCOME_LABEL,
   HAS_NON_WAGE_INCOME_HELP,
   GLOBAL_INCOME_LABEL,
   GLOBAL_INCOME_HELP,
-  SOURCE_GUIDE_TRIGGER,
-  SOURCE_GUIDE_ITEMS,
-  SOURCE_GUIDE_PLACEHOLDER_NOTICE,
   ANNUITY_START_LABEL,
   ANNUITY_START_EFFECT_CAPTION,
   ANNUITY_STARTED_HORIZON_NOTE,
   FINANCIAL_INCOME_LABEL,
   FINANCIAL_INCOME_EFFECT_CAPTION,
   YOUTH_BLOCK_TITLE,
+  YOUTH_BLOCK_TRIGGER,
   YOUTH_DECLARE_LABEL,
   YOUTH_AGE_UNDETERMINED_LINE,
   YOUTH_SCENARIO_SCOPE_CAPTION,
   YOUTH_DECLARED_RANGE_NOTE,
-  WITHHOLDING_RECEIPT_DIVIDER,
   PROPOSED_BADGE_LABEL,
   RESET_CONFIRM_TITLE,
   RESET_CONFIRM_BODY,
@@ -70,9 +64,6 @@ import { openConfirm } from './modal.js';
 import { formatYears, formatKrw } from '../format.js';
 import { isWithinYouthAgeRange } from '../engine/provisional-rules.js';
 import { parseManwonToWon, ISA_INCOME_CHARACTERS } from '../state/validation.js';
-
-/** `SourceGuide`는 한 번 펼치면 그 세션 동안 펼침 상태를 유지한다(design-system 5.27절). */
-let sourceGuideOpen = false;
 
 /**
  * `showMissing`는 **조건부 필수 항목에만** 켠다.
@@ -304,87 +295,13 @@ function birthDateField({ value, error, onInput, onBlur, renderGuard }) {
   ]);
 }
 
-/** `SourceGuide` — 인라인 확장. 모달·툴팁이 아니다(design-system 5.27절). */
-function sourceGuide() {
-  const items = SOURCE_GUIDE_ITEMS.map((item) =>
-    el('li', {}, [
-      el('span', { class: 'source-guide-heading' }, [item.heading]),
-      el('span', { class: 'source-guide-body' }, [item.body]),
-      // D19 — 미설정 상태는 조용하면 안 된다. 자리표시자가 남아 있으면 개발
-      // 빌드가 그 사실을 드러낸다.
-      item.placeholder ? el('span', { class: 'source-guide-placeholder' }, [SOURCE_GUIDE_PLACEHOLDER_NOTICE]) : null,
-    ]),
-  );
-  return el(
-    'details',
-    {
-      class: 'source-guide',
-      open: sourceGuideOpen,
-      ontoggle: (e) => {
-        sourceGuideOpen = e.target.open;
-      },
-    },
-    [el('summary', { class: 'source-guide-trigger' }, [SOURCE_GUIDE_TRIGGER]), el('ul', {}, items)],
-  );
-}
-
-/**
- * `KnownOrUnknownField` — 값 또는 "모름"(design-system 5.26절).
- *
- * **금액 칸과 `모르겠습니다`는 배타적이다.** 금액을 치면 `모르겠습니다`가 풀리고,
- * `모르겠습니다`를 누르면 금액 칸이 **비워진다** — 값을 남겨 두고 숨기지 않는다.
- * **기본 선택이 없다.** `모르겠습니다`도 사용자가 눌러야 선택된다.
- */
-function priorTaxField({ form, errors, warnings, store, renderGuard }) {
-  const isUnknown = form.priorTaxState === 'unknown';
-  const error = fieldError(errors, 'priorTaxAmount');
-  const warning = warnings.priorTaxAmount?.message ?? null;
-
-  const amountInput = el('input', {
-    id: 'priorTaxAmount',
-    class: `field-input${error ? ' field-input-error' : warning ? ' field-input-warning' : ''}`,
-    type: 'text',
-    // **결정세액도 다른 금액과 같은 만원 단위다** — 예외를 두지 않는다. 결정세액은
-    // 만원으로 딱 떨어지지 않는 게 정상이라(예: 1,234,567원) 소수 넷째 자리(1원)
-    // 까지 받는 `parseManwonToWon`이 그 문제를 정확히 해결한다: 반올림 없이
-    // "123.4567"로 받으면 그대로 1,234,567원이 된다. 그래서 결정세액만 원 단위로
-    // 남기거나 내림·오차방향 안내를 따로 만들지 않았다 — 보고에 근거를 남긴다.
-    inputmode: 'decimal',
-    autocomplete: 'off',
-    value: isUnknown ? '' : form.priorTaxAmount,
-    'aria-invalid': Boolean(error),
-    'aria-describedby': error ? 'priorTaxAmount-error' : warning ? 'priorTaxAmount-warning' : 'priorTaxAmount-effect',
-    oninput: (e) => store.setField('priorTax', { state: 'amount', amount: e.target.value }),
-    onblur: () => {
-      if (!renderGuard?.active) store.flush();
-    },
-  });
-
-  const unknownOption = el(
-    'button',
-    {
-      type: 'button',
-      role: 'radio',
-      id: 'priorTaxUnknown',
-      'aria-checked': isUnknown,
-      class: `known-unknown-option${isUnknown ? ' known-unknown-option-selected' : ''}`,
-      onclick: () => store.setField('priorTax', { state: 'unknown', amount: '' }, { immediate: true }),
-    },
-    [el('span', { class: 'known-unknown-dot', 'aria-hidden': 'true' }, [isUnknown ? '●' : '○']), PRIOR_TAX_UNKNOWN_LABEL],
-  );
-
-  return el('div', { class: 'field known-unknown-field' }, [
-    el('label', { for: 'priorTaxAmount', class: 'field-label' }, [PRIOR_TAX_LABEL]),
-    el('div', { class: 'field-control' }, [amountInput, el('span', { class: 'field-suffix' }, ['만원'])]),
-    wonPreviewNode(isUnknown ? '' : form.priorTaxAmount, error),
-    el('div', { class: 'known-unknown-group', role: 'radiogroup', 'aria-label': PRIOR_TAX_LABEL }, [unknownOption]),
-    error ? el('p', { id: 'priorTaxAmount-error', class: 'field-error-msg', role: 'alert' }, [error]) : null,
-    warning && !error ? el('p', { id: 'priorTaxAmount-warning', class: 'field-warning-msg', role: 'status' }, [warning]) : null,
-    // 효과 고지 캡션 — **비울 수 없는 슬롯**(R1).
-    el('p', { id: 'priorTaxAmount-effect', class: 'field-help' }, [PRIOR_TAX_EFFECT_CAPTION]),
-    sourceGuide(),
-  ]);
-}
+// **`sourceGuide()`·`priorTaxField()`가 여기 있었다** [2026-08-11 D39로 폐기].
+// 소유자 지시로 직전 과세연도 결정세액 입력·문구를 전부 없앴다 — 그 물음
+// 자체가 없으므로 `SourceGuide`("이 값을 어디서 찾나요")도 `KnownOrUnknownField`
+// 입력도 그릴 대상이 없다. 컴포넌트가 쓰던 클래스(`.source-guide`·
+// `.known-unknown-field` 등)는 `styles.css`에 남아 있을 수 있으나 여기서
+// 부르는 자리는 없다. 법정 한도 자체는 사라지지 않는다 — 엔진이 총급여액에서
+// 직접 산출한다(`resolveTaxLiabilityCapMock`, D40).
 
 /**
  * 청년 자기신고 — `screens.md` 3.9절의 B-1.
@@ -398,6 +315,13 @@ function priorTaxField({ form, errors, warnings, store, renderGuard }) {
  * 그 줄에도 숫자는 없고, 룰셋의 값은 **해당 여부를 판정하는 데만** 쓰인다.
  * 시행령이 공개돼 룰셋에 값이 들어오면 그날 저절로 켜진다.
  */
+/** 청년 우대 블록은 한 번 펼치면 그 세션 동안 펼침 상태를 유지한다(옛 `SourceGuide`와 같은 규약). */
+let youthBlockOpen = false;
+
+/**
+ * [2026-08-11 D39 §2] 기본 접힘 `<details>` 안에 둔다(screens.md 3.9.3.1절).
+ * **펼치면 안의 내용은 그대로다** — 바뀌는 것은 기본 상태(펼침 → 접힘)뿐이다.
+ */
 function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
   // 규칙을 못 읽으면 그리지 않는다 — `LawChip` 없는 세법 서술을 화면에 두지
   // 않는다(design-system 5.28절).
@@ -405,31 +329,43 @@ function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
 
   const showRangeNote = isWithinYouthAgeRange(provisionalYouth.ageRange, derivedAgeYears);
 
-  return el('div', { class: 'provisional-note', 'data-key': 'youthBlock' }, [
-    el('h4', { class: 'provisional-note-title' }, [YOUTH_BLOCK_TITLE]),
-    showRangeNote ? el('p', { class: 'type-body-s' }, [YOUTH_DECLARED_RANGE_NOTE]) : null,
-    el('p', { class: 'type-body-s' }, [YOUTH_AGE_UNDETERMINED_LINE]),
-    el('p', { class: 'note-laws' }, [
-      provisionalYouth.billStage ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
-      el('span', { class: 'law-chip' }, [provisionalYouth.law]),
-    ]),
-    el('label', { class: 'checkbox-row' }, [
-      el('input', {
-        type: 'checkbox',
-        id: 'declaredYouth',
-        checked: form.declaredYouth,
-        onchange: (e) => store.setField('declaredYouth', e.target.checked, { immediate: true }),
-      }),
-      el('span', {}, [YOUTH_DECLARE_LABEL]),
-    ]),
-    el('p', { class: 'field-help' }, [YOUTH_SCENARIO_SCOPE_CAPTION]),
-  ]);
+  return el(
+    'details',
+    {
+      class: 'provisional-note-details',
+      open: youthBlockOpen,
+      ontoggle: (e) => {
+        youthBlockOpen = e.target.open;
+      },
+    },
+    [
+      el('summary', { class: 'provisional-note-trigger' }, [YOUTH_BLOCK_TRIGGER]),
+      el('div', { class: 'provisional-note', 'data-key': 'youthBlock' }, [
+        el('h4', { class: 'provisional-note-title' }, [YOUTH_BLOCK_TITLE]),
+        showRangeNote ? el('p', { class: 'type-body-s' }, [YOUTH_DECLARED_RANGE_NOTE]) : null,
+        el('p', { class: 'type-body-s' }, [YOUTH_AGE_UNDETERMINED_LINE]),
+        el('p', { class: 'note-laws' }, [
+          provisionalYouth.billStage ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
+          el('span', { class: 'law-chip' }, [provisionalYouth.law]),
+        ]),
+        el('label', { class: 'checkbox-row' }, [
+          el('input', {
+            type: 'checkbox',
+            id: 'declaredYouth',
+            checked: form.declaredYouth,
+            onchange: (e) => store.setField('declaredYouth', e.target.checked, { immediate: true }),
+          }),
+          el('span', {}, [YOUTH_DECLARE_LABEL]),
+        ]),
+        el('p', { class: 'field-help' }, [YOUTH_SCENARIO_SCOPE_CAPTION]),
+      ]),
+    ],
+  );
 }
 
 export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) {
   const { form, validation, provisionalYouth, result } = state;
   const errors = validation.errors;
-  const warnings = validation.warnings ?? {};
   // 만 나이는 **엔진이 낸 값**만 쓴다(D21). 화면은 이 값을 사용자에게 되비추지
   // 않고, 룰셋의 청년 연령 범위와 대조하는 데만 쓴다.
   const derivedAgeYears = result?.echo?.derived_age?.age_years ?? null;
@@ -445,7 +381,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
 
   const salaryField = numberField({
     id: 'currentSalary',
-    label: '총급여액 (2026년, 해당 과세연도)',
+    // 12.2(c) — ISA 필드가 이미 쓰는 「당해연도」와 어휘를 맞췄다.
+    label: '총급여액 (2026년, 당해연도)',
     value: form.currentSalary,
     help: '근로소득 원천징수영수증의 총급여액',
     error: fieldError(errors, 'currentSalary'),
@@ -492,9 +429,9 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     }),
     el('span', {}, ['직전 과세기간(2025년) 총급여액이 다릅니다']),
   ]);
-  const priorSalaryHelp = el('p', { class: 'field-help' }, [
-    '체크하지 않으면 ISA 비과세 한도 구간의 교차확인 없이 해당 연도 소득만으로 계산합니다.',
-  ]);
+  // 12.2(c) — 같은 사실을 짧게. "교차확인"이 무엇의 교차확인인지는 체크박스
+  // 라벨(ISA 비과세 한도 구간)이 이미 말한다.
+  const priorSalaryHelp = el('p', { class: 'field-help' }, ['체크하지 않으면 해당 연도 소득만으로 계산합니다(교차확인 없음).']);
   const priorSalaryField = conditionalGroup(
     form.priorSalaryEnabled,
     [
@@ -515,16 +452,15 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     el('h3', { class: 'input-group-title' }, ['① 기본정보']),
     birthField,
     youthBlock({ form, store, provisionalYouth, derivedAgeYears }),
-    // 출처가 같은 입력을 인접시킨다(3.11.4절 (c)) — 두 값이 흩어져 있으면
-    // 사용자가 서류를 두 번 꺼내야 한다.
-    el('p', { class: 'input-source-divider' }, [WITHHOLDING_RECEIPT_DIVIDER]),
+    // **12.2(d) — 「원천징수영수증에서 오는 값」 구분선을 지웠다.** 낼 세금
+    // 입력이 D39로 없어지면서 이 구분선 아래 필드가 사실상 하나(총급여액,
+    // 조건부로 둘)만 남아 그룹핑의 값이 옅어졌다(screens.md 12.2(d)).
     salaryField,
     hasNonWageIncomeToggle,
     globalIncomeField,
     priorSalaryCheckbox,
     priorSalaryHelp,
     priorSalaryField,
-    priorTaxField({ form, errors, warnings, store, renderGuard }),
   ]);
 
   // ---- 그룹 ② ------------------------------------------------------------
@@ -533,7 +469,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     label: '월 납입 여력',
     // 퇴직급여 입금액·계약이전액이 여기 섞여 들어오면 세액공제액이 과대
     // 계산된다(계약 3.2절). 그래서 "본인이 새로 넣는 돈"임을 명시한다.
-    help: '본인이 새로 넣는 돈 기준으로 입력합니다. 퇴직급여 입금액·계약이전액은 포함하지 않습니다.',
+    // 12.2(c) — 같은 사실을 더 짧게.
+    help: '새로 넣는 돈 기준입니다(퇴직급여 입금액·계약이전액 제외).',
     value: form.monthlyCapacity,
     error: fieldError(errors, 'monthlyCapacity'),
     onInput: (v) => store.setField('monthlyCapacity', v),
@@ -715,7 +652,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
 
   const groupThree = el('section', { class: 'input-group' }, [
     el('h3', { class: 'input-group-title' }, ['③ 계좌 현황']),
-    el('p', { class: 'field-help' }, ['계좌가 없으면 0으로 둡니다. 본인이 새로 넣은 금액만 적습니다.']),
+    // 12.2(c) — 같은 사실을 더 짧게.
+    el('p', { class: 'field-help' }, ['계좌가 없으면 0, 새로 넣은 금액만 적습니다.']),
     annuityField,
     retirementField,
     isaExistsToggle,

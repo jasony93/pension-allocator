@@ -8,14 +8,17 @@
  * 정해야 하고 그것은 세법 판단이다 — 화면이 정하면 세무 유닛의 검증을 우회한다.
  * 그래서 요청은 생년월일 원본을 싣고 환산은 엔진이 한다.
  *
- * `RequirementChecklist`의 분모는 **무조건 필수인 일곱 항목**으로 고정한다
+ * `RequirementChecklist`의 분모는 **무조건 필수인 여섯 항목**으로 고정한다
  * (`screens.md` 3.6절, 계약 5.0.0으로 D27의 첫 물음이 추가됐다) — 생년월일 ·
- * 총급여액 · 근로소득 외 다른 종합소득 여부 · 직전 과세연도 결정세액 · 월 납입
- * 여력 · 연금 수령 여부 · 자금 사용 시점. 이 중 넷(다른 종합소득 여부·결정세액·
- * 연금 수령 여부·자금 사용 시점)은 **클릭 한 번으로 유효한 답이 되는 형태**라
- * 숫자 입력을 강제하지 않는다. 종합소득금액(둘째 물음)은 **예**를 고른 사람에게만
- * 나타나고 그때도 선택이라 분모에 넣지 않는다 — 모르면 본문 구간으로 계산된다.
- * 기납입액은 진행을 막지 않고, 조건부 필수 항목(전환 금액)은 분모에 넣지 않는다.
+ * 총급여액 · 근로소득 외 다른 종합소득 여부 · 월 납입 여력 · 연금 수령 여부 ·
+ * 자금 사용 시점. **[2026-08-11 D39] 「직전 과세연도 결정세액」이 분모에서
+ * 빠졌다** — 소유자 지시로 그 입력 자체가 없어졌다. 법정 한도는 사라지지
+ * 않는다. 엔진이 해당 과세기간 총급여액에서 직접 산출한다(D40). 남은 넷 중
+ * 셋(다른 종합소득 여부·연금 수령 여부·자금 사용 시점)은 **클릭 한 번으로
+ * 유효한 답이 되는 형태**라 숫자 입력을 강제하지 않는다. 종합소득금액(둘째
+ * 물음)은 **예**를 고른 사람에게만 나타나고 그때도 선택이라 분모에 넣지
+ * 않는다 — 모르면 본문 구간으로 계산된다. 기납입액은 진행을 막지 않고,
+ * 조건부 필수 항목(전환 금액)은 분모에 넣지 않는다.
  *
  * ---------------------------------------------------------------------------
  * 금액 입력 단위 — **만원**(소유자 지시). "5000"을 입력하면 5,000만원으로
@@ -23,16 +26,15 @@
  * 화면 경계(이 파일 · `state/store.js`)에서만 변환한다 — `parseManwonToWon`이
  * 그 경계다.
  *
- * **왜 소수를 허용하는가.** 결정세액처럼 만원으로 딱 떨어지지 않는 금액이
- * 있다(예: 1,234,567원). 만원 정수만 받으면 그 값을 반올림하게 되고, 그 값이
- * 세액공제 한도를 정하므로 사용자가 실제로 받을 금액이 입력 단위 때문에
+ * **왜 소수를 허용하는가.** 만원으로 딱 떨어지지 않는 금액이 있다(예:
+ * 1,234,567원). 만원 정수만 받으면 그 값을 반올림하게 되고, 반올림한 값이
+ * 세액공제 계산에 들어가면 사용자가 실제로 받을 금액이 입력 단위 때문에
  * 달라진다 — 이 조직의 "추정하지 않는다" 원칙에 어긋난다. 그래서 정수 대신
  * **소수 넷째 자리(=1원)까지** 받는다. 1원 = 0.0001만원이므로 넷째 자리까지면
  * 어떤 원 단위 금액도 반올림 없이 표현할 수 있다 — 1,234,567원은
  * "123.4567"이고, 원래 값의 마지막 네 자리 앞에 점 하나를 찍는 것과 같다.
- * 결정세액만 예외로 두지 않고 **모든 금액 입력에 같은 규칙을 적용한다** —
- * 다른 금액(기납입액 등)도 만원의 배수가 아닐 수 있고, 그때도 반올림해
- * 계산에 넣으면 같은 문제가 재발한다.
+ * **모든 금액 입력에 같은 규칙을 적용한다** — 어느 금액(기납입액 등)도
+ * 만원의 배수가 아닐 수 있고, 반올림해 계산에 넣으면 같은 문제가 재발한다.
  *
  * **부동소수점을 쓰지 않는다.** `parseFloat(v) * 10000` 같은 계산은 이진
  * 부동소수점 오차로 정확한 원 단위를 보장하지 않는다(`0.1 * 10000`이
@@ -100,15 +102,9 @@ export const CORE_REQUIREMENTS = [
     // 결함이 걸리는 바로 그 사람들에게 조용히 틀린 답을 준다(계약 0.6절).
     isFilled: (f) => f.hasNonWageIncome === true || f.hasNonWageIncome === false,
   },
-  {
-    key: 'priorTax',
-    label: '직전 과세연도 결정세액',
-    fieldId: 'priorTaxAmount',
-    // **빈 상태와 `모름` 상태를 구분한다**(D14 · `screens.md` 3.8.3절). 비어 있는
-    // 것을 모름으로 간주하면 사용자의 침묵에서 답을 추론하는 것이 된다.
-    isFilled: (f) => f.priorTaxState === 'unknown' || (f.priorTaxState === 'amount' && f.priorTaxAmount !== ''),
-    hint: '모르면 "모르겠습니다"를 고르면 됩니다. 결과는 나옵니다.',
-  },
+  // **`priorTax` 항목이 여기 있었다**(D39로 폐기). 직전 과세연도 결정세액을
+  // 묻지 않는다 — 법정 한도는 이제 총급여액에서 계산되고 사용자가 답할
+  // 항목이 아니다(3.8절).
   { key: 'monthlyCapacity', label: '월 납입 여력', fieldId: 'monthlyCapacity', isFilled: (f) => f.monthlyCapacity !== '' },
   {
     key: 'annuityStarted',
@@ -177,30 +173,9 @@ function validateNonNegativeAmount(value, { required } = { required: true }) {
   return undefined;
 }
 
-/**
- * 직전 과세연도 결정세액 — `screens.md` 3.8.3절.
- *
- * **`0`은 유효한 입력이고 `모름`과 다르다.** `0원`은 "낼 세금이 없다"는 사실이고
- * `모름`은 "얼마인지 모른다"는 사실이다. 두 상태의 결과 화면이 다르다(4.8절).
- */
-function validatePriorTax(form) {
-  if (form.priorTaxState !== 'amount') return undefined; // 빈·모름은 이 칸의 오류가 될 수 없다
-  return validateNonNegativeAmount(form.priorTaxAmount, { required: false });
-}
-
-/**
- * **차단이 아니라 확인 요청**(`screens.md` 3.8.3절). 이론적으로 불가능하다고
- * 단정할 근거를 화면이 갖고 있지 않으므로 계산은 그대로 진행하고, 결과를 막는
- * 오류(`state-error`)와 구분해 `state-warning`으로 표시한다.
- */
-function priorTaxWarning(form) {
-  if (form.priorTaxState !== 'amount') return undefined;
-  const tax = parseManwonToWon(form.priorTaxAmount);
-  const salary = parseManwonToWon(form.currentSalary);
-  if (Number.isNaN(tax) || Number.isNaN(salary)) return undefined;
-  if (tax > salary) return { code: 'exceeds_salary', message: '총급여액보다 큰 값입니다. 두 값을 확인해 주세요.' };
-  return undefined;
-}
+// **`validatePriorTax`·`priorTaxWarning`이 여기 있었다**(D39로 폐기). 직전
+// 과세연도 결정세액 입력이 없어지면서 검증할 칸도 없다. 총급여액보다 큰
+// 결정세액을 확인 요청하던 경고도 함께 사라졌다 — 견줄 두 번째 금액이 없다.
 
 export function validateForm(form, { today } = {}) {
   const errors = {};
@@ -211,11 +186,6 @@ export function validateForm(form, { today } = {}) {
 
   const salaryErr = validateNonNegativeAmount(form.currentSalary);
   if (salaryErr) errors.currentSalary = salaryErr;
-
-  const priorTaxErr = validatePriorTax(form);
-  if (priorTaxErr) errors.priorTaxAmount = priorTaxErr;
-  const priorTaxWarn = priorTaxWarning(form);
-  if (priorTaxWarn) warnings.priorTaxAmount = priorTaxWarn;
 
   if (form.priorSalaryEnabled) {
     const priorErr = validateNonNegativeAmount(form.priorSalary);
@@ -318,11 +288,9 @@ export function validateForm(form, { today } = {}) {
     if (lossErr) errors.isaLossAmount = lossErr;
   }
 
-  const errorKeyFor = { priorTax: 'priorTaxAmount' };
-  const filled = CORE_REQUIREMENTS.filter((r) => {
-    const errorKey = errorKeyFor[r.key] ?? r.key;
-    return !errors[errorKey] && r.isFilled(form);
-  });
+  // 9.0.0(D39) — `priorTax` 항목이 사라지면서 `req.key`와 오류 맵의 키가
+  // 어긋나는 항목이 없어졌다. 예전에는 여기 `errorKeyFor` 매핑이 있었다.
+  const filled = CORE_REQUIREMENTS.filter((r) => !errors[r.key] && r.isFilled(form));
   const coreComplete = filled.length === CORE_REQUIREMENTS.length;
   const conditionalPending =
     form.isaExists && form.isaTransferEnabled && (errors.isaTransferAmount || isBlank(form.isaTransferAmount));

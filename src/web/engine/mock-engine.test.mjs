@@ -38,8 +38,8 @@ function baseRequest(overrides = {}) {
     profile: {
       // 4.0.0 — 만 나이가 아니라 생년월일을 보낸다(D21). 환산은 엔진이 한다.
       birth_date: '1988-03-15',
-      // 세액 한도의 재료. 두 값을 짝으로 받는다(계약 3.5절).
-      prior_year_tax: { state: 'unknown', determined_tax_krw: null, pension_credit_applied_krw: null },
+      // 9.0.0(D39·D40) — `profile.prior_year_tax`가 사라졌다. 세액 한도는 이제
+      // `current_year_total_salary_krw`에서 엔진이 직접 산출한다.
       current_year_total_salary_krw: 62000000,
       prior_year_total_salary_krw: null,
       // 5.0.0(D27) — 공제율 판정 축의 첫 물음. 대다수 사용자가 여기다: `false`면
@@ -82,7 +82,7 @@ test('missing required fields collects all errors, not just the first', () => {
 });
 
 test('unknown schema major triggers schema_version_mismatch', () => {
-  const res = compute(baseRequest({ schema_version: '9.0.0' }), rulesets);
+  const res = compute(baseRequest({ schema_version: '8.2.0' }), rulesets);
   assert.equal(res.ok, false);
   assert.ok(res.errors.some((e) => e.code === 'schema_version_mismatch'));
 });
@@ -376,10 +376,12 @@ test('a 3.x request is rejected outright — the mock does not quietly keep comp
   assert.ok(res.errors.some((e) => e.code === 'schema_version_mismatch'));
 });
 
-test('the three fields 4.0.0 made required are actually required', () => {
+test('the three fields the contract makes required are actually required', () => {
+  // 9.0.0(D39) — `profile.prior_year_tax`는 계약에서 사라졌다. 세액 한도의 재료가
+  // 된 `current_year_total_salary_krw`로 그 자리를 대신 지킨다.
   for (const drop of [
     (r) => delete r.profile.birth_date,
-    (r) => delete r.profile.prior_year_tax,
+    (r) => delete r.profile.current_year_total_salary_krw,
     (r) => delete r.accounts.annuity_savings.annuity_start_status,
   ]) {
     const req = baseRequest();
@@ -415,7 +417,7 @@ test('the mock response has exactly the shape the real engine produces', () => {
   req.accounts.isa.exists = true;
   req.accounts.isa.account_type = 'general';
   req.accounts.isa.cumulative_contribution_krw = 5000000;
-  req.profile.prior_year_tax = { state: 'amount', determined_tax_krw: 3000000, pension_credit_applied_krw: null };
+  req.profile.current_year_total_salary_krw = 45000000;
 
   const mockRes = compute(req, rulesets);
   const realRes = realCompute(req, rulesets);
@@ -443,22 +445,39 @@ test('the mock response has exactly the shape the real engine produces', () => {
   assert.deepEqual(Object.keys(m.plans[0].priority_basis).sort(), Object.keys(r.plans[0].priority_basis).sort());
 });
 
-test('the mock agrees with the real engine on the three states the screen branches on', () => {
+// 9.0.0(D39·D40·D41) — "낼 세금" 입력이 없어지면서 화면의 세 상태(모름·잘림·0)가
+// 두 상태(정상·잘림)로 줄었다(screens.md 4.8절). 대신 오차 **방향**이 갈리는
+// 분기가 새로 생겼다(direction_indeterminate, D41). 이 테스트는 그 갈래마다
+// 목과 실제 엔진이 같은 값을 내는지 본다 — 세액 한도는 이제 입력이 아니라
+// 총급여액에서 계산되므로 케이스는 소득 프로필로 만든다.
+test('the mock agrees with the real engine on the branches the screen renders differently', () => {
   const cases = [
-    { label: '모름', prior: { state: 'unknown', determined_tax_krw: null, pension_credit_applied_krw: null } },
-    { label: '0', prior: { state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: null } },
-    { label: '잘림', prior: { state: 'amount', determined_tax_krw: 500000, pension_credit_applied_krw: null } },
-    { label: '넉넉', prior: { state: 'amount', determined_tax_krw: 5000000, pension_credit_applied_krw: null } },
+    // 정확히 0 — 상한이자 등식(D40, 검산된 좌표).
+    { label: '0(등식)', overrides: { current_year_total_salary_krw: 5000000 } },
+    // 낮은 총급여 + 높은 월 납입 여력 — 세액공제가 한도를 넘어 잘린다.
+    { label: '잘림', overrides: { current_year_total_salary_krw: 20000000, monthly_capacity_krw: 1500000 } },
+    // 충분히 큰 총급여 — 한도가 넉넉해 잘리지 않는다.
+    { label: '정상', overrides: { current_year_total_salary_krw: 500000000 } },
+    // 종합소득이 있는데 금액을 모른다 — 오차 방향 자체가 미정이다(D41).
+    {
+      label: '방향 미정',
+      overrides: {
+        current_year_total_salary_krw: 45000000,
+        has_non_wage_global_income_current_year: true,
+        current_year_global_income_krw: null,
+      },
+    },
   ];
-  for (const { label, prior } of cases) {
+  for (const { label, overrides } of cases) {
     const req = baseRequest({ scenarios: ['current'] });
-    req.profile.prior_year_tax = prior;
+    Object.assign(req.profile, overrides);
     const m = compute(req, rulesets).scenarios[0].plans[0].deterministic_benefit.tax_liability_cap;
     const r = realCompute(req, rulesets).scenarios[0].plans[0].deterministic_benefit.tax_liability_cap;
-    // 화면이 상태를 고르는 데 쓰는 세 값이 일치해야 한다(tax-credit-view.js).
-    assert.equal(m.known, r.known, label + ': known');
+    // 화면이 상태를 고르는 데 쓰는 값들이 일치해야 한다(tax-credit-view.js).
     assert.equal(m.cap_krw, r.cap_krw, label + ': cap_krw');
     assert.equal(m.applied, r.applied, label + ': applied');
+    assert.equal(m.binding_code, r.binding_code, label + ': binding_code');
+    assert.equal(m.error_direction_code, r.error_direction_code, label + ': error_direction_code');
   }
 });
 
@@ -485,10 +504,12 @@ test('an unknown annuity status holds that account back rather than assuming not
 });
 
 test('a zero cap flattens the tax-credit axis and says so, without moving the allocations', () => {
+  // 9.0.0(D39·D40) — 총급여 5,000,000원은 검산된 등식 좌표다(과세표준이 정확히
+  // 0이 되어 한도도 정확히 0이다). 충분히 큰 총급여는 한도가 자르지 않는다.
   const withCap = baseRequest();
-  withCap.profile.prior_year_tax = { state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: null };
+  withCap.profile.current_year_total_salary_krw = 5000000;
   const plentiful = baseRequest();
-  plentiful.profile.prior_year_tax = { state: 'amount', determined_tax_krw: 9000000, pension_credit_applied_krw: null };
+  plentiful.profile.current_year_total_salary_krw = 500000000;
 
   const zero = compute(withCap, rulesets).scenarios[0];
   const rich = compute(plentiful, rulesets).scenarios[0];

@@ -33,6 +33,11 @@ before(async () => {
     set('monthlyCapacity', '150');
   })()`);
   await sleep(300);
+  // 9.0.0(D39 §2) — 청년 우대 블록이 기본 접힘이다(screens.md 3.9.3.1절).
+  // 안의 체크박스를 누르려면 먼저 트리거를 열어야 한다 — 닫힌 `<details>`
+  // 안의 자식은 `display: none`이라 좌표를 얻을 수 없다.
+  await page.clickElement("document.querySelector('.provisional-note-trigger')");
+  await sleep(200);
   await page.clickElement("document.getElementById('declaredYouth')");
   await sleep(200);
   await page.clickElement("document.querySelector('.scenario-tab:not(.scenario-tab-selected)')");

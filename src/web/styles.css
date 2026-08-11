@@ -361,8 +361,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .known-unknown-option-selected { background: var(--accent-subtle); border-color: var(--accent); color: var(--text-primary); font-weight: 600; }
 .known-unknown-dot { color: var(--accent); }
 
-/* SourceGuide (design-system 5.27절) — 이 시스템에서 접기가 허용되는 유일한 자리.
-   접히는 것이 *답*이 아니라 *설명*이기 때문이다. 모달·툴팁이 아니다. */
+/* SourceGuide (design-system 5.27절) — 접히는 것이 *답*이 아니라 *설명*이기
+   때문에 접기가 허용됐던 첫 번째 자리. 그 유일한 용례(옛 직전 과세연도
+   결정세액)는 D39로 없어졌지만, 클래스는 남겨 둔다 — 아래 청년 우대 블록의
+   트리거가 같은 시각 언어를 재사용한다. 모달·툴팁이 아니다. */
 .source-guide { margin-top: var(--space-2); }
 .source-guide-trigger { min-height: 44px; display: flex; align-items: center; font-size: 14px; color: var(--text-link); cursor: pointer; }
 .source-guide ul { margin: 0; padding: var(--space-3) 0 0 var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
@@ -383,6 +385,14 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .provisional-note p { margin: 0; }
 .provisional-note-title { margin: 0; font-size: 14px; font-weight: 700; }
 .provisional-note .checkbox-row { margin-bottom: 0; }
+
+/* [2026-08-11 D39 §2] 청년 우대 블록의 접힘 — R3의 두 번째 예외
+   (screens.md 3.11.3절). 트리거는 항상 보이고, 접힌 상태가 기본이다. `.provisional-note`
+   자체의 위 여백을 접힌 상태에서 중복시키지 않는다. */
+.provisional-note-details { margin: 0 0 var(--space-4); }
+.provisional-note-details .provisional-note { margin-bottom: 0; }
+.provisional-note-trigger { min-height: 44px; display: flex; align-items: center; font-size: 14px; color: var(--text-link); cursor: pointer; }
+.provisional-note-details[open] .provisional-note-trigger { margin-bottom: var(--space-2); }
 
 .segment-group { display: flex; gap: var(--space-2); align-items: stretch; }
 /* `min-height`(고정 `height`가 아니다) — 터치 타깃 44px는 지키되, 이번 회차

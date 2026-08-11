@@ -1,11 +1,30 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 8.2.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 9.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `8.2.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `9.0.0`으로 맞췄다.
+ *
+ * **9.0.0에서 따라온 것(D39·D40·D41·D42, major).** 소유자가 직전 과세연도
+ * 결정세액 입력·문구를 전부 없애라고 지시했다(D39). `profile.prior_year_tax`가
+ * 요청에서 사라졌다 — 이 목의 `PRIOR_TAX_STATES`·`validatePriorYearTax`도 함께
+ * 걷어냈다. **한도는 없어지지 않았다. 상한이 됐다**(D40) — 엔진이 해당
+ * 과세기간 총급여액에서 §47(근로소득공제)→§50①1(기본공제)→§55①(기본세율)→
+ * §59(근로소득세액공제)를 밟아 §61②③의 세액 한도를 산출한다. 그 값은 그
+ * 사람의 실제 한도가 **아니라 상한**이고(`cap_krw`가 결코 `null`이 아니다),
+ * `PlanTaxLiabilityCap.applied`의 `false`가 이제 「잘리지 않았다」가 아니라
+ * 「우리가 아는 상한으로는 잘리지 않았다」를 뜻한다 — 그 구분을
+ * `binding_code`(`binds_provably` / `binding_not_determined`)가 낸다. 종합소득이
+ * 있는데 금액을 모르는 분기는 오차 방향조차 정해지지 않아
+ * `error_direction_code`가 `direction_indeterminate`이고, 그 분기에서는 「최대」도
+ * 「적어도」도 쓸 수 없다(D41). 분기 판정은 룰셋의 산문(`direction`)이 상한
+ * 코드로 시작하는지만 본다 — 산문을 다시 해석하지 않는다. 안내
+ * `tax_liability_cap_unknown`이 없어지고 `tax_liability_cap_estimated_from_total_salary`가
+ * **언제나** 나가며, 미정 분기에서는 `tax_liability_cap_direction_indeterminate`가
+ * 함께 나간다. **세법 수치는 이 파일에 없다** — 구간·세율·기본공제액은 전부
+ * `resolveTaxLiabilityCapMock`이 룰셋에서 읽는다.
  *
  * **8.2.0에서 따라온 것(D38, minor).** 헤드라인이 「올해 세액공제 + 앞으로 N년
  * ISA」의 합계를 낼 수 있게 됐다. `Plan`에 `headline_composite_total`이 새로
@@ -94,10 +113,26 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 // 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '8';
-export const MOCK_SCHEMA_VERSION = '8.2.0';
+const KNOWN_SCHEMA_MAJOR = '9';
+export const MOCK_SCHEMA_VERSION = '9.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
-const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
+// 9.0.0(D39·D40) — 세액 한도를 총급여액에서 산출한다. `profile.prior_year_tax`가
+// 요청에서 사라졌으므로 그 값의 상태 열거형(`PRIOR_TAX_STATES`)도 함께 없앤다.
+// **한도의 정의 자리는 룰셋** — 아래 넷은 값의 정의 자리가 계약인 자리만 옮겨 적는다
+// (계약 8.7절). `CAP_BASIS`는 값이 하나뿐이라 계약이 정의한다(D39의 결과).
+const CAP_BASIS = 'current_year_total_salary';
+// 룰셋 `pension.credit.tax_liability_cap.current_year_estimate.branches`의 **키**.
+// 정의 자리는 룰셋이고 여기는 전사다.
+const CAP_BRANCH = {
+  WAGE_ONLY: 'wage_income_only',
+  GLOBAL_INCOME_SUPPLIED: 'global_income_amount_supplied',
+  GLOBAL_INCOME_MISSING: 'global_income_amount_missing',
+};
+// 오차 방향이 정해지지 않은 분기의 코드. 이 문자열의 정의 자리는 계약이다(8.7절) —
+// 상한 쪽 코드(`overstated_or_equal`)는 룰셋이 값으로 적어 두므로 그것을 읽는다.
+const CAP_DIRECTION_INDETERMINATE = 'direction_indeterminate';
+// 이 배분안에서 한도가 걸린다는 것이 **증명되는가**(D40). 정의 자리는 계약이다.
+const CAP_BINDING = { PROVABLE: 'binds_provably', NOT_DETERMINED: 'binding_not_determined' };
 // 5.1.0(D28·D29) — 수익이 어떤 형태로 들어오는가. 자산군이 아니다(계약 3.6절).
 const ISA_INCOME_CHARACTERS = ['interest_dividend', 'listed_equity_capital_gain', 'mixed_or_unknown'];
 // 5.1.0(D31) — 되돌리는 길. 계산과 입력은 그대로 두고 표시만 끈다(0.11절).
@@ -794,6 +829,161 @@ function selectCreditRateBracket(brackets, basis) {
 }
 
 // ---------------------------------------------------------------------------
+// 세액 한도 — 해당 과세기간 총급여액에서 산출한다 (9.0.0, D39·D40)
+//
+// **실제 엔진의 `src/engine/liability-cap.mjs`를 그대로 옮겨 적은 것이다.** 세법
+// 수치는 한 개도 여기에 없다 — 구간 경계·비율·기본공제액·근로소득세액공제 한도는
+// 전부 룰셋에서 읽는다. 제2항 한도는 룰셋이 산식을 **문자열**로 적어 두었으므로
+// 그 문자열을 기계적으로 읽는다.
+// ---------------------------------------------------------------------------
+
+/** 세액 한도 산출에 쓰는 규칙 id 여섯 — 정렬해 `basis_rule_ids`에 싣는다. */
+const CAP_ESTIMATE_RULE_IDS = [
+  'income.deduction.basic.self',
+  'tax.rate.basic',
+  'pension.credit.tax_liability_cap',
+  'pension.credit.tax_liability_cap.current_year_estimate',
+  'credit.wage_income',
+  'income.wage.deduction',
+].sort();
+
+/**
+ * `base_krw + (x − threshold_krw) × rate_on_excess` 꼴의 구간표를 읽는다. 근로소득공제·
+ * 기본세율·근로소득세액공제 제1항이 같은 모양을 쓴다. 경계값은 아래 구간에 속한다
+ * (문언이 '이하').
+ */
+function capBracketAmount(brackets, maxKey, x) {
+  if (!Array.isArray(brackets)) return null;
+  const bracket = brackets.find((b) => (b?.[maxKey] ?? null) === null || x <= b[maxKey]);
+  if (bracket === undefined) return null;
+  if (typeof bracket.base_krw !== 'number' || typeof bracket.threshold_krw !== 'number') return null;
+  const excess = applyRate(clampToZero(x - bracket.threshold_krw), bracket.rate_on_excess);
+  if (excess === null) return null;
+  return bracket.base_krw + excess;
+}
+
+/** 근로소득세액공제 제2항의 한도. 첫 구간만 금액이고 나머지 셋은 룰셋에 문자열로 있다. */
+const CAP_LIMIT_FORMULA = /^(\d+)\s*[−-]\s*\(\s*총급여액\s*[−-]\s*(\d+)\s*\)\s*[×x*]\s*(\d+)\s*\/\s*(\d+)$/;
+
+function capWageCreditLimit(brackets, totalSalary) {
+  if (!Array.isArray(brackets)) return null;
+  const bracket = brackets.find((b) => (b?.total_salary_max_krw ?? null) === null || totalSalary <= b.total_salary_max_krw);
+  if (bracket === undefined) return null;
+  if (typeof bracket.limit_krw === 'number') return bracket.limit_krw;
+
+  const match = CAP_LIMIT_FORMULA.exec(String(bracket.formula ?? '').trim());
+  if (match === null || typeof bracket.floor_krw !== 'number') return null;
+  const [base, threshold, numerator, denominator] = match.slice(1).map(Number);
+  if (denominator === 0) return null;
+  const limit = Math.floor((base * denominator - clampToZero(totalSalary - threshold) * numerator) / denominator);
+  return Math.max(limit, bracket.floor_krw);
+}
+
+/**
+ * 어느 분기인가. **엔진이 판정하는 것은 분기뿐이고 그 분기의 오차 방향은 룰셋이
+ * 정한다.** 분기의 `direction`이 규칙의 상한 코드로 시작하면 상한이고, 아니면
+ * 미정이다 — 산문을 파싱해 코드를 만들지 않는다.
+ */
+function capBranchOf(profile) {
+  if (profile.has_non_wage_global_income_current_year !== true) return CAP_BRANCH.WAGE_ONLY;
+  if (profile.current_year_global_income_krw != null) return CAP_BRANCH.GLOBAL_INCOME_SUPPLIED;
+  return CAP_BRANCH.GLOBAL_INCOME_MISSING;
+}
+
+/**
+ * 세액 한도를 총급여액에서 산출한다(네 단계, 규칙의 `statutory_path`). `use`는
+ * `computeScenario`의 규칙 조회 헬퍼다 — 규칙을 찾지 못하면 이미 `missingRules`에
+ * 기록되고 여기서는 `null`을 돌려준다(대체값을 만들지 않는다).
+ */
+function resolveTaxLiabilityCapMock(use, profile) {
+  const appliedTo = 'pension_credit_tax_liability_cap.cap_krw';
+  const deductionRule = use('income.wage.deduction', appliedTo);
+  const basicDeductionRule = use('income.deduction.basic.self', appliedTo);
+  const rateRule = use('tax.rate.basic', appliedTo);
+  const creditRule = use('credit.wage_income', appliedTo);
+  const capRule = use('pension.credit.tax_liability_cap', appliedTo);
+  const estimateRule = use('pension.credit.tax_liability_cap.current_year_estimate', appliedTo);
+  // 사용자가 서식에서 값을 읽던 경로가 이 계산으로 대체됐다는 사실이 그 규칙에 적혀 있다.
+  const sourceRule = use('pension.credit.tax_liability_cap.source_form', appliedTo);
+  if (!deductionRule || !basicDeductionRule || !rateRule || !creditRule || !capRule || !estimateRule || !sourceRule) {
+    return null;
+  }
+
+  const branch = capBranchOf(profile);
+  const branchNode = estimateRule.value?.branches?.[branch];
+  const upperBoundCode = estimateRule.value?.error_direction?.code;
+  if (branchNode === undefined || typeof branchNode.direction !== 'string' || typeof upperBoundCode !== 'string') {
+    return null;
+  }
+  const isUpperBound = branchNode.direction.startsWith(upperBoundCode);
+  const totalSalary = profile.current_year_total_salary_krw;
+
+  // 1단계. 공제액이 총급여액을 넘지 못하고(§47③) 2천만원 상한이 걸린다(§47① 단서).
+  const bracketDeduction = capBracketAmount(deductionRule.value.brackets, 'total_salary_max_krw', totalSalary);
+  if (bracketDeduction === null || typeof deductionRule.value.overall_cap_krw !== 'number') return null;
+  const wageDeduction = Math.min(bracketDeduction, deductionRule.value.overall_cap_krw, totalSalary);
+  const wageIncome = totalSalary - wageDeduction;
+
+  // 2단계. 종합소득금액을 받았으면 그것이 조문상의 합산 기준 그 자체다.
+  const basicDeduction = basicDeductionRule.value?.amount_krw;
+  if (typeof basicDeduction !== 'number') return null;
+  const globalIncome = branch === CAP_BRANCH.GLOBAL_INCOME_SUPPLIED ? profile.current_year_global_income_krw : wageIncome;
+  const taxBase = clampToZero(globalIncome - basicDeduction);
+
+  // 3단계.
+  const computedTax = capBracketAmount(rateRule.value.brackets, 'tax_base_max_krw', taxBase);
+  if (computedTax === null) return null;
+
+  // 4단계. 근로소득 외 소득이 있으면 근로소득금액 비율로 안분한 산출세액을 제1항에 넣는다.
+  const wagePortionTax = globalIncome > 0 ? Math.floor((computedTax * Math.min(wageIncome, globalIncome)) / globalIncome) : 0;
+  const creditByAmount = capBracketAmount(creditRule.value.amount_brackets, 'wage_income_tax_max_krw', wagePortionTax);
+  const creditLimit = capWageCreditLimit(creditRule.value.limit_brackets, totalSalary);
+  if (creditByAmount === null || creditLimit === null) return null;
+  const wageCredit = Math.min(creditByAmount, creditLimit);
+
+  const capKrw = clampToZero(computedTax - wageCredit);
+  const errorDirection = isUpperBound ? upperBoundCode : CAP_DIRECTION_INDETERMINATE;
+  const basisRuleIds = [...CAP_ESTIMATE_RULE_IDS, sourceRule.id].sort();
+  const carryforward = capRule.value?.excess_treatment?.credit_carryforward ?? false;
+
+  return {
+    branch,
+    isUpperBound,
+    errorDirection,
+    basisRuleIds,
+    cap: {
+      // **`null`이 아니다.** 총급여액이 있으면 값이 하나로 정해진다.
+      cap_krw: capKrw,
+      basis_code: CAP_BASIS,
+      branch_code: branch,
+      error_direction_code: errorDirection,
+      is_upper_bound: isUpperBound,
+      // 상한이 0이면 실제 한도도 0 이하일 수 없으므로 정확히 0이다. 그 구간에서만 등식이다.
+      is_exact: isUpperBound && capKrw === 0,
+      measured_total_salary_krw: totalSalary,
+      measured_global_income_krw: branch === CAP_BRANCH.GLOBAL_INCOME_SUPPLIED ? profile.current_year_global_income_krw : null,
+      wage_income_deduction_krw: wageDeduction,
+      wage_income_amount_krw: wageIncome,
+      basic_deduction_krw: basicDeduction,
+      tax_base_krw: taxBase,
+      computed_tax_krw: computedTax,
+      wage_income_credit_krw: wageCredit,
+      credit_carryforward: carryforward,
+      basis_rule_ids: basisRuleIds,
+    },
+  };
+}
+
+/**
+ * 이 배분안에서 **한도가 걸린다는 것이 증명되는가**(D40). 추정 한도가 잘랐고 그
+ * 추정이 상한이면 실제 한도는 그보다 작거나 같으므로 반드시 잘린다. 자르지 않은
+ * 경우는 아무것도 증명하지 못한다 — 문장의 부재가 「안 걸림」을 뜻하지 않는다.
+ */
+function capBindingCodeFor(applied, isUpperBound) {
+  return applied && isUpperBound ? CAP_BINDING.PROVABLE : CAP_BINDING.NOT_DETERMINED;
+}
+
+// ---------------------------------------------------------------------------
 // 요청 검증 (7.1 / 8.1)
 // ---------------------------------------------------------------------------
 
@@ -865,8 +1055,6 @@ function validateProfile(p) {
   if (p.birth_date == null) errors.push(err('missing_required', 'profile.birth_date', {}));
   // 오류 params에 입력값을 되풀이하지 않는다(계약 8.1절).
   else if (parseIsoDate(p.birth_date) === null) errors.push(err('invalid_date', 'profile.birth_date', { format: 'YYYY-MM-DD' }));
-
-  errors.push(...validatePriorYearTax(p.prior_year_tax));
 
   if (p.current_year_total_salary_krw == null)
     errors.push(err('missing_required', 'profile.current_year_total_salary_krw', {}));
@@ -984,37 +1172,6 @@ function validateIsaReturnAssumption(node) {
     else if (node.loss_amount_krw < 0) errors.push(err('negative_value', `${field}.loss_amount_krw`, {}));
   }
 
-  return errors;
-}
-
-/**
- * 계약 3.5절 `PriorYearTax` — 세액 한도의 재료. **결정세액과 연금계좌 세액공제액을
- * 짝으로 받는다.** 짝이라는 사실을 규약이 아니라 자료형이 강제한다.
- */
-function validatePriorYearTax(node) {
-  const errors = [];
-  const field = 'profile.prior_year_tax';
-  if (node == null || typeof node !== 'object') {
-    errors.push(err('missing_required', field, {}));
-    return errors;
-  }
-  if (node.state == null) errors.push(err('missing_required', `${field}.state`, {}));
-  else if (!PRIOR_TAX_STATES.includes(node.state)) errors.push(err('invalid_enum', `${field}.state`, { value: node.state }));
-
-  if (node.state === 'amount') {
-    if (node.determined_tax_krw == null) errors.push(err('missing_required', `${field}.determined_tax_krw`, {}));
-    else if (!isInt(node.determined_tax_krw)) errors.push(err('not_integer', `${field}.determined_tax_krw`, {}));
-    else if (node.determined_tax_krw < 0) errors.push(err('negative_value', `${field}.determined_tax_krw`, {}));
-  } else if (node.determined_tax_krw != null) {
-    // 금액을 실었는데 state가 금액을 뜻하지 않는다. 둘 중 무엇이 사용자의 답인지
-    // 엔진이 고르면 그것이 추론이다. 고르지 않고 되돌려준다.
-    errors.push(err('invalid_enum', `${field}.state`, { reason: 'determined_tax_krw_present' }));
-  }
-
-  if (node.pension_credit_applied_krw != null) {
-    if (!isInt(node.pension_credit_applied_krw)) errors.push(err('not_integer', `${field}.pension_credit_applied_krw`, {}));
-    else if (node.pension_credit_applied_krw < 0) errors.push(err('negative_value', `${field}.pension_credit_applied_krw`, {}));
-  }
   return errors;
 }
 
@@ -1700,49 +1857,64 @@ function computeScenario(scenario, request, rulesets) {
     return Math.max(0, combinedCreditEligible);
   }
 
-  // -- 세액 한도 (계약 3.5·5.10절) ------------------------------------------
+  // -- 세액 한도 (계약 5.10절, D39·D40) --------------------------------------
   //
-  // **한도 = 결정세액 + 연금계좌 세액공제액.** 소득세법 §61 ③이 산출세액이 모자랄
-  // 때 밀려나는 공제로 연금계좌세액공제를 이름으로 지목하므로, 되더한 값이 곧
-  // 법정 한도와 **일치한다.** 근사가 아니라 등식이다.
+  // 직전 과세연도 결정세액을 묻던 자리가 사라졌다(D39). 대신 **해당 과세기간
+  // 총급여액**에서 §47→§50①1→§55①→§59를 밟아 §61②③의 한도를 산출한다
+  // (`resolveTaxLiabilityCapMock`, 실제 엔진의 `liability-cap.mjs`를 그대로 옮겼다).
   //
-  // 모를 때 **지어내지 않는다.** 대신 오차의 방향을 낸다 — 한도가 공제액을 늘리는
-  // 경로가 조문에 없으므로 한도를 무시한 값은 언제나 과대이거나 같다.
-  const capRule = use('pension.credit.tax_liability_cap', 'scenarios[].pension_credit_tax_liability_cap');
-  const capSourceRule = use('pension.credit.tax_liability_cap.source_form', 'scenarios[].pension_credit_tax_liability_cap');
-  const capBasisRuleIds = [capRule?.id, capSourceRule?.id].filter(Boolean);
-  const priorTax = profile.prior_year_tax;
-  const priorPensionCredit = priorTax.pension_credit_applied_krw ?? 0;
-  let capKnown = false;
-  let capKrw = null;
-  let capSourceCode = null;
-  if (priorTax.state === 'amount') {
-    capKnown = true;
-    capKrw = priorTax.determined_tax_krw + priorPensionCredit;
-    capSourceCode = 'determined_tax_add_back';
-  } else if (priorTax.state === 'zero') {
-    capKnown = true;
-    capKrw = priorPensionCredit;
-    capSourceCode = 'declared_zero';
-  }
-  const capDeclaredNonzero = priorTax.state === 'nonzero_amount_unknown' || (capKnown && capKrw > 0);
-  const capErrorDirection = capKnown ? null : 'overstated_or_equal';
+  // **나온 값은 상한이다(D40).** `cap_krw`는 결코 `null`이 아니다 — 「모름」이라는
+  // 상태가 없다. 종합소득이 있는데 금액을 모르는 분기에서는 오차 방향조차 정해지지
+  // 않는다(`error_direction_code === 'direction_indeterminate'`, D41).
+  const capResolved = resolveTaxLiabilityCapMock(use, profile);
+  const capKnown = capResolved !== null;
+  const capKrw = capResolved?.cap.cap_krw ?? null;
+  const capIsUpperBound = capResolved?.isUpperBound ?? false;
+  const capErrorDirection = capResolved?.errorDirection ?? null;
+  const capBasisRuleIds = capResolved?.basisRuleIds ?? [];
 
-  if (!capKnown) {
+  if (capResolved) {
+    // **언제나 나간다.** 이 한도가 총급여액에서 계산한 값이고 다른 소득공제·
+    // 세액공제를 반영하지 않았으며, 그래서 실제 공제는 이보다 적을 수 있다는
+    // 사실이 금액과 같은 화면에 있어야 한다(규칙의 `required_display`).
     notices.push({
-      code: 'tax_liability_cap_unknown',
+      code: 'tax_liability_cap_estimated_from_total_salary',
       severity: 'warning',
-      field: 'profile.prior_year_tax',
-      params: { error_direction: capErrorDirection, declared_nonzero: capDeclaredNonzero },
+      field: 'profile.current_year_total_salary_krw',
+      params: {
+        error_direction: capErrorDirection,
+        branch: capResolved.branch,
+        is_upper_bound: capIsUpperBound,
+        cap_krw: capKrw,
+      },
       basis_rule_ids: capBasisRuleIds,
     });
-  } else if (capKrw === 0) {
-    // **오류가 아니라 결과다** — 이 사용자에게는 0이 정확한 답이다.
-    notices.push({ code: 'tax_liability_cap_zero', severity: 'info', field: null, params: {}, basis_rule_ids: capBasisRuleIds });
+    if (!capIsUpperBound) {
+      // 다른 소득을 세지 않은 것은 산출세액을 작게 잡는 방향이고 공제를 세지
+      // 않은 것은 크게 잡는 방향이라 합의 부호가 정해지지 않는다.
+      notices.push({
+        code: 'tax_liability_cap_direction_indeterminate',
+        severity: 'warning',
+        field: 'profile.current_year_global_income_krw',
+        params: { branch: capResolved.branch },
+        basis_rule_ids: capBasisRuleIds,
+      });
+    }
+    if (capKrw === 0) {
+      // **오류가 아니라 결과다** — 상한이 0이면 실제 한도도 0인 등식이 되지만,
+      // 미정 분기에서는 0이 실제 한도를 가두지 못한다.
+      notices.push({
+        code: 'tax_liability_cap_zero',
+        severity: 'info',
+        field: 'profile.current_year_total_salary_krw',
+        params: { is_exact: capIsUpperBound },
+        basis_rule_ids: capBasisRuleIds,
+      });
+    }
   }
 
   const carryoverRule = use('pension.credit.unused.contribution_carryover');
-  const creditCarryforward = capRule?.value?.credit_carryforward ?? false;
+  const creditCarryforward = capResolved?.cap.credit_carryforward ?? false;
 
   // -- 확정 축의 최댓값 (계약 5.15절, D36) -----------------------------------
   // 연금계좌 합산 인정한도를 전액 채웠을 때의 세액공제액. **소득세분만 내지
@@ -1756,13 +1928,14 @@ function computeScenario(scenario, request, rulesets) {
   // 이 목은 청년 우대(개정안 `proposed.pension.credit.youth_irp_rate`)를 입력
   //으로 받지 않는다 — `unapplied_proposed_rules`에 `requires_input_not_collected`
   // 로 실린다. 언제나 본문 구간(`credit_rate_bracket`)에서 온다.
-  let ceilingCapRelation = 'cap_unknown';
-  if (capKnown) {
-    // **소득세분끼리 비교한다** — 한도는 산출세액에서 나온 소득세의 값이고
-    // 상한의 합계는 지방소득세를 포함하므로, 그대로 비교하면 단위가 다른
-    // 두 수를 재는 것이 된다.
-    ceilingCapRelation = capKrw < ceilingIncomeTaxKrw ? 'cap_below_ceiling' : 'cap_at_or_above_ceiling';
-  }
+  // 9.0.0부터 `cap_unknown`이 없다 — 한도가 결코 null이 아니므로 이 관계는 언제나
+  // 값을 갖는다. **`cap_at_or_above_ceiling`은 「걸리지 않는다」가 아니다** — 한도가
+  // 상한이므로 실제 한도는 이보다 작을 수 있다. 그 구분은 `binding_code`가 낸다(D40).
+  //
+  // **소득세분끼리 비교한다** — 한도는 산출세액에서 나온 소득세의 값이고
+  // 상한의 합계는 지방소득세를 포함하므로, 그대로 비교하면 단위가 다른
+  // 두 수를 재는 것이 된다.
+  const ceilingCapRelation = capKrw < ceilingIncomeTaxKrw ? 'cap_below_ceiling' : 'cap_at_or_above_ceiling';
   const pensionCreditCeiling = {
     ceiling_krw: ceilingIncomeTaxKrw + ceilingLocalTaxKrw,
     income_tax_krw: ceilingIncomeTaxKrw,
@@ -1810,9 +1983,11 @@ function computeScenario(scenario, request, rulesets) {
     const totalBeforeCapKrw = incomeTaxBeforeCapKrw + localTaxBeforeCapKrw;
     const capApplied = capKnown && incomeTaxKrw < incomeTaxBeforeCapKrw;
     const planCap = {
-      known: capKnown,
       cap_krw: capKrw,
       applied: capApplied,
+      // **잘렸다는 사실과 「걸린다는 것이 증명된다」는 사실은 다르다**(D40). 추정
+      // 한도가 상한인 분기에서만 잘림이 실제 한도의 잘림을 증명한다.
+      binding_code: capBindingCodeFor(capApplied, capIsUpperBound),
       reduced_income_tax_krw: incomeTaxBeforeCapKrw - incomeTaxKrw,
       reduced_local_tax_krw: localTaxBeforeCapKrw - localTaxKrw,
       reduced_total_krw: totalBeforeCapKrw - totalCreditKrw,
@@ -2131,7 +2306,7 @@ function computeScenario(scenario, request, rulesets) {
         // 전환 신청의 대상으로 살아남는다.
         credit_eligible_contribution_krw: creditEligible,
         tax_liability_cap: planCap,
-        basis_rule_ids: [creditRateRule?.id, creditRateBasisRule?.id, annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, surtaxRule?.id, capRule?.id].filter(Boolean),
+        basis_rule_ids: [creditRateRule?.id, creditRateBasisRule?.id, annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, surtaxRule?.id, 'pension.credit.tax_liability_cap'].filter(Boolean),
       },
       delta_vs_baseline_krw: 0, // baseline 선정 후 채운다
       non_quantified_effects: nonQuantified,
@@ -2401,20 +2576,9 @@ function computeScenario(scenario, request, rulesets) {
       effective_from: rulesets['2026.json']?.effective_from ?? '2026-01-01',
     },
     account_eligibility: accountEligibility,
-    // 세액 한도와 **그것을 어떻게 알았는지.** 두 시나리오에서 같은 값이다 —
-    // 한도는 개정예고 규칙의 대상이 아니다(계약 5.10절).
-    pension_credit_tax_liability_cap: {
-      known: capKnown,
-      // **`0`은 유효한 값이고 `null`(모름)과 다르다.**
-      cap_krw: capKrw,
-      determined_tax_krw: priorTax.state === 'amount' ? priorTax.determined_tax_krw : null,
-      prior_pension_credit_krw: capKnown ? priorPensionCredit : null,
-      source_code: capSourceCode,
-      declared_nonzero: capDeclaredNonzero,
-      error_direction_code: capErrorDirection,
-      credit_carryforward: creditCarryforward,
-      basis_rule_ids: capBasisRuleIds,
-    },
+    // 세액 한도와 **그것을 어떻게 계산했는지.** 두 시나리오에서 같은 값이다 —
+    // 한도는 개정예고 규칙의 대상이 아니다(계약 5.10절, D39·D40).
+    pension_credit_tax_liability_cap: capResolved?.cap ?? null,
     // 5.15절. 확정 축의 최댓값(D36) — 이 사람이 올해 받을 수 있는 세액공제의 상한.
     pension_credit_ceiling: pensionCreditCeiling,
     // 5.16절. 연금계좌를 나중에 받을 때의 세율표(D36). 금액은 한 칸도 없다.
@@ -2591,14 +2755,8 @@ export function compute(request, rulesets) {
     applies_to_scenarios: applyAll,
     basis_rule_ids: [ageReckoningRule.id],
   });
-  if (request.profile.prior_year_tax.pension_credit_applied_krw == null) {
-    assumptions.push({
-      code: 'prior_pension_credit_zero_assumed',
-      params: {},
-      applies_to_scenarios: applyAll,
-      basis_rule_ids: ['pension.credit.tax_liability_cap.source_form'],
-    });
-  }
+  // **`prior_pension_credit_zero_assumed`가 여기 있었다**(D39에 폐기). 되더하기의
+  // 가산항을 0으로 보던 가정인데, 되더할 입력 자체가 사라졌다.
   assumptions.push({
     code: 'local_tax_follows_income_tax_cap',
     params: {},
@@ -2626,10 +2784,18 @@ export function compute(request, rulesets) {
     });
   }
   // **`basis_rule_ids`를 비워 두는 것도 주장이다** — 계약 4.3절이 빈 배열을 "룰셋
-  // 근거가 없는 순수 표시 규칙"으로 정했다. 아래 넷은 실제로 표시 규칙이라 비어 있고,
+  // 근거가 없는 순수 표시 규칙"으로 정했다. 아래 셋은 실제로 표시 규칙이라 비어 있고,
   // 위의 것들은 근거가 있어 채워져 있다.
   assumptions.push({ code: 'single_tax_year_only', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
-  assumptions.push({ code: 'other_deductions_excluded', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
+  // 9.0.0부터 이 가정에 룰셋 근거가 붙는다 — 세액 한도를 총급여액에서 산출하는
+  // 경로가 세지 않은 공제를 규칙이 `excluded_items`로 열거하고, 그것을 세지 않은
+  // 결과가 어느 방향인지(과대)까지 같은 규칙이 적는다. 전에는 근거 없는 표시 규칙이었다.
+  assumptions.push({
+    code: 'other_deductions_excluded',
+    params: {},
+    applies_to_scenarios: applyAll,
+    basis_rule_ids: ['pension.credit.tax_liability_cap.current_year_estimate'],
+  });
   assumptions.push({ code: 'rounding_floor_to_won', params: {}, applies_to_scenarios: applyAll, basis_rule_ids: [] });
   // 5.1.0(D28, 계약 0.9절) — **가정을 보내면 이 진술이 거짓이 된다.** 그 계산에서는
   // ISA 효과가 실제로 금액으로 나가므로(`Plan.assumption_based_isa_estimate`), 선언과

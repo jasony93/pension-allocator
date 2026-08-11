@@ -117,7 +117,9 @@ export function mountApp(root, { engineClient, analytics }) {
   const resultSlot = el('div', { class: 'result-slot' });
   mainEl.append(inputSlot, resultSlot);
 
-  const footer = el('footer', { class: 'app-footer' }, ['제공자 표기 · 현재 제휴·광고 없음 · 룰셋 기준일 2026-08-08']);
+  // 12.2(b) — "현재 제휴·광고 없음"은 `LimitNote`가 같은 스크롤에서 이미
+  // 말한다. 푸터에서 뗀다.
+  const footer = el('footer', { class: 'app-footer' }, ['제공자 표기 · 룰셋 기준일 2026-08-08']);
 
   layout.append(header, mainEl, footer);
   mount(root, layout);
