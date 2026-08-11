@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { compute } from './index.mjs';
 import { uncertaintyNotesIn } from './ruleset.mjs';
 import {
+  CAP_COORDINATES,
   CONFIRMED_FILE,
   baseRequest,
   cloneRulesets,
@@ -176,7 +177,9 @@ test('전환 특례의 조건이 룰셋에서 바뀌면 응답도 따라 바뀐�
     const request = baseRequest({
       profile: {
         monthly_capacity_krw: 1_000_000,
-        prior_year_tax: { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+        // 이 총급여의 추정 한도(900,000원)가 공제액(1,350,000원)을 자른다 — 전환 특례
+        // 규칙이 실제로 읽히는 상태여야 이 검사가 뜻을 갖는다(D40의 검산 좌표).
+        current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
       },
     });
     return planOf(scenarioOf(compute(request, bundle)), 'max_tax_credit').deterministic_benefit
@@ -319,7 +322,9 @@ test('한 규칙 안의 여러 표시가 하나로 뭉개지지 않는다', () =
   const request = baseRequest({
     profile: {
       monthly_capacity_krw: 1_000_000,
-      prior_year_tax: { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+      // 한도가 실제로 자르는 총급여(D40의 검산 좌표). 자르지 않으면 전환 특례 규칙이
+      // 읽히지 않아 이 검사가 아무것도 보지 못한다.
+      current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
     },
   });
   const entry = scenarioOf(compute(request, rulesets)).legal_basis.find(
@@ -507,4 +512,186 @@ test('비과세 한도를 바꾸면 축의 상한이 따라 바뀐다 — 308,00
   });
 
   assert.equal(ceilingOf(mutated) * 2, before, '한도를 반으로 줄였는데 상한이 그대로다');
+});
+
+// ── 세액 한도를 총급여액에서 산출하는 경로 (D39·D40) ─────────────
+//
+// **이 묶음이 무는 것은 값이 아니라 방향이다.** 값이 룰셋에서 오는지는 아래 넷이 보고,
+// **오차 방향이 뒤집히는 주입**은 그 뒤 셋이 본다. 이 조직에서 회차마다 나온 것이
+// 「통과하지만 아무것도 증명하지 않는 검사」였고, 방향은 값과 달리 **틀려도 금액이
+// 그럴듯해 보이는** 축이다.
+
+/** 한도가 실제로 자르는 좌표. 한도가 결과를 바꾸지 못하면 아래 주입이 전부 무의미하다. */
+const CAP_REQUEST = baseRequest({
+  profile: {
+    current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
+    monthly_capacity_krw: 5_000_000,
+  },
+});
+
+const capOf = (bundle, request = CAP_REQUEST) =>
+  scenarioOf(compute(request, bundle)).pension_credit_tax_liability_cap;
+
+test('한도 산출에 쓰는 규칙이 하나라도 없으면 총급여로 어림잡지 않고 멈춘다', () => {
+  for (const ruleId of [
+    'income.wage.deduction',
+    'income.deduction.basic.self',
+    'tax.rate.basic',
+    'credit.wage_income',
+    'pension.credit.tax_liability_cap.current_year_estimate',
+  ]) {
+    const mutated = withMutation((clone) => {
+      const doc = clone[CONFIRMED_FILE];
+      doc.rules = doc.rules.filter((r) => r.id !== ruleId);
+    });
+    const response = compute(CAP_REQUEST, mutated);
+    assert.equal(response.ok, false, `${ruleId}이 없는데 계산이 끝났다 — 산식이 코드에 박혀 있다`);
+    assert.ok(errorCodes(response).includes('rule_missing'));
+  }
+});
+
+test('근로소득공제 구간을 바꾸면 한도가 따라 바뀐다 — 산식이 코드에 없다', () => {
+  const before = capOf(rulesets);
+  const mutated = withMutation((clone) => {
+    const brackets = findRule(clone, CONFIRMED_FILE, 'income.wage.deduction').value.brackets;
+    // 공제를 늘리면 과세표준이 줄고 산출세액이 줄어 **한도가 내려간다.**
+    for (const bracket of brackets) bracket.base_krw += 1_000_000;
+  });
+  const after = capOf(mutated);
+
+  assert.ok(after.wage_income_deduction_krw > before.wage_income_deduction_krw);
+  assert.ok(after.cap_krw < before.cap_krw, '근로소득공제를 늘렸는데 한도가 그대로다');
+});
+
+test('기본세율표와 기본공제를 바꾸면 한도가 따라 바뀐다', () => {
+  const before = capOf(rulesets).cap_krw;
+
+  const rateChanged = withMutation((clone) => {
+    const brackets = findRule(clone, CONFIRMED_FILE, 'tax.rate.basic').value.brackets;
+    for (const bracket of brackets) bracket.rate_on_excess /= 2;
+  });
+  assert.ok(capOf(rateChanged).cap_krw < before, '세율을 반으로 줄였는데 한도가 그대로다');
+
+  const deductionChanged = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'income.deduction.basic.self');
+    rule.value.amount_krw *= 3;
+  });
+  const after = capOf(deductionChanged);
+  assert.ok(after.basic_deduction_krw > 0 && after.cap_krw < before, '기본공제가 한도에 걸리지 않는다');
+});
+
+test('근로소득세액공제 제2항 한도를 바꾸면 한도가 따라 바뀐다 — 산식 문자열을 실제로 읽는다', () => {
+  const before = capOf(rulesets);
+  const mutated = withMutation((clone) => {
+    const brackets = findRule(clone, CONFIRMED_FILE, 'credit.wage_income').value.limit_brackets;
+    // 첫 구간은 금액, 나머지는 산식 문자열이다. **둘 다** 반으로 줄인다.
+    for (const bracket of brackets) {
+      if (typeof bracket.limit_krw === 'number') bracket.limit_krw = Math.floor(bracket.limit_krw / 2);
+      if (typeof bracket.formula === 'string') {
+        bracket.formula = bracket.formula.replace(/^(\d+)/, (m) => String(Math.floor(Number(m) / 2)));
+      }
+      if (typeof bracket.floor_krw === 'number') bracket.floor_krw = Math.floor(bracket.floor_krw / 2);
+    }
+  });
+  const after = capOf(mutated);
+
+  // 근로소득세액공제가 줄면 빼는 값이 줄어 **한도가 올라간다.**
+  assert.ok(after.wage_income_credit_krw < before.wage_income_credit_krw);
+  assert.ok(after.cap_krw > before.cap_krw, '제2항 한도를 반으로 줄였는데 한도가 그대로다');
+});
+
+test('산식 문자열의 형태가 깨지면 어림잡지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    const brackets = findRule(clone, CONFIRMED_FILE, 'credit.wage_income').value.limit_brackets;
+    for (const bracket of brackets) {
+      if (typeof bracket.formula === 'string') bracket.formula = '총급여액에 따라 정한다';
+    }
+  });
+  // **총급여가 첫 구간(금액이 적힌 구간)을 넘어야 산식 자리에 닿는다.** 검산 좌표
+  // 34,143,912원이 그 구간 밖이다 — 여기서 멈추지 않으면 산식을 읽지 않았다는 뜻이다.
+  const response = compute(
+    baseRequest({
+      profile: {
+        current_year_total_salary_krw: CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw,
+        monthly_capacity_krw: 5_000_000,
+      },
+    }),
+    mutated,
+  );
+  assert.equal(response.ok, false, '읽을 수 없는 산식을 만나고도 값을 냈다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+// ── 오차 방향을 뒤집는 주입 ──────────────────────────────────────
+
+test('주입 / 룰셋의 오차 방향 코드를 바꾸면 응답의 방향도 바뀐다 — 코드가 엔진에 박혀 있지 않다', () => {
+  assert.equal(capOf(rulesets).error_direction_code, 'overstated_or_equal');
+
+  const mutated = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
+    rule.value.error_direction.code = 'understated_or_equal';
+    for (const branch of Object.values(rule.value.branches)) {
+      if (branch.direction.startsWith('overstated_or_equal')) {
+        branch.direction = branch.direction.replace('overstated_or_equal', 'understated_or_equal');
+      }
+    }
+  });
+
+  assert.equal(
+    capOf(mutated).error_direction_code,
+    'understated_or_equal',
+    '룰셋이 방향을 바꿨는데 응답이 그대로다 — 코드가 엔진에 박혀 있다는 뜻이다',
+  );
+});
+
+test('주입 / 상한을 하한으로 뒤집으면 「걸린다」의 증명이 사라진다', () => {
+  // **이 주입이 이 파일의 핵심이다.** 값은 한 원도 바뀌지 않고 방향만 뒤집힌다.
+  // 잡히지 않으면 화면이 「한도에 걸린다」를 증명 없이 말하게 된다.
+  const before = planOf(scenarioOf(compute(CAP_REQUEST, rulesets)), 'max_tax_credit')
+    .deterministic_benefit.tax_liability_cap;
+  assert.equal(before.applied, true, '한도가 자르지 않는 좌표에서는 이 주입이 아무것도 못 본다');
+  assert.equal(before.binding_code, 'binds_provably');
+
+  const mutated = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
+    // 상한 코드는 그대로 두고 **분기의 방향만** 상한이 아닌 것으로 바꾼다.
+    rule.value.branches.wage_income_only.direction = 'indeterminate. 주입된 방향이다.';
+  });
+
+  const scenario = scenarioOf(compute(CAP_REQUEST, mutated));
+  const after = planOf(scenario, 'max_tax_credit').deterministic_benefit.tax_liability_cap;
+
+  // 자르는 것은 그대로다 — 금액은 한 원도 바뀌지 않는다.
+  assert.equal(after.applied, true);
+  assert.equal(after.cap_krw, before.cap_krw);
+  // 그러나 그 자름이 실제 한도의 자름을 증명하지 못하게 된다.
+  assert.equal(
+    after.binding_code,
+    'binding_not_determined',
+    '분기가 상한이 아니게 됐는데도 「걸린다」가 증명된다고 말한다',
+  );
+  assert.equal(scenario.pension_credit_tax_liability_cap.is_upper_bound, false);
+  assert.equal(scenario.pension_credit_tax_liability_cap.error_direction_code, 'direction_indeterminate');
+  assert.ok(noticeCodes(scenario).includes('tax_liability_cap_direction_indeterminate'));
+});
+
+test('주입 / 미정 분기를 상한으로 바꾸면 등식 표시가 되살아난다 — 그 자리가 실제로 매여 있다', () => {
+  const request = baseRequest({
+    profile: {
+      current_year_total_salary_krw: CAP_COORDINATES.ZERO_EXACT.total_salary_krw,
+      has_non_wage_global_income_current_year: true,
+      current_year_global_income_krw: null,
+    },
+  });
+
+  // 미정 분기에서는 한도가 0이어도 등식이 아니다.
+  assert.equal(capOf(rulesets, request).is_exact, false);
+
+  const mutated = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
+    rule.value.branches.global_income_amount_missing.direction = 'overstated_or_equal. 주입된 방향이다.';
+  });
+
+  // 룰셋이 그 분기를 상한이라고 말하면 0이 등식이 된다. 판정이 룰셋에 매여 있다는 뜻이다.
+  assert.equal(capOf(mutated, request).is_exact, true);
 });

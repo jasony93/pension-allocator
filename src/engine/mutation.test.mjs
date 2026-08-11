@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { compute } from './index.mjs';
-import { baseRequest, loadRulesets } from './test-helpers.mjs';
+import { CAP_COORDINATES, baseRequest, loadRulesets } from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
 // 경로에 공백·한글이 들어 있다. `URL.pathname`은 퍼센트 인코딩된 문자열이므로 쓰지 않는다.
@@ -468,5 +468,91 @@ test('주입 / 합계에 분모나 기간을 붙이면 구조 검사가 문다',
     planById(annual(COMPOSITE, rulesets), 'max_tax_credit').headline_composite_total.is_annual,
     true,
     '연간 선언을 넣었는데 응답이 그대로다',
+  );
+});
+
+// ── 주입 6. 상한을 하한처럼 다룬다 (D40) ─────────────────────────────────────
+//
+// **이 주입이 겨누는 것은 금액이 아니라 방향이다.** 세액 한도는 이제 그 사람의 확정된
+// 한도가 아니라 **상한**이고, 그 성질에서 나오는 결론은 한쪽뿐이다 — 「상한이 자르면
+// 실제로도 자른다」는 참이고 「상한이 자르지 않으면 실제로도 자르지 않는다」는 거짓이다.
+// 구현이 그 비대칭을 잃으면 **금액은 전부 그대로인 채** 화면이 증명되지 않은 문장을
+// 말하기 시작한다. 값 검사로는 잡히지 않는 결함이므로 여기서 소스를 뒤집어 확인한다.
+
+/** 한도가 실제로 자르는 좌표. 자르지 않으면 아래 주입이 아무것도 뒤집지 못한다. */
+const CAP_BINDING_REQUEST = baseRequest({
+  profile: {
+    current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
+    monthly_capacity_krw: 5_000_000,
+  },
+});
+
+const capOfPlan = (response) =>
+  planById(response, 'max_tax_credit').deterministic_benefit.tax_liability_cap;
+
+test('주입 / 한도를 상한이 아니라 하한으로 취급하면(min → max) 공제액이 자르기 전보다 커진다', async () => {
+  const before = capOfPlan(compute(CAP_BINDING_REQUEST, rulesets));
+  assert.equal(before.applied, true, '이 좌표에서 자르지 않으면 주입이 아무것도 보지 못한다');
+
+  const flipped = await mutatedCompute({
+    file: 'plans.mjs',
+    from: 'const recognizedIncomeTax = Math.min(incomeTax, cap.cap_krw);',
+    to: 'const recognizedIncomeTax = Math.max(incomeTax, cap.cap_krw);',
+  });
+  // (1) 자르던 좌표에서 자름이 사라진다. 한도가 낮은 사람에게 낼 수 없는 공제를 준다.
+  const bound = capOfPlan(flipped(CAP_BINDING_REQUEST, rulesets));
+  assert.equal(bound.applied, false, '주입이 자름을 없애지 못했다 — 이 좌표가 겨눈 자리가 아니다');
+
+  // (2) 한도가 넉넉한 좌표에서는 인정 공제액이 **자르기 전 금액을 넘는다.** 조문이
+  //     "없는 것으로 한다"고 한 금액을 넘어서는 값이 결과에 남는 것이고, 불변식 I22가
+  //     무는 자리다.
+  const ample = baseRequest({ profile: { monthly_capacity_krw: 5_000_000 } });
+  const benefit = planById(flipped(ample, rulesets), 'max_tax_credit').deterministic_benefit;
+  assert.ok(
+    benefit.pension_credit_income_tax_krw > benefit.pension_credit_income_tax_before_cap_krw,
+    '주입이 금액을 바꾸지 못했다 — 이 검사는 통과하면서 아무것도 증명하지 않는다',
+  );
+});
+
+test('주입 / 「자르지 않았다」를 「걸리지 않는다」로 읽으면(부정 뒤집기) 증명 표시가 거짓이 된다', async () => {
+  // 한도가 자르지 **않는** 요청. 여기서 `binds_provably`가 나오면 화면이
+  // 「한도에 걸립니다」를 증명 없이 말하게 된다.
+  const ample = baseRequest({ profile: { monthly_capacity_krw: 5_000_000 } });
+  assert.equal(capOfPlan(compute(ample, rulesets)).binding_code, 'binding_not_determined');
+
+  const flipped = await mutatedCompute({
+    file: 'liability-cap.mjs',
+    from: 'return applied && isUpperBound ? CAP_BINDING.PROVABLE : CAP_BINDING.NOT_DETERMINED;',
+    to: 'return !applied && isUpperBound ? CAP_BINDING.PROVABLE : CAP_BINDING.NOT_DETERMINED;',
+  });
+
+  assert.equal(
+    capOfPlan(flipped(ample, rulesets)).binding_code,
+    'binds_provably',
+    '주입이 표시를 뒤집지 못했다 — 이 자리를 무는 검사가 실제로는 없다는 뜻이다',
+  );
+  // 뒤집힌 상태에서 자르는 좌표는 반대로 증명을 잃는다. 양쪽 방향이 다 움직여야
+  // 이 값이 실제로 두 사실을 가르고 있다는 것이 확인된다.
+  assert.equal(capOfPlan(flipped(CAP_BINDING_REQUEST, rulesets)).binding_code, 'binding_not_determined');
+});
+
+test('주입 / 근로소득세액공제 차감을 빼면 한도가 검산 좌표에서 어긋난다', async () => {
+  // **관리자가 조문으로 검산한 좌표가 이 단계를 실제로 재는지 본다.** 4단계를 빼면
+  // 한도가 「산출세액 그 자체」가 되어 더 커지고, 상한이 더 헐거워진다 — 과대 방향이다.
+  const withoutStep = await mutatedCompute({
+    file: 'liability-cap.mjs',
+    from: 'const capKrw = clampToZero(computedTax - wageCredit);',
+    to: 'const capKrw = clampToZero(computedTax);',
+  });
+
+  const scenario = withoutStep(CAP_BINDING_REQUEST, rulesets).scenarios[0];
+  assert.notEqual(
+    scenario.pension_credit_tax_liability_cap.cap_krw,
+    CAP_COORDINATES.BINDS.cap_krw,
+    '4단계를 빼도 검산 좌표가 그대로다 — 골든 좌표가 그 단계를 재지 않고 있다',
+  );
+  assert.ok(
+    scenario.pension_credit_tax_liability_cap.cap_krw > CAP_COORDINATES.BINDS.cap_krw,
+    '공제를 덜 빼면 한도는 올라간다 — 방향이 반대로 나왔다면 산식이 뒤집힌 것이다',
   );
 });

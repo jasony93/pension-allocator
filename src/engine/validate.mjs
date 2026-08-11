@@ -13,8 +13,6 @@ import {
   ISA_INCOME_CHARACTERS,
   MONTHS_IN_TAX_YEAR,
   PLAN_ORDER,
-  PRIOR_TAX_STATE,
-  PRIOR_TAX_STATES,
   SCENARIO_ORDER,
   SUPPORTED_MAJOR,
   TRANSFER_DESTINATIONS,
@@ -211,7 +209,6 @@ function validateProfile(c, profile) {
   return {
     // 만 나이가 아니라 생년월일을 받는다(D21). 환산은 엔진이 하고 기준일은 계산 층에서 정한다.
     birth_date: c.date(profile.birth_date, 'profile.birth_date', { required: true }),
-    prior_year_tax: validatePriorYearTax(c, profile.prior_year_tax),
     current_year_total_salary_krw: c.requiredInt(
       profile.current_year_total_salary_krw,
       'profile.current_year_total_salary_krw',
@@ -302,7 +299,9 @@ function validateIsaReturnAssumption(c, node) {
  *
  * **1단계가 '아니오'인데 금액이 실려 오면 오류다.** 둘 중 무엇이 사용자의 답인지
  * 엔진이 고르면 그것이 추론이고, 고르는 순간 "총급여를 환산해 판정"으로 미끄러진다.
- * `prior_year_tax.state`와 `determined_tax_krw`에 이미 쓴 것과 같은 형태다.
+ *
+ * **이 두 값이 이제 세액 한도의 분기도 정한다**(D39·D40). 공제율 축을 고르는 물음과
+ * 같은 물음이 한도 추정의 분기를 고르므로, 새 입력이 한 개도 늘지 않았다.
  */
 function validateGlobalIncome(c, profile) {
   const hasNonWage = c.requiredBoolean(
@@ -326,55 +325,6 @@ function validateGlobalIncome(c, profile) {
   }
 
   return { hasNonWage, amount, provided };
-}
-
-/**
- * 세액 한도의 재료. **결정세액과 연금계좌 세액공제액을 짝으로 받는다.**
- *
- * 하나만 받으면 등식이 성립하지 않는다 — 결정세액만 받으면 이미 받은 공제만큼 한도가
- * 줄어 보이는 순환이 생기고(과소), 공제액만 받으면 한도를 계산할 수조차 없다.
- * 그래서 두 값을 **한 객체 안에** 두고, 되더하기의 출발점인 결정세액을 그 객체의
- * 필수 항목으로 만들었다. 짝이라는 사실이 규약이 아니라 자료형으로 강제된다.
- *
- * `state`를 따로 두는 이유는 "빈 칸"과 "모르겠습니다"를 가르기 위해서다(D14).
- * 비어 있는 것을 모름으로 간주하면 사용자의 침묵에서 답을 추론하는 것이 된다.
- */
-function validatePriorYearTax(c, node) {
-  const field = 'profile.prior_year_tax';
-  if (!isObject(node)) {
-    c.add(ERROR.MISSING_REQUIRED, field);
-    return null;
-  }
-
-  const state = c.enumValue(node.state, `${field}.state`, PRIOR_TAX_STATES, { required: true });
-
-  // 되더하기의 가산항. 미입력이면 0으로 보되 그 사실을 가정으로 낸다 —
-  // 0으로 두면 한도가 과소로 나오고, 과소는 절세액을 과대로 만들지 않는 방향이다.
-  const creditProvided =
-    node.pension_credit_applied_krw !== undefined && node.pension_credit_applied_krw !== null;
-  const pensionCredit = c.optionalInt(
-    node.pension_credit_applied_krw,
-    `${field}.pension_credit_applied_krw`,
-  );
-
-  let determined = null;
-  if (state === PRIOR_TAX_STATE.AMOUNT) {
-    determined = c.requiredInt(node.determined_tax_krw, `${field}.determined_tax_krw`);
-  } else if (node.determined_tax_krw !== undefined && node.determined_tax_krw !== null) {
-    // 금액을 실었는데 state가 금액을 뜻하지 않는다. 둘 중 무엇이 사용자의 답인지
-    // 엔진이 고르면 그것이 추론이다. 고르지 않고 되돌려준다.
-    c.add(ERROR.INVALID_ENUM, `${field}.state`, {
-      value: String(state),
-      reason: 'determined_tax_krw_present',
-    });
-  }
-
-  return {
-    state,
-    determined_tax_krw: determined,
-    pension_credit_applied_krw: pensionCredit ?? 0,
-    pension_credit_provided: creditProvided,
-  };
 }
 
 function validateAccounts(c, accounts) {

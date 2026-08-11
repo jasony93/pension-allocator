@@ -193,7 +193,11 @@ const VOCABULARY_DEBT = [
   'plan.tax_liability_cap',
   'plan.objective_degenerate',
   'scenario.pension_withdrawal_start',
-  'tax_liability_cap.known',
+  // **`tax_liability_cap.known`이 여기 있었다**(D39·D40). 그 축이 사라지고 뜻이 다른
+  // 축 하나가 들어왔다 — `binding_code`는 「값을 아는가」가 아니라 **「한도가 걸린다는
+  // 것이 증명되는가」**를 주장한다. 자르지 않은 결과가 「걸리지 않는다」를 뜻하지 않는다는
+  // 것이 이 회차의 핵심이고, 정답지가 그 구분을 주장할 자리가 여기다.
+  'tax_liability_cap.binding_code',
   'tax_liability_cap.cap_krw',
   'tax_liability_cap.applied',
   'tax_liability_cap.threshold_income_tax_krw',

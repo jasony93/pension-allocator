@@ -21,6 +21,7 @@ import {
 } from './constants.mjs';
 import { boundariesFrom, boundariesSource, dedupeErrors } from './boundaries.mjs';
 import { buildPlans } from './plans.mjs';
+import { resolveTaxLiabilityCap } from './liability-cap.mjs';
 import { resolveHeadlineRule } from './headline.mjs';
 import { resolveIsaReturn } from './isa-return.mjs';
 import { resolvePensionWithdrawalTaxReference } from './pension-reference.mjs';
@@ -35,7 +36,6 @@ import {
   resolvePensionStartDates,
   resolvePensionWithoutCreditFacts,
   resolveRates,
-  resolveTaxLiabilityCap,
   resolveTransfer,
   resolveWithdrawalOrder,
 } from './limits.mjs';
@@ -166,7 +166,9 @@ function computeScenario(scenarioId, request, rulesets) {
   const isaEligible = eligibilityResult.eligibility.find((e) => e.account === ACCOUNT.ISA).eligible;
 
   // 4.5. 세액 한도. **마지막에 걸리는 상한이 아니라 계산 전체의 전제다**(규칙의 engine_note).
-  const capResult = resolveTaxLiabilityCap(access, { priorYearTax: request.profile.prior_year_tax });
+  //      D39로 직전 과세연도 결정세액 입력이 사라졌고, 이제 해당 과세기간 총급여액에서
+  //      산출한다. **나온 값은 상한이다** — 방향은 룰셋이 증명과 함께 정한다(D40).
+  const capResult = resolveTaxLiabilityCap(access, { profile: request.profile });
   notices.push(...capResult.notices);
 
   // 4.6. 연금으로 꺼낼 수 있는 가장 이른 시점. 배분 비율을 바꾸지 않는다 — 시점만 낸다.
@@ -531,11 +533,6 @@ function buildAssumptions(request, ageReckoning, isaReturn) {
     add(ASSUMPTION.CREDIT_RATE_WAGE_ONLY_READING, {}, [RULE.CREDIT_RATE_BASIS]);
   }
 
-  if (!request.profile.prior_year_tax.pension_credit_provided) {
-    // 되더하기의 가산항을 0으로 두었다. 한도가 과소로 나오는 방향이고,
-    // 과소한 한도는 절세액을 과대로 만들지 않는다.
-    add(ASSUMPTION.PRIOR_PENSION_CREDIT_ZERO, {}, [RULE.CREDIT_TAX_CAP_SOURCE]);
-  }
   add(ASSUMPTION.LOCAL_TAX_FOLLOWS_CAP, {}, [RULE.CREDIT_TAX_CAP, RULE.LOCAL_SURTAX]);
 
   const retirementTransferIn =
@@ -563,7 +560,10 @@ function buildAssumptions(request, ageReckoning, isaReturn) {
   }
 
   add(ASSUMPTION.SINGLE_TAX_YEAR);
-  add(ASSUMPTION.OTHER_DEDUCTIONS_EXCLUDED);
+  // **이 가정에 이제 룰셋 근거가 붙는다.** 세액 한도를 총급여액에서 산출하는 경로가
+  // 세지 않은 공제를 규칙이 `excluded_items`로 열거하고, 그것을 세지 않은 결과가
+  // 어느 방향인지(과대)까지 같은 규칙이 적는다. 전에는 근거 없는 표시 규칙이었다.
+  add(ASSUMPTION.OTHER_DEDUCTIONS_EXCLUDED, {}, [RULE.CREDIT_TAX_CAP_ESTIMATE]);
   // 원 미만 버림은 룰셋 근거가 아니라 엔진의 표시 규칙이다. 그래서 근거 규칙이 비어 있다.
   add(ASSUMPTION.ROUNDING_FLOOR);
   // 수익률 가정이 들어오면 이 가정은 거짓이 된다 — 그때는 금액이 실제로 나간다.

@@ -11,12 +11,13 @@
 // 이 파일은 테스트 전용이다 — `index.mjs`가 내보내지 않으므로 제품 번들에 들어가지 않는다.
 // `test-helpers.mjs`와 같이 확장자가 `.test.mjs`가 아닌 이유는 러너가 테스트 파일로
 // 잡지 않게 하기 위해서다. **여기 있는 숫자는 세법 수치가 아니라 실행기의 픽스처다**
-// (기본 과세연도와 "한도가 걸리지 않는 결정세액" 하나뿐이고, 둘 다 아래에 이유를 적었다).
+// (기본 과세연도 하나뿐이고 아래에 이유를 적었다).
 
 import assert from 'node:assert/strict';
 
 import {
   ACCOUNT_ORDER,
+  CAP_BINDING,
   NON_QUANTIFIED,
   PENSION_ACCOUNT_KEYS,
   PLAN,
@@ -32,6 +33,7 @@ import {
 // 검사된 것처럼 보인다 — 이 저장소가 세 번 밟은 침묵과 같은 형태다.
 
 const ACCOUNTS = [...ACCOUNT_ORDER];
+const CAP_BINDING_CODES = Object.values(CAP_BINDING);
 export const CASE_KEYS = ['case', 'request', 'credit_rate', 'expect'];
 /**
  * `basis`·`fallback_applied`는 계약 5.0.0의 새 축이다(D27). 비율만 주장하면 그 비율이
@@ -317,9 +319,12 @@ export const BOUNDARY_KEYS = [
 ];
 /** 배분안 단위 세액 한도. D22가 이름으로 지목한 넷 + D26이 드러내라고 한 조건 둘이다. */
 export const PLAN_TAX_CAP_KEYS = [
-  'known',
+  // **`known`이 여기 있었다**(D39·D40에 폐기). 한도를 「모르는」 상태가 사라졌다 —
+  // 총급여액이 있으면 값이 하나로 정해진다. 그 자리를 대신하는 것이 `binding_code`이고,
+  // 뜻이 다르다: 전자는 「값을 아는가」였고 후자는 **「걸린다는 것이 증명되는가」**다.
   'cap_krw',
   'applied',
+  'binding_code',
   'threshold_income_tax_krw',
   'carryover_shares_future_year_credit_limit',
   'carryover_requires_application',
@@ -510,19 +515,24 @@ function validatePlanTaxCap(value, where, errors) {
   if (!requireNonEmptyObject(value, where, errors)) return;
   unknownKeys(value, PLAN_TAX_CAP_KEYS, where, errors);
 
-  if ('known' in value) requireBoolean(value.known, `${where}.known`, errors);
   if ('applied' in value) requireBoolean(value.applied, `${where}.applied`, errors);
-  // 한도 `0`은 유효한 값이고 `null`(모름)과 다르다(계약 5.10절).
-  if ('cap_krw' in value) requireIntOrNull(value.cap_krw, `${where}.cap_krw`, errors);
+  // 한도 `0`은 유효한 값이고 「모름」이 아니다 — 이 경로에서는 **등식**이다(계약 5.10절).
+  if ('cap_krw' in value) requireInt(value.cap_krw, `${where}.cap_krw`, errors);
   if ('threshold_income_tax_krw' in value) {
     requireInt(value.threshold_income_tax_krw, `${where}.threshold_income_tax_krw`, errors);
   }
-  // 모르는 한도로 자를 수는 없다. 블록이 그렇게 적었으면 옮겨 적다 어긋난 것이다.
-  if (value.known === false && value.applied === true) {
-    errors.push(`${where}: known:false인데 applied:true다 — 모르는 한도로 자를 수 없다`);
+  if ('binding_code' in value && !CAP_BINDING_CODES.includes(value.binding_code)) {
+    errors.push(
+      `${where}.binding_code: 계약 8.7절의 두 값이 아니다 (받은 값: ${value.binding_code})`,
+    );
   }
-  if (value.known === false && 'cap_krw' in value && value.cap_krw !== null) {
-    errors.push(`${where}: known:false인데 cap_krw가 null이 아니다`);
+  // **자르지 않은 것은 「걸리지 않는다」를 증명하지 않는다**(D40). 잘리지 않았는데
+  // 걸림이 증명된다고 적었으면 옮겨 적다 방향이 뒤집힌 것이다.
+  if (value.applied === false && value.binding_code === CAP_BINDING.PROVABLE) {
+    errors.push(
+      `${where}: applied:false인데 binding_code가 ${CAP_BINDING.PROVABLE}다 — ` +
+        '자르지 않은 결과는 한도가 걸린다는 것을 증명하지 못한다',
+    );
   }
 }
 
@@ -1269,21 +1279,15 @@ export function vocabularyUsedBy(parsed) {
 // ── 요청 조립 ────────────────────────────────────────────────────────────────
 
 /**
- * 골든 블록에 없는 새 필수 입력을 채운다. **이 함수는 골든 케이스가 지금까지 무엇을
- * 암묵적으로 전제하고 있었는지를 코드로 적어 둔 것이다.**
+ * 골든 블록에 없는 새 필수 입력을 채운다.
  *
- * 36건은 프로필에 결정세액이 없는 채로 산출됐고, 그것은 "세액 한도가 절세액을 자르지
- * 않을 만큼 충분하다"는 전제 위에서만 성립한다. 계약 4.0.0이 그 값을 필수로 만들었으므로
- * 실행기가 어떤 값이든 넣어야 하는데, **아무 값이나 넣으면 전제가 다시 보이지 않는 곳으로
- * 숨는다.** 그래서 (a) 한도를 자르지 않는 값을 명시적으로 넣고, (b) 그것이 문서가 아니라
- * 실행기가 세운 전제임을 여기에 적는다.
+ * **세액 한도를 채우던 자리가 여기서 사라졌다**(D39·D40). 계약 `9.0.0` 이전에는 블록에
+ * 없는 `profile.prior_year_tax`를 실행기가 "한도가 자르지 않는 값"으로 채웠고, 그 채움이
+ * 곧 골든 케이스의 암묵적 전제였다. 이제 한도는 입력이 아니라 **총급여액에서 계산되는
+ * 값**이므로 채울 것이 없다 — 블록이 이미 싣고 있는 `current_year_total_salary_krw`가
+ * 한도를 정한다. 전제를 실행기가 세우지 않게 된 것이 이 변경의 부수 효과다.
  *
- * **기대값을 다시 세우는 것은 이 유닛의 일이 아니다.** 세액공제액이 0이 아닌 케이스의
- * 기대값 재산출과 한도 경계 케이스 추가는 `tax-domain`이 한다(tax-rules-report.md 13.11절).
- * 그때 블록이 `profile.prior_year_tax`를 직접 실으면 아래 기본값은 덮어써지고 이 함수는
- * 아무 일도 하지 않는다.
- *
- * 생년월일도 같다. 블록은 `age_years`로 나이를 적었고 계약은 이제 생년월일을 받는다.
+ * 생년월일은 그대로다. 블록은 `age_years`로 나이를 적었고 계약은 생년월일을 받는다.
  * 나이를 생년월일로 되옮기는 것은 이 실행기가 하며, 기준일은 엔진이 정한다.
  */
 export function fillContractDefaults(raw, taxYear) {
@@ -1321,15 +1325,6 @@ export function fillContractDefaults(raw, taxYear) {
   // 산출해야 한다.** 실행기가 그 사실을 감추지 않도록 여기 적어 둔다.
   if (options.plan_variants === undefined || options.plan_variants === null) {
     options.plan_variants = PLAN_ORDER.filter((id) => id !== PLAN.PENSION_BEFORE_ISA);
-  }
-
-  if (profile.prior_year_tax === undefined) {
-    profile.prior_year_tax = {
-      state: 'amount',
-      // 어떤 케이스의 공제액보다도 큰 값. 한도가 걸리지 않는 상태를 뜻한다.
-      determined_tax_krw: 100_000_000,
-      pension_credit_applied_krw: 0,
-    };
   }
 
   for (const key of ['annuity_savings', 'retirement_pension']) {

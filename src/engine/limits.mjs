@@ -6,8 +6,6 @@ import {
   ACCOUNT,
   ACCOUNT_TYPE_IN_RULESET,
   ANNUITY_START,
-  CAP_ERROR_DIRECTION,
-  CAP_SOURCE,
   CEILING_CAP_RELATION,
   CEILING_MEANING,
   CEILING_PERIOD,
@@ -17,7 +15,6 @@ import {
   ERROR,
   NOTICE,
   PENSION_ACCOUNT_KEYS,
-  PRIOR_TAX_STATE,
   RULE,
   SCENARIO,
   START_DATE_REASON,
@@ -252,81 +249,6 @@ export function resolveAgeReckoning(access) {
 }
 
 /**
- * 연금계좌 세액공제의 세액 한도.
- *
- * **한도 = 결정세액 + 연금계좌 세액공제액.** 이것이 근사가 아니라 등식인 이유는
- * 소득세법 제61조 제3항이 초과분의 흡수 대상으로 연금계좌세액공제를 이름으로 지목하기
- * 때문이다 — 밀려난 금액만큼이 정확히 "받지 아니한 것"이 되므로 되더하면 잔여값이 나온다.
- * 결정세액이 0인 경우에도 성립한다.
- *
- * **모를 때 지어내지 않는다.** 대신 오차의 방향을 낸다. 한도는 공제액을 늘리는 경로가
- * 조문에 없으므로, 한도를 무시한 값은 언제나 과대이거나 같고 결코 과소일 수 없다.
- */
-export function resolveTaxLiabilityCap(access, { priorYearTax }) {
-  const notices = [];
-  const appliedTo = 'pension_credit_tax_liability_cap.cap_krw';
-
-  // 한도를 모를 때에도 읽는다 — "이 값은 상한이다"라는 진술의 근거가 이 조문 자체다.
-  const creditCarryforward = access.value(
-    RULE.CREDIT_TAX_CAP,
-    ['value', 'excess_treatment', 'credit_carryforward'],
-    appliedTo,
-  );
-  // 사용자가 어느 서식 칸을 보고 답했는지, 그리고 모를 때의 정책이 실린 규칙.
-  access.use(RULE.CREDIT_TAX_CAP_SOURCE, appliedTo);
-
-  if (creditCarryforward === undefined) return { cap: null, notices };
-
-  const priorCredit = priorYearTax.pension_credit_applied_krw;
-  const basisRuleIds = [RULE.CREDIT_TAX_CAP, RULE.CREDIT_TAX_CAP_SOURCE].sort();
-
-  let capKrw = null;
-  let source = null;
-  if (priorYearTax.state === PRIOR_TAX_STATE.AMOUNT) {
-    capKrw = priorYearTax.determined_tax_krw + priorCredit;
-    source = CAP_SOURCE.ADD_BACK;
-  } else if (priorYearTax.state === PRIOR_TAX_STATE.ZERO) {
-    // 결정세액이 0이어도 되더하기는 그대로다. 0 + 이미 받은 연금계좌 세액공제가 잔여값이다.
-    capKrw = priorCredit;
-    source = CAP_SOURCE.DECLARED_ZERO;
-  }
-
-  const known = capKrw !== null;
-  const declaredNonzero =
-    priorYearTax.state === PRIOR_TAX_STATE.NONZERO_AMOUNT_UNKNOWN ||
-    (known && capKrw > 0);
-
-  if (!known) {
-    notices.push(
-      notice(NOTICE.TAX_CAP_UNKNOWN, 'warning', 'profile.prior_year_tax', {
-        error_direction: CAP_ERROR_DIRECTION,
-        declared_nonzero: declaredNonzero,
-      }, basisRuleIds),
-    );
-  } else if (capKrw === 0) {
-    // 오류가 아니라 결과다. 이 사용자에게는 0이 정확한 답이다.
-    notices.push(notice(NOTICE.TAX_CAP_ZERO, 'info', 'profile.prior_year_tax', {}, basisRuleIds));
-  }
-
-  return {
-    notices,
-    cap: {
-      known,
-      cap_krw: capKrw,
-      determined_tax_krw: priorYearTax.determined_tax_krw,
-      prior_pension_credit_krw: known ? priorCredit : null,
-      source_code: source,
-      declared_nonzero: declaredNonzero,
-      // 한도를 모른 채 낸 값은 "이만큼"이 아니라 "최대 이만큼"이다.
-      error_direction_code: known ? null : CAP_ERROR_DIRECTION,
-      // 초과분의 세액공제액은 이월되지 않는다. 룰셋에서 읽은 사실이다.
-      credit_carryforward: creditCarryforward,
-      basis_rule_ids: basisRuleIds,
-    },
-  };
-}
-
-/**
  * 확정 축(세액공제)의 **최댓값** — 이 사람이 올해 받을 수 있는 세액공제의 상한.
  *
  * D36이 막대의 축을 둘로 가르면서 확정 축에 자기 눈금이 필요해졌다. 그 눈금의 끝이
@@ -368,13 +290,14 @@ export function resolvePensionCreditCeiling(access, { rates, combinedLimit, extr
   const localTaxKrw = incomeTaxKrw === null ? null : applyRate(incomeTaxKrw, rates.surtaxRate);
   if (incomeTaxKrw === null || localTaxKrw === null) return null;
 
-  let capRelation = CEILING_CAP_RELATION.UNKNOWN;
-  if (cap.known) {
-    // **소득세분끼리 비교한다.** 한도는 산출세액에서 나온 소득세의 값이고 상한의 합계는
-    // 지방소득세를 포함하므로, 둘을 그대로 비교하면 단위가 다른 두 수를 재는 것이 된다.
-    capRelation =
-      cap.cap_krw < incomeTaxKrw ? CEILING_CAP_RELATION.BELOW : CEILING_CAP_RELATION.AT_OR_ABOVE;
-  }
+  // **소득세분끼리 비교한다.** 한도는 산출세액에서 나온 소득세의 값이고 상한의 합계는
+  // 지방소득세를 포함하므로, 둘을 그대로 비교하면 단위가 다른 두 수를 재는 것이 된다.
+  //
+  // **`cap_at_or_above_ceiling`은 「걸리지 않는다」가 아니다.** 한도가 상한이므로 실제
+  // 한도는 이보다 작을 수 있다. 이 코드로 화면이 「여유가 있습니다」를 적으면 거짓이 될
+  // 수 있고, 그 구분은 배분안의 `binding_code`가 낸다(D40).
+  const capRelation =
+    cap.cap_krw < incomeTaxKrw ? CEILING_CAP_RELATION.BELOW : CEILING_CAP_RELATION.AT_OR_ABOVE;
 
   return {
     ceiling_krw: incomeTaxKrw + localTaxKrw,

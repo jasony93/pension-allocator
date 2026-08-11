@@ -217,3 +217,47 @@ test('계약의 소득 성격 목록이 룰셋의 선택지와 정확히 같다'
     '계약의 열거형과 룰셋 `isa.benefit.income_character`의 선택지 id가 갈라졌다',
   );
 });
+
+// **분기 코드도 같은 형태다** (D39·D40, 계약 8.7절이 정의 자리를 룰셋으로 지정했다).
+// 계약과 엔진이 고정하는 것은 문자열 셋이고, 그 문자열의 정의 자리는 룰셋의 `branches`
+// 키다. 갈라지면 엔진이 없는 분기를 찾다 `rule_missing`으로 끝나거나 — 더 나쁘게 —
+// 룰셋이 분기를 하나 늘렸는데 엔진이 그것을 영영 고르지 않는 상태가 된다. **그 상태는
+// 조용하다:** 계약도 룰셋도 각자 옳아 보이고 어긋난 것은 둘 사이뿐이다.
+test('계약의 세액 한도 분기 목록이 룰셋의 분기 키와 정확히 같다', async () => {
+  const { CAP_BRANCHES } = await import('./constants.mjs');
+  const branches = findRule(
+    rulesets,
+    CONFIRMED_FILE,
+    'pension.credit.tax_liability_cap.current_year_estimate',
+  ).value.branches;
+
+  assert.deepStrictEqual(
+    [...CAP_BRANCHES].sort(),
+    Object.keys(branches).sort(),
+    '계약의 분기 열거형과 룰셋 `...current_year_estimate.branches`의 키가 갈라졌다',
+  );
+});
+
+// **상한 코드의 정의 자리도 룰셋이다.** 엔진이 이 문자열을 코드에 적으면 룰셋이 방향을
+// 바꿔도 응답이 따라가지 않는다 — `fault-injection.test.mjs`가 그 방향을 실제로 뒤집어
+// 확인하고, 여기서는 **엔진 상수에 그 문자열이 아예 없다**는 것을 본다.
+test('상한 쪽 오차 방향 코드는 엔진 상수에 없다 — 룰셋에서만 온다', async () => {
+  const constants = await import('./constants.mjs');
+  const fromRuleset = findRule(
+    rulesets,
+    CONFIRMED_FILE,
+    'pension.credit.tax_liability_cap.current_year_estimate',
+  ).value.error_direction.code;
+
+  const values = Object.values(constants)
+    .flatMap((value) => (typeof value === 'object' && value !== null ? Object.values(value) : [value]))
+    .filter((value) => typeof value === 'string');
+
+  assert.equal(
+    values.includes(fromRuleset),
+    false,
+    `엔진 상수에 "${fromRuleset}"이 적혀 있다 — 룰셋이 방향을 바꿔도 응답이 따라가지 않는다`,
+  );
+  // 미정 쪽은 반대다. 룰셋에 대응 문자열이 없으므로 계약이 정하고 상수에 있어야 한다.
+  assert.ok(values.includes(constants.CAP_DIRECTION_INDETERMINATE));
+});

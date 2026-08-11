@@ -1,12 +1,18 @@
 // 세액 한도·연금수령 개시·개시 가능 시점·퇴직급여 입금의 동작 고정.
 //
-// **이 파일이 왜 필요한가.** 골든 케이스 36건은 프로필에 결정세액이 없는 채로 산출됐고,
-// 그것은 "세액 한도가 충분하다"는 암묵적 전제 위에서만 성립한다. 즉 골든 케이스와
-// 엔진이 같은 누락을 공유하고 있어서 대조가 그 누락을 잡아내지 못한다. 그 전제 밖의
-// 동작은 여기서 고정한다 — 기대값 재산출과 경계 케이스 추가는 `tax-domain`의 몫이다.
+// **한도가 입력에서 계산으로 바뀌었다**(D39·D40). 소유자가 직전 과세연도 결정세액 입력을
+// 없애라고 했고, 대체 경로는 해당 과세기간 총급여액에서 §47 → §50①1 → §55① → §59를
+// 밟아 §61②③의 한도를 **추정**한다. 나온 값은 하한이 아니라 **상한**이다.
 //
-// **여기의 기대값은 룰셋에서 읽어 만든다.** 세법 수치를 옮겨 적으면 이 파일이 두 번째
-// 진실 원천이 되고, 룰셋이 바뀌어도 조용히 통과한다.
+// **이 파일이 무는 것 셋.**
+//   1. 관리자가 조문으로 검산한 세 좌표(`CAP_COORDINATES`)를 값으로 못 박는다.
+//   2. 그 위(약 3,414만원 초과)에서는 한도가 **아무것도 자르지 않는다** — 자르지 않는 것이
+//      결함이 아니라 설계라는 것이 다음 사람에게 보이도록 좌표로 남긴다.
+//   3. 상한 성질에서 나오는 두 진술을 가른다 — 「걸린다」는 증명되고 「안 걸린다」는
+//      증명되지 않는다.
+//
+// **기대값은 룰셋과 D40에서 온다.** 세법 수치를 이 파일이 스스로 적으면 두 번째 진실
+// 원천이 되고, 룰셋이 바뀌어도 조용히 통과한다.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,6 +20,7 @@ import assert from 'node:assert/strict';
 import { compute } from './index.mjs';
 import { SCHEMA_VERSION } from './constants.mjs';
 import {
+  CAP_COORDINATES,
   CONFIRMED_FILE,
   allocationOf,
   baseRequest,
@@ -33,6 +40,9 @@ const confirmedRule = (id) => findRule(rulesets, CONFIRMED_FILE, id);
 const CREDIT_RATE = confirmedRule('pension.credit.rate').value.brackets.find(
   (b) => b.total_salary_only_max_krw !== null,
 ).rate;
+const MAX_CREDIT_RATE = Math.max(
+  ...confirmedRule('pension.credit.rate').value.brackets.map((b) => b.rate),
+);
 const SURTAX_RATE = confirmedRule('tax.local.personal_income_surtax').value.rate_of_income_tax;
 const COMBINED_LIMIT = confirmedRule('pension.credit.limit.combined').value.amount_krw;
 const CONTRIBUTION_LIMIT = confirmedRule('pension.contribution.annual_limit').value.amount_krw;
@@ -40,26 +50,24 @@ const PENSION_REQUIREMENTS = confirmedRule('pension.withdrawal.eligibility').val
 const MIN_AGE = PENSION_REQUIREMENTS.find((r) => r.id === 'age').min_age;
 const HOLDING_YEARS = PENSION_REQUIREMENTS.find((r) => r.id === 'holding_period').min_years;
 
+/**
+ * 전환 추가한도가 없을 때 이 룰셋이 낼 수 있는 **최대 세액공제 소득세분.**
+ * 합산 인정한도를 이 사람에게 걸릴 수 있는 가장 높은 율로 전부 채운 값이다.
+ */
+const MAX_CREDIT_INCOME_TAX = Math.floor(COMBINED_LIMIT * MAX_CREDIT_RATE);
+
 /** 총급여를 우대 구간 안에 두어 공제율이 CREDIT_RATE로 판정되게 한다. */
 const LOW_SALARY = 50_000_000;
 
-/**
- * 한도만 갈아 끼운 요청. `baseRequest`가 깊은 병합을 하므로 짝의 두 칸을 매번
- * 명시적으로 비운다 — 비우지 않으면 기본 요청의 값이 살아남아 "그 칸이 없는 상태"를
- * 시험한다고 믿으면서 실제로는 값이 있는 상태를 시험하게 된다.
- */
-function withCap(prior, patch = {}) {
+/** 총급여만 갈아 끼운 요청. 한도는 이제 이 값 하나에서 나온다. */
+function withSalary(salary, patch = {}) {
   return baseRequest(
     deepMerge(
       {
         profile: {
-          current_year_total_salary_krw: LOW_SALARY,
+          current_year_total_salary_krw: salary,
+          // ISA 유형 교차확인은 직전 연도 값이 따로 정한다 — 한도 축과 섞지 않는다.
           prior_year_total_salary_krw: 60_000_000,
-          prior_year_tax: {
-            determined_tax_krw: null,
-            pension_credit_applied_krw: null,
-            ...prior,
-          },
         },
       },
       patch,
@@ -67,80 +75,258 @@ function withCap(prior, patch = {}) {
   );
 }
 
-// ── 되더하기 ─────────────────────────────────────────────────────
+/** 합산 인정한도를 전부 채우는 예산. 한도가 자를 여지가 실제로 생긴다. */
+const FULL_PENSION = { profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 } };
 
-test('한도는 결정세액과 연금계좌 세액공제액의 합이다 — 근사가 아니라 등식', () => {
+const capOf = (salary, patch = {}) =>
+  scenarioOf(compute(withSalary(salary, patch), rulesets)).pension_credit_tax_liability_cap;
+
+// ── 관리자가 조문으로 검산한 세 좌표 (D40) ───────────────────────
+
+test('총급여 5,000,000원 이하의 한도는 정확히 0이다 — 추정이 아니라 등식', () => {
   const scenario = scenarioOf(
-    compute(
-      withCap({ state: 'amount', determined_tax_krw: 400_000, pension_credit_applied_krw: 250_000 }),
-      rulesets,
-    ),
+    compute(withSalary(CAP_COORDINATES.ZERO_EXACT.total_salary_krw), rulesets),
   );
-
   const cap = scenario.pension_credit_tax_liability_cap;
-  assert.equal(cap.known, true);
-  assert.equal(cap.cap_krw, 650_000);
-  assert.equal(cap.source_code, 'determined_tax_add_back');
-  // 이미 받은 공제를 되더하지 않으면 한도가 그만큼 작아 보이는 순환이 생긴다.
-  assert.equal(cap.prior_pension_credit_krw, 250_000);
-  assert.equal(cap.error_direction_code, null);
+
+  // 근로소득공제 뒤 근로소득금액이 본인 기본공제와 같아 과세표준이 정확히 0이 된다.
+  assert.equal(cap.tax_base_krw, 0);
+  assert.equal(cap.computed_tax_krw, 0);
+  assert.equal(cap.cap_krw, CAP_COORDINATES.ZERO_EXACT.cap_krw);
+  // 상한이 0이면 실제 한도도 0보다 클 수 없다. 이 구간에서만 등식이 성립한다.
+  assert.equal(cap.is_exact, true);
+  assert.equal(
+    scenario.notices.find((n) => n.code === 'tax_liability_cap_zero').params.is_exact,
+    true,
+  );
 });
 
-test('결정세액이 0이어도 되더하기는 그대로 성립한다', () => {
+test('총급여 30,686,275원의 한도는 정확히 900,000원이고 그 한도가 공제를 자른다', () => {
+  const { total_salary_krw: salary, cap_krw: expected } = CAP_COORDINATES.BINDS;
+  const scenario = scenarioOf(compute(withSalary(salary, FULL_PENSION), rulesets));
+
+  assert.equal(scenario.pension_credit_tax_liability_cap.cap_krw, expected);
+  // 상한이지 등식이 아니다 — 0이 아닌 값에는 등식 구간이 없다.
+  assert.equal(scenario.pension_credit_tax_liability_cap.is_exact, false);
+
+  const benefit = planOf(scenario, 'max_tax_credit').deterministic_benefit;
+  assert.ok(
+    benefit.pension_credit_income_tax_before_cap_krw > expected,
+    '이 좌표에서 자르지 않으면 아래 검사들이 아무것도 증명하지 못한다',
+  );
+  assert.equal(benefit.pension_credit_income_tax_krw, expected);
+  assert.equal(benefit.tax_liability_cap.applied, true);
+});
+
+test('총급여 34,143,912원의 한도는 정확히 1,350,000원 — 최대 공제액과 같아지는 지점', () => {
+  const { total_salary_krw: salary, cap_krw: expected } = CAP_COORDINATES.NO_LONGER_BINDS;
+
+  assert.equal(capOf(salary).cap_krw, expected);
+  // **이 수가 우연이 아니다.** 합산 인정한도를 최고 공제율로 전부 채운 소득세분과 같다.
+  assert.equal(expected, MAX_CREDIT_INCOME_TAX);
+});
+
+// ── 자르지 않는 것이 결함이 아니라 설계다 (D40) ──────────────────
+
+test('약 3,414만원 위에서는 이 한도가 아무것도 자르지 않는다 — 결함이 아니라 설계다', () => {
+  const boundary = CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw;
+
+  // 경계 위쪽. 예산을 합산 한도까지 채워 자를 여지를 최대로 만들어도 자르지 않는다.
+  for (const salary of [boundary, boundary + 1, 40_000_000, LOW_SALARY, 100_000_000]) {
+    const scenario = scenarioOf(compute(withSalary(salary, FULL_PENSION), rulesets));
+    const cap = scenario.pension_credit_tax_liability_cap;
+    assert.ok(
+      cap.cap_krw >= MAX_CREDIT_INCOME_TAX,
+      `총급여 ${salary}: 한도(${cap.cap_krw})가 최대 공제액(${MAX_CREDIT_INCOME_TAX})보다 작다`,
+    );
+    for (const plan of scenario.plans) {
+      assert.equal(
+        plan.deterministic_benefit.tax_liability_cap.applied,
+        false,
+        `총급여 ${salary} / ${plan.plan_id}: 자르지 않아야 할 좌표에서 잘렸다`,
+      );
+    }
+    assert.equal(noticeCodes(scenario).includes('tax_liability_cap_applied'), false);
+  }
+
+  // 경계 아래에서는 실제로 자른다. 위 검사가 "언제나 자르지 않는다"를 시험한 것이
+  // 되지 않게 하는 짝이다.
+  const below = scenarioOf(
+    compute(withSalary(CAP_COORDINATES.BINDS.total_salary_krw, FULL_PENSION), rulesets),
+  );
+  assert.ok(below.pension_credit_tax_liability_cap.cap_krw < MAX_CREDIT_INCOME_TAX);
+  assert.ok(noticeCodes(below).includes('tax_liability_cap_applied'));
+});
+
+// ── 값이 어디서 나왔는가 ─────────────────────────────────────────
+
+test('한도는 총급여액에서 네 단계로 나온다 — 그 중간값이 전부 값으로 나간다', () => {
+  const cap = capOf(LOW_SALARY);
+  const basicDeduction = confirmedRule('income.deduction.basic.self').value.amount_krw;
+
+  // 1. 총급여 → 근로소득금액, 2. 본인 기본공제, 3. 산출세액, 4. 근로소득세액공제 차감.
+  assert.equal(cap.measured_total_salary_krw, LOW_SALARY);
+  assert.equal(cap.wage_income_amount_krw, LOW_SALARY - cap.wage_income_deduction_krw);
+  assert.equal(cap.basic_deduction_krw, basicDeduction);
+  assert.equal(cap.tax_base_krw, cap.wage_income_amount_krw - basicDeduction);
+  assert.equal(cap.cap_krw, cap.computed_tax_krw - cap.wage_income_credit_krw);
+  assert.equal(cap.basis_code, 'current_year_total_salary');
+
+  // 근거 규칙 다섯이 전부 실린다. 하나라도 빠지면 화면이 그 조문을 보이지 못한다.
+  for (const ruleId of [
+    'income.wage.deduction',
+    'income.deduction.basic.self',
+    'tax.rate.basic',
+    'credit.wage_income',
+    'pension.credit.tax_liability_cap.current_year_estimate',
+  ]) {
+    assert.ok(cap.basis_rule_ids.includes(ruleId), `근거에 ${ruleId}이 없다`);
+  }
+});
+
+test('한도가 상한이라는 사실이 금액과 같은 응답에 실린다', () => {
+  const scenario = scenarioOf(compute(withSalary(LOW_SALARY), rulesets));
+  const cap = scenario.pension_credit_tax_liability_cap;
+
+  assert.equal(cap.error_direction_code, 'overstated_or_equal');
+  assert.equal(cap.is_upper_bound, true);
+  assert.equal(cap.branch_code, 'wage_income_only');
+
+  // 「모름」 상태가 사라졌으므로 값은 언제나 정수다. `null`을 내지 않는다.
+  assert.equal(Number.isInteger(cap.cap_krw), true);
+
+  const estimated = scenario.notices.find(
+    (n) => n.code === 'tax_liability_cap_estimated_from_total_salary',
+  );
+  assert.ok(estimated, '이 값이 총급여액에서 계산한 상한이라는 사실이 안내로 나가야 한다');
+  assert.equal(estimated.severity, 'warning');
+  assert.equal(estimated.params.error_direction, 'overstated_or_equal');
+  assert.equal(estimated.params.is_upper_bound, true);
+  assert.ok(
+    estimated.basis_rule_ids.includes('pension.credit.tax_liability_cap.current_year_estimate'),
+  );
+
+  // 폐기된 코드가 되살아나지 않는다.
+  assert.equal(noticeCodes(scenario).includes('tax_liability_cap_unknown'), false);
+});
+
+test('오차 방향은 룰셋에서 읽는다 — 엔진이 스스로 정하지 않는다', () => {
+  const fromRuleset = confirmedRule('pension.credit.tax_liability_cap.current_year_estimate').value
+    .error_direction.code;
+  assert.equal(capOf(LOW_SALARY).error_direction_code, fromRuleset);
+});
+
+// ── 분기마다 방향이 다르다 ───────────────────────────────────────
+
+test('종합소득금액을 받으면 그 금액이 과세표준의 기준이 되고 방향은 그대로 상한이다', () => {
+  const cap = capOf(LOW_SALARY, {
+    profile: {
+      has_non_wage_global_income_current_year: true,
+      current_year_global_income_krw: 40_000_000,
+    },
+  });
+
+  assert.equal(cap.branch_code, 'global_income_amount_supplied');
+  assert.equal(cap.measured_global_income_krw, 40_000_000);
+  // 근로소득공제는 종합소득금액 안에서 이미 빠져 있다 — 다시 빼지 않는다.
+  assert.equal(cap.tax_base_krw, 40_000_000 - cap.basic_deduction_krw);
+  assert.equal(cap.is_upper_bound, true);
+  assert.equal(cap.error_direction_code, 'overstated_or_equal');
+});
+
+test('종합소득이 있는데 금액을 모르면 방향이 미정이다 — 상한 코드로 내지 않는다', () => {
   const scenario = scenarioOf(
     compute(
-      withCap({ state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: 180_000 }),
+      withSalary(LOW_SALARY, {
+        profile: {
+          has_non_wage_global_income_current_year: true,
+          current_year_global_income_krw: null,
+        },
+      }),
       rulesets,
     ),
   );
+  const cap = scenario.pension_credit_tax_liability_cap;
 
-  // 결정세액 0 + 연금계좌 세액공제 18만원 = 잔여가 정확히 18만원이었다는 뜻이다.
-  assert.equal(scenario.pension_credit_tax_liability_cap.cap_krw, 180_000);
-  assert.equal(
-    planOf(scenario, 'max_tax_credit').deterministic_benefit.pension_credit_income_tax_krw,
-    180_000,
-  );
+  // 다른 소득을 세지 않은 것은 산출세액을 작게 잡는 방향이고 공제를 세지 않은 것은
+  // 크게 잡는 방향이다. 두 힘의 부호가 반대라 합의 부호가 정해지지 않는다.
+  assert.equal(cap.branch_code, 'global_income_amount_missing');
+  assert.equal(cap.is_upper_bound, false);
+  assert.equal(cap.error_direction_code, 'direction_indeterminate');
+  assert.notEqual(cap.error_direction_code, 'overstated_or_equal');
+  // 값이 0이어도 등식이 아니다 — 상한이 아니면 0이 실제 한도를 가두지 못한다.
+  assert.equal(cap.is_exact, false);
+  assert.ok(noticeCodes(scenario).includes('tax_liability_cap_direction_indeterminate'));
 });
 
-test('결정세액과 연금계좌 세액공제액은 짝으로 받는다', () => {
-  // 금액을 답하겠다고 해 놓고 결정세액이 없으면 되더하기의 출발점이 없다.
-  const missing = compute(
-    withCap({ state: 'amount', pension_credit_applied_krw: 100_000 }),
-    rulesets,
-  );
-  assert.equal(missing.ok, false);
-  assert.ok(
-    missing.errors.some(
-      (e) => e.code === 'missing_required' && e.field === 'profile.prior_year_tax.determined_tax_krw',
+test('미정 분기에서는 잘려도 「걸린다」가 증명되지 않는다', () => {
+  const indeterminate = scenarioOf(
+    compute(
+      withSalary(CAP_COORDINATES.BINDS.total_salary_krw, {
+        profile: {
+          has_non_wage_global_income_current_year: true,
+          current_year_global_income_krw: null,
+          monthly_capacity_krw: COMBINED_LIMIT / 12,
+        },
+      }),
+      rulesets,
     ),
   );
+  const benefit = planOf(indeterminate, 'max_tax_credit').deterministic_benefit;
 
-  // 짝 자체가 빠진 것과 "모르겠습니다"는 다르다. 빈 칸을 모름으로 간주하지 않는다.
-  const absent = compute(baseRequest({ profile: { prior_year_tax: null } }), rulesets);
-  assert.equal(absent.ok, false);
-  assert.ok(errorCodes(absent).includes('missing_required'));
+  // 자르기는 한다 — 엔진이 낸 금액은 이 한도로 잘린 값이다.
+  assert.equal(benefit.tax_liability_cap.applied, true);
+  // 그러나 그 자름이 실제 한도의 자름을 증명하지는 못한다. 방향이 미정이기 때문이다.
+  assert.equal(benefit.tax_liability_cap.binding_code, 'binding_not_determined');
+});
+
+// ── 「걸린다」와 「안 걸린다」는 대칭이 아니다 (D40) ──────────────
+
+test('상한이 자르면 실제 한도도 반드시 자른다 — 그 사실만 코드로 낸다', () => {
+  const binds = scenarioOf(
+    compute(withSalary(CAP_COORDINATES.BINDS.total_salary_krw, FULL_PENSION), rulesets),
+  );
+  const benefit = planOf(binds, 'max_tax_credit').deterministic_benefit;
+
+  assert.equal(benefit.tax_liability_cap.applied, true);
+  assert.equal(benefit.tax_liability_cap.binding_code, 'binds_provably');
+});
+
+test('자르지 않은 결과는 「걸리지 않는다」를 증명하지 않는다 — 문장의 부재가 답이 아니다', () => {
+  const ample = scenarioOf(compute(withSalary(LOW_SALARY, FULL_PENSION), rulesets));
+
+  for (const plan of ample.plans) {
+    const cap = plan.deterministic_benefit.tax_liability_cap;
+    assert.equal(cap.applied, false);
+    // **여기가 이 회차의 핵심이다.** 실제 한도는 이 상한보다 작을 수 있으므로
+    // 「한도에 걸리지 않았습니다」는 증명되지 않는다. 화면이 그 반대 진술을 지어내지
+    // 못하도록 계약이 두 상태를 값으로 가른다.
+    assert.equal(cap.binding_code, 'binding_not_determined');
+  }
+  // 축 쪽 관계 코드도 「여유가 있다」는 뜻이 아니다 — 두 수의 비교일 뿐이다.
+  assert.equal(
+    ample.pension_credit_ceiling.tax_liability_cap_relation_code,
+    'cap_at_or_above_ceiling',
+  );
 });
 
 // ── 자르기 ───────────────────────────────────────────────────────
 
 test('자르기 전 금액과 자른 뒤 금액을 둘 다 낸다', () => {
-  // 예산을 합산 한도까지 채워 공제액을 최대로 만든 뒤, 그보다 낮은 한도를 준다.
-  const request = withCap(
-    { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
-    { profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 } },
-  );
-  const scenario = scenarioOf(compute(request, rulesets));
+  const salary = CAP_COORDINATES.BINDS.total_salary_krw;
+  const expected = CAP_COORDINATES.BINDS.cap_krw;
+  const scenario = scenarioOf(compute(withSalary(salary, FULL_PENSION), rulesets));
   const benefit = planOf(scenario, 'max_tax_credit').deterministic_benefit;
 
   const uncappedIncomeTax = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
   assert.equal(benefit.pension_credit_income_tax_before_cap_krw, uncappedIncomeTax);
-  assert.equal(benefit.pension_credit_income_tax_krw, 300_000);
+  assert.equal(benefit.pension_credit_income_tax_krw, expected);
   assert.equal(benefit.tax_liability_cap.applied, true);
-  assert.equal(benefit.tax_liability_cap.reduced_income_tax_krw, uncappedIncomeTax - 300_000);
+  assert.equal(benefit.tax_liability_cap.reduced_income_tax_krw, uncappedIncomeTax - expected);
 
   // 지방소득세는 **인정된 소득세분**을 따라간다. 인정되지 않은 공제에 붙는 지방세를
   // 남겨 두면 근거가 사라진 금액이 결과에 남는다.
-  assert.equal(benefit.pension_credit_local_tax_krw, Math.floor(300_000 * SURTAX_RATE));
+  assert.equal(benefit.pension_credit_local_tax_krw, Math.floor(expected * SURTAX_RATE));
   assert.equal(
     benefit.pension_credit_local_tax_before_cap_krw,
     Math.floor(uncappedIncomeTax * SURTAX_RATE),
@@ -152,88 +338,41 @@ test('자르기 전 금액과 자른 뒤 금액을 둘 다 낸다', () => {
   assert.equal(benefit.tax_liability_cap.contribution_carryover_available, true);
   assert.equal(benefit.tax_liability_cap.credit_carryforward, false);
   assert.ok(
-    benefit.tax_liability_cap.basis_rule_ids.includes('pension.credit.unused.contribution_carryover'),
+    benefit.tax_liability_cap.basis_rule_ids.includes(
+      'pension.credit.unused.contribution_carryover',
+    ),
   );
   assert.ok(noticeCodes(scenario).includes('tax_liability_cap_applied'));
 });
 
-test('임계값이 실제 경계다 — 그 아래로 1원만 내려가도 결과가 달라진다', () => {
-  const budget = { profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 } };
-  const probe = scenarioOf(
-    compute(
-      withCap({ state: 'amount', determined_tax_krw: 100_000_000, pension_credit_applied_krw: 0 }, budget),
-      rulesets,
-    ),
-  );
+test('임계값이 실제 경계다 — 한도가 그 아래로 내려가면 결과가 달라진다', () => {
+  const probe = scenarioOf(compute(withSalary(LOW_SALARY, FULL_PENSION), rulesets));
   const threshold = planOf(probe, 'max_tax_credit').deterministic_benefit.tax_liability_cap
     .threshold_income_tax_krw;
 
-  const at = scenarioOf(
-    compute(
-      withCap({ state: 'amount', determined_tax_krw: threshold, pension_credit_applied_krw: 0 }, budget),
-      rulesets,
-    ),
-  );
-  const below = scenarioOf(
-    compute(
-      withCap(
-        { state: 'amount', determined_tax_krw: threshold - 1, pension_credit_applied_krw: 0 },
-        budget,
-      ),
-      rulesets,
-    ),
+  // 임계값은 자르기 전 소득세분이다. 한도가 그보다 크거나 같으면 자르지 않는다.
+  assert.ok(probe.pension_credit_tax_liability_cap.cap_krw >= threshold);
+  assert.equal(
+    planOf(probe, 'max_tax_credit').deterministic_benefit.tax_liability_cap.applied,
+    false,
   );
 
-  // 임계값 위에서는 잘리지 않고, 1원 아래에서는 정확히 1원 잘린다.
-  assert.equal(planOf(at, 'max_tax_credit').deterministic_benefit.tax_liability_cap.applied, false);
+  // 총급여를 낮춰 한도를 임계값 아래로 내리면 그 차이만큼 정확히 잘린다.
+  const below = scenarioOf(
+    compute(withSalary(CAP_COORDINATES.BINDS.total_salary_krw, FULL_PENSION), rulesets),
+  );
   const cut = planOf(below, 'max_tax_credit').deterministic_benefit.tax_liability_cap;
   assert.equal(cut.applied, true);
-  assert.equal(cut.reduced_income_tax_krw, 1);
-});
-
-// ── 한도를 모를 때 ───────────────────────────────────────────────
-
-test('한도를 모르면 지어내지 않고 오차의 방향을 낸다', () => {
-  const scenario = scenarioOf(
-    compute(withCap({ state: 'unknown', determined_tax_krw: null }), rulesets),
-  );
-  const cap = scenario.pension_credit_tax_liability_cap;
-
-  assert.equal(cap.known, false);
-  assert.equal(cap.cap_krw, null);
-  assert.equal(cap.source_code, null);
-  // 값이 아니라 방향을 낸다. 이 값이 "이만큼"이 아니라 "최대 이만큼"이라는 근거다.
-  assert.equal(cap.error_direction_code, 'overstated_or_equal');
-  assert.ok(noticeCodes(scenario).includes('tax_liability_cap_unknown'));
-
-  const capNotice = scenario.notices.find((n) => n.code === 'tax_liability_cap_unknown');
-  assert.equal(capNotice.severity, 'warning');
-  assert.ok(capNotice.basis_rule_ids.includes('pension.credit.tax_liability_cap'));
-});
-
-test('"0은 아니었다"만 답해도 한도의 크기는 여전히 모른다', () => {
-  const scenario = scenarioOf(
-    compute(withCap({ state: 'nonzero_amount_unknown', determined_tax_krw: null }), rulesets),
-  );
-  const cap = scenario.pension_credit_tax_liability_cap;
-
-  // 최악의 오류(한도 0인 사용자에게 절세액을 제시하는 것)는 걸러지지만
-  // 크기를 주지 않으므로 결과는 여전히 상한이다.
-  assert.equal(cap.known, false);
-  assert.equal(cap.declared_nonzero, true);
-  assert.ok(noticeCodes(scenario).includes('tax_liability_cap_unknown'));
+  assert.equal(cut.reduced_income_tax_krw, cut.threshold_income_tax_krw - cut.cap_krw);
 });
 
 // ── 한도가 0일 때 ────────────────────────────────────────────────
 
 test('한도가 0이면 공제액은 0이지만 연금계좌 배분을 0으로 만들지 않는다', () => {
-  const zero = scenarioOf(compute(withCap({ state: 'zero', determined_tax_krw: null }), rulesets));
-  const ample = scenarioOf(
-    compute(
-      withCap({ state: 'amount', determined_tax_krw: 100_000_000, pension_credit_applied_krw: 0 }),
-      rulesets,
-    ),
+  const zero = scenarioOf(
+    compute(withSalary(CAP_COORDINATES.ZERO_EXACT.total_salary_krw), rulesets),
   );
+  const ample = scenarioOf(compute(withSalary(LOW_SALARY), rulesets));
 
   assert.equal(zero.pension_credit_tax_liability_cap.cap_krw, 0);
 
@@ -241,7 +380,11 @@ test('한도가 0이면 공제액은 0이지만 연금계좌 배분을 0으로 �
     assert.equal(plan.deterministic_benefit.pension_credit_total_krw, 0);
     // 연금계좌에 배분한 안은 자르기 전 금액이 남아 있다 — 화면이 "계산된 공제액 중
     // 얼마가 이번 과세연도에 쓰이지 않았는지"를 말할 수 있어야 한다.
-    if (allocationOf(plan, 'retirement_pension').annual_krw + allocationOf(plan, 'annuity_savings').annual_krw > 0) {
+    if (
+      allocationOf(plan, 'retirement_pension').annual_krw +
+        allocationOf(plan, 'annuity_savings').annual_krw >
+      0
+    ) {
       assert.ok(plan.deterministic_benefit.pension_credit_total_before_cap_krw > 0);
     }
 
@@ -266,7 +409,9 @@ test('한도가 0이면 공제액은 0이지만 연금계좌 배분을 0으로 �
 });
 
 test('한도가 0이면 세액공제로는 배분안이 갈리지 않는다는 사실이 값으로 나간다', () => {
-  const scenario = scenarioOf(compute(withCap({ state: 'zero', determined_tax_krw: null }), rulesets));
+  const scenario = scenarioOf(
+    compute(withSalary(CAP_COORDINATES.ZERO_EXACT.total_salary_krw), rulesets),
+  );
 
   assert.ok(scenario.comparison_note_codes.includes('tax_credit_axis_not_discriminating'));
   assert.ok(noticeCodes(scenario).includes('tax_liability_cap_zero'));
@@ -285,13 +430,10 @@ test('한도가 0이면 세액공제로는 배분안이 갈리지 않는다는 �
 test('한도가 0이어도 기본안을 옮기지 않는다', () => {
   // 세액이 같아졌다는 이유로 유동성 우선안을 기본으로 올리면, 그것은 엔진이
   // 세금 밖의 선호를 지어낸 것이다. 기본안은 여전히 자금 사용 시점이 정한다.
-  const zero = scenarioOf(compute(withCap({ state: 'zero', determined_tax_krw: null }), rulesets));
-  const ample = scenarioOf(
-    compute(
-      withCap({ state: 'amount', determined_tax_krw: 100_000_000, pension_credit_applied_krw: 0 }),
-      rulesets,
-    ),
+  const zero = scenarioOf(
+    compute(withSalary(CAP_COORDINATES.ZERO_EXACT.total_salary_krw), rulesets),
   );
+  const ample = scenarioOf(compute(withSalary(LOW_SALARY), rulesets));
 
   assert.equal(zero.plans[0].plan_id, ample.plans[0].plan_id);
   assert.equal(
@@ -586,14 +728,14 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   const response = compute(legacy, rulesets);
   assert.equal(response.ok, false);
   assert.ok(errorCodes(response).includes('schema_version_mismatch'));
-  // D32에서 6으로, 월 환산 잔차 처리에서 7로 올렸다(계약 0.12절) — 뒤엣것은
-  // `Allocation.monthly_krw`가 더 이상 `floor(연 ÷ 개월수)`가 아니게 된 변경이고,
-  // 그 산식을 그대로 구현한 소비자는 계좌별 금액을 더해도 월 여력이 되지 않는 화면을
-  // 계속 낸다. **옛 소비자가 조용히 다른 숫자를 내보내는 상태를 만들지 않는다.**
+  // D32에서 6으로, 월 환산 잔차 처리에서 7로 올렸고, 8은 **값이 아니라 서술**이었다
+  // (계약 0.13절 — `7.0.0`이 적은 월 환산 이탈 범위가 산술로 틀렸고, 그 범위를 믿은
+  // 소비자는 값이 유효 범위 안이라 어떤 검증에도 걸리지 않는 채로 틀린다).
   //
-  // 8로 올린 것은 **값이 아니라 서술**이다(계약 0.13절). `7.0.0`이 월 환산 이탈 범위를
-  // `±(개월수 − 1)`로 적었는데 실제 위쪽 끝은 그 셋 배이고, 그 범위를 믿은 소비자는
-  // **값이 유효 범위 안이라 어떤 검증에도 걸리지 않는 채로** 틀린다. 규약이 「응답 쪽
-  // 보장을 거두는 것」을 major로 정하고 0.1절이 같은 자리에서 patch를 기각했다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '8');
+  // **9로 올린 것은 요청에서 필수 필드가 사라졌기 때문만이 아니다**(계약 0.17절).
+  // `profile.prior_year_tax`를 지운 것은 요청 쪽 변경이지만, 같은 변경이 **응답 쪽
+  // 보장을 거둔다** — `cap_krw`가 그 사람의 실제 한도와 일치한다는 등식 보장이 사라지고
+  // 상한이 되며, `applied: false`의 뜻이 「잘리지 않았다」에서 **「잘리는지 알 수 없다」**로
+  // 바뀐다. 규약과 0.1절이 「계약이 보장하던 성질을 거두는 것」을 major로 정한다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '9');
 });

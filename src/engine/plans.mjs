@@ -25,6 +25,7 @@ import {
   WARNING,
 } from './constants.mjs';
 import { resolveCarryoverConditions } from './limits.mjs';
+import { bindingCodeFor } from './liability-cap.mjs';
 import { headlineCompositeTotalFor } from './headline.mjs';
 import { isaEstimateFor } from './isa-return.mjs';
 import { apportionMonthly } from './monthly.mjs';
@@ -272,13 +273,12 @@ function allocate(planId, ctx) {
  * 그 사실은 assumptions로 나간다.
  */
 function applyCap(incomeTax, localTax, { cap, rates, access }) {
-  const known = cap.known;
-  const recognizedIncomeTax = known ? Math.min(incomeTax, cap.cap_krw) : incomeTax;
+  const recognizedIncomeTax = Math.min(incomeTax, cap.cap_krw);
   const recognizedLocalTax =
     recognizedIncomeTax === incomeTax ? localTax : applyRate(recognizedIncomeTax, rates.surtaxRate) ?? 0;
 
   const reducedIncomeTax = incomeTax - recognizedIncomeTax;
-  const applied = known && reducedIncomeTax > 0;
+  const applied = reducedIncomeTax > 0;
 
   // 잘린 것은 공제액이고 납입액이 아니다. 그 납입액은 전환 신청의 대상이 된다 —
   // "넣은 돈이 사라진다"가 아니라 "올해의 공제는 0이고 납입액은 넘길 수 있다"가 정확한 서술이다.
@@ -292,9 +292,13 @@ function applyCap(incomeTax, localTax, { cap, rates, access }) {
     recognizedIncomeTax,
     recognizedLocalTax,
     cap: {
-      known,
       cap_krw: cap.cap_krw,
       applied,
+      // **잘렸다는 사실과 「걸린다는 것이 증명된다」는 사실은 다르다.** 추정 한도가
+      // 상한인 분기에서만 잘림이 실제 한도의 잘림을 증명한다. 자르지 않은 경우는
+      // 어느 분기에서도 아무것도 증명하지 못한다 — 화면이 「걸리지 않았습니다」를
+      // 적으면 거짓이 될 수 있고, 그것을 막는 것이 이 값이다(D40).
+      binding_code: bindingCodeFor(applied, cap.is_upper_bound),
       reduced_income_tax_krw: reducedIncomeTax,
       reduced_local_tax_krw: localTax - recognizedLocalTax,
       reduced_total_krw: incomeTax + localTax - (recognizedIncomeTax + recognizedLocalTax),
@@ -558,7 +562,7 @@ export function splitUnallocated({ unallocated, pensionRoom, isaRoom }) {
 const CREDIT_NAMED_PLANS = new Set([PLAN.MAX_CREDIT, PLAN.ANNUITY_FIRST]);
 
 function objectiveDegenerate(planId, { cap }) {
-  return cap.known && cap.cap_krw === 0 && CREDIT_NAMED_PLANS.has(planId);
+  return cap.cap_krw === 0 && CREDIT_NAMED_PLANS.has(planId);
 }
 
 /**
@@ -805,7 +809,7 @@ export function buildPlans(ctx) {
   // 한도가 0이면 모든 안의 공제액이 0이라 비교의 축이 사라진다. `alternatives_have_equal_tax_credit`
   // 만으로는 부족하다 — 그것은 "동률"이라고만 말하고 **왜** 동률인지, 그리고 그 동률이
   // 앞으로도 어떤 배분에서든 깨지지 않는다는 사실을 말하지 않는다.
-  if (cap.known && cap.cap_krw === 0) {
+  if (cap.cap_krw === 0) {
     comparisonNotes.push(COMPARISON_NOTE.TAX_CREDIT_AXIS_FLAT);
   }
 

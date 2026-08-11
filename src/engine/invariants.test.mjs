@@ -35,6 +35,8 @@ import {
   baseRequest,
   birthDateForAge,
   deepMerge,
+  findRule,
+  CAP_COORDINATES,
   PROPOSED_FILE,
   CONFIRMED_FILE,
 } from './test-helpers.mjs';
@@ -166,26 +168,37 @@ const PROFILES = [
   // ── 세액 한도가 실제로 걸리는 상태들 ────────────────────────────
   // 한도를 넣기 전의 행렬은 전부 "한도가 넉넉하다"는 한 상태만 돌았다.
   // 그 행렬에서는 I22~I26이 통과하면서도 아무것도 막지 못한다.
+  //
+  // **한도가 입력에서 총급여액의 함수로 바뀌었다**(D39·D40). 그래서 이 세 줄은 이제
+  // 세액 한도가 아니라 **총급여액**을 갈아 끼운다 — 좌표의 값은 관리자가 조문으로
+  // 검산한 것이고(`CAP_COORDINATES`), 셋 다 공제율 우대 구간 안이라 갈리는 축은 한도뿐이다.
   {
-    label: '세액 한도 0 (결정세액 0 신고)',
-    patch: { profile: { prior_year_tax: { state: 'zero', determined_tax_krw: null } } },
+    label: '세액 한도 0 (과세표준이 정확히 0인 총급여)',
+    patch: {
+      profile: { current_year_total_salary_krw: CAP_COORDINATES.ZERO_EXACT.total_salary_krw },
+    },
   },
   {
     label: '세액 한도가 공제액을 자름',
     patch: {
+      profile: { current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw },
+    },
+  },
+  {
+    label: '세액 한도가 최대 공제액과 정확히 같아지는 총급여',
+    patch: {
       profile: {
-        prior_year_tax: { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+        current_year_total_salary_krw: CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw,
       },
     },
   },
   {
-    label: '세액 한도 모름',
-    patch: { profile: { prior_year_tax: { state: 'unknown', determined_tax_krw: null } } },
-  },
-  {
-    label: '세액 한도 모름 (0은 아니라고 답함)',
+    label: '오차 방향이 미정인 분기 (종합소득 있음 · 금액 모름)',
     patch: {
-      profile: { prior_year_tax: { state: 'nonzero_amount_unknown', determined_tax_krw: null } },
+      profile: {
+        has_non_wage_global_income_current_year: true,
+        current_year_global_income_krw: null,
+      },
     },
   },
   {
@@ -706,22 +719,16 @@ function checkScenario(scenario, response, request, at) {
 
   // I22 — **인정 공제액은 결코 한도를 넘지 않는다.**
   // 이 불변식 하나가 §61 ②③의 "그 초과하는 금액은 없는 것으로 한다"를 기계로 고정한다.
+  //
+  // **한도에 「모름」이 없다**(D39·D40). 총급여액이 있으면 값이 하나로 정해지므로
+  // 갈래가 하나뿐이고, 그래서 이 불변식이 모든 요청에 걸린다.
+  assert.equal(Number.isInteger(cap.cap_krw), true, `${at} I22: 한도가 정수가 아니다`);
   for (const plan of plans) {
     const benefit = plan.deterministic_benefit;
-    if (cap.known) {
-      assert.ok(
-        benefit.pension_credit_income_tax_krw <= cap.cap_krw,
-        `${at} I22: 인정 공제액(${benefit.pension_credit_income_tax_krw})이 한도(${cap.cap_krw})를 넘었다`,
-      );
-    } else {
-      // 한도를 모르면 자르지 않는다 — 지어낸 한도로 자르는 것이 더 나쁘다.
-      assert.equal(
-        benefit.pension_credit_income_tax_krw,
-        benefit.pension_credit_income_tax_before_cap_krw,
-        `${at} I22: 한도를 모르는데 값이 잘렸다`,
-      );
-      assert.equal(benefit.tax_liability_cap.applied, false, `${at} I22: 모르는 한도를 적용했다`);
-    }
+    assert.ok(
+      benefit.pension_credit_income_tax_krw <= cap.cap_krw,
+      `${at} I22: 인정 공제액(${benefit.pension_credit_income_tax_krw})이 한도(${cap.cap_krw})를 넘었다`,
+    );
   }
 
   // I23 — 자르기 전 금액과 자른 뒤 금액, 그리고 그 차이가 서로 어긋나지 않는다.
@@ -751,8 +758,16 @@ function checkScenario(scenario, response, request, at) {
     );
     assert.equal(
       c.applied,
-      cap.known && c.reduced_income_tax_krw > 0,
+      c.reduced_income_tax_krw > 0,
       `${at} I23: 잘림 표시가 실제 잘린 금액과 어긋난다`,
+    );
+    // **자름과 「걸림의 증명」은 대칭이 아니다**(D40). 상한인 분기에서 잘렸을 때만
+    // 실제 한도의 자름이 증명된다. 이 등식이 무너지면 화면이 「걸리지 않았습니다」를
+    // 적을 근거를 갖게 되고, 그 문장은 이 경로에서 참이 아니다.
+    assert.equal(
+      c.binding_code,
+      c.applied && cap.is_upper_bound ? 'binds_provably' : 'binding_not_determined',
+      `${at} I23: 걸림 증명 표시가 자름·오차 방향과 어긋난다`,
     );
     // 잘린 것은 공제액이고 납입액이 아니다. 납입액은 전환 신청의 대상으로 살아남는다.
     assert.equal(
@@ -764,7 +779,7 @@ function checkScenario(scenario, response, request, at) {
 
   // I24 — 한도가 0이면 세액공제로는 배분안이 갈리지 않는다는 사실이 값으로 나간다.
   // 조용히 아무 배분이나 고르고 `max_tax_credit`이라는 이름을 다는 것이 이 검사가 막는 것이다.
-  const axisFlat = cap.known && cap.cap_krw === 0;
+  const axisFlat = cap.cap_krw === 0;
   assert.equal(
     notes.includes(COMPARISON_NOTE.TAX_CREDIT_AXIS_FLAT),
     axisFlat,
@@ -1295,14 +1310,20 @@ test('I9 — fund_use_horizon 네 값에서 금액·한도가 동일하다', () 
 // 한도에까지 밀면, 한도가 0인 사용자의 연금계좌 배분이 0이 된다. 그것은 세법이 정한
 // 결론이 아니다 — 시행령 §118의3이 그 납입액을 이후 과세기간으로 넘길 수 있게 하므로
 // "넣지 마라"는 제품 판단이지 조문의 결론이 아니다. 그래서 한도는 **공제액만** 자른다.
+//
+// **한도를 어떻게 움직이는가가 D39·D40으로 바뀌었다.** 전에는 요청의 결정세액을 갈아
+// 끼웠고 지금은 그런 입력이 없다. 그래서 **총급여액**을 움직인다 — 다만 공제율 구간
+// 경계를 넘으면 공제율까지 함께 달라져 이 검사가 뜻을 잃으므로, **한 구간 안에서만**
+// 움직인다. 그 제약이 이 검사를 오히려 넓혔다: 이제 "한도가 배분을 바꾸지 않는다"에
+// 더해 **"총급여액이 (공제율을 통하지 않고는) 배분을 바꾸지 않는다"**까지 고정한다.
 test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', () => {
-  const CAPS = [
-    { state: 'unknown', determined_tax_krw: null },
-    { state: 'nonzero_amount_unknown', determined_tax_krw: null },
-    { state: 'zero', determined_tax_krw: null },
-    { state: 'amount', determined_tax_krw: 0, pension_credit_applied_krw: 0 },
-    { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
-    { state: 'amount', determined_tax_krw: 100_000_000, pension_credit_applied_krw: 0 },
+  // 넷 다 공제율 우대 구간(총급여 5,500만원 이하) 안이다. 갈리는 것은 한도뿐이고,
+  // 셋은 관리자가 조문으로 검산한 좌표다(D40).
+  const SALARIES = [
+    CAP_COORDINATES.ZERO_EXACT.total_salary_krw,
+    CAP_COORDINATES.BINDS.total_salary_krw,
+    CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw,
+    50_000_000,
   ];
 
   const shape = (scenario) => ({
@@ -1319,22 +1340,29 @@ test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', (
   });
 
   for (const { label, patch } of PROFILES) {
-    // 한도를 이미 지정한 프로필군은 이 검사의 대상이 아니다 — 여기서 덮어쓰면 같은 것을 두 번 본다.
-    if (JSON.stringify(patch).includes('prior_year_tax')) continue;
+    // 총급여를 이미 지정한 프로필군은 이 검사의 대상이 아니다 — 여기서 덮어쓰면
+    // 같은 것을 두 번 보거나, 더 나쁘게는 그 프로필이 보려던 것을 지운다.
+    if (JSON.stringify(patch).includes('current_year_total_salary_krw')) continue;
+    if (JSON.stringify(patch).includes('has_non_wage_global_income_current_year')) continue;
     for (const horizon of HORIZONS) {
-      const shapes = CAPS.map((prior) =>
+      const responses = SALARIES.map((salary) =>
         compute(
           baseRequest(
             deepMerge(patch, {
               scenarios: ['current', 'proposed'],
-              profile: { fund_use_horizon: horizon, prior_year_tax: prior },
+              profile: {
+                fund_use_horizon: horizon,
+                current_year_total_salary_krw: salary,
+                // ISA 유형 교차확인은 직전 연도 값이 정한다. 한도 축과 섞지 않는다.
+                prior_year_total_salary_krw: 60_000_000,
+              },
             }),
           ),
           rulesets,
         ),
       );
 
-      for (const response of shapes) {
+      for (const response of responses) {
         assert.equal(response.ok, true, `${label}: 계산이 실패했다`);
         assert.deepStrictEqual(response.echo.tax_liability_cap_affects, {
           allocation_amounts: false,
@@ -1346,61 +1374,88 @@ test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', (
         });
       }
 
-      const first = shapes[0].scenarios.map(shape);
-      for (let i = 1; i < shapes.length; i += 1) {
+      // 한도가 실제로 갈렸는가. 갈리지 않았다면 이 좌표에서 이 검사는 아무것도 막지 못한다.
+      const caps = responses.map((r) => r.scenarios[0].pension_credit_tax_liability_cap.cap_krw);
+      assert.ok(
+        new Set(caps).size === SALARIES.length,
+        `${label} / ${horizon}: 네 총급여가 서로 다른 한도를 내지 않았다 (${caps.join(', ')})`,
+      );
+
+      const first = responses[0].scenarios.map(shape);
+      for (let i = 1; i < responses.length; i += 1) {
         assert.deepStrictEqual(
-          shapes[i].scenarios.map(shape),
+          responses[i].scenarios.map(shape),
           first,
-          `${label} / ${horizon}: 한도 ${CAPS[i].state}에서 배분이 달라졌다`,
+          `${label} / ${horizon}: 한도 ${caps[i]}에서 배분이 달라졌다`,
         );
       }
     }
   }
 });
 
-// I27 — **한도를 모를 때의 값은 아는 경우의 값보다 작지 않다.**
-// 룰셋이 확정한 오차 방향(과대이거나 같고 결코 과소일 수 없다)을 기계로 고정한다.
-// 이것이 무너지면 "최대 이만큼"이라는 화면 문구가 근거를 잃는다.
-test('I27 — 한도 미확인의 결과는 언제나 상한이다', () => {
-  const KNOWN = [0, 1, 300_000, 989_999, 990_000, 100_000_000];
+// I27 — **총급여액이 오르면 세액 한도는 내려가지 않는다.**
+//
+// 이 불변식이 상한 성질의 뼈대다(D40). 한도 = 산출세액 − 근로소득세액공제인데,
+// 산출세액은 과세표준에 대해 단조증가하고(`tax.rate.basic.monotonicity`) 잔여
+// `x − 근로소득세액공제(x)`도 산출세액에 대해 단조증가한다
+// (`credit.wage_income.monotonicity` — 55% 구간에서 기울기 0.45, 30% 구간에서 0.7,
+// 제2항 한도가 걸린 뒤 1). **두 성질을 룰셋이 값으로 적어 두었고 여기서 다시 유도하지
+// 않는다** — 하는 일은 그 귀결이 엔진에서 실제로 성립하는지 재는 것뿐이다.
+//
+// **깨지면 무엇이 무너지는가.** 단조가 깨진다는 것은 소득이 늘었는데 한도가 줄어드는
+// 좌표가 있다는 뜻이고, 그런 좌표에서는 "이 값은 실제 한도보다 크거나 같다"는 보장이
+// 성립할 이유가 없다. 근로소득세액공제를 빼는 4단계가 상한 성질을 깨지 않는다는 것을
+// 기계로 확인하는 자리이기도 하다 — 그 단계가 없으면 이 검사는 통과하지만
+// 골든 좌표(900,000·1,350,000)가 어긋난다.
+test('I27 — 총급여가 오르면 한도가 내려가지 않는다 (상한 성질의 뼈대)', () => {
+  const capAt = (salary) =>
+    compute(
+      baseRequest({
+        profile: {
+          current_year_total_salary_krw: salary,
+          prior_year_total_salary_krw: 60_000_000,
+          monthly_capacity_krw: 0,
+        },
+      }),
+      rulesets,
+    ).scenarios[0].pension_credit_tax_liability_cap.cap_krw;
 
-  for (const { label, patch } of PROFILES) {
-    if (JSON.stringify(patch).includes('prior_year_tax')) continue;
-    for (const scenarios of SCENARIO_SETS) {
-      const run = (prior) =>
-        compute(
-          baseRequest(deepMerge(patch, { scenarios, profile: { prior_year_tax: prior } })),
-          rulesets,
-        );
+  // 구간 경계 언저리를 촘촘히 훑는다. 구간표를 잘못 읽으면 경계에서 값이 튄다.
+  const salaries = new Set();
+  const brackets = [
+    ...findRule(rulesets, CONFIRMED_FILE, 'income.wage.deduction').value.brackets.map(
+      (b) => b.total_salary_max_krw,
+    ),
+    ...findRule(rulesets, CONFIRMED_FILE, 'credit.wage_income').value.limit_brackets.map(
+      (b) => b.total_salary_max_krw,
+    ),
+  ].filter((value) => value !== null && value !== undefined);
 
-      const unknown = run({ state: 'unknown', determined_tax_krw: null });
-      assert.equal(unknown.ok, true);
-
-      for (const determined of KNOWN) {
-        const known = run({
-          state: 'amount',
-          determined_tax_krw: determined,
-          pension_credit_applied_krw: 0,
-        });
-        assert.equal(known.ok, true);
-
-        for (let s = 0; s < known.scenarios.length; s += 1) {
-          const knownPlans = known.scenarios[s].plans;
-          const unknownPlans = unknown.scenarios[s].plans;
-          assert.equal(knownPlans.length, unknownPlans.length, `${label}: 배분안 수가 달라졌다`);
-
-          for (let i = 0; i < knownPlans.length; i += 1) {
-            assert.equal(knownPlans[i].plan_id, unknownPlans[i].plan_id);
-            assert.ok(
-              unknownPlans[i].deterministic_benefit.pension_credit_total_krw >=
-                knownPlans[i].deterministic_benefit.pension_credit_total_krw,
-              `${label} / ${knownPlans[i].plan_id}: 한도를 모를 때의 값이 아는 경우(${determined})보다 작다`,
-            );
-          }
-        }
-      }
-    }
+  for (const edge of brackets) {
+    for (const delta of [-2, -1, 0, 1, 2]) salaries.add(Math.max(0, edge + delta));
   }
+  for (let salary = 0; salary <= 60_000_000; salary += 250_000) salaries.add(salary);
+  for (const coordinate of Object.values(CAP_COORDINATES)) {
+    salaries.add(coordinate.total_salary_krw - 1);
+    salaries.add(coordinate.total_salary_krw);
+    salaries.add(coordinate.total_salary_krw + 1);
+  }
+
+  const sorted = [...salaries].sort((a, b) => a - b);
+  let previous = -1;
+  let previousSalary = null;
+  for (const salary of sorted) {
+    const cap = capAt(salary);
+    assert.ok(
+      cap >= previous,
+      `I27: 총급여 ${previousSalary} → ${salary}에서 한도가 ${previous} → ${cap}로 내려갔다`,
+    );
+    previous = cap;
+    previousSalary = salary;
+  }
+
+  // 실제로 오르기는 하는가. 전 구간이 0이면 위 검사는 통과하면서 아무것도 막지 못한다.
+  assert.ok(previous > 0, 'I27: 훑은 구간에서 한도가 한 번도 오르지 않았다');
 });
 
 // I37 — **수익률 가정은 배분·공제액·배분안 순서·경고를 한 글자도 바꾸지 않는다.**

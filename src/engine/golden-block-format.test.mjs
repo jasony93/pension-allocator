@@ -21,7 +21,14 @@ import {
   validateBlock,
 } from './golden-block.mjs';
 import { uncertaintyNotesIn } from './ruleset.mjs';
-import { CONFIRMED_FILE, baseRequest, deepMerge, findRule, loadRulesets } from './test-helpers.mjs';
+import {
+  CAP_COORDINATES,
+  CONFIRMED_FILE,
+  baseRequest,
+  deepMerge,
+  findRule,
+  loadRulesets,
+} from './test-helpers.mjs';
 
 const rulesets = loadRulesets();
 const confirmedRule = (id) => findRule(rulesets, CONFIRMED_FILE, id);
@@ -37,20 +44,28 @@ const PENSION_REQUIREMENTS = confirmedRule('pension.withdrawal.eligibility').val
 const MIN_AGE = PENSION_REQUIREMENTS.find((r) => r.id === 'age').min_age;
 const HOLDING_YEARS = PENSION_REQUIREMENTS.find((r) => r.id === 'holding_period').min_years;
 
-/** `tax-liability-cap.test.mjs`와 같은 프로필. 공제율이 우대 구간으로 판정된다. */
+/**
+ * **한도를 총급여액으로 고른다**(D39·D40). 세 값 다 공제율 우대 구간(총급여 5,500만원
+ * 이하) 안이므로 공제율은 같고 한도만 달라진다 — 이 파일이 한도 축 하나만 움직이려면
+ * 그래야 한다. 세 값의 출처는 관리자가 조문으로 검산한 좌표다(D40).
+ */
+const SALARY = {
+  /** 한도가 세액공제를 자르는 좌표. 이 총급여의 추정 한도는 정확히 900,000원이다. */
+  CAP_BINDS: CAP_COORDINATES.BINDS.total_salary_krw,
+  /** 과세표준이 정확히 0이 되는 좌표. 한도가 0이고 그 0은 추정이 아니라 등식이다. */
+  CAP_ZERO: CAP_COORDINATES.ZERO_EXACT.total_salary_krw,
+};
+
+/** 한도가 이 룰셋의 최대 세액공제액보다 커서 아무것도 자르지 않는 좌표(기본 요청). */
 const LOW_SALARY = 50_000_000;
-const withCap = (prior, patch = {}) =>
+
+const withSalary = (salary, patch = {}) =>
   baseRequest(
     deepMerge(
       {
         profile: {
-          current_year_total_salary_krw: LOW_SALARY,
+          current_year_total_salary_krw: salary,
           prior_year_total_salary_krw: 60_000_000,
-          prior_year_tax: {
-            determined_tax_krw: null,
-            pension_credit_applied_krw: null,
-            ...prior,
-          },
         },
       },
       patch,
@@ -72,13 +87,10 @@ const creditOf = (incomeTax) => ({
  */
 const CAP_APPLIED = (() => {
   const uncapped = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
-  const capKrw = 300_000;
+  const capKrw = CAP_COORDINATES.BINDS.cap_krw;
   return {
     case: 'GC-90',
-    request: withCap(
-      { state: 'amount', determined_tax_krw: capKrw, pension_credit_applied_krw: 0 },
-      { profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 } },
-    ),
+    request: withSalary(SALARY.CAP_BINDS, { profile: { monthly_capacity_krw: COMBINED_LIMIT / 12 } }),
     expect: {
       current: {
         // D36 — 확정 축의 최댓값. **한도가 이 상한을 무는 좌표**라 관계 코드까지 함께 진다.
@@ -103,9 +115,10 @@ const CAP_APPLIED = (() => {
             tax_credit: creditOf(capKrw),
             tax_credit_before_cap: creditOf(uncapped),
             tax_liability_cap: {
-              known: true,
               cap_krw: capKrw,
               applied: true,
+              // 추정 한도가 상한이므로 이 자름은 실제 한도의 자름을 **증명한다**(D40).
+              binding_code: 'binds_provably',
               threshold_income_tax_krw: uncapped,
             },
             warning_count: 0,
@@ -121,17 +134,14 @@ const CAP_ZERO = {
   case: 'GC-91',
   // 예산을 연금저축 자기 한도에 맞춰 둔다 — 그러면 배분이 룰셋 값 하나로 정해져
   // 한도가 바뀌어도 이 블록이 뜻을 잃지 않는다.
-  request: withCap(
-    { state: 'zero', determined_tax_krw: null },
-    { profile: { monthly_capacity_krw: ANNUITY_LIMIT / 12 } },
-  ),
+  request: withSalary(SALARY.CAP_ZERO, { profile: { monthly_capacity_krw: ANNUITY_LIMIT / 12 } }),
   expect: {
     current: {
       plans: {
         max_tax_credit: {
           allocation: { annuity_savings: ANNUITY_LIMIT, retirement_pension: 0, isa: 0 },
           tax_credit: creditOf(0),
-          tax_liability_cap: { known: true, cap_krw: 0, applied: true },
+          tax_liability_cap: { cap_krw: 0, applied: true, binding_code: 'binds_provably' },
           // 이름이 내세운 근거가 이 입력에서 아무것도 가르지 못한다.
           objective_degenerate: true,
           warning_count: 0,
@@ -204,9 +214,10 @@ const START_UNKNOWN = {
         max_tax_credit: {
           allocation: { annuity_savings: ANNUITY_LIMIT, retirement_pension: 0, isa: 0 },
           tax_credit: creditOf(Math.floor(ANNUITY_LIMIT * CREDIT_RATE)),
-          // 한도를 안다는 것만 적는다 — 나머지 세 항목 없이 `known` 하나만 적어도
-          // 대조가 도는지를 이 자리에서 본다(선택 항목의 부분 기재).
-          tax_liability_cap: { known: true },
+          // 한 항목만 적는다 — 나머지 없이 `binding_code` 하나만 적어도 대조가 도는지를
+          // 이 자리에서 본다(선택 항목의 부분 기재). 이 좌표는 한도가 자르지 않으므로
+          // **걸리는지가 증명되지 않는다** — 「걸리지 않는다」가 아니다(D40).
+          tax_liability_cap: { binding_code: 'binding_not_determined' },
           warning_count: 0,
         },
       },
@@ -598,13 +609,22 @@ const INJECTIONS = [
   { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.is_axis_degenerate', path: CEIL('is_axis_degenerate'), value: true, mentions: ['GC-90', '확정 축', 'is_axis_degenerate'] },
 
   // ── 배분안 단위 세액 한도 네 항목 ──
-  { via: 'compare', block: START_UNKNOWN, name: 'tax_liability_cap.known', path: P('max_tax_credit', 'tax_liability_cap', 'known'), value: false, mentions: ['GC-93', 'max_tax_credit', 'known'] },
+  { via: 'compare', block: START_UNKNOWN, name: 'tax_liability_cap.binding_code', path: P('max_tax_credit', 'tax_liability_cap', 'binding_code'), value: 'binds_provably', mentions: ['GC-93', 'max_tax_credit', 'binding_code'] },
   { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.cap_krw', path: P('max_tax_credit', 'tax_liability_cap', 'cap_krw'), value: 1, mentions: ['GC-90', 'max_tax_credit', 'cap_krw'] },
-  { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.applied', path: P('max_tax_credit', 'tax_liability_cap', 'applied'), value: false, mentions: ['GC-90', 'applied'] },
+  // 두 칸을 **함께** 뒤집는다. 하나만 뒤집으면 형식 검사가 먼저 물어 대조 층을 시험하지
+  // 못한다 — 그 형식 검사 자체는 바로 아래에서 따로 시험한다.
+  { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.applied', path: P('max_tax_credit', 'tax_liability_cap'), value: { applied: false, binding_code: 'binding_not_determined' }, mentions: ['GC-90', 'applied'] },
+  // **오차 방향을 뒤집는 주입**(D40). 한도가 실제로 자른 좌표에서 블록이 「걸리는지
+  // 증명되지 않았다」고 적으면 대조가 물어야 한다 — 이 자리가 통과해 버리면 화면이
+  // 상한과 확정값을 같은 말로 부르기 시작한다.
+  { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.binding_code (증명→미정)', path: P('max_tax_credit', 'tax_liability_cap', 'binding_code'), value: 'binding_not_determined', mentions: ['GC-90', 'binding_code'] },
   { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.threshold_income_tax_krw', path: P('max_tax_credit', 'tax_liability_cap', 'threshold_income_tax_krw'), value: 1, mentions: ['GC-90', 'threshold_income_tax_krw'] },
   // 한도가 0인 쪽에서도 같은 항목이 문다 — `0`과 `null`을 섞지 않는지 함께 본다.
   { via: 'compare', block: CAP_ZERO, name: 'tax_liability_cap.cap_krw (한도 0)', path: P('max_tax_credit', 'tax_liability_cap', 'cap_krw'), value: 1, mentions: ['GC-91', 'cap_krw'] },
-  { via: 'format', block: CAP_APPLIED, name: 'known:false + applied:true', path: P('max_tax_credit', 'tax_liability_cap'), value: { known: false, applied: true }, token: '모르는 한도로 자를 수 없다' },
+  // **형식 자체가 방향을 무는 자리.** 자르지 않았는데 걸림이 증명된다고 적는 블록은
+  // 대조 이전에 형식에서 걸린다 — 옮겨 적다 방향이 뒤집히는 것이 가장 흔한 사고다.
+  { via: 'format', block: CAP_APPLIED, name: 'applied:false + binds_provably', path: P('max_tax_credit', 'tax_liability_cap'), value: { applied: false, binding_code: 'binds_provably' }, token: '한도가 걸린다는 것을 증명하지 못한다' },
+  { via: 'format', block: CAP_APPLIED, name: 'binding_code에 없는 값', path: P('max_tax_credit', 'tax_liability_cap'), value: { binding_code: 'cap_has_headroom' }, token: '계약 8.7절의 두 값이 아니다' },
 
   // ── 목적함수 무력화 — 양쪽 방향 다 ──
   { via: 'compare', block: CAP_ZERO, name: 'objective_degenerate (참→거짓)', path: P('max_tax_credit', 'objective_degenerate'), value: false, mentions: ['GC-91', 'max_tax_credit', '목적함수'] },

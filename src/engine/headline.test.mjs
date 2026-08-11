@@ -14,6 +14,7 @@ import { compute } from './index.mjs';
 import { headlineCompositeTotalFor } from './headline.mjs';
 import { HEADLINE_TOTAL_BOUND, ISA_ESTIMATE_STATE } from './constants.mjs';
 import {
+  CAP_COORDINATES,
   CONFIRMED_FILE,
   baseRequest,
   findRule,
@@ -237,7 +238,8 @@ test('세액 한도가 공제액을 자르면 합계의 아래 끝도 잘린 뒤
           profile: {
             monthly_capacity_krw: 1_000_000,
             isa_return_assumption: assumption('mixed_or_unknown'),
-            prior_year_tax: { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+            // 추정 한도가 공제액을 자르는 총급여(D40의 검산 좌표).
+            current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
           },
         }),
         rulesets,

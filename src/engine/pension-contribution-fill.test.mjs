@@ -23,6 +23,7 @@ import { compute } from './index.mjs';
 import { HORIZONS } from './constants.mjs';
 import { splitUnallocated } from './plans.mjs';
 import {
+  CAP_COORDINATES,
   allocationOf,
   baseRequest,
   deepMerge,
@@ -471,7 +472,8 @@ test('전환 가능 표시에 조건 둘이 함께 나간다', () => {
   const scenario = scenarioFor({
     profile: {
       monthly_capacity_krw: 1_000_000,
-      prior_year_tax: { state: 'amount', determined_tax_krw: 300_000, pension_credit_applied_krw: 0 },
+      // 추정 한도가 공제액을 자르는 총급여(D40의 검산 좌표).
+      current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
     },
   });
   const cap = planOf(scenario, 'max_tax_credit').deterministic_benefit.tax_liability_cap;

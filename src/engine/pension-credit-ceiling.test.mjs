@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 
 import { compute } from './index.mjs';
 import {
+  CAP_COORDINATES,
   CONFIRMED_FILE,
   PROPOSED_FILE,
   baseRequest,
@@ -111,11 +112,13 @@ test('ISA 전환 추가한도가 붙으면 축의 끝이 그만큼 커진다', (
 
 // ── 2. 막대가 축을 넘지 않는다 (I39) ──────────────────────────────────────────
 
-/** 한도를 다 채우고도 남을 예산. 세액 한도는 넉넉히 둬 자르기 전 값을 본다. */
+/**
+ * 한도를 다 채우고도 남을 예산. **세액 한도는 총급여액이 정한다**(D39·D40) — 이 묶음이
+ * 쓰는 총급여(우대 구간의 상한 언저리)에서는 한도가 최대 공제액보다 커서 자르지 않는다.
+ */
 const FILL_BUDGET = {
   profile: {
     monthly_capacity_krw: 3_000_000,
-    prior_year_tax: { state: 'amount', determined_tax_krw: 9_000_000, pension_credit_applied_krw: 0 },
   },
 };
 
@@ -270,12 +273,9 @@ test('한도가 상한보다 낮으면 그 사실을 코드로 내되 축의 끝
         ...FILL_BUDGET,
         profile: {
           ...FILL_BUDGET.profile,
-          current_year_total_salary_krw: SALARY_IN_PREFERRED,
-          prior_year_tax: {
-            state: 'amount',
-            determined_tax_krw: 1,
-            pension_credit_applied_krw: 0,
-          },
+          // 한도가 축의 끝(소득세분)보다 작아지는 총급여. 관리자가 조문으로 검산한
+          // 좌표이고 이 룰셋에서 한도는 정확히 900,000원이다(D40).
+          current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
         },
       }),
       rulesets,
@@ -300,12 +300,8 @@ test('한도가 0이어도 축은 무너지지 않는다', () => {
         ...FILL_BUDGET,
         profile: {
           ...FILL_BUDGET.profile,
-          current_year_total_salary_krw: SALARY_IN_PREFERRED,
-          prior_year_tax: {
-            state: 'zero',
-            determined_tax_krw: null,
-            pension_credit_applied_krw: 0,
-          },
+          // 과세표준이 정확히 0이 되는 총급여. 한도 0이 추정이 아니라 등식인 자리다.
+          current_year_total_salary_krw: CAP_COORDINATES.ZERO_EXACT.total_salary_krw,
         },
       }),
       rulesets,
@@ -318,42 +314,43 @@ test('한도가 0이어도 축은 무너지지 않는다', () => {
   assert.equal(ceiling.is_axis_degenerate, false);
 });
 
-test('한도를 모르면 관계도 모른다고 적는다 — 지어내지 않는다', () => {
-  const scenario = scenarioOf(
-    compute(
-      baseRequest({
-        profile: {
-          prior_year_tax: {
-            state: 'unknown',
-            determined_tax_krw: null,
-            pension_credit_applied_krw: null,
-          },
-        },
-      }),
-      rulesets,
-    ),
+test('관계 코드에 「모름」이 없다 — 그리고 「여유가 있다」도 아니다', () => {
+  // **`cap_unknown`이 사라졌다**(D39·D40). 총급여액이 있으면 한도가 언제나 나오므로
+  // 모르는 상태 자체가 없다. 남은 두 값은 **두 수의 비교일 뿐**이고, 그중
+  // `cap_at_or_above_ceiling`을 「한도에 걸리지 않았습니다」로 읽으면 거짓이 될 수 있다 —
+  // 실제 한도는 이 상한보다 작을 수 있기 때문이다. 그 구분을 지는 것은 배분안의
+  // `binding_code`이고, 이 검사가 두 값이 서로 다른 것을 말한다는 사실을 고정한다.
+  const scenario = scenarioOf(compute(baseRequest(), rulesets));
+
+  assert.equal(
+    scenario.pension_credit_ceiling.tax_liability_cap_relation_code,
+    'cap_at_or_above_ceiling',
   );
-  assert.equal(scenario.pension_credit_ceiling.tax_liability_cap_relation_code, 'cap_unknown');
+  for (const plan of scenario.plans) {
+    assert.equal(
+      plan.deterministic_benefit.tax_liability_cap.binding_code,
+      'binding_not_determined',
+      '자르지 않은 것이 「걸리지 않는다」의 증명이 되면 안 된다',
+    );
+  }
 });
 
 test('한도와의 비교는 소득세분끼리 한다 — 합계와 비교하면 경계가 어긋난다', () => {
   const expected = creditOf(COMBINED_LIMIT, PREFERRED.rate);
-  // 한도를 소득세분과 정확히 같게 둔다. 합계와 비교하는 구현이라면 여기서 below가 나온다.
+  // **한도가 축의 소득세분과 정확히 같아지는 총급여가 실재한다**(D40의 세 번째 좌표).
+  // 합계(지방소득세 포함)와 비교하는 구현이라면 여기서 below가 나온다.
   const scenario = scenarioOf(
     compute(
       baseRequest({
         profile: {
-          current_year_total_salary_krw: SALARY_IN_PREFERRED,
-          prior_year_tax: {
-            state: 'amount',
-            determined_tax_krw: expected.incomeTax,
-            pension_credit_applied_krw: 0,
-          },
+          current_year_total_salary_krw: CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw,
         },
       }),
       rulesets,
     ),
   );
+  assert.equal(scenario.pension_credit_tax_liability_cap.cap_krw, expected.incomeTax);
+  assert.ok(expected.total > expected.incomeTax, '두 자가 실제로 다른 좌표여야 이 검사가 문다');
   assert.equal(
     scenario.pension_credit_ceiling.tax_liability_cap_relation_code,
     'cap_at_or_above_ceiling',
@@ -442,15 +439,9 @@ test('I40 — 세율표는 요청의 어떤 값에도 반응하지 않는다', (
       'current',
     ],
     [
-      '세액 한도를 모름',
+      '세액 한도가 0인 총급여',
       baseRequest({
-        profile: {
-          prior_year_tax: {
-            state: 'unknown',
-            determined_tax_krw: null,
-            pension_credit_applied_krw: null,
-          },
-        },
+        profile: { current_year_total_salary_krw: CAP_COORDINATES.ZERO_EXACT.total_salary_krw },
       }),
       'current',
     ],

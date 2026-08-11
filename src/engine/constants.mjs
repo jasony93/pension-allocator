@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '8.2.0';
-export const SUPPORTED_MAJOR = 8;
+export const SCHEMA_VERSION = '9.0.0';
+export const SUPPORTED_MAJOR = 9;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -92,30 +92,48 @@ export const ANNUITY_START = {
 export const ANNUITY_START_VALUES = Object.values(ANNUITY_START);
 
 /**
- * 세액 한도를 무엇으로 알았는가. 사용자가 답한 형태를 그대로 나타내는 값이고
- * 엔진이 상태를 추론해 만들지 않는다.
+ * 세액 한도를 **무엇에서** 계산했는가. 값이 하나뿐이다 — 해당 과세기간 총급여액이다.
+ *
+ * D39로 직전 과세연도 결정세액 입력이 사라졌고, 그 자리를 대체한 것이
+ * `pension.credit.tax_liability_cap.current_year_estimate`다. 「모름」이라는 상태가
+ * 더 이상 없다는 것이 이 상수가 하나뿐인 이유다.
  */
-export const PRIOR_TAX_STATE = {
-  /** 결정세액 금액을 안다 */
-  AMOUNT: 'amount',
-  /** 금액은 모르나 "직전 과세연도 결정세액이 0이었다"고 답했다 */
-  ZERO: 'zero',
-  /** "0이 아니었다"까지만 답했다 — 한도의 크기는 여전히 모른다 */
-  NONZERO_AMOUNT_UNKNOWN: 'nonzero_amount_unknown',
-  /** 모르겠다 */
-  UNKNOWN: 'unknown',
+export const CAP_BASIS = 'current_year_total_salary';
+
+/**
+ * 룰셋 `...current_year_estimate.branches`의 **키**. 정의 자리는 룰셋이고 여기는 전사다.
+ * 두 목록이 갈라지면 `ruleset-driven.test.mjs`가 실패한다.
+ */
+export const CAP_BRANCH = {
+  WAGE_ONLY: 'wage_income_only',
+  GLOBAL_INCOME_SUPPLIED: 'global_income_amount_supplied',
+  GLOBAL_INCOME_MISSING: 'global_income_amount_missing',
 };
 
-export const PRIOR_TAX_STATES = Object.values(PRIOR_TAX_STATE);
+export const CAP_BRANCHES = Object.values(CAP_BRANCH);
 
-/** 한도를 어떻게 얻었는지. `null`이면 한도를 모르는 것이다. */
-export const CAP_SOURCE = {
-  ADD_BACK: 'determined_tax_add_back',
-  DECLARED_ZERO: 'declared_zero',
+/**
+ * 오차 방향이 정해지지 않은 분기의 코드. **이 문자열의 정의 자리는 계약이다**(8.7절).
+ *
+ * 상한 쪽 코드(`overstated_or_equal`)는 룰셋이 `error_direction.code`에 값으로 적어
+ * 두었으므로 엔진이 그것을 읽어 그대로 낸다. 미정 쪽은 룰셋이 산문으로만 적었고
+ * (`branches.global_income_amount_missing.direction`) 엔진은 산문을 파싱해 코드를
+ * 만들지 않는다. 그래서 이 한 문자열만 계약이 정한다.
+ */
+export const CAP_DIRECTION_INDETERMINATE = 'direction_indeterminate';
+
+/**
+ * 이 배분안에서 **한도가 걸린다는 것이 증명되는가.**
+ *
+ * D40 — 추정 한도는 상한이므로 그것이 자르면 실제 한도도 반드시 자른다. 반대는 성립하지
+ * 않는다. **자르지 않았다는 사실은 「걸리지 않는다」를 뜻하지 않는다.** 화면이 그 반대
+ * 진술("한도에 걸리지 않았습니다"·"여유가 있습니다")을 적으면 거짓이 될 수 있으므로,
+ * 두 상태를 값으로 갈라 낸다.
+ */
+export const CAP_BINDING = {
+  PROVABLE: 'binds_provably',
+  NOT_DETERMINED: 'binding_not_determined',
 };
-
-/** 한도를 모른 채 낸 값이 어느 쪽으로 틀리는가. 조문상 방향이 한쪽으로만 열려 있다. */
-export const CAP_ERROR_DIRECTION = 'overstated_or_equal';
 
 /**
  * 공제율 구간을 **무엇으로** 판정했는가.
@@ -265,7 +283,6 @@ export const CEILING_RATE_SOURCE = {
  * 그림에서 사라진다. 대신 걸리는지를 코드로 낸다.
  */
 export const CEILING_CAP_RELATION = {
-  UNKNOWN: 'cap_unknown',
   AT_OR_ABOVE: 'cap_at_or_above_ceiling',
   BELOW: 'cap_below_ceiling',
 };
@@ -393,6 +410,14 @@ export const RULE = {
   CREDIT_TAX_CAP: 'pension.credit.tax_liability_cap',
   CREDIT_TAX_CAP_SOURCE: 'pension.credit.tax_liability_cap.source_form',
   CREDIT_UNUSED_CARRYOVER: 'pension.credit.unused.contribution_carryover',
+
+  // 19차 조사(D39·D40). 직전 과세연도 결정세액 입력이 사라진 자리를 대체하는 규칙과,
+  // 그 계산이 밟는 네 조문. **값은 상한이고 하한은 존재하지 않는다.**
+  CREDIT_TAX_CAP_ESTIMATE: 'pension.credit.tax_liability_cap.current_year_estimate',
+  WAGE_INCOME_DEDUCTION: 'income.wage.deduction',
+  BASIC_DEDUCTION_SELF: 'income.deduction.basic.self',
+  BASIC_TAX_RATE: 'tax.rate.basic',
+  WAGE_INCOME_CREDIT: 'credit.wage_income',
 
   // 9차 조사(D26). 세액공제 한도를 넘는 연금계좌 납입의 세법상 취급과
   // 그 원금이 인출될 때의 과세. 배분 금액을 바꾸지 않고 **사실**만 준다.
@@ -532,7 +557,11 @@ export const NOTICE = {
   PLANS_COLLAPSED_SINGLE: 'plans_collapsed_single',
   HORIZON_NOT_DECLARED: 'fund_use_horizon_not_declared',
   PENSION_HOLDING_NOT_EVALUATED: 'pension_holding_period_not_evaluated',
-  TAX_CAP_UNKNOWN: 'tax_liability_cap_unknown',
+  // **`tax_liability_cap_unknown`이 여기 있었다**(D39·D40에 폐기). 「모름」이라는 상태가
+  // 사라졌으므로 그 코드가 뜻하던 것이 없다. 대체하는 것은 아래 둘이다 — 한도가 여전히
+  // 추정값이라는 사실과, 그 추정의 방향이 정해지지 않은 분기가 하나 있다는 사실.
+  TAX_CAP_ESTIMATED: 'tax_liability_cap_estimated_from_total_salary',
+  TAX_CAP_DIRECTION_INDETERMINATE: 'tax_liability_cap_direction_indeterminate',
   TAX_CAP_ZERO: 'tax_liability_cap_zero',
   TAX_CAP_APPLIED: 'tax_liability_cap_applied',
   ANNUITY_STARTED: 'pension_contribution_blocked_annuity_started',
@@ -593,7 +622,8 @@ export const ASSUMPTION = {
   // `web-dev`가 `4.0.0`에 맞춰 구현 중인 화면이 낡는다(D22). 개명은 다음 회차에
   // 계산 기준일 입력과 함께 처리한다.
   AGE_REFERENCE_DATE: 'age_reference_date_not_in_ruleset',
-  PRIOR_PENSION_CREDIT_ZERO: 'prior_pension_credit_zero_assumed',
+  // **`prior_pension_credit_zero_assumed`가 여기 있었다**(D39에 폐기). 되더하기의
+  // 가산항을 0으로 보던 가정인데, 되더할 입력 자체가 사라졌다.
   RETIREMENT_TRANSFER_IN_CONTRIBUTION_LIMIT: 'retirement_transfer_counted_in_contribution_limit',
   DEFERRED_RETIREMENT_INCOME_ABSENT: 'deferred_retirement_income_absent_assumed',
   LOCAL_TAX_FOLLOWS_CAP: 'local_tax_follows_income_tax_cap',

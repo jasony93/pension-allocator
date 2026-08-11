@@ -645,19 +645,34 @@
           "who_it_hurts_most": "자녀가 있거나 의료비·기부금이 큰 사람이다. 그런 사람은 실제 한도가 산출세액보다 훨씬 작은데 이 경로는 그 차이를 전혀 보지 못한다. 단신 근로자보다 과대가 크다.",
           "one_more_separate_cap": "특별세액공제(제59조의4 제1항부터 제3항까지)와 조세특례제한법 제95조의2에 따른 세액공제에는 근로소득에 대한 종합소득산출세액을 기준으로 한 별도 한도가 하나 더 있다(소득세법 제61조 제1항). 이 경로는 그 단계도 보지 않는다. 방향은 역시 같다."
         },
+        "branches_reading_rule": {
+          "engine_reads": "direction_code",
+          "engine_must_not_read": "direction",
+          "rule": "각 분기의 방향은 direction_code 칸 하나로 정해진다. direction 칸은 사람이 읽는 산문이며 엔진이 그 문자열을 파싱하거나 접두사를 검사해서는 안 된다.",
+          "why": "산문 앞에 한 단어가 붙는 것만으로 방향 판정이 조용히 뒤집힌다. 뒤집혀도 아무 검사가 실패하지 않으므로 배포까지 살아남는다. 조문이 정한 사실과 그 사실을 기계가 읽는 자리를 갈라 두는 것이 이 룰셋의 다른 자리(예: error_direction.code)에서 이미 쓰는 형태다.",
+          "allowed_direction_codes": ["overstated_or_equal", "direction_indeterminate"],
+          "code_definition_sites": {
+            "overstated_or_equal": "이 규칙의 error_direction.code. 방향의 증명이 같은 자리에 있다.",
+            "direction_indeterminate": "이 규칙의 global_income_amount_missing.direction_code. 이 분기가 그 방향의 유일한 발생 자리이고, 부호가 정해지지 않는 이유를 같은 객체가 적고 있다."
+          },
+          "added_on": "D41 1번의 판정에 따라 코드 칸을 산문과 분리했다."
+        },
         "branches": {
           "wage_income_only": {
             "when": "해당 과세기간에 근로소득 외에 종합소득과세표준에 합산되는 소득이 없다고 답한 경우",
+            "direction_code": "overstated_or_equal",
             "direction": "overstated_or_equal. 위 증명이 그대로 성립한다.",
             "note": "이 서비스가 이미 받고 있는 두 입력(해당 과세기간 총급여액, 근로소득 외 합산 소득의 유무)으로 판정된다. 새 입력이 필요하지 않다."
           },
           "global_income_amount_supplied": {
             "when": "근로소득 외 합산 소득이 있고 종합소득금액을 받은 경우",
             "path": "과세표준 = max(0, 종합소득금액 − 1,500,000). 근로소득공제는 이미 종합소득금액 안에서 빠져 있으므로 다시 빼지 않는다. 근로소득세액공제는 종합소득산출세액 × (근로소득금액 ÷ 종합소득금액)으로 안분한 금액을 제1항에 넣는다.",
+            "direction_code": "overstated_or_equal",
             "direction": "overstated_or_equal. 종합소득금액이 조문상의 합산 기준 그 자체이고 종합소득공제는 150만원 이상이므로 상한 성질이 유지된다."
           },
           "global_income_amount_missing": {
             "when": "근로소득 외 합산 소득이 있는데 종합소득금액을 받지 못한 경우",
+            "direction_code": "direction_indeterminate",
             "direction": "indeterminate. 다른 소득을 세지 않은 것은 산출세액을 작게 잡는 방향이고, 공제를 세지 않은 것은 크게 잡는 방향이다. 두 힘의 부호가 반대이므로 합의 부호가 정해지지 않는다.",
             "bounded": "다만 과대의 크기는 wage_income_only의 과대보다 크지 않다. 다른 소득은 실제 산출세액을 올리기만 하므로 과대를 줄이거나 과소로 넘길 뿐이다. 즉 이 분기가 과대의 최댓값을 키우지는 않는다.",
             "engine_note": "이 분기에서는 방향 코드를 overstated_or_equal로 내면 안 된다. 방향이 정해지지 않았음을 그대로 내야 한다."
