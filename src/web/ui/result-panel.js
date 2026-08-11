@@ -750,7 +750,7 @@ function confirmedAxisSection(scenario, plan, p) {
     ceiling && !ceiling.is_axis_degenerate
       ? Math.min(100, Math.max(0, ((p.afterCapKrw ?? 0) / ceiling.ceiling_krw) * 100))
       : null;
-  const meter = fillPercent != null ? benefitMeter({ account: p.accounts[0], grade: 'solid', fillPercent }) : null;
+  const meter = fillPercent != null ? benefitMeter({ account: p.accounts[0], fillPercent }) : null;
   // D38 재개정 — 「최대 X 중 Y」 한 줄이 이 행에서 유일한 "행 = 소구획 전체"
   // 자리다. 판정 기준 문장(basis_code)은 그 아래 별도 줄로 둔다.
   const sentence = ceiling ? confirmedAxisAmountSentence(ceiling, actualAmountText) : actualAmountText;
@@ -775,13 +775,16 @@ function confirmedAxisSection(scenario, plan, p) {
 }
 
 /**
- * 가정 축(D36 → D38 재개정) — ISA 비과세·저율분리과세·손익통산(보조 행) 셋.
- * **세법 재판정(관리자 메시지, 커밋 `13c42e4`)으로 행 구조가 비대칭이 됐다** —
- * 법정 상한이 있는 축은 비과세뿐이라, 막대(윤곽+해칭)를 갖는 행도 이제
- * 하나뿐이다(design-system 5.31.4절). 나머지 둘(저율분리·손익통산)은 숫자 +
+ * 가정 축(D36 → D38 재개정 → D43 재개정) — ISA 비과세·저율분리과세·손익통산(보조
+ * 행) 셋. **세법 재판정(관리자 메시지, 커밋 `13c42e4`)으로 행 구조가 비대칭이
+ * 됐다** — 법정 상한이 있는 축은 비과세뿐이라, 막대를 갖는 행도 이제 하나뿐이다
+ * (design-system 5.31.4절). 나머지 둘(저율분리·손익통산)은 숫자 +
  * `법정 상한 없음`만 낸다 — 상한 없는 값에 막대를 그리면 분모를 지어내는
  * 것이다. 가정 자체가 없거나 계산하지 못했으면(narrative) 축 캡션 없이
  * 서술만 남는다 — 잴 값 자체가 없다.
+ * **[2026-08-11, D43] 막대는 이제 채움(solid)이다** — 빗금이 아니다.
+ * 확정/가정 구분은 이 절 상단의 조건절(`assumptionAxisCaption`)과 아래
+ * 비과세 행의 정산 기간이 진다(design-system 5.31.6절).
  */
 function assumptionAxisSection(i, isaReturnAssumption) {
   const onClick = () => scrollAndHighlight('account-row-isa');
@@ -827,7 +830,7 @@ function assumptionAxisSection(i, isaReturnAssumption) {
         })
       : null;
 
-    // 행 1 — ISA 비과세로 아낀 금액. 이 위젯에서 유일하게 막대(윤곽+해칭)를
+    // 행 1 — ISA 비과세로 아낀 금액. 이 위젯에서 유일하게 막대(D43 — 채움)를
     // 갖는 가정 축 행이다. 「최대 X 중 Y」 형태이고 기간이 문장 맨 앞이다.
     const taxFreeSentence = ceiling ? isaTaxFreeCeilingSentence(est) : boundedAxisAmountText(breakdown.tax_free_krw, est.axis_breakdown_bound_code);
     const taxFreeRow = el(
@@ -842,10 +845,13 @@ function assumptionAxisSection(i, isaReturnAssumption) {
         el('span', { class: 'benefit-row-dots' }, [dot]),
         el('span', { class: 'benefit-row-body' }, [
           el('span', { class: 'benefit-row-names' }, [ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL]),
-          // **「가정 기반」 칩을 지웠다**(D39 #2, design-system 5.31.5절). 빗금(아래
-          // `benefitMeter`의 `assumption` 등급)과 가정 축 조건절이 이미 같은 뜻을
-          // 진다 — 칩은 세 번째 사본이었다.
-          benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: taxFreeFill }),
+          // **「가정 기반」 칩을 지웠다**(D39 #2, design-system 5.31.5절).
+          // **[2026-08-11, D43] 빗금 → 채움.** 소유자가 "ISA 막대 안이 비어
+          // 있다"를 두 번째로 신고했고, 확정/가정 구분은 이제 이 막대가
+          // 아니라 가정 축 제목의 조건절과 이 행의 정산 기간(아래 문장 맨
+          // 앞)이 진다 — `benefitMeter`는 더 이상 등급별로 모양을 가르지
+          // 않는다(design-system 5.31.6절).
+          benefitMeter({ account: 'isa', fillPercent: taxFreeFill }),
           el('span', { class: 'benefit-row-amount' }, [taxFreeSentence]),
         ]),
       ],

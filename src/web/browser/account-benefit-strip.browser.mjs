@@ -85,6 +85,16 @@ const MEASURE = `(() => {
   const cardSurface = document.querySelector('.result-panel-inner');
   const assumptionChip = document.querySelector('.benefit-row-assumption-chip');
   const assumptionTrack = document.querySelector('.benefit-axis-assumption .benefit-meter-track');
+  // D43 — ISA 비과세 행의 채움 원소. .benefit-axis-assumption의 첫 번째
+  // .benefit-meter-fill이 곧 비과세 행의 막대다(가정 축에서 막대를 갖는
+  // 행이 이제 이거 하나뿐이다).
+  const assumptionFill = document.querySelector('.benefit-axis-assumption .benefit-meter-fill');
+  // D43 — 가정 축 제목(조건절)이 실제로 그 자리에 렌더되는지. 자리로 세지
+  // 않고 **확정 축 트랙과 가정 축 트랙 사이**에 실제로 존재하는지를 아래
+  // 테스트가 y좌표로 확인한다.
+  const axisCaptionEl = document.querySelector('.benefit-axis-assumption .benefit-axis-caption');
+  const confirmedFillCs = confirmedFill ? getComputedStyle(confirmedFill) : null;
+  const assumptionFillCs = assumptionFill ? getComputedStyle(assumptionFill) : null;
   return {
     stripRect: rect(strip),
     cardRect: rect(card),
@@ -113,6 +123,16 @@ const MEASURE = `(() => {
     // align-items 기본값이 stretch라 이 칩이 트랙 전체 폭으로 늘어났었다.
     assumptionChipRect: rect(assumptionChip),
     assumptionTrackForChipRect: rect(assumptionTrack),
+    // D43 — 채움 실측. 빗금(repeating-linear-gradient)으로 되돌아갔는지,
+    // solid 배경으로 실제로 칠해졌는지를 렌더된 값으로 확인한다.
+    assumptionFillRect: rect(assumptionFill),
+    axisCaptionRect: rect(axisCaptionEl),
+    confirmedFillBackgroundImage: confirmedFillCs ? confirmedFillCs.backgroundImage : null,
+    confirmedFillBackgroundColor: confirmedFillCs ? confirmedFillCs.backgroundColor : null,
+    confirmedFillBorderWidth: confirmedFillCs ? confirmedFillCs.borderTopWidth : null,
+    assumptionFillBackgroundImage: assumptionFillCs ? assumptionFillCs.backgroundImage : null,
+    assumptionFillBackgroundColor: assumptionFillCs ? assumptionFillCs.backgroundColor : null,
+    assumptionFillBorderWidth: assumptionFillCs ? assumptionFillCs.borderTopWidth : null,
   };
 })()`;
 
@@ -189,6 +209,11 @@ test('두 축이 실제로 다른 배율을 쓴다 — 트랙 길이는 같아�
   );
   // 가정 축은 기간과 조건절을 함께 져야 한다(D36·D39) — 「가정 기반」 칩을
   // 지운 승인이 이 둘에 걸려 있으므로, 하나라도 사라지면 여기서 걸린다.
+  //
+  // **[2026-08-11, D43] 이 두 검사가 이제 D43의 승인 조건 그 자체다.** 막대가
+  // 빗금에서 채움으로 바뀌면서, 확정/가정을 가르는 채널이 이 조건절과 아래
+  // 「계약 전체」(정산 기간) 문구 둘로 줄었다 — 여유가 없다. 검사는 이미
+  // 있었으므로 새로 만들지 않고 이 주석만 남긴다.
   assert.match(
     m.assumptionAxisText,
     /\d+년 동안, 수익률이 연 [\d.]+%라면/,
@@ -198,6 +223,75 @@ test('두 축이 실제로 다른 배율을 쓴다 — 트랙 길이는 같아�
     m.assumptionAxisText,
     /\d+년 계약 전체에서/,
     `ISA 비과세 축에 「계약 전체」가 없다 — 옆의 연간 축과 나란히 놓여 오독이 난다: "${m.assumptionAxisText.slice(0, 200)}"`,
+  );
+});
+
+test('가정 축 막대가 채워져 있다(D43) — 빗금·윤곽으로 되돌아가지 않았다', { skip: skipWithoutChrome }, async () => {
+  // 소유자가 "ISA 막대 안이 비어 있다"를 두 번째로 신고했다(D38 5번 → D43).
+  // D38 5번의 대응(윤곽 + 45° 빗금)이 답이 아니었다는 뜻이므로, 이 검사는
+  // 그 형태로 되돌아가는 회귀를 잡는다 — 이전엔 "빗금이 렌더된다"를 쟀을
+  // 자리인데, 지금은 뒤집어서 "빗금이 아니라 채움이다"를 잰다.
+  const { page } = app;
+  await setViewport(page, 1440, 1400);
+  const m = await page.evaluate(MEASURE);
+  assert.ok(m.assumptionFillRect, 'ISA 비과세 막대의 채움 원소를 찾지 못했습니다');
+  assert.ok(m.assumptionFillRect.width > 0, 'ISA 비과세 채움 폭이 0입니다');
+  assert.equal(
+    m.assumptionFillBackgroundImage,
+    'none',
+    `채움에 배경 이미지(옛 repeating-linear-gradient 빗금)가 남아 있습니다: ${m.assumptionFillBackgroundImage}`,
+  );
+  assert.notEqual(
+    m.assumptionFillBackgroundColor,
+    'rgba(0, 0, 0, 0)',
+    'ISA 비과세 채움의 배경색이 투명합니다 — 옛 윤곽(outline) 등급처럼 속이 비어 있습니다',
+  );
+  // 확정 축 채움과 같은 처리(D43 — 등급이 모양을 가르지 않는다)인지 대조한다.
+  assert.equal(
+    m.assumptionFillBackgroundImage,
+    m.confirmedFillBackgroundImage,
+    '확정 축 채움과 가정 축 채움이 서로 다른 배경 이미지 처리를 쓰고 있습니다 — 이제 같아야 한다',
+  );
+  assert.equal(
+    m.assumptionFillBorderWidth,
+    m.confirmedFillBorderWidth,
+    '확정 축 채움과 가정 축 채움이 서로 다른 테두리 두께를 쓰고 있습니다 — 이제 같아야 한다(둘 다 border: none)',
+  );
+});
+
+test('확정 축 막대와 가정 축 막대가 같은 시야에서 이웃하지 않는다(D43) — 구분선·축 제목이 실제로 그 사이를 가른다', { skip: skipWithoutChrome }, async () => {
+  // 막대가 빗금에서 채움으로 바뀌어 모양으로는 더 이상 두 축을 구분할 수
+  // 없다(D43). 이제 이 구분을 지는 것은 배치뿐이다 — 구분선(`.benefit-axis-
+  // divider`)과 가정 축 제목(조건절, `.benefit-axis-caption`)이 실제로
+  // 확정 축 트랙과 가정 축 트랙 "사이"에 렌더돼야 한다. "존재한다"만으로는
+  // 부족하다 — 두 트랙 사이가 아니라 다른 자리에 있어도 이 검사를 빼면
+  // 통과했을 것이다.
+  const { page } = app;
+  await setViewport(page, 1440, 1400);
+  const m = await page.evaluate(MEASURE);
+  assert.ok(m.confirmedTrackRect && m.confirmedTrackRect.height > 0, '확정 축 트랙이 렌더되지 않았습니다');
+  assert.ok(m.assumptionTrackRects[0] && m.assumptionTrackRects[0].height > 0, '가정 축(비과세) 트랙이 렌더되지 않았습니다');
+  assert.ok(m.dividerRect && m.dividerRect.width > 0, '구분선이 실제로 렌더되지 않았습니다');
+  assert.ok(m.axisCaptionRect && m.axisCaptionRect.width > 0 && m.axisCaptionRect.height > 0, '가정 축 제목(조건절)이 실제로 렌더되지 않았습니다');
+
+  const confirmedBottom = m.confirmedTrackRect.y + m.confirmedTrackRect.height;
+  const assumptionTop = m.assumptionTrackRects[0].y;
+  assert.ok(
+    assumptionTop > confirmedBottom,
+    `가정 축 트랙(y=${assumptionTop})이 확정 축 트랙 아래(y=${confirmedBottom} 이하)에 있어야 합니다 — 겹치거나 위에 있으면 안 됩니다`,
+  );
+  assert.ok(
+    m.dividerRect.y >= confirmedBottom && m.dividerRect.y <= assumptionTop,
+    `구분선(y=${m.dividerRect.y})이 두 트랙 사이(${confirmedBottom} ~ ${assumptionTop})에 있어야 합니다 — 딴 자리에 있으면 "사이를 가른다"고 말할 수 없습니다`,
+  );
+  assert.ok(
+    m.axisCaptionRect.y >= m.dividerRect.y && m.axisCaptionRect.y <= assumptionTop,
+    `가정 축 제목(y=${m.axisCaptionRect.y})이 구분선 아래·가정 축 트랙 위(${m.dividerRect.y} ~ ${assumptionTop})에 있어야 합니다`,
+  );
+  const gapPx = assumptionTop - confirmedBottom;
+  assert.ok(
+    gapPx > 20,
+    `두 트랙의 세로 간격(${gapPx}px)이 너무 좁습니다 — 구분선·제목이 실제로 시야를 갈라놓지 못하면 두 채움 막대가 같은 시야에서 이웃한 것처럼 읽힙니다`,
   );
 });
 

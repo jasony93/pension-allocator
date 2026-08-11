@@ -616,8 +616,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    먼저 비교하고 글자는 나중에 읽는다). */
 .benefit-axis { display: flex; flex-direction: column; gap: var(--space-1); }
 /* `-confirmed`/`-assumption`은 지금 별도 스타일이 없는 훅 클래스다 — 배치
-   구분은 `.benefit-axis-divider`(구분선)와 DOM 순서(확정이 먼저)가 이미
-   지고 있고, 등급(solid/outline) 자체가 `BenefitMeter`에서 이미 갈린다.
+   구분은 `.benefit-axis-divider`(구분선)와 DOM 순서(확정이 먼저)가 진다.
+   **[2026-08-11, D43]** 예전에는 등급(solid/outline)이 `BenefitMeter`에서
+   추가로 갈렸는데, 이제 모든 등급이 같은 solid 채움을 쓰므로 이 구분이
+   빠졌다 — 축을 가르는 일 전부가 구분선·DOM 순서·축 제목의 문구로 옮겨갔다.
    그래도 이름을 남겨 둔다 — 나중에 소구획별 스타일이 필요해지면(예: 배경
    틴트) 여기에 붙일 자리가 이미 있다. */
 .benefit-axis-confirmed,
@@ -672,10 +674,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    C-2(20px)와 나란히 비교했다 — 8px 이하는 여전히 "가는 선"으로 읽히고,
    14px부터는 C-2와의 굵기 비율(14/20=0.7)이 D35가 겹침으로 지목한 위험
    구간에 가까워지기 시작한다(스크린샷 비교, `track-Npx-vs-c2.png`).
-   12px(비율 0.6)에서 두 조건이 함께 성립했다 — 확정 축 채움·가정 축 윤곽선
-   모두 뚜렷한 막대로 읽히면서도, C-2는 여전히 solid 채움 + 더 굵은 트랙 +
-   계좌별 큰 라벨이라는 다른 시각 언어로 남아 하나로 읽히지 않았다(C-2는
-   solid fill, 이 위젯의 가정 축은 outline — 형태 자체가 다르다). */
+   12px(비율 0.6)에서 두 조건이 함께 성립했다 — 두 축 모두 뚜렷한 막대로
+   읽히면서도, C-2는 여전히 더 굵은 트랙 + 계좌별 큰 라벨이라는 다른 시각
+   언어로 남아 하나로 읽히지 않았다. **[2026-08-11, D43]** 이 판단 당시엔
+   가정 축이 윤곽(outline)이라 "형태 자체가 다르다"도 겹침을 막는 근거였는데,
+   지금은 두 축이 모두 solid라 이 굵기 비율(0.6)과 컨테이너(D35)가 겹침을
+   막는 유일한 장치다 — 아래 트랙 굵기 회귀 검사가 이전보다 더 무거워졌다. */
 .benefit-meter-track {
   height: 12px; border-radius: var(--radius-full); background: var(--data-track);
   border: 1px solid var(--border-subtle); overflow: visible; width: 100%; margin: 2px 0;
@@ -693,26 +697,22 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    맞추되(12.5px) 별도 클래스를 둔다 — 서로 다른 축을 재는 캡션임을 스타일이
    아니라 문구가 말하게 한다(어휘 자체가 장치다). */
 .benefit-meter-axis-caption { font-size: 12.5px; color: var(--text-secondary); }
-/* 확정(solid) — 계좌색 솔리드 채움. */
+/* 계좌색 솔리드 채움 — 지금은 등급과 무관하게 `BenefitMeter`의 모든 채움이
+   이 클래스 하나를 쓴다(design-system 5.31.6절).
+
+   **[2026-08-11, D43] 가정(assumption) 등급의 윤곽선 + 대각선 해칭을 지우고
+   이 규칙으로 통합했다.** 그때(D28·D35·D38)는 이 자리가 "속을 채우지
+   않는다 — 채우면 확정(solid) 등급과 같아져 구분이 형태로 사라진다"였다.
+   소유자가 같은 신고("ISA 막대 안이 비어 있다")를 두 번째로 냈고, 관리자
+   D43이 판정했다 — **그 구분을 지는 일 자체가 바뀐 것이지, 구분이 없어진
+   것이 아니다.** D36이 두 축을 물리적 구분선으로 가르고 각자 제목(조건절)을
+   가진 지금은, 가정 축 제목의 조건절(`{n}년 동안, 수익률이 연 {n}%라면`)과
+   행의 정산 기간(`{n}년 계약 전체에서`)이 그 일을 진다 — D28을 세울 때
+   두 값이 "한 축 위 이웃한 막대"였던 전제 자체가 D36으로 깨졌다. 옛 해칭
+   규칙(45°, 잉크 2px + 간격 2px, 대비 실측 라이트 4.79 / 다크 4.24)은
+   `docs/org/gate-decisions.md` D43·design-system 5.31.4절 5번에 기록으로만
+   남는다. */
 .benefit-meter-fill-solid { border: none; }
-/* 가정(assumption) — 값의 위치까지 계좌색 윤곽선 + 대각선 해칭(D28·D38 5번).
-   **속을 채우지 않는다** — 채우면 확정(solid) 등급과 같아져 "확정된 세금
-   감면과 가정 위의 추정치를 같은 확실성으로 보이지 않게 한다"는 구분이
-   형태로 사라진다(D28·D35). 해칭은 잉크 자체를 옅게 만들지 않는다 — 줄무늬
-   한 올 한 올이 계좌색 100% 그대로이고, 다만 그 잉크가 트랙 면적의 절반만
-   덮는다(design-system 5.31.4절 5번, 대비 실측 라이트 4.79 / 다크 4.24 —
-   기존 `outline` 등급의 테두리색이 이미 통과한 값을 그대로 물려받는다).
-   기존 1.5px 실선 윤곽은 지우지 않고 함께 남긴다 — 해칭이 새 채널이라면
-   윤곽은 이미 있던 채널이고, 이 시스템이 반복해 온 "누적 방어"와 같은
-   원칙이다. 실선이다 — 점선은 `data-excluded`(배제)가 이미 쓰고 있어 겹치면
-   안 된다. **45°, 잉크 2px + 간격 2px(주기 4px, 커버리지 50%) 고정** — 값에
-   따라 질감이 달라지면 채움 폭과 이중으로 값을 나르게 된다(같은 절 "왜
-   채움 비율이 아니라 항상 50%인가"). */
-.benefit-meter-fill-outline {
-  box-sizing: border-box; border: 1.5px solid; margin: -1px 0;
-  background-color: transparent;
-  background-image: repeating-linear-gradient(45deg, currentColor 0px, currentColor 2px, transparent 2px, transparent 4px);
-}
 /* `가정 기반` 칩 — ProvisionalStatusNote·note-tag-product와 같은 state-info 색 규약.
    **`align-self: flex-start`가 필수다.** 이 칩의 부모(`.benefit-row-body`)가
    `flex-direction: column`인데 `align-items`의 기본값이 `stretch`라, 이 값이
