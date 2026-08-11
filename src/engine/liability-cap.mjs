@@ -13,20 +13,23 @@
 //
 // **분기마다 방향이 다르다.** 근로소득만 있는 경우와 종합소득금액을 받은 경우는 상한이고,
 // 종합소득이 있는데 금액을 모르는 경우는 **미정**이다(두 힘의 부호가 반대다). 그 판정도
-// 엔진이 정하지 않는다 — 분기의 `direction` 문자열이 규칙의 상한 코드로 시작하는지만 본다.
+// 엔진이 정하지 않는다 — 분기의 **`direction_code` 칸**을 그대로 읽는다.
+//
+// **산문을 해석하는 자리를 남기지 않는다** (D41 1번, D42 5절 (나)). 전에는 분기의 `direction`
+// 문자열이 상한 코드로 **시작하는지**를 보았다. 그 칸은 사람이 읽는 산문이고, 앞에 한 단어가
+// 붙는 것만으로 방향 판정이 뒤집힌다. 룰셋이 `branches_reading_rule`로 그것을 명시로 금지하며
+// (`engine_must_not_read: "direction"`) 분기마다 코드 칸을 따로 두었다. 이 파일은 그 칸만 본다.
+//
+// **미정 쪽 코드도 이제 룰셋에서 온다.** 전에는 엔진 상수(`CAP_DIRECTION_INDETERMINATE`)가
+// 그 문자열을 들고 있었다. 룰셋이 `code_definition_sites`로 정의 자리를 스스로 밝혔으므로
+// (`global_income_amount_missing.direction_code`) 상한 코드와 **같은 취급**을 한다 — 엔진
+// 상수에 두 문자열 어느 것도 없다. `ruleset-driven.test.mjs`가 그 부재를 본다.
 //
 // **세법 수치는 한 개도 이 파일에 없다.** 구간 경계·비율·기본공제액·근로소득세액공제
 // 한도는 전부 룰셋에서 온다. 제2항 한도는 룰셋이 산식을 **문자열**로 적어 두었으므로
 // 그 문자열을 기계적으로 읽는다(`limits.mjs`의 `readTenureCap`과 같은 방식이다).
 
-import {
-  CAP_BASIS,
-  CAP_BRANCH,
-  CAP_BINDING,
-  CAP_DIRECTION_INDETERMINATE,
-  NOTICE,
-  RULE,
-} from './constants.mjs';
+import { CAP_BASIS, CAP_BRANCH, CAP_BINDING, NOTICE, RULE } from './constants.mjs';
 import { notice } from './limits.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
 
@@ -111,8 +114,9 @@ function readInputs(access, appliedTo) {
 /**
  * 어느 분기인가. **엔진이 판정하는 것은 분기뿐이고 그 분기의 오차 방향은 룰셋이 정한다.**
  *
- * 분기의 `direction`이 규칙의 상한 코드로 시작하면 상한이고, 아니면 미정이다. 산문을
- * 파싱해 코드를 **만들지** 않는다 — 상한이라고 읽을 근거가 없으면 상한이 아닌 쪽으로 둔다.
+ * 방향은 분기의 `direction_code` 칸에서 그대로 온다. 산문(`direction`)은 읽지 않는다 —
+ * 룰셋의 `branches_reading_rule`이 그것을 금지하고, 그 칸이 없으면 방향을 **지어내지 않고**
+ * 계산을 멈춘다.
  */
 function branchOf(profile) {
   if (profile.has_non_wage_global_income_current_year !== true) return CAP_BRANCH.WAGE_ONLY;
@@ -143,12 +147,14 @@ export function resolveTaxLiabilityCap(access, { profile }) {
 
   const branch = branchOf(profile);
   const branchNode = input.branches[branch];
-  if (branchNode === undefined || typeof branchNode.direction !== 'string') {
-    access.value(RULE.CREDIT_TAX_CAP_ESTIMATE, ['value', 'branches', branch, 'direction'], appliedTo);
+  // **읽는 칸은 `direction_code` 하나다.** 산문 칸(`direction`)이 무엇이든 보지 않는다.
+  if (branchNode === undefined || typeof branchNode.direction_code !== 'string') {
+    access.value(RULE.CREDIT_TAX_CAP_ESTIMATE, ['value', 'branches', branch, 'direction_code'], appliedTo);
     return { cap: null, notices };
   }
 
-  const isUpperBound = branchNode.direction.startsWith(input.upperBoundCode);
+  const directionCode = branchNode.direction_code;
+  const isUpperBound = directionCode === input.upperBoundCode;
   const totalSalary = profile.current_year_total_salary_krw;
 
   // 1단계. 공제액이 총급여액을 넘지 못하고(§47③) 2천만원 상한이 걸린다(§47① 단서).
@@ -193,7 +199,8 @@ export function resolveTaxLiabilityCap(access, { profile }) {
   const wageCredit = Math.min(creditByAmount, creditLimit);
 
   const capKrw = clampToZero(computedTax - wageCredit);
-  const errorDirection = isUpperBound ? input.upperBoundCode : CAP_DIRECTION_INDETERMINATE;
+  // 상한 쪽도 미정 쪽도 룰셋이 값으로 적어 둔 코드를 그대로 싣는다. 엔진이 만들지 않는다.
+  const errorDirection = directionCode;
   const basisRuleIds = [...CAP_ESTIMATE_RULE_IDS, RULE.CREDIT_TAX_CAP_SOURCE].sort();
 
   // 이 값이 총급여액에서 계산한 것이고 다른 공제를 반영하지 않았다는 사실은 **금액과 같은

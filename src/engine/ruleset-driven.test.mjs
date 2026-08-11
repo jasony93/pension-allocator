@@ -238,26 +238,65 @@ test('계약의 세액 한도 분기 목록이 룰셋의 분기 키와 정확히
   );
 });
 
-// **상한 코드의 정의 자리도 룰셋이다.** 엔진이 이 문자열을 코드에 적으면 룰셋이 방향을
-// 바꿔도 응답이 따라가지 않는다 — `fault-injection.test.mjs`가 그 방향을 실제로 뒤집어
-// 확인하고, 여기서는 **엔진 상수에 그 문자열이 아예 없다**는 것을 본다.
-test('상한 쪽 오차 방향 코드는 엔진 상수에 없다 — 룰셋에서만 온다', async () => {
+// **오차 방향 코드의 정의 자리는 룰셋이다 — 이제 두 값 모두 그렇다** (D41 1번·D42 5절 (나)).
+// 엔진이 이 문자열을 코드에 적으면 룰셋이 방향을 바꿔도 응답이 따라가지 않는다 —
+// `fault-injection.test.mjs`가 그 방향을 실제로 뒤집어 확인하고, 여기서는 **엔진 상수에
+// 그 문자열이 아예 없다**는 것을 본다.
+//
+// **미정 쪽이 이번에 옮겨 왔다.** 전에는 룰셋이 그 분기의 방향을 산문으로만 적어 두어
+// 계약이 문자열을 정하고 엔진 상수가 그것을 들고 있었다. 룰셋이 `direction_code` 칸과
+// `code_definition_sites`를 두면서 그 근거가 사라졌다.
+test('오차 방향 코드 두 값 모두 엔진 상수에 없다 — 룰셋에서만 온다', async () => {
   const constants = await import('./constants.mjs');
-  const fromRuleset = findRule(
+  const rule = findRule(
     rulesets,
     CONFIRMED_FILE,
     'pension.credit.tax_liability_cap.current_year_estimate',
-  ).value.error_direction.code;
+  ).value;
 
   const values = Object.values(constants)
     .flatMap((value) => (typeof value === 'object' && value !== null ? Object.values(value) : [value]))
     .filter((value) => typeof value === 'string');
 
-  assert.equal(
-    values.includes(fromRuleset),
-    false,
-    `엔진 상수에 "${fromRuleset}"이 적혀 있다 — 룰셋이 방향을 바꿔도 응답이 따라가지 않는다`,
+  const allowed = rule.branches_reading_rule.allowed_direction_codes;
+  assert.ok(allowed.includes(rule.error_direction.code), '상한 코드가 허용 목록에 없다');
+  assert.ok(
+    allowed.includes(rule.branches.global_income_amount_missing.direction_code),
+    '미정 분기의 코드가 허용 목록에 없다',
   );
-  // 미정 쪽은 반대다. 룰셋에 대응 문자열이 없으므로 계약이 정하고 상수에 있어야 한다.
-  assert.ok(values.includes(constants.CAP_DIRECTION_INDETERMINATE));
+
+  for (const code of allowed) {
+    assert.equal(
+      values.includes(code),
+      false,
+      `엔진 상수에 "${code}"가 적혀 있다 — 룰셋이 방향을 바꿔도 응답이 따라가지 않는다`,
+    );
+  }
+});
+
+// **엔진이 읽는 칸의 이름도 룰셋이 정한다.** 룰셋이 `engine_must_not_read`로 산문 칸을
+// 명시로 금지했다. 그 금지가 코드에서 실제로 지켜지는지를 파일 내용으로 본다 —
+// 주입 시험은 "지금 결과가 같다"를 보고, 이 시험은 "그 칸을 읽는 문장이 없다"를 본다.
+test('세액 한도 계산이 룰셋의 산문 칸을 읽지 않는다 — 금지가 파일에서 지켜진다', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  const rule = findRule(
+    rulesets,
+    CONFIRMED_FILE,
+    'pension.credit.tax_liability_cap.current_year_estimate',
+  ).value;
+  const forbidden = rule.branches_reading_rule.engine_must_not_read;
+  const required = rule.branches_reading_rule.engine_reads;
+
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'liability-cap.mjs'), 'utf8');
+  // 주석에는 그 이름이 나온다(왜 읽지 않는지를 적고 있다). 코드에서 값을 꺼내는 형태만 본다.
+  const reads = (name) =>
+    new RegExp(`(\\.${name}\\b|['"\`]${name}['"\`])`).test(
+      source.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''),
+    );
+
+  assert.equal(reads(forbidden), false, `liability-cap.mjs가 금지된 칸 "${forbidden}"을 읽고 있다`);
+  assert.equal(reads(required), true, `liability-cap.mjs가 읽어야 할 칸 "${required}"을 읽지 않는다`);
 });

@@ -1706,7 +1706,17 @@ accounts.isa               : IsaAccountState
 
 - **`error_direction_code`의 `overstated_or_equal`** — 정의 자리는 **룰셋**이다(`pension.credit.tax_liability_cap.current_year_estimate.error_direction.code`). 엔진은 그 값을 **읽어서 그대로 싣고** 이 문자열을 코드에 적지 않는다. 그 규칙이 방향의 증명까지 함께 싣고 있으므로, 방향과 문자열이 한 자리에 있는 것이 옳다.
 - **`branch_code`의 세 값** — 정의 자리는 **룰셋**이다(같은 규칙의 `branches` 키). 계약과 엔진은 전사하며, **두 목록이 갈라지면 `ruleset-driven.test.mjs`가 실패한다.** `IsaReturnAssumption.income_character`에 이미 쓴 형태이고 새 패턴이 아니다.
-- **`error_direction_code`의 `direction_indeterminate`** — 정의 자리는 **계약(이 절)**이다. 룰셋은 그 분기의 방향을 산문으로만 적었고(`branches.global_income_amount_missing.direction`), **엔진은 산문을 파싱해 코드를 만들지 않는다.** 그래서 이 한 문자열만 계약이 정한다. 엔진은 분기의 `direction`이 룰셋의 상한 코드로 **시작하는지**만 보고, 시작하지 않으면 상한이 아닌 쪽으로 둔다 — **상한이라고 읽을 근거가 없으면 상한이라고 말하지 않는다.**
+- **`error_direction_code`의 `direction_indeterminate`** — 정의 자리는 **룰셋**이다(같은 규칙의 `branches.global_income_amount_missing.direction_code`). 계약과 엔진은 전사한다. **`overstated_or_equal`과 완전히 같은 취급이고, 이 문자열은 엔진 상수에 없다.**
+
+  **이 항목이 D42 5절 (나)로 옮겨졌다.** 계약이 이 문자열을 정하던 이유는 하나뿐이었다 — 룰셋이 그 분기의 방향을 **산문으로만** 적어 두어 엔진이 읽을 코드 칸이 없었고, 엔진은 산문을 파싱해 코드를 만들지 않기 때문이다. `tax-domain`이 분기마다 `direction_code` 칸을 두고 `branches_reading_rule.code_definition_sites`로 정의 자리를 스스로 밝히면서 그 이유가 사라졌다.
+
+**엔진이 방향을 읽는 규약 — 코드 칸 하나만 본다** (D41 1번).
+
+**엔진은 분기의 `direction_code`를 그대로 읽는다.** 산문 칸(`direction`)은 읽지 않는다 — 룰셋의 `branches_reading_rule`이 `engine_must_not_read: "direction"`으로 그것을 명시로 금지한다. **그 칸이 없으면 방향을 지어내지 않고 `rule_missing`으로 멈춘다.** 산문이 남아 있어도 그것으로 대신 읽지 않는다.
+
+**옛 규약은 산문의 접두사를 검사했다.** 「분기의 `direction`이 상한 코드로 시작하는지」만 보았고, 그래서 **산문 앞에 한 단어가 붙는 것만으로 판정이 뒤집혔다.** 값은 한 원도 바뀌지 않고 방향만 뒤집히므로 금액을 보는 어떤 검사도 그것을 잡지 못한다. `fault-injection.test.mjs`가 두 방향으로 이 자리를 잠갔다 — **코드 칸을 바꾸면 방향이 따라 움직이고, 산문을 바꾸면 아무것도 움직이지 않는다.** `ruleset-driven.test.mjs`는 금지된 칸을 읽는 문장이 `liability-cap.mjs`에 없다는 것을 파일 내용으로 본다.
+
+**응답의 값은 한 좌표도 바뀌지 않았다.** 확정 룰셋의 `direction_code`가 산문의 접두사와 모든 분기에서 같기 때문이다. `schema_version`은 그대로다 — 필드도 열거형도 움직이지 않았다.
 - **`binding_code`의 두 값** — 정의 자리는 **계약(이 절)**이다. 룰셋에 대응하는 문자열이 없다. 조문이 정하는 것은 한도의 정의와 오차 방향까지이고, 「그래서 화면이 무엇을 주장할 수 있는가」는 계약의 몫이다.
 - **`basis_code`의 `current_year_total_salary`** — 정의 자리는 **계약(이 절)**이다. 값이 하나뿐이고, 하나뿐인 것이 D39의 결과다.
 

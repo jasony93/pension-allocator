@@ -630,9 +630,12 @@ test('주입 / 룰셋의 오차 방향 코드를 바꾸면 응답의 방향도 �
   const mutated = withMutation((clone) => {
     const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
     rule.value.error_direction.code = 'understated_or_equal';
+    // **주입하는 칸이 옮겨졌다** (D41 1번). 전에는 분기의 산문(`direction`)을 바꿔야 방향이
+    // 뒤집혔다. 이제 엔진이 읽는 칸은 `direction_code` 하나다. 옮긴 것은 좌표이고, 이 시험이
+    // 보려는 사실("코드가 엔진에 박혀 있지 않다")은 그대로다.
     for (const branch of Object.values(rule.value.branches)) {
-      if (branch.direction.startsWith('overstated_or_equal')) {
-        branch.direction = branch.direction.replace('overstated_or_equal', 'understated_or_equal');
+      if (branch.direction_code === 'overstated_or_equal') {
+        branch.direction_code = 'understated_or_equal';
       }
     }
   });
@@ -654,8 +657,8 @@ test('주입 / 상한을 하한으로 뒤집으면 「걸린다」의 증명이 
 
   const mutated = withMutation((clone) => {
     const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
-    // 상한 코드는 그대로 두고 **분기의 방향만** 상한이 아닌 것으로 바꾼다.
-    rule.value.branches.wage_income_only.direction = 'indeterminate. 주입된 방향이다.';
+    // 상한 코드는 그대로 두고 **분기의 방향 코드만** 상한이 아닌 것으로 바꾼다.
+    rule.value.branches.wage_income_only.direction_code = 'direction_indeterminate';
   });
 
   const scenario = scenarioOf(compute(CAP_REQUEST, mutated));
@@ -689,9 +692,51 @@ test('주입 / 미정 분기를 상한으로 바꾸면 등식 표시가 되살�
 
   const mutated = withMutation((clone) => {
     const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
-    rule.value.branches.global_income_amount_missing.direction = 'overstated_or_equal. 주입된 방향이다.';
+    rule.value.branches.global_income_amount_missing.direction_code = 'overstated_or_equal';
   });
 
   // 룰셋이 그 분기를 상한이라고 말하면 0이 등식이 된다. 판정이 룰셋에 매여 있다는 뜻이다.
   assert.equal(capOf(mutated, request).is_exact, true);
+});
+
+// ── 산문을 건드리는 주입 — **아무것도 바뀌면 안 된다** (D41 1번·D42 5절 (나)) ─────────────
+//
+// **이 두 시험이 이번 회차에 새로 세운 축이다.** 룰셋의 `branches_reading_rule`이
+// `engine_must_not_read: "direction"`을 명시로 적었는데 엔진이 그 칸을 읽고 있었다.
+// 산문 앞에 한 단어가 붙으면 판정이 뒤집혔고, **뒤집혀도 아무 시험이 실패하지 않았다.**
+
+test('주입 / 분기의 산문을 뒤집어도 방향 판정이 흔들리지 않는다 — 엔진이 산문을 읽지 않는다', () => {
+  const before = capOf(rulesets);
+  assert.equal(before.error_direction_code, 'overstated_or_equal');
+  assert.equal(before.is_upper_bound, true);
+
+  const mutated = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
+    // 코드 칸은 그대로 두고 **산문만** 반대 방향으로 바꾼다. 접두사를 검사하던 엔진은
+    // 여기서 조용히 미정으로 넘어갔다.
+    for (const branch of Object.values(rule.value.branches)) {
+      branch.direction = `understated_or_equal. ${branch.direction}`;
+    }
+  });
+
+  const after = capOf(mutated);
+  assert.equal(
+    after.error_direction_code,
+    'overstated_or_equal',
+    '산문을 바꿨더니 방향이 따라 움직였다 — 엔진이 코드 칸이 아니라 산문을 읽고 있다',
+  );
+  assert.equal(after.is_upper_bound, true);
+  assert.equal(after.cap_krw, before.cap_krw, '방향과 무관한 금액이 함께 움직였다');
+});
+
+test('주입 / 분기에 방향 코드가 없으면 방향을 지어내지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'pension.credit.tax_liability_cap.current_year_estimate');
+    // 산문은 남겨 둔다. 산문이 남아 있다고 해서 그것으로 대신 읽으면 안 된다.
+    delete rule.value.branches.wage_income_only.direction_code;
+  });
+
+  const response = compute(CAP_REQUEST, mutated);
+  assert.equal(response.ok, false, '방향 코드가 없는데도 값을 냈다 — 어딘가에서 방향을 만들었다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
 });

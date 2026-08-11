@@ -113,14 +113,17 @@ export const CAP_BRANCH = {
 export const CAP_BRANCHES = Object.values(CAP_BRANCH);
 
 /**
- * 오차 방향이 정해지지 않은 분기의 코드. **이 문자열의 정의 자리는 계약이다**(8.7절).
+ * **오차 방향 코드는 이 파일에 없다** — 상한 쪽도 미정 쪽도 룰셋에서 온다 (D41 1번·D42 5절 (나)).
  *
- * 상한 쪽 코드(`overstated_or_equal`)는 룰셋이 `error_direction.code`에 값으로 적어
- * 두었으므로 엔진이 그것을 읽어 그대로 낸다. 미정 쪽은 룰셋이 산문으로만 적었고
- * (`branches.global_income_amount_missing.direction`) 엔진은 산문을 파싱해 코드를
- * 만들지 않는다. 그래서 이 한 문자열만 계약이 정한다.
+ * 전에는 미정 쪽 문자열(`direction_indeterminate`)이 여기 상수로 있었다. 룰셋이 그 분기의
+ * 방향을 **산문으로만** 적고 있었기 때문이고, 엔진이 산문을 파싱해 코드를 만들지 않으려면
+ * 어딘가에는 그 문자열이 있어야 했다. 이제 룰셋이 분기마다 `direction_code` 칸을 두었고
+ * `branches_reading_rule.code_definition_sites`가 정의 자리를 스스로 밝혔으므로, 상한 쪽
+ * 코드(`overstated_or_equal`)와 **같은 취급**을 한다 — 엔진은 읽어서 그대로 싣는다.
+ *
+ * **여기에 다시 적지 마라.** 엔진 상수에 그 문자열이 있으면 룰셋이 방향을 바꿔도 응답이
+ * 따라가지 않는다. `ruleset-driven.test.mjs`가 두 문자열의 부재를 본다.
  */
-export const CAP_DIRECTION_INDETERMINATE = 'direction_indeterminate';
 
 /**
  * 이 배분안에서 **한도가 걸린다는 것이 증명되는가.**
