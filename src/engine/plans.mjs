@@ -25,6 +25,7 @@ import {
   WARNING,
 } from './constants.mjs';
 import { resolveCarryoverConditions } from './limits.mjs';
+import { headlineCompositeTotalFor } from './headline.mjs';
 import { isaEstimateFor } from './isa-return.mjs';
 import { apportionMonthly } from './monthly.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
@@ -701,6 +702,19 @@ export function buildPlans(ctx) {
       }
     }
 
+    // 헤드라인 합계(D38). **정산액과 세액공제액이 다 나온 뒤에 붙는다** — 이 값은 그 둘의
+    // 합이고, 어떤 금액도 이 값을 읽지 않으므로 목적함수에 들어갈 길이 없다.
+    // **가정 성분이 들어가려면 이 안이 ISA에 실제로 넣은 돈이 있어야 한다**(headline.mjs).
+    const headline = headlineCompositeTotalFor({
+      determinedCreditKrw: benefit.pension_credit_total_krw,
+      estimate: isaEstimate,
+      isaAllocatedKrw: result.amounts[ACCOUNT.ISA],
+      rule: ctx.headlineRule,
+    });
+    for (const ruleId of headline.basis_rule_ids) {
+      access.markUsed(ruleId, 'plans[].headline_composite_total');
+    }
+
     plans.push({
       plan_id: planId,
       is_baseline: false,
@@ -756,6 +770,9 @@ export function buildPlans(ctx) {
       // 과세연도에 대해 정하는 금액이고 이것은 사용자가 준 가정 위의 계산이다.
       // 요청에 `profile.isa_return_assumption`이 없으면 `null`이다.
       assumption_based_isa_estimate: isaEstimate,
+      // **위 두 값을 더한 자리는 여기 하나뿐이다**(D38). 두 성분의 단위 기간이 달라
+      // 합계에는 어느 기간도 붙지 않고, 확정과 가정의 구분은 구간의 두 끝이 진다.
+      headline_composite_total: headline,
     });
   }
 

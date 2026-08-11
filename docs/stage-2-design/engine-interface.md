@@ -65,10 +65,11 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `8.1.0`.**
+**현재 계약 버전: `8.2.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
+| `8.2.0` | **D38 — 헤드라인이 세액공제만의 것이 아니게 됐다.** `Plan`에 `headline_composite_total`(합계의 두 끝·점/구간 코드·가정 성분 유무)이 붙고, `AssumptionBasedIsaEstimate`에 `axis_ceilings`(비과세 축의 상한과 그 상한이 재는 **기간**, 나머지 두 축의 상한 유무)가 붙는다. **기존 필드는 하나도 바뀌지 않고 금액도 한 원도 움직이지 않는다** — 새 값은 전부 새 자리에 실린다. 함께 **틀린 수 하나를 고쳤다**: 연 환산 과대율의 「최대 1.75배」는 거꾸로였고 1.75는 **하한**이다(0.16절). **왜 minor인지는 0.15절** |
 | `8.1.0` | **D36 — 축을 둘로 가른 화면이 그려지려면 계약에 없던 값 둘이 필요했다.** `ScenarioResult`에 `pension_credit_ceiling`(확정 축의 최댓값)과 `pension_withdrawal_tax_reference`(연금 저율과세 세율표, **금액 없음**)가 붙는다. `AssumptionBasedIsaEstimate`에 `axis_breakdown_bound_code`·`rate_gap_axis_zero_reason_code`가 붙고, 안내 코드 `isa_rate_gap_axis_zero_because_within_tax_free_limit`이 늘었다. **기존 필드는 하나도 바뀌지 않고 금액도 한 원도 움직이지 않는다.** **왜 minor인지는 0.14절** |
 | `8.0.0` | **`7.0.0`이 적은 월 환산 이탈 범위가 산술로 틀렸다.** `monthly_annualized_krw − annual_krw`의 범위를 `±(개월수 − 1)`로 적었으나 실제는 **−(개월수 − 1) 이상 (갈래 수 − 1) × (개월수 − 1) 이하**다 — 한 갈래가 조정을 둘·셋 받는 좌표가 실재한다. **응답은 한 원도 바뀌지 않는다. 필드도 요청 형태도 그대로다.** 그런데도 major인 이유는 **계약이 준 범위 보장을 거두기 때문**이고, 규약과 0.1절이 그것을 major로 정한다. **왜 major인지는 0.13절** |
 | `7.0.0` | **소유자 신고 — 월 배분 총액이 1원 모자란다.** 계좌별 월 금액이 더 이상 `floor(연 ÷ 개월수)`가 아니다. 내림으로 버려지던 잔차를 **납입 한도 여유가 남은 갈래에 얹어** 월 표시 금액의 합이 월 납입 여력과 정확히 같아진다. `Allocation`에 `monthly_annualized_krw`·`monthly_rounding_adjustment_krw`가, `Plan`에 `monthly_unassigned_krw`·`monthly_unassigned_reason_code`·`unallocated_monthly_rounding_adjustment_krw`가 붙는다. **연간 금액·한도·세액공제액은 한 원도 움직이지 않는다.** **왜 major인지는 0.12절** |
@@ -350,6 +351,48 @@ open_questions:
 #### 「연금 저율과세」에는 금액 칸을 두지 않았다
 
 `pension.rate_gap.quantifiability`가 금액으로도 구간으로도 낼 수 없다고 확정했고 D36이 승인했다. 그래서 5.16절에는 **`*_krw`로 끝나는 필드가 하나뿐이고 그것은 조문의 기준금액(1,500만원)이지 혜택이 아니다.** `0`을 실을 자리를 아예 만들지 않은 것이 이 설계의 요점이다 — 칸이 있으면 언젠가 0이 들어간다.
+
+### 0.15 왜 `8.2.0`(minor)인가 — 그리고 합계를 어떻게 거짓이 아니게 만들었나 (D38)
+
+**minor인 근거.** `8.1.0`과 같은 형태다. **추가만 있다.**
+
+- 새 필수 입력이 없다. 요청 형태가 한 칸도 바뀌지 않는다.
+- 기존 필드의 뜻이 바뀌지 않는다. `0.6절 (3)`이 major의 근거로 든 「이름과 자료형은 그대로인데 값이 다른 축에서 나온다」가 이번에도 없다.
+- **금액이 한 원도 움직이지 않는다.** `headline_composite_total`은 이미 계약에 있던 두 값의 합이고, 그 두 값 자체는 그대로다.
+- 계약이 준 보장을 거두지 않는다(`8.0.0`·`0.1절`이 major로 판정한 형태가 없다).
+
+**`8.1.0`에 맞춰 만든 목은 새 필드를 무시하면 그대로 동작한다.**
+
+#### 합계는 점이 아니라 구간이다 — 그리고 그 구간의 아래 끝이 확정 세액공제액이다
+
+D38이 헤드라인에 세액공제와 ISA 혜택의 합계를 내라고 정했고, `tax-domain`이 **그냥 더할 수는 없다**고 확인했다(`benefit.headline.composite_total`). **두 수의 단위 기간이 다르다** — 세액공제액은 소득세법 §59조의3 ①이 「해당 과세기간에 납입한 금액」에 대해 정하는 한 과세기간의 값이고, ISA 금액은 조특법 §91조의18 ②이 한도금액을 「가입일 또는 연장일을 기준으로」 정하므로 한 계약 전체의 값이다. **합계 자체가 틀린 것이 아니라 합계에 기간 이름을 붙이는 것이 틀린 것이다.**
+
+그리고 두 성분의 **오차 방향이 반대다.**
+
+- 확정 성분은 **하한**이다 — 장래 과세기간의 세액공제액은 공제액이므로 0 이상이고, 따라서 올해만 세는 것이 과소 방향임을 조문이 보장한다.
+- 가정 성분은 소득 성격이 확정적이지 않으면 **구간의 위 끝**이고, 그 구간의 **아래 끝 0도 조문에서 나온다** — 소액주주가 증권시장에서 양도하는 국내 상장주식의 양도차익은 애초에 양도소득 과세대상이 아니다(소득세법 §94조 ① 3호 가목).
+
+**그래서 합계 구간의 아래 끝이 확정된 세액공제액과 정확히 같은 수가 된다.** 확정과 가정의 구분이 부기가 아니라 **숫자 자체**에 들어간다. 이 계약이 그 항등식을 값으로 진다(5.17절).
+
+#### 왜 화면이 이 판단을 하게 두지 않는가
+
+「합계가 점인가 구간인가」·「가정 성분이 들어 있는가」는 **세법 판단이다.** 화면이 `point_estimate_krw === null`을 보고 스스로 정하게 두면 그 판단이 화면 코드로 새고, 계약이 분해의 정의를 바꾸면 화면이 조용히 낡는다. **이 조직에서 같은 형태가 반복해서 문제를 냈다**(0.14절·5.14절의 `axis_breakdown_bound_code`가 같은 이유로 생긴 칸이다). 규칙이 `requested_contract_fields`에서 이 칸들을 이름으로 요청했다.
+
+#### 합계에는 상한 칸이 없다 — 없다는 것이 조문의 판정이다
+
+ISA 세 축 중 **둘에 법정 상한이 없으므로**(`isa.benefit.axis_ceiling`) 그것을 포함한 합계에도 없다. 그래서 이 계약은 합계 객체에 상한 칸을 **두지 않고**, 대신 `has_statutory_ceiling: false`로 그 사실을 값으로 낸다. **소유자가 요청한 「최대 ○원 중 ○원」 형태는 세액공제 축 전용이다** — 그 축에는 최댓값이 있고 `pension_credit_ceiling`이 그 눈금을 낸다(5.15절).
+
+#### 연금계좌 저율과세는 합계 밖이다
+
+D36 판정 그대로다. `pension.rate_gap.quantifiability`가 금액으로도 구간으로도 낼 수 없다고 확정했으므로 **더할 것이 없다.** 5.16절에 금액 칸이 하나도 없는 것이 그 판정의 자리이고, 이번 개정이 그것을 건드리지 않는다.
+
+### 0.16 우리가 적어 온 과대율이 거꾸로였다 (D38 후속 정정)
+
+이 문서 5.14절과 8.2절이 「ISA 금액의 연 환산은 **최대** 1.75배 과대」라고 적어 왔다. **거꾸로다.**
+
+`isa.benefit.settlement_period`의 `correction_1_75_is_the_floor_not_the_ceiling`이 정정한다 — **1.75는 계약기간 3년에서의 값이고 하한이다.** 과대율의 최댓값은 계약 n년에서 `0.154n ÷ (0.055n + 0.099)`이고 **n에 대해 단조 증가**한다: n=3에서 1.75, n=5에서 2.06, n=10에서 2.37, 극한이 2.8(= 0.154 ÷ 0.055)이다. 현행법에 계약기간 상한이 없으므로(제3항 제4호는 하한 3년만 정한다) **2026 기준으로는 과대율에 상한이 없다.**
+
+**금지의 방향은 그대로고 근거만 세진다.** `is_annual: false`는 여전히 상수이고, 바뀐 것은 그 옆에 적힌 수의 뜻뿐이다. 값도 동작도 한 줄 바뀌지 않으므로 이 정정 자체는 버전을 올리지 않는다(`8.2.0`에 얹어 낸다).
 
 ### 0.10 수익률을 들이면서 지킨 선 셋 (D28·D31)
 
@@ -857,6 +900,7 @@ accounts.isa               : IsaAccountState
 | `delta_vs_baseline_krw` | integer | 원/연 | 기본안(`plans[0]`) 대비 세액공제액 차이. **기본안은 언제나 0. 다른 안은 음수·0·양수 모두 가능하다.** 기본안이 `max_tax_credit`일 때만 나머지가 전부 0 이하다 — 그때만 기본안이 세액공제액을 최대화하기 때문이다. `fund_use_horizon`이 기본안을 다른 안으로 옮기면(`comparison_note_codes`에 `baseline_reordered_by_fund_use_horizon`) 양수가 나온다. **부호를 "포기한 금액"으로 읽지 마라** — 경위는 0.1절 |
 | `non_quantified_effects` | NonQuantifiedEffect[] | — | 금액으로 낼 수 없는 효과. 5.6절 |
 | `assumption_based_isa_estimate` | AssumptionBasedIsaEstimate \| null | — | **가정 기반 ISA 정산액.** 5.14절. 요청에 `profile.isa_return_assumption`이 없으면 `null`. **`deterministic_benefit`과 더하거나 같은 축에 놓으면 안 된다** — 앞은 조문이 그 과세연도에 대해 정하는 금액이고 이것은 사용자가 준 가정 위의 계산이다 |
+| `headline_composite_total` | HeadlineCompositeTotal | — | **`8.2.0` 신규.** 헤드라인에 적을 합계. 5.17절. **항상 있다**(가정이 없으면 확정 세액공제액과 같은 한 수다). **위 두 값을 더해도 되는 자리는 여기 하나뿐이고, 그 덧셈은 엔진이 이미 했다** — 화면이 다시 더하지 마라 |
 
 **`Allocation`**
 
@@ -1096,7 +1140,7 @@ accounts.isa               : IsaAccountState
 |---|---|---|---|
 | `state` | `"computed"` \| `"display_suppressed"` \| `"not_computable"` | — | 아래 표. **`state`가 `"computed"`가 아니면 아래 모든 `*_krw`와 `axis_breakdown`이 `null`이다** |
 | `not_computable_reason_code` | `"isa_tax_free_limit_unknown"` \| `"amount_not_representable"` \| null | — | 왜 못 냈는가. `state`가 `"not_computable"`일 때만 값이 있다 |
-| `is_annual` | `false` | — | **상수.** 이 금액은 **정산 기간 전체**의 값이고 1년치가 아니다. 비과세 한도가 계약 단위라 연 환산은 최대 1.75배 과대다(`isa.benefit.settlement_period`) |
+| `is_annual` | `false` | — | **상수.** 이 금액은 **정산 기간 전체**의 값이고 1년치가 아니다. 비과세 한도가 계약 단위라 연 환산은 **적어도** 1.75배 과대이고(계약 3년), 계약이 길수록 커져 2.8배에 수렴한다 — **1.75는 상한이 아니라 하한이다**(`isa.benefit.settlement_period`, 0.16절) |
 | `settlement_years` | integer \| null | 년 | **실제로 적용된** 정산 기간 |
 | `settlement_years_source` | `"user"` \| `"ruleset_min_contract_years"` \| null | — | 위 값이 사용자가 준 것인지 룰셋의 계약기간 하한인지 |
 | `taxable_share_min` | number | 비율(0~1) | 소득 성격이 정하는 과세 비율의 아래 끝. 룰셋에서 읽는다 |
@@ -1115,6 +1159,7 @@ accounts.isa               : IsaAccountState
 | `lower_bound_krw` | integer \| null | 원(기간 합계) | 구간의 아래 끝(`taxable_share_min`에 대응) |
 | `upper_bound_krw` | integer \| null | 원(기간 합계) | 구간의 위 끝(`taxable_share_max`에 대응). `comparison_side_tax_krw − isa_side_tax_krw`와 같다 |
 | `axis_breakdown` | IsaAxisBreakdown \| null | — | 세 축과 절사 잔차. 아래 |
+| `axis_ceilings` | IsaAxisCeilings \| null | — | **`8.2.0` 신규.** 축마다 **상한이 있는지**와, 있는 축의 상한과 그것이 재는 기간(D38 6번·7번). `state`가 `"computed"`가 아니면 `null` |
 | `axis_breakdown_bound_code` | `"point"` \| `"upper_bound"` \| null | — | **세 축 금액이 점인가 구간의 위 끝인가**(D36). `state`가 `"computed"`가 아니면 `null`. 아래 |
 | `rate_gap_axis_zero_reason_code` | `"within_tax_free_limit"` \| null | — | **세율차 축이 0인 것이 「혜택 없음」이 아니라는 사실**(D36). 아래 |
 | `comparison_baseline_code` | `"withholding_at_general_rate"` | — | 비교 기준. 원천징수로 종결되는 경우다 |
@@ -1140,6 +1185,23 @@ accounts.isa               : IsaAccountState
 | `tax_free_krw` | integer | 원 | **비과세 축.** 한도 안에서 아낀 세액 |
 | `rate_gap_krw` | integer | 원 | **세율차 축.** 한도 초과분의 세율 차이 |
 | `rounding_residual_krw` | integer | 원 | 원 미만 절사가 축마다 따로 걸려 생기는 몫. **삼키지 않고 내보낸다** |
+
+**`IsaAxisCeilings` — 축마다 상한의 유무가 다르다 (D38 6번·7번).**
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `tax_free_krw` | integer | 원(**계약 1건당**) | **비과세 축의 상한.** `C × 일반세율 × (1+지방소득세 부가율)`. 축의 정의가 `min(N, C) × …`이고 `min(N, C) ≤ C`이므로 이 축은 이 값을 넘을 수 없다. 확정 룰셋에서 일반형 `308,000` · 서민형/농어민형 `616,000` |
+| `tax_free_period_code` | `"contract_settlement_period"` | — | **상수.** 위 값이 재는 기간. **한 해가 아니라 계약 한 건 전체다** — 기준 시점이 「가입일 또는 연장일」이라 해마다 반복되지 않는다 |
+| `tax_free_settlement_years` | integer | 년 | 그 계약의 정산 기간. `settlement_years`와 같은 값이다 |
+| `tax_free_is_lower_bound` | `true` | — | **상수.** 이 값은 「법이 정한 최대 절세액」이 아니라 **이 계산이 낼 수 있는 값의 최댓값**이다. 비교 세율이 14%보다 높아질 여지가 둘 있고 둘 다 실제 값을 키우는 방향이라 오차 방향은 **과소**다 |
+| `rate_gap_has_ceiling` | `false` | — | **저율분리과세 축에는 법정 상한이 없다.** 조특법 §91조의18 ①이 「비과세 한도금액을 초과하는 금액」에 상한을 두지 않는다 |
+| `loss_offset_has_ceiling` | `false` | — | **손익통산 축에도 없다.** `G`에 법정 상한이 없다 |
+
+**두 축에 금액 칸이 없는 것이 이 객체의 요점이다.** 없어서 못 낸 것이 아니라 **없다는 것이 조문의 판정**이다. 분모가 조문에 없는데 「최대 ○원 중 ○원」을 그리면 그 분모는 지어낸 것이고 **그 막대는 거짓말을 한다.** 칸을 두면 언젠가 값이 들어가므로 칸째로 두지 않았다(5.16절이 「연금 저율과세」에 금액 칸을 두지 않은 것과 같은 규율이다).
+
+**축 라벨에 기간이 반드시 붙는다.** 「○년 계약 전체에서 최대 308,000원 중 ○원」. 기간 없이 「최대 308,000원 중 ○원」이라고만 적으면, **옆에 놓인 세액공제 축이 연간 값이므로 사용자가 이 값도 연간으로 읽는다.** 두 축을 나란히 두는 배치가 그 오독을 만들고, 그래서 기간이 값으로 나간다.
+
+**소유자가 말한 200만·400만은 이 값이 아니다.** 그것은 **비과세되는 이자소득등의 한도**(소득의 금액)이지 아낀 금액의 한도가 아니다. 「200만원 중 30만원」이라고 적으면 사용자는 자기가 200만원을 아낄 수 있다고 읽는다 — 실제 상한은 그 15.4%다.
 
 **세 축을 나눠 내는 이유.** 합계만 보이면 **손익통산이 혜택의 일부라는 사실이 사라진다.** 세 축은 각각 다른 조문에서 나오므로 화면이 값 옆에 근거를 짝지을 수 있다. 실수 산술에서는 셋의 합이 혜택과 항등적으로 같고, 정수에서는 절사가 축마다 걸려 몇 원이 어긋날 수 있어 그 몫을 넷째 칸으로 낸다 — `monthly_rounding_residual_krw`와 같은 규율이다.
 
@@ -1266,6 +1328,61 @@ accounts.isa               : IsaAccountState
 **행이 일곱이고 화면이 그리는 것은 그중 넷이다.** design-system 5.31.3절의 표는 소득 성격 둘 × 인출 방식 둘을 그린다. 계약은 거기에 **기준금액 초과 갈래 둘**(`not_determined`)과 **`mixed_or_unknown`**(`crosses_zero`)을 더해 낸다 — 룰셋이 그 셋도 사실로 적고 있고, 계약이 그것을 빼면 화면이 그 사실을 낼 방법 자체가 없어지기 때문이다. **무엇을 그릴지는 화면이 정한다.**
 
 **`mixed_or_unknown` 행은 세율이 닫히는 모든 조합의 합집합이다.** 계좌 밖도 계좌 안도 하나로 좁혀지지 않으므로 폭이 양쪽 끝을 다 본다. 그 결과가 0을 가로지른다는 것이 D36의 판정이고, 이 계약에서는 그것이 룰셋 문장의 옮겨 적기가 아니라 **표의 뺄셈에서 그대로 나온다.**
+
+### 5.17 `HeadlineCompositeTotal` — 헤드라인에 적을 합계 (D38)
+
+**배분안 단위다.** 확정 성분(그 안의 세액공제액)도 가정 성분(그 안의 ISA 정산액)도 안마다 다르다.
+
+**항상 있다.** 수익률 가정을 보내지 않았어도 이 객체는 나가고, 그때는 확정 세액공제액과 같은 한 수다. `null`이 아니다 — 「합계가 없다」와 「합계가 확정 성분과 같다」는 다른 사실이고, 뒤쪽이 규칙의 세 번째 갈래다.
+
+| 필드 | 자료형 | 단위 | 필수 | 설명 |
+|---|---|---|---|---|
+| `lower_bound_krw` | integer | 원(**두 기간에 걸친 누적액**) | 항상 | **구간의 아래 끝.** `bound_code`가 `range`이면 **`deterministic_benefit.pension_credit_total_krw`와 같은 수다**(아래 항등식) |
+| `upper_bound_krw` | integer | 원(누적) | 항상 | **구간의 위 끝.** `확정 세액공제액 + assumption_component_krw` |
+| `point_estimate_krw` | integer \| null | 원(누적) | 항상 | 합계를 한 수로 적을 수 있으면 그 수. `bound_code`가 `range`이면 `null` |
+| `bound_code` | `"point"` \| `"range"` | — | 항상 | **합계를 한 수로 적는가 두 끝으로 적는가.** 아래 |
+| `includes_assumption_component` | boolean | — | 항상 | **합계에 가정 위의 금액이 들어 있는가.** 아래 |
+| `determined_component_krw` | integer | 원/연 | 항상 | 구성 첫 줄. **올해 확정된 세액공제액**이고 `deterministic_benefit.pension_credit_total_krw`와 언제나 같다(세액 한도 적용 **후**) |
+| `determined_component_period_code` | `"current_tax_year"` | — | 항상 | **상수.** 위 성분이 재는 기간. **「올해」를 붙일 수 있는 것은 이 성분뿐이다** |
+| `assumption_component_krw` | integer \| null | 원(**정산 기간 전체**) | 항상 | 구성 둘째 줄. 위 끝에 실제로 들어간 ISA 금액(점이 있으면 그 점, 없으면 구간의 위 끝). 가정 성분이 없으면 `null` |
+| `assumption_settlement_years` | integer \| null | 년 | 항상 | 그 성분이 걸친 정산 기간. 가정 성분이 없으면 `null` |
+| `assumption_settlement_years_source` | `"user"` \| `"ruleset_min_contract_years"` \| null | — | 항상 | 그 기간이 사용자가 준 값인지 룰셋의 계약기간 하한인지. **후자면 그 사실이 화면에 함께 보여야 한다** |
+| `is_annual` | `false` | — | 항상 | **상수.** 합계에는 **어느 기간도 붙지 않는다.** 아래 금지 |
+| `has_statutory_ceiling` | `false` | — | 항상 | **상수.** 합계에 법정 상한이 없다. 아래 금지 |
+| `basis_rule_ids` | string[] | — | 항상 | |
+
+#### ★ 항등식 — 구간의 아래 끝이 확정된 세액공제액이다
+
+**`bound_code`가 `range`이면 `lower_bound_krw === deterministic_benefit.pension_credit_total_krw`다.** 이 계약에서 가장 무거운 한 줄이고, 0.15절이 그 근거를 적었다. 두 성분의 오차 방향이 반대라 합계가 구간이 되고, 그 구간의 **아래 끝만은 조문만으로 정해지는 수**다.
+
+**그래서 「최소 ○원 ~ 최대 ○원」으로 적으면 확정된 것과 가정 위의 것의 구분이 부기가 아니라 숫자에 들어간다.** 화면이 「최소」 옆에 확정 성분 줄을 두면 같은 수가 두 번 보이는 것이 아니라 **같은 수라는 사실이 보이는 것**이다.
+
+**엔진이 그 0을 박아 넣지 않는다.** 아래 끝은 `확정 성분 + assumption_based_isa_estimate.lower_bound_krw`이고, 그 뒤 항이 0인 것은 룰셋의 `s_range`가 정한다. 항등식은 이 계약의 규약이 아니라 **조문의 귀결**이다.
+
+#### `bound_code`
+
+| 값 | 뜻 | 화면이 할 일 |
+|---|---|---|
+| `range` | 소득 성격이 확정적이지 않아 ISA 성분이 구간이다 | **「최소 ○원 ~ 최대 ○원」.** 중간값이나 평균을 만들지 마라 — 구간 안의 한 점을 고르는 근거가 조문에 없다 |
+| `point` | ISA 성분이 점이거나, 가정 성분이 아예 없다 | 한 수로 적는다. **둘을 가르는 것은 `includes_assumption_component`다** |
+
+#### `includes_assumption_component`
+
+**합계의 확실성 등급이 이 값에서 나온다.** 등급은 구성요소 중 가장 약한 것을 따르고, 성분이 둘뿐이므로 이 boolean이 곧 등급이다.
+
+- `false` — 합계가 **확정 등급**이다. 이때만 합계에 「올해」를 단독으로 붙일 수 있고, 이때만 합계가 조문만으로 정해진다.
+- `true` — 합계에 가정 위의 금액이 들어 있다. **확정 등급의 시각 형식을 쓰면 안 된다**(design-system이 정한 등급 구분). 조건절(「수익률이 연 ○%라면」)과 기간(「올해 + 앞으로 ○년」)이 반드시 함께 보인다.
+
+**`false`가 되는 자리가 셋이다** — (a) 요청에 수익률 가정이 없다, (b) 정산액을 내지 못했거나 표시를 껐다(`state`가 `computed`가 아니다), (c) **이 배분안이 ISA에 한 푼도 넣지 않았다.** (c)에서는 정산액이 계산돼 있어도 합계에 들어가지 않는다 — 그 혜택은 **이 배분안이 만든 것이 아니고**, 소유자가 쓴 「이 배분으로 계산된」이라는 한정 밖이다.
+
+#### 합계에 붙이면 안 되는 것
+
+- **기간 이름.** 「연간」·「매년」·「해마다」·「연 ○원」·「/년」. 합계는 두 기간에 걸친 **누적액**이지 어느 한 기간의 값이 아니다. `is_annual: false`가 그 선언이다. 계약기간으로 나눠 「연평균」으로 적는 것도 같은 이유로 금지다.
+- **상한 대비 막대.** 합계에 법정 상한이 없다(`has_statutory_ceiling: false`). **「최대 ○원 중 ○원」 형태는 세액공제 축 전용이고** 그 눈금은 `pension_credit_ceiling.ceiling_krw`다.
+- **「전부」·「총」·「모든 절세」.** 합계에 들어가지 않은 것이 둘 있다 — 연금계좌 인출 단계의 세율 차이(금액을 낼 수 없다, 5.16절)와, **세액공제를 받은 납입액이 인출 시 다시 과세된다는 사실**(부호가 반대다). 소유자가 쓴 「이 배분으로 계산된」이라는 한정을 그대로 살린다.
+- **구성 두 줄 없이 합계만.** 그 순간 규칙이 허용한 형태가 아니게 되고, 원래의 합산 금지가 되살아난다. 두 줄은 **헤드라인과 같은 시야 안에** 있어야 하고 접거나 다른 화면으로 밀 수 없다.
+
+**사라지면 안 되는 문장 하나.** 「세액공제를 받은 납입액은 나중에 연금으로 받을 때 다시 과세됩니다」(소득세법 §20조의3 ① 2호 나목). **금액이 없는 문장이므로 인출 단계를 여는 것이 아니다.** 그 재과세의 금액이나 순효과를 적으면 안 된다.
 
 ### 5.8 `UnappliedRule`
 
@@ -1481,7 +1598,7 @@ accounts.isa               : IsaAccountState
 | `pension_start_date_not_computable` | info | `accounts.*.opened_on`이 없어 개시 가능 시점을 계산하지 못함. 나이 요건만 낸다 |
 | `retirement_transfer_excluded_from_credit` | info | 퇴직급여 입금액·계약이전액이 입력에 있어 세액공제 대상 납입액에서 제외함. `params.amount_krw` 포함 |
 | `isa_return_assumption_not_supplied` | info | `profile.isa_return_assumption`이 `null`. ISA 금액을 한 원도 내지 않았다. **화면이 수익률을 제안하거나 미리 채우면 안 된다**(0.10절) — 이 안내는 "묻지 않았다"이지 "효과가 없다"가 아니다 |
-| `isa_return_estimate_is_not_annual` | info | 가정 기반 ISA 정산액을 낸 배분안이 하나 이상 있음. 그 금액은 **정산 기간 전체**의 값이고 1년치가 아니다. `params.settlement_years` 포함. 연 환산은 비과세 한도를 해마다 새로 주는 계산이라 최대 1.75배 과대다 |
+| `isa_return_estimate_is_not_annual` | info | 가정 기반 ISA 정산액을 낸 배분안이 하나 이상 있음. 그 금액은 **정산 기간 전체**의 값이고 1년치가 아니다. `params.settlement_years` 포함. 연 환산은 비과세 한도를 해마다 새로 주는 계산이라 **적어도** 1.75배 과대다(계약 3년) — 계약이 길수록 커져 2.8배에 수렴하므로 **1.75는 하한이다**(0.16절) |
 | `isa_return_estimate_reported_as_range` | info | 소득 성격이 확정적이지 않아 점이 아니라 **구간**으로 냈다. `point_estimate_krw`가 `null`인 배분안이 하나 이상 있다는 뜻이다 |
 | `isa_return_estimate_not_computable` | warning | 수익률 가정은 받았으나 계산에 필요한 값을 얻지 못함. `params.reason_code`가 `"isa_tax_free_limit_unknown"`(ISA 유형 미선언) 또는 `"amount_not_representable"`(정수 연산으로 낼 수 없는 입력) |
 | `isa_return_estimate_display_suppressed` | info | `options.assumption_based_isa_estimate`가 `"suppress"`여서 계산은 돌았으나 금액을 싣지 않음(0.11절). **이 상태가 조용하면 안 된다**(D19) |

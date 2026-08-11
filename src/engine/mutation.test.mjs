@@ -342,3 +342,131 @@ test('주입 / 내림을 반올림으로 바꾸면 예산과 한도를 함께 �
   );
   assert.ok(pensionAnnualized(baselineOf(compute(request, rulesets))) <= pensionLimit);
 });
+
+// ── 주입 6~8. 헤드라인 합계를 틀리게 만든다 (D38) ────────────────────────────
+//
+// 이번 회차가 지켜야 하는 것도 룰셋에 손잡이가 없다. **합계의 아래 끝이 확정된
+// 세액공제액과 같다**는 항등식은 조문의 귀결이지만, 그것을 실제로 지키는 것은 코드
+// 한 줄이고 그 줄이 틀려도 **금액이 전부 유효 범위 안에 남는다** — 어떤 자료형 검사에도
+// 걸리지 않는다. 그래서 소스를 변형해 새 검사가 실제로 무는지 확인한다.
+//
+// 검사식은 불변식·골든 테스트와 같은 문장을 여기 다시 적는다(위 주입 4·5와 같은 이유).
+
+/** 구간 분기를 밟는 요청 — 기본안이 ISA에 300만을 넣고, 소득 성격은 미확정이다. */
+const COMPOSITE = baseRequest({
+  profile: {
+    monthly_capacity_krw: 1_000_000,
+    isa_return_assumption: {
+      annual_return_rate: 0.07,
+      income_character: 'mixed_or_unknown',
+      settlement_years: 3,
+      loss_amount_krw: null,
+    },
+  },
+  accounts: { isa: { cumulative_contribution_krw: 20_000_000, years_since_opening: 2 } },
+});
+
+const planById = (response, planId) => {
+  assert.equal(response.ok, true, JSON.stringify(response.errors));
+  const plan = response.scenarios[0].plans.find((p) => p.plan_id === planId);
+  assert.ok(plan, `${planId}이 응답에 없다`);
+  return plan;
+};
+
+test('주입 / 구간의 아래 끝에 위 끝을 넣으면 항등식 검사가 문다', async () => {
+  const mutated = await mutatedCompute({
+    file: 'headline.mjs',
+    from: 'lower_bound_krw: determinedCreditKrw + estimate.lower_bound_krw,',
+    to: 'lower_bound_krw: determinedCreditKrw + estimate.upper_bound_krw,',
+  });
+
+  const before = planById(compute(COMPOSITE, rulesets), 'max_tax_credit');
+  const after = planById(mutated(COMPOSITE, rulesets), 'max_tax_credit');
+  const credit = before.deterministic_benefit.pension_credit_total_krw;
+
+  // 지금은 아래 끝이 확정된 세액공제액과 같은 수다.
+  assert.equal(before.headline_composite_total.lower_bound_krw, credit);
+  // 주입된 엔진에서는 그렇지 않다 — **그리고 두 끝은 여전히 뒤집히지 않았고 금액도 양수라**
+  // 자료형 검사·범위 검사는 전부 통과한다. I42의 항등식만이 이 자리를 본다.
+  assert.notEqual(
+    after.headline_composite_total.lower_bound_krw,
+    credit,
+    '아래 끝을 위 끝으로 바꿨는데 값이 그대로다 — 이 주입이 겨눈 자리가 아니다',
+  );
+  assert.ok(after.headline_composite_total.lower_bound_krw <= after.headline_composite_total.upper_bound_krw);
+  assert.ok(after.headline_composite_total.lower_bound_krw > 0);
+
+  // 세액공제액도 정산액도 한 원 안 바뀐다. **성분만 보는 검사는 이 결함에 눈이 먼다.**
+  assert.equal(after.deterministic_benefit.pension_credit_total_krw, credit);
+  assert.equal(
+    after.assumption_based_isa_estimate.upper_bound_krw,
+    before.assumption_based_isa_estimate.upper_bound_krw,
+  );
+});
+
+test('주입 / ISA 배분 조건을 지우면 「합계 = 확정 성분」 좌표가 문다', async () => {
+  const mutated = await mutatedCompute({
+    file: 'headline.mjs',
+    from: 'estimate.state === ISA_ESTIMATE_STATE.COMPUTED && isaAllocatedKrw > 0',
+    to: 'estimate.state === ISA_ESTIMATE_STATE.COMPUTED',
+  });
+
+  // 이 안은 ISA에 한 푼도 넣지 않는데 계좌에는 기존 납입액이 있다. 조건을 지우면
+  // **이 배분안이 만들지 않은 혜택**이 합계에 들어간다.
+  const before = planById(compute(COMPOSITE, rulesets), 'pension_contribution_before_isa');
+  const after = planById(mutated(COMPOSITE, rulesets), 'pension_contribution_before_isa');
+  const credit = before.deterministic_benefit.pension_credit_total_krw;
+
+  assert.equal(before.allocations.find((a) => a.account === 'isa').annual_krw, 0);
+  assert.equal(before.headline_composite_total.upper_bound_krw, credit);
+  assert.equal(before.headline_composite_total.includes_assumption_component, false);
+
+  assert.equal(
+    after.headline_composite_total.includes_assumption_component,
+    true,
+    '조건을 지웠는데 가정 성분이 들어오지 않는다 — 이 주입이 겨눈 자리가 아니다',
+  );
+  assert.ok(after.headline_composite_total.upper_bound_krw > credit);
+  // 아래 끝은 여전히 세액공제액과 같다. **항등식만 보는 검사는 이 결함에 눈이 먼다** —
+  // 그래서 「합계 = 확정 성분」 좌표를 골든으로 따로 얼려 둔다.
+  assert.equal(after.headline_composite_total.lower_bound_krw, credit);
+});
+
+test('주입 / 합계에 분모나 기간을 붙이면 구조 검사가 문다', async () => {
+  const withCeiling = await mutatedCompute({
+    file: 'headline.mjs',
+    from: 'has_statutory_ceiling: false,',
+    to: 'has_statutory_ceiling: false, ceiling_krw: 0,',
+    count: 2,
+  });
+  const headline = planById(withCeiling(COMPOSITE, rulesets), 'max_tax_credit')
+    .headline_composite_total;
+  assert.ok(
+    Object.keys(headline).includes('ceiling_krw'),
+    '분모를 넣었는데 응답에 나타나지 않는다 — 이 주입이 겨눈 자리가 아니다',
+  );
+  // 합계에 법정 상한이 없으므로 이 칸은 **무엇을 담아도 지어낸 분모다.** 금액 칸 목록을
+  // 통째로 고정하는 검사만이 이 자리를 본다 — 값 검사는 0을 정상으로 본다.
+  assert.notDeepStrictEqual(
+    Object.keys(headline).filter((key) => key.endsWith('_krw')).sort(),
+    [
+      'assumption_component_krw',
+      'determined_component_krw',
+      'lower_bound_krw',
+      'point_estimate_krw',
+      'upper_bound_krw',
+    ],
+  );
+
+  const annual = await mutatedCompute({
+    file: 'headline.mjs',
+    from: 'is_annual: false,',
+    to: 'is_annual: true,',
+    count: 2,
+  });
+  assert.equal(
+    planById(annual(COMPOSITE, rulesets), 'max_tax_credit').headline_composite_total.is_annual,
+    true,
+    '연간 선언을 넣었는데 응답이 그대로다',
+  );
+});

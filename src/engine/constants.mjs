@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '8.1.0';
+export const SCHEMA_VERSION = '8.2.0';
 export const SUPPORTED_MAJOR = 8;
 
 export const ACCOUNT = {
@@ -217,6 +217,37 @@ export const AXIS_BOUND = { POINT: 'point', UPPER_BOUND: 'upper_bound' };
 export const RATE_GAP_ZERO_REASON = { WITHIN_TAX_FREE_LIMIT: 'within_tax_free_limit' };
 
 /**
+ * 헤드라인 합계가 **점인가 구간인가**(D38, `benefit.headline.composite_total`).
+ *
+ * **`AXIS_BOUND`와 다른 집합이고 다른 것을 가린다.** 저쪽은 「세 축 금액이 점인가 위
+ * 끝인가」이고 이쪽은 「합계를 한 수로 적는가 두 끝으로 적는가」다. 값 이름도 `range`로
+ * 달리 둔다 — 같은 낱말을 쓰면 화면이 한쪽 코드로 다른 쪽을 판정하게 된다.
+ *
+ * **화면이 `point_estimate_krw === null`로 이 판단을 대신하게 두지 않는다.** 규칙이
+ * `requested_contract_fields`에서 이 칸을 이름으로 요청했고, 그 이유가 「합계가 점인가
+ * 구간인가라는 세법 판단이 화면 코드로 새는 것」이다.
+ */
+export const HEADLINE_TOTAL_BOUND = { POINT: 'point', RANGE: 'range' };
+
+/**
+ * 헤드라인 합계의 **확정 성분이 재는 기간**. `PensionCreditCeiling.period_code`와 같은 값이고
+ * 같은 이유로 상수다 — 그 성분에만 「올해」를 붙일 수 있다.
+ *
+ * **합계 자체에는 어느 기간도 붙지 않는다.** 두 성분의 단위 기간이 달라 합계에 기간
+ * 이름을 붙이면 그 줄이 틀린 수가 되기 때문이고, 그 사실은 `is_annual: false`가 진다.
+ */
+export const HEADLINE_DETERMINED_PERIOD = 'current_tax_year';
+
+/**
+ * 비과세 축 상한이 재는 기간(D38 6번, `isa.benefit.axis_ceiling`).
+ *
+ * **계약 1건당이고 해마다 반복되지 않는다** — 기준 시점이 「가입일 또는 연장일」이기
+ * 때문이다. 옆에 놓이는 세액공제 축은 연간 값이므로, 기간이 값으로 나가지 않으면
+ * 화면이 두 축을 나란히 둔 배치 때문에 이 값도 연간으로 읽힌다.
+ */
+export const AXIS_CEILING_PERIOD = 'contract_settlement_period';
+
+/**
  * 확정 축(세액공제)의 최댓값을 만든 공제율이 어디서 왔는가(D36).
  * 개정안 시나리오의 청년 우대가 본문 구간보다 높으면 그쪽이 상한을 정한다 —
  * 그 우대에는 계좌 단독 한도가 걸리지 않아 합산 한도 전액을 그 율로 채울 수 있다.
@@ -342,6 +373,11 @@ export const RULE = {
   ISA_BENEFIT_INCOME_CHARACTER: 'isa.benefit.income_character',
   ISA_BENEFIT_QUANTIFICATION: 'isa.benefit.quantification',
   PENSION_TAX_DEFERRAL_WITH_RETURN: 'pension.tax_deferral.with_return_rate',
+
+  // 18차 조사(D38). 헤드라인 합계가 **어떤 형태일 때 거짓이 아닌가**를 정하는 규칙과,
+  // 축마다 상한의 유무가 다르다는 판정. 배분 금액도 세액공제액도 한 원 바꾸지 않는다.
+  BENEFIT_HEADLINE_COMPOSITE_TOTAL: 'benefit.headline.composite_total',
+  ISA_BENEFIT_AXIS_CEILING: 'isa.benefit.axis_ceiling',
 
   // 17차 조사(D36). **금액이 아니라 세율만** 내는 규칙군. 연금계좌 저율과세를 막대에
   // 올릴 수 없다는 판정과, 그 대신 낼 수 있는 것(조문 그대로의 세율표)이 여기 있다.

@@ -388,3 +388,123 @@ test('연금저축 단독 공제한도가 IRP의 몫을 정한다 — 비용 0 �
   });
   assert.equal(irpOf(mutated), combined - widened, '경계가 코드에 박혀 있으면 값이 안 변한다');
 });
+
+// ── 헤드라인 합계와 축의 상한 (D38) ──────────────────────────────
+
+/** 구간 분기를 실제로 밟는 요청. 기본안이 ISA에 300만을 넣는다. */
+function compositeRequest(overrides = {}) {
+  return baseRequest({
+    profile: {
+      monthly_capacity_krw: 1_000_000,
+      isa_return_assumption: {
+        annual_return_rate: 0.07,
+        income_character: 'mixed_or_unknown',
+        settlement_years: 3,
+        loss_amount_krw: null,
+      },
+    },
+    accounts: { isa: { cumulative_contribution_krw: 20_000_000, years_since_opening: 2 } },
+    ...overrides,
+  });
+}
+
+const headlineOf = (bundle) =>
+  planOf(scenarioOf(compute(compositeRequest(), bundle)), 'max_tax_credit').headline_composite_total;
+
+test('헤드라인 규칙이 없으면 합계를 지어내지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    const doc = clone[CONFIRMED_FILE];
+    doc.rules = doc.rules.filter((r) => r.id !== 'benefit.headline.composite_total');
+  });
+
+  const response = compute(compositeRequest(), mutated);
+  assert.equal(response.ok, false, '규칙이 없는데 합계가 나왔다 — 그 형태가 코드에 박혀 있다는 뜻이다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+test('분기가 늘거나 이름이 바뀌면 모르는 채로 계산을 이어 가지 않는다', () => {
+  const renamed = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'benefit.headline.composite_total');
+    const shape = rule.value.the_rule.shape;
+    shape.when_the_isa_component_is_partial = shape.when_it_does_not;
+  });
+  assert.equal(compute(compositeRequest(), renamed).ok, false, '갈래가 늘었는데 그대로 계산했다');
+
+  const removed = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'benefit.headline.composite_total');
+    delete rule.value.the_rule.shape.when_there_is_no_isa_component;
+  });
+  assert.equal(compute(compositeRequest(), removed).ok, false, '갈래가 사라졌는데 그대로 계산했다');
+});
+
+test('금지 목록이 사라지면 멈춘다 — 기간도 상한도 안 붙이는 근거가 그 목록이다', () => {
+  const mutated = withMutation((clone) => {
+    delete findRule(clone, CONFIRMED_FILE, 'benefit.headline.composite_total').value.the_rule.forbidden;
+  });
+  assert.equal(compute(compositeRequest(), mutated).ok, false);
+});
+
+test('구간의 아래 끝을 옮기면 합계의 아래 끝도 따라 옮겨진다 — 0이 코드에 없다', () => {
+  // **항등식이 코드의 규약이 아니라 조문의 귀결임을 확인한다.** 지금 합계의 아래 끝이
+  // 세액공제액과 같은 것은 소득 성격이 미확정일 때 `s`의 아래 끝이 0이기 때문이고,
+  // 그 0은 룰셋의 `s_range`가 정한다. 구간을 올리면 합계의 아래 끝이 함께 올라가야 한다.
+  const before = headlineOf(rulesets);
+  const credit = planOf(scenarioOf(compute(compositeRequest(), rulesets)), 'max_tax_credit')
+    .deterministic_benefit.pension_credit_total_krw;
+  assert.equal(before.lower_bound_krw, credit, '이 좌표에서 항등식이 성립해야 시험이 성립한다');
+
+  const mutated = withMutation((clone) => {
+    const rule = findRule(clone, CONFIRMED_FILE, 'isa.benefit.income_character');
+    const option = rule.value.what_to_ask_instead.options.find((o) => o.id === 'mixed_or_unknown');
+    option.s_range = '0.5 ≤ s ≤ 1';
+  });
+  const after = headlineOf(mutated);
+
+  assert.ok(
+    after.lower_bound_krw > credit,
+    '구간의 아래 끝을 올렸는데 합계의 아래 끝이 그대로다 — 엔진이 0을 스스로 박아 넣고 있다',
+  );
+  assert.equal(after.upper_bound_krw, before.upper_bound_krw, '위 끝은 이 변형과 무관하다');
+});
+
+test('축의 상한 유무가 룰셋에서 오고, 없다고 적힌 축에 금액을 만들지 않는다', () => {
+  const ceilingsOf = (bundle) =>
+    planOf(scenarioOf(compute(compositeRequest(), bundle)), 'max_tax_credit')
+      .assumption_based_isa_estimate.axis_ceilings;
+
+  assert.equal(ceilingsOf(rulesets).rate_gap_has_ceiling, false);
+
+  // 저율분리과세 축에 상한이 생겼다고 적힌 룰셋 — 이 계약에는 그 금액을 만들 산식이
+  // 없다. 조용히 `false`로 내보내면 룰셋이 바뀐 사실이 응답에서 사라진다.
+  const opened = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'isa.benefit.axis_ceiling').value.rate_gap_axis.has_a_ceiling = true;
+  });
+  assert.equal(compute(compositeRequest(), opened).ok, false, '상한이 생겼는데 없다고 계속 말한다');
+
+  // 비과세 축의 상한이 없어졌다고 적힌 룰셋도 같다 — 분모를 지어내지 않는다.
+  const closed = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'isa.benefit.axis_ceiling').value.tax_free_axis.has_a_ceiling = false;
+  });
+  assert.equal(compute(compositeRequest(), closed).ok, false);
+
+  // 규칙 자체가 없으면 멈춘다.
+  const gone = withMutation((clone) => {
+    const doc = clone[CONFIRMED_FILE];
+    doc.rules = doc.rules.filter((r) => r.id !== 'isa.benefit.axis_ceiling');
+  });
+  assert.equal(compute(compositeRequest(), gone).ok, false);
+});
+
+test('비과세 한도를 바꾸면 축의 상한이 따라 바뀐다 — 308,000이 코드에 없다', () => {
+  const ceilingOf = (bundle) =>
+    planOf(scenarioOf(compute(compositeRequest(), bundle)), 'max_tax_credit')
+      .assumption_based_isa_estimate.axis_ceilings.tax_free_krw;
+
+  const before = ceilingOf(rulesets);
+  const mutated = withMutation((clone) => {
+    const brackets = findRule(clone, CONFIRMED_FILE, 'isa.tax_free_limit').value.brackets;
+    for (const bracket of brackets) bracket.limit_krw = Math.floor(bracket.limit_krw / 2);
+  });
+
+  assert.equal(ceilingOf(mutated) * 2, before, '한도를 반으로 줄였는데 상한이 그대로다');
+});

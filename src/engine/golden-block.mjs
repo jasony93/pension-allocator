@@ -190,6 +190,12 @@ export const PLAN_KEYS = [
   'is_baseline',
   // D28·D29 — 가정 기반 ISA 정산액. **`DeterministicBenefit`과 다른 축이다.**
   'assumption_based_isa_estimate',
+  /**
+   * D38 — 헤드라인 합계. **위 둘을 더한 자리는 응답에서 여기 하나뿐이고**, 그 합계의
+   * 아래 끝이 확정 세액공제액과 같은 수라는 항등식이 이 회차의 알맹이다.
+   * 정답지가 그 관계를 주장할 수 있어야 「일관되지만 틀린」 합계가 걸린다.
+   */
+  'headline_composite_total',
 ];
 /**
  * 가정 기반 ISA 정산액이 주장할 수 있는 것. 응답 필드 이름을 그대로 쓴다.
@@ -228,6 +234,12 @@ export const ISA_ESTIMATE_KEYS = [
   'lower_bound_krw',
   'upper_bound_krw',
   'axis_breakdown',
+  /**
+   * D38 6번·7번 — **축마다 상한의 유무가 다르다.** 비과세 축에만 상한이 있고 그 상한은
+   * 계약 1건당이다. 정답지가 이 자리를 주장할 수 있어야 「기간 없이 최댓값만 적는」
+   * 회귀를 무는 층이 생긴다 — 값은 맞는데 기간이 빠지는 형태는 금액 검사에 걸리지 않는다.
+   */
+  'axis_ceilings',
   'comparison_baseline_code',
 ];
 /** 세 축 + 절사 잔차. 넷의 합이 `upper_bound_krw`와 같아야 한다. */
@@ -237,10 +249,40 @@ export const ISA_AXIS_KEYS = [
   'rate_gap_krw',
   'rounding_residual_krw',
 ];
+/**
+ * 축의 상한(D38). **금액 칸이 하나뿐인 것이 이 목록의 요점이다** — 나머지 두 축에는
+ * 상한이 없고, 없다는 것이 조문의 판정이므로 유무만 적을 수 있다.
+ */
+export const ISA_AXIS_CEILING_KEYS = [
+  'tax_free_krw',
+  'tax_free_period_code',
+  'tax_free_settlement_years',
+  'tax_free_is_lower_bound',
+  'rate_gap_has_ceiling',
+  'loss_offset_has_ceiling',
+];
+/**
+ * 헤드라인 합계(D38). **`lower_bound_krw`가 이 목록에서 가장 무거운 칸이다** —
+ * `bound_code`가 `range`이면 그 값이 같은 안의 확정 세액공제액과 **같은 수**여야 한다.
+ * 정답지가 그 항등식을 스스로 주장할 수 있도록 두 끝과 두 성분을 함께 연다.
+ */
+export const HEADLINE_KEYS = [
+  'lower_bound_krw',
+  'upper_bound_krw',
+  'point_estimate_krw',
+  'bound_code',
+  'includes_assumption_component',
+  'determined_component_krw',
+  'assumption_component_krw',
+  'assumption_settlement_years',
+  'assumption_settlement_years_source',
+];
+const HEADLINE_BOUNDS = ['point', 'range'];
 const ISA_ESTIMATE_STATES = ['computed', 'display_suppressed', 'not_computable'];
 /** 상태가 `computed`가 아니면 이 칸들은 전부 `null`이다. 주장하면 자기모순이다. */
 const ISA_ESTIMATE_AMOUNT_KEYS = ISA_ESTIMATE_KEYS.filter(
-  (key) => key.endsWith('_krw') || key === 'axis_breakdown',
+  // `axis_ceilings`는 이름이 `_krw`로 끝나지 않지만 **안에 금액을 담는다**(D38).
+  (key) => key.endsWith('_krw') || key === 'axis_breakdown' || key === 'axis_ceilings',
 );
 export const TAX_CREDIT_KEYS = ['income_tax', 'local_tax', 'total'];
 export const LIMIT_KEYS = [
@@ -715,7 +757,10 @@ function validateIsaEstimate(value, where, errors) {
     );
   }
   for (const key of ['settlement_years', ...ISA_ESTIMATE_AMOUNT_KEYS]) {
-    if (key in value && key !== 'axis_breakdown') requireIntOrNull(value[key], `${where}.${key}`, errors);
+    // 객체를 담는 둘은 아래에서 따로 본다.
+    if (key in value && key !== 'axis_breakdown' && key !== 'axis_ceilings') {
+      requireIntOrNull(value[key], `${where}.${key}`, errors);
+    }
   }
   for (const key of ['taxable_share_min', 'taxable_share_max']) {
     if (key in value && typeof value[key] !== 'number') {
@@ -724,7 +769,8 @@ function validateIsaEstimate(value, where, errors) {
   }
 
   // **상수다.** `true`로 적으면 그 블록은 연 환산을 정답으로 주장하는 것이고,
-  // 비과세 한도가 계약 단위라 그 주장은 최대 1.75배 과대다.
+  // 비과세 한도가 계약 단위라 그 주장은 **적어도** 1.75배 과대다(계약 3년). 계약이
+  // 길수록 커져 2.8배에 수렴하므로 1.75는 상한이 아니라 하한이다(계약 0.16절).
   if ('is_annual' in value && value.is_annual !== false) {
     errors.push(`${where}.is_annual: 언제나 false다 — 이 금액은 정산 기간 전체의 값이지 1년치가 아니다`);
   }
@@ -765,6 +811,39 @@ function validateIsaEstimate(value, where, errors) {
     }
   }
 
+  if ('axis_ceilings' in value && value.axis_ceilings !== null) {
+    const at = `${where}.axis_ceilings`;
+    if (requireNonEmptyObject(value.axis_ceilings, at, errors)) {
+      unknownKeys(value.axis_ceilings, ISA_AXIS_CEILING_KEYS, at, errors);
+      for (const key of ['tax_free_krw', 'tax_free_settlement_years']) {
+        if (key in value.axis_ceilings) requireInt(value.axis_ceilings[key], `${at}.${key}`, errors);
+      }
+      for (const key of ['tax_free_is_lower_bound', 'rate_gap_has_ceiling', 'loss_offset_has_ceiling']) {
+        if (key in value.axis_ceilings) requireBoolean(value.axis_ceilings[key], `${at}.${key}`, errors);
+      }
+      if ('tax_free_period_code' in value.axis_ceilings) {
+        requireStringOrNull(value.axis_ceilings.tax_free_period_code, `${at}.tax_free_period_code`, errors);
+      }
+      // **없다는 것이 조문의 판정이다.** 있다고 적는 블록은 그 상한의 금액을 낼 산식이
+      // 계약에 없다는 사실과 어긋나므로 대조 전에 거절한다.
+      for (const key of ['rate_gap_has_ceiling', 'loss_offset_has_ceiling']) {
+        if (value.axis_ceilings[key] === true) {
+          errors.push(
+            `${at}.${key}: 언제나 false다 — 조특법 §91조의18 ①이 초과분에 상한을 두지 않는다. ` +
+              '상한이 없는 축에 분모를 적으면 그 막대는 거짓말을 한다',
+          );
+        }
+      }
+      // 이 상한은 「법이 정한 최대 절세액」이 아니라 이 계산이 낼 수 있는 값의 최댓값이다.
+      if (value.axis_ceilings.tax_free_is_lower_bound === false) {
+        errors.push(
+          `${at}.tax_free_is_lower_bound: 언제나 true다 — 비교 세율이 14%보다 높아질 여지가 ` +
+            '둘 있고 둘 다 실제 값을 키우는 방향이라 오차 방향이 과소다',
+        );
+      }
+    }
+  }
+
   if ('state' in value && value.state !== 'computed') {
     for (const key of ISA_ESTIMATE_AMOUNT_KEYS) {
       if (key in value && value[key] !== null) {
@@ -774,6 +853,76 @@ function validateIsaEstimate(value, where, errors) {
   }
   if (value.state === 'computed' && (value.not_computable_reason_code ?? null) !== null) {
     errors.push(`${where}: state:computed인데 not_computable_reason_code가 있다`);
+  }
+}
+
+/**
+ * 헤드라인 합계(D38). **자기모순은 대조 전에 거절한다.**
+ *
+ * 특히 두 자리를 본다 — (a) 점을 적었으면 두 끝이 그 점과 같아야 하고, (b) 가정 성분이
+ * 없다고 적었으면 성분 칸과 기간 칸이 전부 `null`이어야 한다. 어긋난 블록은 통과하면서
+ * 아무것도 주장하지 않는 상태가 된다.
+ */
+function validateHeadline(value, where, errors) {
+  if (!requireNonEmptyObject(value, where, errors)) return;
+  unknownKeys(value, HEADLINE_KEYS, where, errors);
+
+  for (const key of [
+    'lower_bound_krw',
+    'upper_bound_krw',
+    'point_estimate_krw',
+    'determined_component_krw',
+    'assumption_component_krw',
+    'assumption_settlement_years',
+  ]) {
+    if (key in value) requireIntOrNull(value[key], `${where}.${key}`, errors);
+  }
+  if ('includes_assumption_component' in value) {
+    requireBoolean(value.includes_assumption_component, `${where}.includes_assumption_component`, errors);
+  }
+  if ('assumption_settlement_years_source' in value) {
+    requireStringOrNull(
+      value.assumption_settlement_years_source,
+      `${where}.assumption_settlement_years_source`,
+      errors,
+    );
+  }
+  if ('bound_code' in value && !HEADLINE_BOUNDS.includes(value.bound_code)) {
+    errors.push(
+      `${where}.bound_code: 모르는 분기 "${value.bound_code}" (허용: ${HEADLINE_BOUNDS.join(', ')})`,
+    );
+  }
+
+  const { lower_bound_krw: lower, upper_bound_krw: upper, point_estimate_krw: point } = value;
+  if (Number.isInteger(lower) && Number.isInteger(upper) && lower > upper) {
+    errors.push(`${where}: lower_bound_krw(${lower})가 upper_bound_krw(${upper})보다 크다`);
+  }
+  if (Number.isInteger(point)) {
+    for (const [key, bound] of [['lower_bound_krw', lower], ['upper_bound_krw', upper]]) {
+      if (Number.isInteger(bound) && bound !== point) {
+        errors.push(
+          `${where}: point_estimate_krw(${point})가 ${key}(${bound})와 다르다 — ` +
+            '합계를 한 수로 적는 것은 두 끝이 같을 때뿐이다',
+        );
+      }
+    }
+  }
+  if (value.bound_code === 'range' && (value.point_estimate_krw ?? null) !== null) {
+    errors.push(`${where}: bound_code가 range인데 점을 주장한다`);
+  }
+  if (value.includes_assumption_component === false) {
+    for (const key of [
+      'assumption_component_krw',
+      'assumption_settlement_years',
+      'assumption_settlement_years_source',
+    ]) {
+      if (key in value && value[key] !== null) {
+        errors.push(`${where}: 가정 성분이 없다고 적고 ${key}에 값을 주장한다`);
+      }
+    }
+    if (value.bound_code === 'range') {
+      errors.push(`${where}: 가정 성분이 없는데 구간으로 적었다 — 그 합계는 확정 세액공제액 한 수다`);
+    }
   }
 }
 
@@ -876,6 +1025,9 @@ function validatePlan(plan, where, errors) {
       `${where}.assumption_based_isa_estimate`,
       errors,
     );
+  }
+  if ('headline_composite_total' in plan) {
+    validateHeadline(plan.headline_composite_total, `${where}.headline_composite_total`, errors);
   }
 }
 
@@ -1056,6 +1208,8 @@ export const VOCABULARY = [
   ...UNALLOCATED_KEYS.map((k) => `unallocated_breakdown.${k}`),
   ...ISA_ESTIMATE_KEYS.map((k) => `assumption_based_isa_estimate.${k}`),
   ...ISA_AXIS_KEYS.map((k) => `isa_axis_breakdown.${k}`),
+  ...ISA_AXIS_CEILING_KEYS.map((k) => `isa_axis_ceilings.${k}`),
+  ...HEADLINE_KEYS.map((k) => `headline_composite_total.${k}`),
 ];
 
 /** 블록 하나가 실제로 주장한 어휘. 값이 아니라 **적혔는가**만 본다. */
@@ -1100,6 +1254,12 @@ export function vocabularyUsedBy(parsed) {
       }
       for (const key of Object.keys(plan.assumption_based_isa_estimate?.axis_breakdown ?? {})) {
         used.add(`isa_axis_breakdown.${key}`);
+      }
+      for (const key of Object.keys(plan.assumption_based_isa_estimate?.axis_ceilings ?? {})) {
+        used.add(`isa_axis_ceilings.${key}`);
+      }
+      for (const key of Object.keys(plan.headline_composite_total ?? {})) {
+        used.add(`headline_composite_total.${key}`);
       }
     }
   }
@@ -1343,6 +1503,9 @@ function checkPlan(plan, expected, label) {
   if (expected.assumption_based_isa_estimate) {
     checkIsaEstimate(plan, expected.assumption_based_isa_estimate, label);
   }
+  if (expected.headline_composite_total) {
+    checkHeadline(plan, expected.headline_composite_total, label);
+  }
 }
 
 /**
@@ -1398,11 +1561,23 @@ function checkIsaEstimate(plan, expected, label) {
   );
 
   for (const [key, value] of Object.entries(expected)) {
-    if (key === 'axis_breakdown') continue;
+    if (key === 'axis_breakdown' || key === 'axis_ceilings') continue;
     assert.equal(actual[key], value, `${label} 가정 기반 ISA 정산액(${key})`);
   }
   for (const [key, value] of Object.entries(expected.axis_breakdown ?? {})) {
     assert.equal(actual.axis_breakdown?.[key], value, `${label} ISA 정산액 축(${key})`);
+  }
+  for (const [key, value] of Object.entries(expected.axis_ceilings ?? {})) {
+    assert.equal(actual.axis_ceilings?.[key], value, `${label} ISA 축의 상한(${key})`);
+  }
+}
+
+/** 헤드라인 합계. **적힌 키는 하나도 건너뛰지 않는다.** */
+function checkHeadline(plan, expected, label) {
+  const actual = plan.headline_composite_total;
+  assert.ok(actual, `${label} 헤드라인 합계: 응답이 null이다`);
+  for (const [key, value] of Object.entries(expected)) {
+    assert.equal(actual[key], value, `${label} 헤드라인 합계(${key})`);
   }
 }
 

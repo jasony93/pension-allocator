@@ -15,6 +15,7 @@
 
 import {
   AXIS_BOUND,
+  AXIS_CEILING_PERIOD,
   ISA_ESTIMATE,
   ISA_ESTIMATE_DISPLAY,
   ISA_ESTIMATE_NOT_COMPUTABLE,
@@ -73,6 +74,49 @@ function readGeneralWithholdingRate(access) {
 }
 
 /**
+ * 축마다 **상한이 있는지**를 룰셋에서 읽는다 (D38 6번·7번, `isa.benefit.axis_ceiling`).
+ *
+ * **없다는 것이 조문의 판정이지 우리가 못 낸 것이 아니다.** 그래서 세 축의 유무를 전부
+ * 읽고, 있다고 적힌 축에만 금액을 만든다. 없다고 적힌 축에 분모를 지어내면 그 막대는
+ * 거짓말을 하고, 있다고 적힌 축에 금액을 안 내면 「한도 중 얼마」를 화면이 만들게 된다.
+ *
+ * **셋 중 하나라도 이 계약이 낼 수 있는 형태를 벗어나면 멈춘다.** 예컨대 룰셋이 저율
+ * 분리과세 축에 상한이 생겼다고 적으면 그 금액을 만들 산식이 이 계약에 없다 —
+ * 그때 조용히 `false`로 내보내면 룰셋이 바뀐 사실이 응답에서 사라진다.
+ * (`pension-reference.mjs`의 `crossCheckRates`가 쓰는 것과 같은 형태의 중단이다.)
+ *
+ * @returns `{ taxFree: true }` 형태의 판정 · 낼 수 없으면 `null`
+ */
+function readAxisCeilingFlags(access) {
+  const at = (axis) =>
+    access.value(RULE.ISA_BENEFIT_AXIS_CEILING, ['value', axis, 'has_a_ceiling'], APPLIED_TO);
+
+  const taxFree = at('tax_free_axis');
+  const rateGap = at('rate_gap_axis');
+  const lossOffset = at('loss_offset_axis');
+  // 이 상한이 **한 해가 아니라 계약 한 건**의 값이라는 판정. 이 자리가 비면 화면이
+  // 기간 없이 「최대 ○원 중 ○원」을 적게 되고, 옆의 세액공제 축이 연간이라 오독이 난다.
+  const unit = access.value(
+    RULE.ISA_BENEFIT_AXIS_CEILING,
+    ['value', 'tax_free_axis', 'the_unit_of_this_ceiling'],
+    APPLIED_TO,
+  );
+  if (taxFree === undefined || rateGap === undefined || lossOffset === undefined) return null;
+  if (typeof unit !== 'string') return null;
+
+  if (taxFree !== true || rateGap !== false || lossOffset !== false) {
+    // 값을 고르지 않는다. 룰셋이 바뀐 것인지 계약이 낡은 것인지는 엔진이 정하지 않는다.
+    access.value(
+      RULE.ISA_BENEFIT_AXIS_CEILING,
+      ['value', 'axis_ceilings_this_contract_can_express'],
+      APPLIED_TO,
+    );
+    return null;
+  }
+  return { taxFree, rateGap, lossOffset };
+}
+
+/**
  * 이 시나리오에서 정산액을 낼 재료를 룰셋에서 모은다.
  *
  * 요청에 가정이 없으면 **규칙을 한 건도 읽지 않는다** — 읽지 않은 규칙을 근거로 싣지
@@ -108,6 +152,8 @@ export function resolveIsaReturn(access, { assumption }) {
     ['value', 'what_can_be_produced_instead'],
     APPLIED_TO,
   );
+  // 축마다 상한의 유무가 다르다는 판정(D38). 축 금액을 낼 때만 읽는다.
+  const axisCeilings = readAxisCeilingFlags(access);
   // 손익통산의 근거 규칙. `L`을 빼는 자리가 어느 조문인지가 화면에 붙어야 한다.
   access.use(RULE.ISA_LOSS_OFFSET, APPLIED_TO);
   // 연금계좌 쪽 칸이 비어 있는 것을 "효과가 없다"로 읽지 않게 하는 규칙(18.5절).
@@ -119,7 +165,8 @@ export function resolveIsaReturn(access, { assumption }) {
     minContractYears === undefined ||
     options === undefined ||
     axes === undefined ||
-    producible === undefined
+    producible === undefined ||
+    axisCeilings === null
   ) {
     return null;
   }
@@ -163,12 +210,14 @@ export function resolveIsaReturn(access, { assumption }) {
     generalRate,
     isaRate,
     minContractYears,
+    axisCeilings,
     settlementYears: settlementFromUser ? assumption.settlement_years : minContractYears,
     settlementSource: settlementFromUser
       ? ISA_ESTIMATE.SETTLEMENT_SOURCE_USER
       : ISA_ESTIMATE.SETTLEMENT_SOURCE_RULESET,
     basisRuleIds: [
       RULE.ISA_ACCOUNT_REQUIREMENTS,
+      RULE.ISA_BENEFIT_AXIS_CEILING,
       RULE.ISA_BENEFIT_FORMULA,
       RULE.ISA_BENEFIT_INCOME_CHARACTER,
       RULE.ISA_BENEFIT_QUANTIFICATION,
@@ -251,7 +300,9 @@ function shell(state, context, extra = {}) {
     state,
     not_computable_reason_code: null,
     // **상수다.** 다른 모든 금액이 연간인 화면에서 이 값만 성질이 다르다는 것을
-    // 자료형으로 못박는다. 비과세 한도가 계약 단위라 연 환산은 최대 1.75배 과대다.
+    // 자료형으로 못박는다. 비과세 한도가 계약 단위라 연 환산은 **적어도** 1.75배 과대이고
+    // (계약 3년), 계약이 길수록 커져 2.8배에 수렴한다 — 1.75는 상한이 아니라 하한이다
+    // (`isa.benefit.settlement_period`의 `correction_1_75_is_the_floor_not_the_ceiling`).
     is_annual: false,
     settlement_years: context.settlementYears,
     settlement_years_source: context.settlementSource,
@@ -271,6 +322,9 @@ function shell(state, context, extra = {}) {
     lower_bound_krw: null,
     upper_bound_krw: null,
     axis_breakdown: null,
+    // 축마다 **상한이 있는지**와 그 상한이 재는 기간(D38 6번·7번). 금액이 없으면
+    // 분모도 없다 — 축 금액이 없는데 「한도 중 얼마」를 적을 자리를 만들지 않는다.
+    axis_ceilings: null,
     // 세 축 금액이 점인가 구간의 위 끝인가(D36). 금액이 없으면 이 판단도 없다.
     axis_breakdown_bound_code: null,
     // 세율차 축의 0이 「한도 안이라 0%로 과세된다」는 뜻인가(D36).
@@ -331,7 +385,11 @@ export function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw
 
   const upper = at(context.share.max);
   const lower = context.share.point ? upper : at(context.share.min);
-  if (upper === null || lower === null) {
+  // 비과세 축의 상한 = `C × 일반세율 × (1+부가율)`. **축의 정의가 `min(N, C) × …`이고
+  // `min(N, C) ≤ C`이므로** 이 값이 그 축이 넘을 수 없는 값이다. 새 세법 수치가 없다 —
+  // `C`도 두 율도 이미 이 계산이 쓰고 있는 값이다.
+  const taxFreeCeiling = taxOf(taxFreeLimitKrw, context.generalRate, surtaxRate);
+  if (upper === null || lower === null || taxFreeCeiling === null) {
     return shell(ISA_ESTIMATE_STATE.NOT_COMPUTABLE, context, {
       not_computable_reason_code: ISA_ESTIMATE_NOT_COMPUTABLE.AMOUNT_NOT_REPRESENTABLE,
     });
@@ -354,6 +412,22 @@ export function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw
     lower_bound_krw: lower.settlementKrw,
     upper_bound_krw: upper.settlementKrw,
     axis_breakdown: upper.axes,
+    // **축마다 상한의 유무가 다르다**(D38). 유무는 룰셋에서 읽고, 있다고 적힌 축에만
+    // 금액을 만든다. 나머지 둘에 `*_krw` 칸을 두지 않은 것이 이 객체의 요점이다 —
+    // 칸이 있으면 언젠가 값이 들어가고, 조문에 없는 분모는 지어낸 분모다.
+    axis_ceilings: {
+      tax_free_krw: taxFreeCeiling,
+      // **계약 1건당이다.** 옆의 세액공제 축은 연간이므로 기간이 값으로 나가지 않으면
+      // 두 축을 나란히 둔 배치가 이 값을 연간으로 읽게 만든다.
+      tax_free_period_code: AXIS_CEILING_PERIOD,
+      tax_free_settlement_years: context.settlementYears,
+      // **이 값은 「법이 정한 최대 절세액」이 아니라 이 계산이 낼 수 있는 값의 최댓값이다.**
+      // 비교 세율이 14%보다 높아질 여지가 둘 있고 둘 다 실제 값을 키우는 방향이라,
+      // 오차 방향은 과소다(`isa.benefit.axis_ceiling`의 `is_0_14_the_right_comparison_rate`).
+      tax_free_is_lower_bound: true,
+      rate_gap_has_ceiling: context.axisCeilings.rateGap,
+      loss_offset_has_ceiling: context.axisCeilings.lossOffset,
+    },
     // **세 축은 `upper_bound_krw`의 분해다.** 점이 없는 입력에서 그 값을 점처럼 적으면
     // 실제보다 크게 말하는 것이 된다. 화면이 `point_estimate_krw === null`로 이 판단을
     // 대신하게 두지 않고 값으로 낸다(D36, tax-rules-report 23.3절).

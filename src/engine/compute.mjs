@@ -21,6 +21,7 @@ import {
 } from './constants.mjs';
 import { boundariesFrom, boundariesSource, dedupeErrors } from './boundaries.mjs';
 import { buildPlans } from './plans.mjs';
+import { resolveHeadlineRule } from './headline.mjs';
 import { resolveIsaReturn } from './isa-return.mjs';
 import { resolvePensionWithdrawalTaxReference } from './pension-reference.mjs';
 import { buildLegalBasis, createAccess, selectRulesets } from './ruleset.mjs';
@@ -199,6 +200,10 @@ function computeScenario(scenarioId, request, rulesets) {
     assumption: request.profile.isa_return_assumption,
   });
 
+  // 6.65. 헤드라인 합계의 형태(D38). **가정이 없어도 읽는다** — ISA 성분이 없는
+  //       사용자에게도 합계는 나가고, 그때 「합계 = 확정 성분」이라는 것도 이 규칙이 정한다.
+  const headlineRule = resolveHeadlineRule(access);
+
   // 6.7. 연금계좌를 나중에 받을 때의 세율표(D36). **요청의 어떤 값에도 반응하지 않는다** —
   //      새 입력 0개·가정 0개가 이 표가 성립하는 조건이다. 금액은 없다.
   const pensionRateReference = resolvePensionWithdrawalTaxReference(access);
@@ -234,6 +239,7 @@ function computeScenario(scenarioId, request, rulesets) {
     ageReckoning === null ||
     withoutCreditFacts === null ||
     isaReturn === null ||
+    headlineRule === null ||
     pensionRateReference === null ||
     creditCeiling === null
   ) {
@@ -256,6 +262,7 @@ function computeScenario(scenarioId, request, rulesets) {
     withdrawalOrder,
     withoutCreditFacts,
     isaReturn,
+    headlineRule,
     isaEstimateDisplay: request.options.assumption_based_isa_estimate,
     isaCumulativeContributionKrw: request.accounts.isa.cumulative_contribution_krw,
     options: request.options,
@@ -413,7 +420,8 @@ function isaReturnNotices(isaReturn, plans, options) {
 
   if (estimates.some((estimate) => estimate.state === ISA_ESTIMATE_STATE.COMPUTED)) {
     // 이 금액은 정산 기간 전체의 값이다. 연 환산은 비과세 한도를 해마다 새로 주는
-    // 계산이 되어 최대 1.75배 과대다(`isa.benefit.settlement_period`).
+    // 계산이 되어 **적어도** 1.75배 과대다(계약 3년). 계약이 길수록 과대율이 커져
+    // 2.8배에 수렴하므로 1.75는 상한이 아니라 하한이다(`isa.benefit.settlement_period`).
     out.push(
       notice(NOTICE.ISA_RETURN_ESTIMATE_NOT_ANNUAL, 'info', null, {
         settlement_years: estimates.find((e) => e.state === ISA_ESTIMATE_STATE.COMPUTED)

@@ -1017,11 +1017,113 @@ function checkScenario(scenario, response, request, at) {
     );
   }
 
+  // I42 — 헤드라인 합계(D38). 배분안마다 성분이 다르므로 안마다 본다.
+  for (const plan of plans) checkHeadline(plan, `${at} [${plan.plan_id}]`);
+
   // I17 — 코드가 계약 목록 안에 있다
   for (const code of noticeCodes) assert.ok(KNOWN_NOTICES.has(code), `${at} I17: 알 수 없는 안내 코드 ${code}`);
   for (const code of notes) {
     assert.ok(KNOWN_COMPARISON_NOTES.has(code), `${at} I17: 알 수 없는 비교 안내 코드 ${code}`);
   }
+}
+
+/**
+ * I42 — **헤드라인 합계**(D38, `benefit.headline.composite_total`).
+ *
+ * 여섯 관계를 한 자리에서 본다. **첫 번째가 이 설계 전체를 떠받치는 항등식이다** —
+ * 합계 구간의 아래 끝이 확정된 세액공제액과 **같은 수**여야 「최소 ○원」이 조문만으로
+ * 정해지는 수가 되고, 확정과 가정의 구분이 부기가 아니라 숫자에 들어간다.
+ *
+ * **점 분기에서는 그 항등식이 성립하지 않고, 성립해서도 안 된다.** 소득 성격이
+ * 확정적이면 규칙이 합계를 한 수로 적으라고 정하므로 아래 끝에 ISA 성분이 들어간다.
+ * 그래서 항등식은 **`bound_code`에 따라 갈라 건다** — 갈라 걸지 않으면 어느 한쪽이
+ * 거짓이 되어 검사가 통째로 무력해진다.
+ */
+function checkHeadline(plan, at) {
+  const headline = plan.headline_composite_total;
+  const credit = plan.deterministic_benefit.pension_credit_total_krw;
+  const estimate = plan.assumption_based_isa_estimate;
+
+  assert.ok(headline, `${at} I42: 헤드라인 합계가 없다`);
+  assert.equal(headline.determined_component_krw, credit, `${at} I42: 확정 성분이 세액공제액과 다르다`);
+  // **합계에는 어느 기간도 붙지 않는다.** 두 성분의 단위 기간이 다르기 때문이다.
+  assert.equal(headline.is_annual, false, `${at} I42: 합계가 연간 금액이라고 선언했다`);
+  // **합계에 법정 상한이 없다.** ISA 세 축 중 둘에 뚜껑이 없다.
+  assert.equal(headline.has_statutory_ceiling, false, `${at} I42: 합계에 상한이 있다고 선언했다`);
+  assert.ok(headline.lower_bound_krw <= headline.upper_bound_krw, `${at} I42: 두 끝이 뒤집혔다`);
+
+  if (!headline.includes_assumption_component) {
+    // 가정 성분이 없으면 합계는 확정 성분과 같은 한 수다. 이 갈래에서만 확정 등급이다.
+    assert.deepStrictEqual(
+      [
+        headline.lower_bound_krw,
+        headline.upper_bound_krw,
+        headline.point_estimate_krw,
+        headline.bound_code,
+        headline.assumption_component_krw,
+        headline.assumption_settlement_years,
+        headline.assumption_settlement_years_source,
+      ],
+      [credit, credit, credit, 'point', null, null, null],
+      `${at} I42: 가정 성분이 없는데 합계가 확정 세액공제액과 다르다`,
+    );
+    // 그 갈래의 조건도 함께 문다 — 정산액을 냈고 ISA에 넣은 돈이 있는데 성분이 빠졌다면
+    // 사용자가 실제로 받는 혜택 하나가 헤드라인에서 조용히 사라진 것이다.
+    const isaAllocated = plan.allocations.find((a) => a.account === 'isa').annual_krw;
+    assert.ok(
+      estimate === null || estimate.state !== 'computed' || isaAllocated === 0,
+      `${at} I42: 정산액을 냈고 ISA 배분도 있는데 합계에 가정 성분이 없다`,
+    );
+    return;
+  }
+
+  assert.equal(estimate.state, 'computed', `${at} I42: 정산액이 없는데 가정 성분이 들어갔다`);
+  // **이 안이 ISA에 넣은 돈이 있어야 한다.** 없으면 그 정산액은 이 배분안이 만든 것이
+  // 아니므로 「이 배분으로 계산된」이라는 한정 밖이다 — 기존 계좌의 혜택을 이 안의
+  // 성과로 적는 셈이 된다. 응답 안쪽만 보면 아무 모순이 없어 이 줄만이 그 자리를 본다.
+  assert.ok(
+    plan.allocations.find((a) => a.account === 'isa').annual_krw > 0,
+    `${at} I42: ISA에 한 푼도 넣지 않은 안의 합계에 가정 성분이 들어갔다`,
+  );
+  assert.equal(
+    headline.assumption_settlement_years,
+    estimate.settlement_years,
+    `${at} I42: 합계에 실린 기간이 정산 기간과 다르다`,
+  );
+  assert.equal(
+    headline.assumption_settlement_years_source,
+    estimate.settlement_years_source,
+    `${at} I42: 기간의 출처가 정산액과 다르다`,
+  );
+
+  if (headline.bound_code === 'range') {
+    // ★ 항등식. 구간의 아래 끝 = 올해 확정된 세액공제액.
+    assert.equal(
+      headline.lower_bound_krw,
+      credit,
+      `${at} I42: 구간의 아래 끝이 확정된 세액공제액과 다르다 — 이 항등식이 설계 전체를 떠받친다`,
+    );
+    assert.equal(headline.point_estimate_krw, null, `${at} I42: 구간인데 점이 있다`);
+    assert.equal(estimate.point_estimate_krw, null, `${at} I42: 점이 있는데 구간으로 적었다`);
+    assert.equal(headline.assumption_component_krw, estimate.upper_bound_krw, `${at} I42: 위 끝의 성분이 다르다`);
+  } else {
+    assert.equal(headline.bound_code, 'point', `${at} I42: 모르는 분기 코드 ${headline.bound_code}`);
+    assert.equal(headline.point_estimate_krw, headline.lower_bound_krw, `${at} I42: 점과 아래 끝이 다르다`);
+    assert.equal(headline.point_estimate_krw, headline.upper_bound_krw, `${at} I42: 점과 위 끝이 다르다`);
+    assert.equal(headline.assumption_component_krw, estimate.point_estimate_krw, `${at} I42: 점의 성분이 다르다`);
+  }
+
+  // 두 성분의 합이 위 끝이다. **화면이 이 덧셈을 하지 않게 하려고 세 값을 다 낸다.**
+  assert.equal(
+    headline.upper_bound_krw,
+    credit + estimate.upper_bound_krw,
+    `${at} I42: 위 끝이 두 성분의 합이 아니다`,
+  );
+  assert.equal(
+    headline.lower_bound_krw,
+    credit + estimate.lower_bound_krw,
+    `${at} I42: 아래 끝이 두 성분의 합이 아니다`,
+  );
 }
 
 function walkAmounts(node, at, path = '') {
@@ -1442,10 +1544,64 @@ test('I38 — 표시를 끄면 가정 기반 금액이 하나도 남지 않는�
         const estimate = plan.assumption_based_isa_estimate;
         assert.equal(estimate.state, 'display_suppressed', `${label}: 상태가 감춤이 아니다`);
         for (const [key, value] of Object.entries(estimate)) {
-          if (!key.endsWith('_krw') && key !== 'axis_breakdown') continue;
+          // `axis_ceilings`는 이름이 `_krw`로 끝나지 않지만 **안에 금액을 담는다**(D38).
+          // 목록에 넣지 않으면 표시를 껐는데 분모가 그대로 나가는 자리가 된다.
+          if (!key.endsWith('_krw') && key !== 'axis_breakdown' && key !== 'axis_ceilings') continue;
           assert.equal(value, null, `${label}: 표시를 껐는데 ${key}에 금액이 남아 있다`);
+        }
+        // 헤드라인 합계에도 가정 성분이 남으면 안 된다 — 정산액을 감췄는데 그 금액이
+        // 합계 안에 섞여 나가면 표시를 껐다는 것이 규약일 뿐 사실이 아니게 된다.
+        assert.equal(
+          plan.headline_composite_total.includes_assumption_component,
+          false,
+          `${label}: 표시를 껐는데 합계에 가정 성분이 들어 있다`,
+        );
+        assert.equal(
+          plan.headline_composite_total.upper_bound_krw,
+          plan.deterministic_benefit.pension_credit_total_krw,
+          `${label}: 표시를 껐는데 합계가 확정 세액공제액보다 크다`,
+        );
+      }
+    }
+  }
+});
+
+// I42 — **헤드라인 합계**(D38). 본 행렬에는 수익률 가정이 없어 확정 성분 단독 갈래만
+// 돌므로, 여기서 성격 세 값과 표시 스위치를 곱해 **네 갈래를 전부** 밟는다.
+//
+// **갈래가 다 돌았는지를 함께 센다.** 한쪽만 돌면 위 `checkHeadline`은 통과하면서
+// 아무것도 막지 못한다 — 이 저장소가 지난 회차에 같은 형태로 0건 실패를 만난 자리다.
+test('I42 — 헤드라인 합계가 네 갈래 전부에서 관계를 지킨다', () => {
+  const boundsSeen = new Set();
+  const componentsSeen = new Set();
+  let checked = 0;
+
+  for (const { label, patch } of PROFILES) {
+    for (const variant of ISA_RETURN_VARIANTS) {
+      const response = compute(
+        baseRequest(
+          deepMerge(patch, {
+            scenarios: ['current', 'proposed'],
+            profile: { isa_return_assumption: variant.assumption },
+            options: variant.display === null ? null : { assumption_based_isa_estimate: variant.display },
+          }),
+        ),
+        rulesets,
+      );
+      assert.equal(response.ok, true, `${label} / ${variant.label}: 계산이 실패했다`);
+
+      for (const scenario of response.scenarios) {
+        for (const plan of scenario.plans) {
+          checkHeadline(plan, `${label} / ${variant.label} / ${scenario.scenario_id} [${plan.plan_id}]`);
+          boundsSeen.add(plan.headline_composite_total.bound_code);
+          componentsSeen.add(plan.headline_composite_total.includes_assumption_component);
+          checked += 1;
         }
       }
     }
   }
+
+  assert.ok(checked >= 100, `행렬이 너무 작다 (${checked}건)`);
+  assert.deepStrictEqual([...boundsSeen].sort(), ['point', 'range'], '합계가 점인 좌표와 구간인 좌표가 둘 다 나와야 한다');
+  assert.deepStrictEqual([...componentsSeen].sort(), [false, true], '가정 성분이 있는 좌표와 없는 좌표가 둘 다 나와야 한다');
 });

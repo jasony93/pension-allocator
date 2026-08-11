@@ -283,6 +283,39 @@ const VOCABULARY_DEBT = [
   // 감추고 있던 것이고, 정답지가 그 이름만 봐서는 이 조건들을 검사하지 못한다.
   'tax_liability_cap.carryover_shares_future_year_credit_limit',
   'tax_liability_cap.carryover_requires_application',
+
+  // ── 헤드라인 합계와 축의 상한 (D38). **이번 회차에 자리가 처음 생겼다.** ──
+  // 소유자가 제품의 목적을 다시 정의했고, 그 결과 응답에 **두 성분을 더한 수** 하나가
+  // 생겼다. 그 합계의 아래 끝이 확정 세액공제액과 같다는 항등식이 이 회차의 알맹이이고,
+  // 엔진 쪽에서는 골든 좌표(`headline.test.mjs`)와 불변식 I42가 그것을 문다.
+  //
+  // **그런데 그 둘은 응답 안쪽의 일관성만 본다.** 「일관되지만 틀린」 합계 —— 예컨대
+  // 세액공제액 자체가 틀린 채로 합계가 그 틀린 값과 일관되게 맞아떨어지는 상태 —— 는
+  // 엔진 코드를 보지 않고 조문에서 산출한 값과 대조해야만 걸린다. **그 층이 정답지다.**
+  // 값의 저자는 `tax-domain`이고, 두 성분의 금액은 이미 정답지에 있으므로(GC-52~GC-60)
+  // 새로 산출할 것은 그 합과 분기 코드뿐이다.
+  'plan.headline_composite_total',
+  'headline_composite_total.lower_bound_krw',
+  'headline_composite_total.upper_bound_krw',
+  'headline_composite_total.point_estimate_krw',
+  'headline_composite_total.bound_code',
+  'headline_composite_total.includes_assumption_component',
+  'headline_composite_total.determined_component_krw',
+  'headline_composite_total.assumption_component_krw',
+  'headline_composite_total.assumption_settlement_years',
+  'headline_composite_total.assumption_settlement_years_source',
+
+  // 축의 상한. **금액(308,000·616,000)은 룰셋이 스스로 적어 두었으므로 정답지가 그 값을
+  // 옮겨 적는 것이 아니라 조문에서 다시 산출해 대조할 수 있다.** 특히 `tax_free_period_code`와
+  // `tax_free_settlement_years`가 비어 있으면 「기간 없이 최댓값만 적는」 회귀를 아무도
+  // 보지 않는다 — 금액은 맞는데 기간이 빠지는 형태는 금액 검사에 걸리지 않는다.
+  'assumption_based_isa_estimate.axis_ceilings',
+  'isa_axis_ceilings.tax_free_krw',
+  'isa_axis_ceilings.tax_free_period_code',
+  'isa_axis_ceilings.tax_free_settlement_years',
+  'isa_axis_ceilings.tax_free_is_lower_bound',
+  'isa_axis_ceilings.rate_gap_has_ceiling',
+  'isa_axis_ceilings.loss_offset_has_ceiling',
 ].sort();
 
 const vocabularyUsed = (() => {
@@ -358,6 +391,12 @@ const UNASSERTED_UNCERTAINTY_RULES = [
   // 이 목록이 **실행 결과에서 나온 값**이라는 점이 중요하다. 룰셋 전체를 훑어 적으면
   // 근거로 실리지도 않는 규칙까지 들어와 정답지가 주장할 수 없는 것을 요구하게 된다.
   'age.reckoning.reference_date',
+  // **이번 회차에 근거 목록에 처음 실렸다**(D38 6번). 비과세 축의 상한을 낼 때 읽는
+  // 규칙이고, 남아 있는 표시는 하나다 — 「비교 세율 14%보다 높은 세율이 ISA 안에서
+  // 발생할 수 있는지는 조특법 시행령의 편입 가능 상품 범위가 가르는데 그 조문을
+  // 확인하지 못했다」. 오차 방향은 과소이고(그런 상품이 있으면 상한이 커진다) 그 사실은
+  // `axis_ceilings.tax_free_is_lower_bound`가 값으로 낸다. **건수의 저자는 `tax-domain`이다.**
+  'isa.benefit.axis_ceiling',
   'isa.early_termination.clawback',
   'isa.tax_free_limit',
   'pension.contribution.after_annuity_start',

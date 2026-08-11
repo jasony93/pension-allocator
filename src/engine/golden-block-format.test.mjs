@@ -379,12 +379,38 @@ const ISA_POINT = {
               rounding_residual_krw: 0,
             },
             comparison_baseline_code: 'withholding_at_general_rate',
+            // **비과세 축의 상한**(D38 6번). 이 블록은 총수익이 정확히 비과세 한도금액이라
+            // 축의 값과 상한이 같아진다 — 그래서 **기간 칸이 빠지면 아무 금액도 틀리지 않는다.**
+            // 그 자리를 정답지가 주장할 수 있어야 「기간 없이 최댓값만 적는」 회귀가 걸린다.
+            axis_ceilings: {
+              tax_free_krw: ISA_SETTLEMENT,
+              tax_free_period_code: 'contract_settlement_period',
+              tax_free_settlement_years: ISA_YEARS,
+              tax_free_is_lower_bound: true,
+              // **없다는 것이 조문의 판정이다.** 유무가 값으로 나가고 금액 칸은 없다.
+              rate_gap_has_ceiling: false,
+              loss_offset_has_ceiling: false,
+            },
             // 계약이 상수로 고정한 넷. **상수라서 오히려 주장되어야 한다** —
             // 아무도 안 보면 조용히 달라지고, 달라져도 어떤 금액도 틀리지 않는다.
             principal_basis_code: 'cumulative_contribution_plus_plan_allocation',
             return_accrual_code: 'simple_interest',
             is_lower_bound_for_aggregate_taxpayer: true,
             assumes_contract_held_to_settlement: true,
+          },
+          // **헤드라인 합계**(D38). 이 블록은 납입 여력이 0이라 ISA 배분도 0이므로
+          // 정산액이 계산돼 있어도 합계에 들어가지 않는다 — 그 혜택은 이 배분안이 만든
+          // 것이 아니다. **합계가 확정 성분과 같은 한 수인 갈래**가 이 자리다.
+          headline_composite_total: {
+            lower_bound_krw: 0,
+            upper_bound_krw: 0,
+            point_estimate_krw: 0,
+            bound_code: 'point',
+            includes_assumption_component: false,
+            determined_component_krw: 0,
+            assumption_component_krw: null,
+            assumption_settlement_years: null,
+            assumption_settlement_years_source: null,
           },
         },
       },
@@ -538,6 +564,9 @@ const E = (...rest) => P('max_tax_credit', 'assumption_based_isa_estimate', ...r
 const NQ = (account, ...rest) =>
   P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credit', account, ...rest);
 const NQF = (key) => NQ('annuity_savings', 'facts', key);
+/** 헤드라인 합계(D38)와 축의 상한. 배분안 단위다. */
+const H = (key) => P('max_tax_credit', 'headline_composite_total', key);
+const AC = (key) => E('axis_ceilings', key);
 
 const UNCAPPED = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
 
@@ -688,6 +717,27 @@ const INJECTIONS = [
   { via: 'format', block: WITHOUT_CREDIT_FACTS, name: 'facts가 붙지 않는 코드에 facts를 적음', path: P('max_tax_credit', 'non_quantified_effects', 'isa_tax_free_headroom'), value: { isa: { present: true, facts: { principal_taxed_on_withdrawal: false, principal_tax_free_requires_confirmation: true, principal_tax_free_confirmation_prospective_only: true, returns_taxed_on_withdrawal: true } } }, token: 'facts가 붙지 않는다' },
   { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '붙는 코드에 facts:null', path: NQ('annuity_savings', 'facts'), value: null, token: '언제나 facts가 붙는다' },
   { via: 'format', block: WITHOUT_CREDIT_FACTS, name: '사실 자리에 참·거짓이 아닌 값', path: NQF('principal_tax_free_requires_confirmation'), value: 'true', token: '참/거짓이어야 한다' },
+
+  // ── 헤드라인 합계와 축의 상한 (D38) ──
+  // **이 회차에 자리가 처음 생겼다.** 적으면 실제로 대조되는지, 그리고 자기모순인 블록이
+  // 형식 단계에서 걸리는지를 층을 갈라 본다.
+  // 두 끝과 점을 **함께** 올린다 — 하나만 올리면 자기모순이 되어 형식 단계에서 걸리고,
+  // 그러면 대조가 무는지를 시험하지 못한다. 층을 갈라 둔 이유가 이것이다.
+  { via: 'compare', block: ISA_POINT, name: 'headline.lower_bound_krw', path: P('max_tax_credit', 'headline_composite_total'), value: { lower_bound_krw: 1, upper_bound_krw: 1, point_estimate_krw: 1, bound_code: 'point', includes_assumption_component: false, determined_component_krw: 0, assumption_component_krw: null, assumption_settlement_years: null, assumption_settlement_years_source: null }, mentions: ['GC-96', '헤드라인 합계', 'lower_bound_krw'] },
+  { via: 'compare', block: ISA_POINT, name: 'headline.determined_component_krw', path: H('determined_component_krw'), value: 1, mentions: ['GC-96', '헤드라인 합계', 'determined_component_krw'] },
+  // **가정 성분이 있다고 적으면 걸려야 한다.** ISA 배분이 0인 안의 합계에 그 성분이
+  // 들어가면 어느 안을 골라도 같은 금액이 헤드라인에 붙어 안 사이의 비교가 무의미해진다.
+  { via: 'compare', block: ISA_POINT, name: 'headline.includes_assumption_component', path: H('includes_assumption_component'), value: true, mentions: ['GC-96', '헤드라인 합계', 'includes_assumption_component'] },
+  { via: 'compare', block: ISA_POINT, name: 'axis_ceilings.tax_free_krw', path: AC('tax_free_krw'), value: ISA_SETTLEMENT + 1, mentions: ['GC-96', '축의 상한', 'tax_free_krw'] },
+  // **금액은 그대로 두고 기간만 비튼다** — 이 자리가 비면 아무 금액도 틀리지 않는다.
+  { via: 'compare', block: ISA_POINT, name: 'axis_ceilings.tax_free_settlement_years', path: AC('tax_free_settlement_years'), value: ISA_YEARS + 1, mentions: ['GC-96', '축의 상한', 'tax_free_settlement_years'] },
+  { via: 'compare', block: ISA_POINT, name: 'axis_ceilings.tax_free_period_code', path: AC('tax_free_period_code'), value: 'tax_year', mentions: ['GC-96', '축의 상한', 'tax_free_period_code'] },
+  { via: 'format', block: ISA_POINT, name: '가정 성분이 없는데 구간으로 적음', path: H('bound_code'), value: 'range', token: '가정 성분이 없는데 구간으로' },
+  { via: 'format', block: ISA_POINT, name: '가정 성분이 없는데 기간을 주장', path: H('assumption_settlement_years_source'), value: 'user', token: '가정 성분이 없다고 적고' },
+  { via: 'format', block: ISA_POINT, name: '합계의 점이 구간의 끝과 다름', path: H('upper_bound_krw'), value: 1, token: 'point_estimate_krw' },
+  { via: 'format', block: ISA_POINT, name: '모르는 분기 코드', path: H('bound_code'), value: 'upper_bound', token: '모르는 분기' },
+  { via: 'format', block: ISA_POINT, name: '상한 없는 축에 상한이 있다고 적음', path: AC('rate_gap_has_ceiling'), value: true, token: '언제나 false다' },
+  { via: 'format', block: ISA_POINT, name: '축의 상한을 법정 최댓값이라고 적음', path: AC('tax_free_is_lower_bound'), value: false, token: '언제나 true다' },
 ];
 
 for (const injection of INJECTIONS) {
@@ -737,6 +787,8 @@ const TYPOS = [
   { where: '공제율', path: CR('basis_code'), block: LEGAL_BASIS },
   { where: 'ISA 정산액', path: E('upper_bound'), block: ISA_POINT },
   { where: 'ISA 정산액 축', path: E('axis_breakdown', 'tax_free'), block: ISA_POINT },
+  { where: 'ISA 축의 상한', path: AC('tax_free'), block: ISA_POINT },
+  { where: '헤드라인 합계', path: H('lower_bound'), block: ISA_POINT },
   { where: '미반영 규칙 항목', path: ['expect', 'current', 'unapplied_proposed_rules', 'proposed.productive_isa.youth_income_deduction', 'reason'], block: LEGAL_BASIS },
   { where: '비정량 효과', path: P('max_tax_credit', 'non_quantified_effect'), block: WITHOUT_CREDIT_FACTS },
   { where: '비정량 효과 코드', path: P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credits'), block: WITHOUT_CREDIT_FACTS },
@@ -768,6 +820,8 @@ test('빈 객체로 적으면 형식 검사가 거절한다', () => {
     [LEGAL_BASIS, ['credit_rate']],
     [ISA_POINT, E()],
     [ISA_POINT, E('axis_breakdown')],
+    [ISA_POINT, E('axis_ceilings')],
+    [ISA_POINT, P('max_tax_credit', 'headline_composite_total')],
     // 이번에 넓힌 세 겹에도 같은 못을 박는다.
     [WITHOUT_CREDIT_FACTS, P('max_tax_credit', 'non_quantified_effects')],
     [WITHOUT_CREDIT_FACTS, P('max_tax_credit', 'non_quantified_effects', 'pension_contribution_without_credit')],
