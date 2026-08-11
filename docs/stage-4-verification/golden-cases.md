@@ -8463,3 +8463,183 @@ GC-04는 여섯 중 유일하게 **세액 한도가 실제로 무는** 좌표다
 - **계좌별 미공제분이 한 점으로 정해지지 않는 좌표를 이번에 만들지 않았다.** 15.2절. 그런 좌표(연금저축이 단독한도에 못 미치는데 합산한도가 무는 경우)에서는 계좌별 금액이 **구간**이고, 블록 어휘에 구간을 실을 자리가 없다. 필요한 것은 `contribution_without_credit_krw` 옆의 두 끝이다. **`calc-engine-dev`에게 올린다.**
 - **세액 한도로 잘린 몫이 어느 계좌의 원금 성격을 바꾸는지는 조문에 답이 없다**(15.4절). 이 문서는 그 몫을 계좌별 금액에서 뺐고, 그것이 「없는 것으로 본다」가 아니라 **「그 축이 조문에 없다」**임을 함께 적었다. 화면이 이 몫을 설명해야 한다면 계좌를 말하지 않는 문장이어야 한다.
 - **`headroom_krw`·`headroom_shared_with`·`basis_rule_ids`는 여전히 블록이 주장하지 않는다.** 허용 키에 없다. `headroom_shared_with`는 「두 계좌의 값을 더하면 이중계상」이라는 보증이라 검사받는 편이 낫다.
+
+---
+
+## 16. 17차 — 확정 축의 최댓값을 못 박는다 (GC-63 · GC-64, 2026-08-11)
+
+**이 절의 작성자는 `calc-engine-dev`다.** 골든 케이스의 기대값은 `tax-domain`이 쓰는 것이 원칙이고(이 문서 머리말), 이번 두 건은 관리자가 D36 후속 작업으로 이 유닛에 지시했다. **그래서 기대값의 출처를 평소보다 더 좁게 잡았다** — 두 케이스의 새 주장은 전부 **조문 두 개의 곱**이고, 엔진을 돌려 얻은 수가 하나도 없다.
+
+```
+확정 축의 최댓값 = 합산 인정한도(소득세법 §59조의3 ① 단서, 9,000,000)
+                 × 공제율(같은 항, 0.15 또는 0.12)
+                 × (1 + 개인지방소득세 부가율)(지방세법 §103조의13, 0.1)
+```
+
+**소유자가 예로 든 148.5만원이 이 곱의 첫 줄이다.** `9,000,000 × 0.15 = 1,350,000`, `1,350,000 × 0.1 = 135,000`, 합계 `1,485,000`. 소유자는 이미 **개인지방소득세를 포함한 수**를 보고 있었고, 그것이 이 축의 단위가 소득세분이 아니라 합계라는 근거다.
+
+### 16.1 두 케이스가 무는 것
+
+**GC-63과 GC-64는 총급여만 1원 다르다.** `pension.credit.rate`의 우대 구간 상한이 총급여 55,000,000원이고 법문이 「이하」이므로, 55,000,000원은 15% 구간이고 55,000,001원은 12% 구간이다. **두 케이스의 축의 끝이 1,485,000과 1,188,000으로 갈린다** — 「축의 최댓값이 총급여에 따라 달라지는 계산값」이라는 D36의 진술이 이 한 쌍으로 고정된다.
+
+| | GC-63 | GC-64 |
+|---|---|---|
+| 총급여 | **55,000,000** (경계 정확히) | **55,000,001** (경계 +1원) |
+| 공제율 | 0.15 | 0.12 |
+| 축의 끝 `ceiling_krw` | **1,485,000** | **1,188,000** |
+| 소득세분 / 지방소득세분 | 1,350,000 / 135,000 | 1,080,000 / 108,000 |
+| 결정세액 | 5,000,000 (넉넉) | **500,000** (모자람) |
+| 세액 한도 | 5,000,000 | **500,000** |
+| 한도와 축의 관계 | `cap_at_or_above_ceiling` | **`cap_below_ceiling`** |
+| 그 안의 실제 공제액 | 1,485,000 (= 축의 끝) | **550,000** (잘림) |
+
+**GC-63이 무는 것 — 축이 도달 가능하다.** 예산을 합산 한도와 정확히 같게 두어 그 배분안의 공제액이 축의 끝과 **한 원도 다르지 않게** 나온다. 축의 끝을 소득세분(1,350,000)으로 잡은 구현에서는 막대가 110%가 되고, 이 케이스가 그 자리에서 실패한다.
+
+**GC-64가 무는 것 — 한도가 축을 내리지 않는다.** 세액 한도가 축의 소득세분보다 낮아 실제 공제액이 550,000으로 잘리는데, **축의 끝은 여전히 1,188,000이다.** 축을 `min(상한, 한도)`로 잡은 구현에서는 이 케이스의 `ceiling_krw`가 550,000이 되어 실패한다. 그리고 그 구현에서는 막대가 가득 차 **잘렸다는 사실이 그림에서 사라진다** — 이 케이스가 지키는 것이 그 그림이다.
+
+**두 케이스의 배분은 같다.** 예산 9,000,000원이 연금저축 6,000,000(단독 한도) + 퇴직연금 3,000,000(합산 한도의 나머지)으로 갈리고 ISA에는 가지 않는다. 연금저축을 먼저 채우는 것은 세제상 동점에서 인출이 자유로운 계좌를 앞세우는 계약 0.4절의 결정이다.
+
+### 16.2 이 두 건이 주장하지 않는 것
+
+- **연금 저율과세 세율표를 블록이 주장하지 않는다.** 그 표는 요청의 어떤 값에도 반응하지 않으므로(불변식 I40) 케이스로 가를 수 있는 축이 없다. 표가 낡았는지는 골든 케이스가 아니라 **원 규칙과의 세율 집합 대조**가 잡는다(`engine-design.md` 9.4절).
+- **세율차 축의 0 판정도 주장하지 않는다.** 경계가 원 단위 절사에 걸려 있어 좌표를 블록의 어휘로 적으려면 정산액 스물여덟 항목을 다 실어야 하고, 그 자리는 이미 GC-53~61이 쓰고 있다. 경계는 단위 시험이 문다.
+- **`fallback_applied: false`만 적었다.** 두 케이스 다 근로소득만 있는 사용자라 판정 축이 총급여다. **종합소득금액을 모르는 사용자의 축의 끝**(과소 방향)을 주장하는 좌표는 이 회차에 만들지 않았다 — `tax-domain`에 남긴다.
+
+```golden
+{
+  "case": "GC-63",
+  "request": {
+    "scenarios": ["current"],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 5000000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000000,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000000,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": { "ytd_contribution_krw": 0, "annuity_start_status": "not_started" },
+      "retirement_pension": { "ytd_contribution_krw": 0, "annuity_start_status": "not_started" },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 1,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "credit_rate": { "income_tax": 0.15, "basis": "total_salary" },
+  "expect": {
+    "current": {
+      "limits": {
+        "pension_combined_credit_limit_krw": 9000000
+      },
+      "pension_credit_ceiling": {
+        "ceiling_krw": 1485000,
+        "income_tax_krw": 1350000,
+        "local_tax_krw": 135000,
+        "credit_limit_krw": 9000000,
+        "rate_source_code": "credit_rate_bracket",
+        "tax_liability_cap_relation_code": "cap_at_or_above_ceiling",
+        "fallback_applied": false,
+        "is_axis_degenerate": false
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": { "annuity_savings": 6000000, "retirement_pension": 3000000, "isa": 0 },
+          "tax_credit": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "tax_credit_before_cap": { "income_tax": 1350000, "local_tax": 135000, "total": 1485000 },
+          "credit_eligible_krw": 9000000,
+          "tax_liability_cap": {
+            "known": true,
+            "cap_krw": 5000000,
+            "applied": false,
+            "threshold_income_tax_krw": 1350000
+          },
+          "warning_count": 0
+        }
+      }
+    }
+  }
+}
+```
+
+```golden
+{
+  "case": "GC-64",
+  "request": {
+    "scenarios": ["current"],
+    "profile": {
+      "birth_date": "1986-06-15",
+      "prior_year_tax": {
+        "state": "amount",
+        "determined_tax_krw": 500000,
+        "pension_credit_applied_krw": 0
+      },
+      "current_year_total_salary_krw": 55000001,
+      "has_non_wage_global_income_current_year": false,
+      "prior_year_total_salary_krw": 55000001,
+      "financial_income_taxpayer_last_3_years": false,
+      "declared_youth": null,
+      "fund_use_horizon": "at_or_after_pension_age",
+      "monthly_capacity_krw": 750000,
+      "months_remaining_in_tax_year": 12
+    },
+    "accounts": {
+      "annuity_savings": { "ytd_contribution_krw": 0, "annuity_start_status": "not_started" },
+      "retirement_pension": { "ytd_contribution_krw": 0, "annuity_start_status": "not_started" },
+      "isa": {
+        "exists": true,
+        "account_type": "general",
+        "cumulative_contribution_krw": 0,
+        "ytd_contribution_krw": 0,
+        "years_since_opening": 1,
+        "other_savings_contract_krw": 0
+      }
+    },
+    "isa_transfer": null
+  },
+  "credit_rate": { "income_tax": 0.12, "basis": "total_salary" },
+  "expect": {
+    "current": {
+      "pension_credit_ceiling": {
+        "ceiling_krw": 1188000,
+        "income_tax_krw": 1080000,
+        "local_tax_krw": 108000,
+        "credit_limit_krw": 9000000,
+        "rate_source_code": "credit_rate_bracket",
+        "tax_liability_cap_relation_code": "cap_below_ceiling",
+        "fallback_applied": false,
+        "is_axis_degenerate": false
+      },
+      "plans": {
+        "max_tax_credit": {
+          "allocation": { "annuity_savings": 6000000, "retirement_pension": 3000000, "isa": 0 },
+          "tax_credit": { "income_tax": 500000, "local_tax": 50000, "total": 550000 },
+          "tax_credit_before_cap": { "income_tax": 1080000, "local_tax": 108000, "total": 1188000 },
+          "credit_eligible_krw": 9000000,
+          "tax_liability_cap": {
+            "known": true,
+            "cap_krw": 500000,
+            "applied": true,
+            "threshold_income_tax_krw": 1080000
+          },
+          "warning_count": 0
+        }
+      }
+    }
+  }
+}
+```

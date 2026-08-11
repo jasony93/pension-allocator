@@ -11,6 +11,7 @@ import {
   ISA_ESTIMATE_DISPLAY,
   ISA_ESTIMATE_STATE,
   NOTICE,
+  RATE_GAP_ZERO_REASON,
   REASON_INPUT_MISSING,
   RULE,
   RULESET_STATUS,
@@ -21,6 +22,7 @@ import {
 import { boundariesFrom, boundariesSource, dedupeErrors } from './boundaries.mjs';
 import { buildPlans } from './plans.mjs';
 import { resolveIsaReturn } from './isa-return.mjs';
+import { resolvePensionWithdrawalTaxReference } from './pension-reference.mjs';
 import { buildLegalBasis, createAccess, selectRulesets } from './ruleset.mjs';
 import { effectiveRate } from './ratio.mjs';
 import {
@@ -28,6 +30,7 @@ import {
   resolveAgeReckoning,
   resolveEligibility,
   resolveLimits,
+  resolvePensionCreditCeiling,
   resolvePensionStartDates,
   resolvePensionWithoutCreditFacts,
   resolveRates,
@@ -196,12 +199,29 @@ function computeScenario(scenarioId, request, rulesets) {
     assumption: request.profile.isa_return_assumption,
   });
 
+  // 6.7. 연금계좌를 나중에 받을 때의 세율표(D36). **요청의 어떤 값에도 반응하지 않는다** —
+  //      새 입력 0개·가정 0개가 이 표가 성립하는 조건이다. 금액은 없다.
+  const pensionRateReference = resolvePensionWithdrawalTaxReference(access);
+
   const boundaries = boundariesFrom(access, {
     birthDate: request.profile.birth_date,
     taxYear: request.tax_year,
     isaExists: request.accounts.isa.exists,
     isaYearsSinceOpening: request.accounts.isa.years_since_opening,
   });
+
+  // 6.8. 확정 축의 최댓값. 한도와 율을 다 읽은 뒤라야 만들 수 있다.
+  const creditCeiling =
+    limitResult.limits === null || rates.incomeTaxRate === null || capResult.cap === null
+      ? null
+      : resolvePensionCreditCeiling(access, {
+          rates,
+          combinedLimit: limitResult.limits.pension_combined_credit_limit_krw,
+          extraCreditLimitKrw: transferResult.transfer
+            ? transferResult.transfer.extra_credit_limit_krw
+            : 0,
+          cap: capResult.cap,
+        });
 
   // 필요한 규칙이나 값을 하나라도 읽지 못했으면 중단한다. 대체값을 만들지 않는다.
   const missing = access.missing();
@@ -213,7 +233,9 @@ function computeScenario(scenarioId, request, rulesets) {
     startDateResult.entries === null ||
     ageReckoning === null ||
     withoutCreditFacts === null ||
-    isaReturn === null
+    isaReturn === null ||
+    pensionRateReference === null ||
+    creditCeiling === null
   ) {
     return { errors: dedupeErrors(missing.length > 0 ? missing : [ruleMissingFallback()]) };
   }
@@ -331,6 +353,11 @@ function computeScenario(scenarioId, request, rulesets) {
       account_eligibility: eligibilityResult.eligibility,
       limits: limitResult.limits,
       pension_credit_tax_liability_cap: capResult.cap,
+      // D36 — 확정 축의 눈금 끝. 배분안이 아니라 시나리오에 둔다: 축은 배분안을 바꿔도
+      // 움직이지 않아야 하고, 움직이면 같은 길이가 안마다 다른 금액을 뜻하게 된다.
+      pension_credit_ceiling: creditCeiling,
+      // D36 — 막대에 올릴 수 없는 것을 표로 낸다. 금액이 한 칸도 없다.
+      pension_withdrawal_tax_reference: pensionRateReference,
       pension_withdrawal_start: startDateResult.entries,
       isa_transfer_extra_limit: transferResult.transfer
         ? {
@@ -398,6 +425,20 @@ function isaReturnNotices(isaReturn, plans, options) {
         notice(NOTICE.ISA_RETURN_ESTIMATE_RANGE, 'info', 'profile.isa_return_assumption', {}, [
           RULE.ISA_BENEFIT_INCOME_CHARACTER,
         ]),
+      );
+    }
+    // 세율차 축이 0인 것이 「혜택 없음」이 아니라 「아직 비과세 한도 안이라 9%가 아니라
+    // 0%로 과세되고 있다」는 더 유리한 사실임을 말한다(D36). **배분안마다 원금이 달라
+    // 갈릴 수 있으므로** 시나리오 단위 안내는 「어느 안에서 그렇다」까지만 말하고,
+    // 행을 그리는 판정은 배분안 단위 `rate_gap_axis_zero_reason_code`가 낸다.
+    if (
+      estimates.some(
+        (estimate) =>
+          estimate.rate_gap_axis_zero_reason_code === RATE_GAP_ZERO_REASON.WITHIN_TAX_FREE_LIMIT,
+      )
+    ) {
+      out.push(
+        notice(NOTICE.ISA_RATE_GAP_AXIS_ZERO, 'info', null, {}, [RULE.ISA_TAX_FREE_LIMIT]),
       );
     }
   }

@@ -14,10 +14,12 @@
 // 부가율, 비과세 한도금액, 계약기간 하한, 소득 성격별 과세 비율 구간이 전부 룰셋에서 온다.
 
 import {
+  AXIS_BOUND,
   ISA_ESTIMATE,
   ISA_ESTIMATE_DISPLAY,
   ISA_ESTIMATE_NOT_COMPUTABLE,
   ISA_ESTIMATE_STATE,
+  RATE_GAP_ZERO_REASON,
   RULE,
 } from './constants.mjs';
 import { applyRate, clampToZero } from './ratio.mjs';
@@ -269,6 +271,10 @@ function shell(state, context, extra = {}) {
     lower_bound_krw: null,
     upper_bound_krw: null,
     axis_breakdown: null,
+    // 세 축 금액이 점인가 구간의 위 끝인가(D36). 금액이 없으면 이 판단도 없다.
+    axis_breakdown_bound_code: null,
+    // 세율차 축의 0이 「한도 안이라 0%로 과세된다」는 뜻인가(D36).
+    rate_gap_axis_zero_reason_code: null,
     comparison_baseline_code: ISA_ESTIMATE.COMPARISON_BASELINE,
     is_lower_bound_for_aggregate_taxpayer: true,
     // 정산 시점까지 계약을 유지하는 것을 전제한다. 중도해지로 감면세액이 추징되면
@@ -348,5 +354,14 @@ export function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw
     lower_bound_krw: lower.settlementKrw,
     upper_bound_krw: upper.settlementKrw,
     axis_breakdown: upper.axes,
+    // **세 축은 `upper_bound_krw`의 분해다.** 점이 없는 입력에서 그 값을 점처럼 적으면
+    // 실제보다 크게 말하는 것이 된다. 화면이 `point_estimate_krw === null`로 이 판단을
+    // 대신하게 두지 않고 값으로 낸다(D36, tax-rules-report 23.3절).
+    axis_breakdown_bound_code: context.share.point ? AXIS_BOUND.POINT : AXIS_BOUND.UPPER_BOUND,
+    // **`rate_gap_krw === 0`으로 판정하지 않는다.** 순소득이 한도를 근소하게 넘으면
+    // 초과분이 있는데도 원 미만 절사로 이 축이 0이 되는 좌표가 있고, 그 0은 여기
+    // 해당하지 않는다. 판정 축은 순소득과 비과세 한도의 비교 하나다(D36).
+    rate_gap_axis_zero_reason_code:
+      upper.netKrw <= taxFreeLimitKrw ? RATE_GAP_ZERO_REASON.WITHIN_TAX_FREE_LIMIT : null,
   });
 }

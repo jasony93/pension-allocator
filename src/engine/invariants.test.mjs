@@ -998,6 +998,25 @@ function checkScenario(scenario, response, request, at) {
     }
   }
 
+  // I39 — **어떤 배분안의 공제액도 확정 축의 최댓값을 넘지 않는다**(D36).
+  // 축은 「합산 인정한도 × 걸릴 수 있는 가장 높은 율」이고 인정액은 그 한도를 넘지 못하므로
+  // 산술로 성립한다. **깨지면 화면의 막대가 트랙 밖으로 나간다** — 축을 소득세분으로
+  // 만들거나 낮은 공제율로 만든 구현이 정확히 여기서 걸린다(engine-design.md 9.3절).
+  const ceiling = scenario.pension_credit_ceiling;
+  assert.equal(
+    ceiling.ceiling_krw,
+    ceiling.income_tax_krw + ceiling.local_tax_krw,
+    `${at} I39: 축의 끝이 소득세분과 지방소득세분의 합이 아니다`,
+  );
+  for (const plan of plans) {
+    assert.ok(
+      plan.deterministic_benefit.pension_credit_total_before_cap_krw <= ceiling.ceiling_krw,
+      `${at} I39: ${plan.plan_id}의 자르기 전 공제액(` +
+        `${plan.deterministic_benefit.pension_credit_total_before_cap_krw})이 ` +
+        `축의 끝(${ceiling.ceiling_krw})을 넘었다`,
+    );
+  }
+
   // I17 — 코드가 계약 목록 안에 있다
   for (const code of noticeCodes) assert.ok(KNOWN_NOTICES.has(code), `${at} I17: 알 수 없는 안내 코드 ${code}`);
   for (const code of notes) {

@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '8.0.0';
+export const SCHEMA_VERSION = '8.1.0';
 export const SUPPORTED_MAJOR = 8;
 
 export const ACCOUNT = {
@@ -194,6 +194,81 @@ export const ISA_ESTIMATE = {
   SETTLEMENT_SOURCE_RULESET: 'ruleset_min_contract_years',
 };
 
+/**
+ * 세 축 금액이 **점인가 구간의 위 끝인가**(D36, tax-rules-report 23.3절).
+ *
+ * `IsaAxisBreakdown`은 `upper_bound_krw`의 분해다. 소득 성격이 확정적이지 않으면
+ * 세 축 금액도 전부 위 끝이고, 그것을 점처럼 적으면 실제보다 크게 말하는 것이 된다.
+ * **화면이 `point_estimate_krw === null`로 이 판단을 스스로 하게 두면 세법 판단이
+ * 화면 코드로 샌다** — 그래서 값으로 낸다.
+ */
+export const AXIS_BOUND = { POINT: 'point', UPPER_BOUND: 'upper_bound' };
+
+/**
+ * 세율차 축이 0인 것이 **결핍이 아니라 더 유리한 사실**임을 말하는 코드(D36).
+ *
+ * 계약기간 순소득이 비과세 한도를 넘지 않으면 초과분이 없어 이 축이 정확히 0이다.
+ * 그 0의 뜻은 "저율 분리과세 혜택이 없다"가 아니라 **"9%가 아니라 0%로 과세되고 있다"**이다.
+ *
+ * **`rate_gap_krw === 0`으로 이 상태를 판정하면 안 된다.** 초과분이 있어도 그것이 아주
+ * 작으면 원 미만 절사로 0이 나오는 좌표가 실재하고(순소득이 한도를 근소하게 넘는 구간),
+ * 그 0은 여기 해당하지 않는다. 판정 축은 **순소득과 비과세 한도의 비교** 하나다.
+ */
+export const RATE_GAP_ZERO_REASON = { WITHIN_TAX_FREE_LIMIT: 'within_tax_free_limit' };
+
+/**
+ * 확정 축(세액공제)의 최댓값을 만든 공제율이 어디서 왔는가(D36).
+ * 개정안 시나리오의 청년 우대가 본문 구간보다 높으면 그쪽이 상한을 정한다 —
+ * 그 우대에는 계좌 단독 한도가 걸리지 않아 합산 한도 전액을 그 율로 채울 수 있다.
+ */
+export const CEILING_RATE_SOURCE = {
+  CREDIT_RATE_BRACKET: 'credit_rate_bracket',
+  PROPOSED_YOUTH_IRP_RATE: 'proposed_youth_irp_rate',
+};
+
+/**
+ * 산출세액 한도가 이 상한에 걸리는가.
+ *
+ * **걸려도 상한 자체는 내려가지 않는다**(engine-design.md 9.2절). 한도는 축의 눈금이
+ * 아니라 그 사람이 실제로 받는 금액을 자르는 것이고, 축을 한도로 줄이면 잘린 몫이
+ * 그림에서 사라진다. 대신 걸리는지를 코드로 낸다.
+ */
+export const CEILING_CAP_RELATION = {
+  UNKNOWN: 'cap_unknown',
+  AT_OR_ABOVE: 'cap_at_or_above_ceiling',
+  BELOW: 'cap_below_ceiling',
+};
+
+/** 확정 축이 재는 기간. ISA 가정 축의 「계약기간」과 뭉개지 않기 위한 자리다(D36). */
+export const CEILING_PERIOD = 'current_tax_year';
+
+/** 이 상한이 무엇인지. 화면이 캡션에 그 뜻을 적을 때 쓰는 안정적 이름이다(D36). */
+export const CEILING_MEANING = 'full_pension_combined_credit_limit_at_this_persons_rate';
+
+/**
+ * 연금계좌 저율과세 — **금액이 아니라 세율만** 낸다(D36).
+ *
+ * `0`으로 적으면 "계산했더니 0이었다"가 되고 그것은 사실이 아니다. 계산 자체를 하지
+ * 않았고 할 수도 없다(`pension.rate_gap.quantifiability`). 그 사실을 코드로 낸다.
+ */
+export const PENSION_RATE_GAP_COMPUTABILITY = 'not_computable_by_design';
+
+/** 인출 갈래. 세율표의 행을 묶는 축이고 세법 수치가 아니라 이름이다. */
+export const WITHDRAWAL_BRANCH = {
+  ANNUITY_WITHIN_THRESHOLD: 'annuity_within_threshold',
+  ANNUITY_OVER_THRESHOLD: 'annuity_over_threshold',
+  NON_ANNUITY: 'non_annuity',
+  ANY: 'any',
+};
+
+/** 계좌 밖 세율에서 계좌 안 세율을 뺀 값의 **부호**. 산술로 정해지고 해석이 없다. */
+export const RATE_GAP_SIGN = {
+  POSITIVE: 'positive',
+  NEGATIVE: 'negative',
+  CROSSES_ZERO: 'crosses_zero',
+  NOT_DETERMINED: 'not_determined',
+};
+
 /** 개시 가능 시점을 계산하지 못한 이유. */
 export const START_DATE_REASON = {
   OPENED_ON_MISSING: 'opened_on_missing',
@@ -267,6 +342,16 @@ export const RULE = {
   ISA_BENEFIT_INCOME_CHARACTER: 'isa.benefit.income_character',
   ISA_BENEFIT_QUANTIFICATION: 'isa.benefit.quantification',
   PENSION_TAX_DEFERRAL_WITH_RETURN: 'pension.tax_deferral.with_return_rate',
+
+  // 17차 조사(D36). **금액이 아니라 세율만** 내는 규칙군. 연금계좌 저율과세를 막대에
+  // 올릴 수 없다는 판정과, 그 대신 낼 수 있는 것(조문 그대로의 세율표)이 여기 있다.
+  PENSION_RATE_GAP_QUANTIFIABILITY: 'pension.rate_gap.quantifiability',
+  // 위 표가 옮겨 적은 원 규칙들. **값을 옮겨 쓰는 것이 아니라 대조한다** —
+  // 전사가 낡으면 조용히 어긋나므로, 세율 집합이 같은지 확인하고 그 사실로 근거를 삼는다.
+  PENSION_INCOME_RATE_BY_AGE: 'pension.income.withholding_rate.by_age',
+  PENSION_INCOME_RATE_LIFETIME: 'pension.income.withholding_rate.lifetime_annuity',
+  PENSION_SEPARATE_TAXATION_THRESHOLD: 'pension.income.separate_taxation.threshold',
+  PENSION_SEPARATE_TAXATION_ELECTIVE: 'pension.income.separate_taxation.elective_rate',
 
   // 6차 조사(tax-rules-report.md 13절)로 들어온 확정 규칙 6건.
   CREDIT_TAX_CAP: 'pension.credit.tax_liability_cap',
@@ -429,6 +514,13 @@ export const NOTICE = {
   ISA_RETURN_ESTIMATE_NOT_COMPUTABLE: 'isa_return_estimate_not_computable',
   ISA_RETURN_ESTIMATE_SUPPRESSED: 'isa_return_estimate_display_suppressed',
   PENSION_TAX_DEFERRAL_NOT_QUANTIFIED: 'pension_tax_deferral_not_quantified',
+
+  // ── D36 ──
+  // 세율차 축의 0이 「혜택 없음」이 아니라는 사실. `tax-domain`이 이름까지 지정했다
+  // (tax-rules-report 23.2절). 배분안 단위 판정은 같은 회차에 붙은
+  // `assumption_based_isa_estimate.rate_gap_axis_zero_reason_code`가 낸다 —
+  // 이 안내는 그것의 시나리오 단위 메아리다.
+  ISA_RATE_GAP_AXIS_ZERO: 'isa_rate_gap_axis_zero_because_within_tax_free_limit',
 };
 
 export const COMPARISON_NOTE = {

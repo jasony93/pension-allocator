@@ -8,6 +8,10 @@ import {
   ANNUITY_START,
   CAP_ERROR_DIRECTION,
   CAP_SOURCE,
+  CEILING_CAP_RELATION,
+  CEILING_MEANING,
+  CEILING_PERIOD,
+  CEILING_RATE_SOURCE,
   CREDIT_RATE_BASIS,
   CREDIT_RATE_FALLBACK_DIRECTION,
   ERROR,
@@ -319,6 +323,87 @@ export function resolveTaxLiabilityCap(access, { priorYearTax }) {
       credit_carryforward: creditCarryforward,
       basis_rule_ids: basisRuleIds,
     },
+  };
+}
+
+/**
+ * 확정 축(세액공제)의 **최댓값** — 이 사람이 올해 받을 수 있는 세액공제의 상한.
+ *
+ * D36이 막대의 축을 둘로 가르면서 확정 축에 자기 눈금이 필요해졌다. 그 눈금의 끝이
+ * 이 값이고, **합산 인정한도를 전액 채웠을 때의 세액공제액**이다.
+ *
+ * **소득세분만 내지 않는다.** 막대에 실리는 금액은 `pension_credit_total_krw`
+ * (소득세분 + 개인지방소득세분)이므로, 축의 끝도 같은 자로 재야 한다. 소득세분만으로
+ * 축을 만들면 한도를 채운 사람의 막대가 트랙 밖으로 나간다(부가율만큼 길어진다).
+ *
+ * **공제율은 이 사람에게 걸릴 수 있는 것 중 가장 높은 것이다.** 확정 시나리오에서는
+ * 계좌에 따라 율이 갈리지 않아 `credit_rate_bracket`의 율 하나뿐이다. 개정안 시나리오의
+ * 청년 우대는 퇴직연금 납입분에만 걸리는데 **그 계좌에는 단독 한도가 없어**(합산 한도
+ * 규칙의 `asymmetry_is_statutory`) 합산 한도 전액을 그 율로 채울 수 있다. 낮은 쪽으로
+ * 축을 만들면 실제 공제액이 축을 넘는다.
+ *
+ * **산출세액 한도(`pension.credit.tax_liability_cap`)를 이 값에 반영하지 않는다.**
+ * 근거는 engine-design.md 9.2절이고, 걸리는지 여부는 `tax_liability_cap_relation_code`로
+ * 따로 낸다.
+ */
+export function resolvePensionCreditCeiling(access, { rates, combinedLimit, extraCreditLimitKrw, cap }) {
+  const appliedTo = 'pension_credit_ceiling.ceiling_krw';
+  // 한도와 율은 이미 읽은 규칙에서 나오지만, **이 값이 무엇에 매여 있는지**가 근거로
+  // 함께 나가야 한다. 읽은 자리를 다시 등록해 legal_basis의 applied_to에 이 축을 남긴다.
+  access.markUsed(RULE.CREDIT_LIMIT_COMBINED, appliedTo);
+  access.markUsed(RULE.CREDIT_RATE, appliedTo);
+  access.markUsed(RULE.LOCAL_SURTAX, appliedTo);
+
+  const useYouthRate = rates.youthIrpRate !== null && rates.youthIrpRate > rates.incomeTaxRate;
+  const incomeTaxRate = useYouthRate ? rates.youthIrpRate : rates.incomeTaxRate;
+  const basisRuleIds = [RULE.CREDIT_LIMIT_COMBINED, RULE.CREDIT_RATE, RULE.LOCAL_SURTAX];
+  if (useYouthRate) {
+    access.markUsed(RULE.PROPOSED_YOUTH_IRP_RATE, appliedTo);
+    basisRuleIds.push(RULE.PROPOSED_YOUTH_IRP_RATE);
+  }
+
+  // 배분안이 쓰는 것과 **같은 두 단계**다. 다른 산술을 쓰면 한도를 채운 사람에게서
+  // 축과 막대가 1원 어긋난다.
+  const incomeTaxKrw = applyRate(combinedLimit, incomeTaxRate);
+  const localTaxKrw = incomeTaxKrw === null ? null : applyRate(incomeTaxKrw, rates.surtaxRate);
+  if (incomeTaxKrw === null || localTaxKrw === null) return null;
+
+  let capRelation = CEILING_CAP_RELATION.UNKNOWN;
+  if (cap.known) {
+    // **소득세분끼리 비교한다.** 한도는 산출세액에서 나온 소득세의 값이고 상한의 합계는
+    // 지방소득세를 포함하므로, 둘을 그대로 비교하면 단위가 다른 두 수를 재는 것이 된다.
+    capRelation =
+      cap.cap_krw < incomeTaxKrw ? CEILING_CAP_RELATION.BELOW : CEILING_CAP_RELATION.AT_OR_ABOVE;
+  }
+
+  return {
+    ceiling_krw: incomeTaxKrw + localTaxKrw,
+    income_tax_krw: incomeTaxKrw,
+    local_tax_krw: localTaxKrw,
+    credit_limit_krw: combinedLimit,
+    isa_transfer_extra_limit_krw: extraCreditLimitKrw,
+    income_tax_rate: incomeTaxRate,
+    local_tax_rate: rates.surtaxRate,
+    effective_rate: effectiveRate(incomeTaxRate, rates.surtaxRate),
+    rate_source_code: useYouthRate
+      ? CEILING_RATE_SOURCE.PROPOSED_YOUTH_IRP_RATE
+      : CEILING_RATE_SOURCE.CREDIT_RATE_BRACKET,
+    // 공제율 구간의 불확실성을 그대로 물려받는다. 구간을 모른 채 본문 구간을 쓴
+    // 사람에게 이 상한이 단일 수로 나가면 안 된다 — 실제 상한은 이보다 높을 수 있다.
+    basis_code: rates.basis.code,
+    measured_amount_krw: rates.basis.amount,
+    fallback_applied: rates.basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT,
+    fallback_direction_code:
+      rates.basis.code === CREDIT_RATE_BASIS.STATUTORY_DEFAULT
+        ? CREDIT_RATE_FALLBACK_DIRECTION
+        : null,
+    tax_liability_cap_relation_code: capRelation,
+    // 축의 끝이 0이면 눈금이 성립하지 않는다(모든 막대가 0/0이 된다).
+    // 화면이 나눗셈 앞에서 이 값을 먼저 보게 한다.
+    is_axis_degenerate: incomeTaxKrw + localTaxKrw === 0,
+    period_code: CEILING_PERIOD,
+    meaning_code: CEILING_MEANING,
+    basis_rule_ids: [...new Set(basisRuleIds)].sort(),
   };
 }
 

@@ -11,6 +11,14 @@ inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json
 open_questions:
+  - "**계약을 8.1.0(minor)으로 올렸다 — D36의 화면이 그려지려면 필요했던 값 둘을 넣었다**(0.14절). `ScenarioResult.pension_credit_ceiling`(확정 축의 최댓값)과 `ScenarioResult.pension_withdrawal_tax_reference`(연금 저율과세 세율표, **금액 칸 없음**), 그리고 `AssumptionBasedIsaEstimate`의 두 칸과 안내 코드 하나다. **추가만 있고 금액은 한 원도 안 움직인다.** `src/web`의 목은 major가 같아 멈추지 않지만 **형태 대조 시험 두 건이 실패한다** — `src/web/engine/mock-engine.js`가 시나리오에 새 필드 둘, 정산액에 새 칸 둘을 내야 한다. 이 유닛은 `src/web/`을 열지 않았고 동기화는 `web-dev`의 몫이다."
+  - "**확정 축의 최댓값 정의를 `designer`의 제안에서 두 곳 고쳤고, 그것이 이 회차의 판정이다**(0.14절·`engine-design.md` 9.1절). (1) 소득세분이 아니라 **소득세분 + 지방소득세분**이다 — 소득세분으로 축을 만들면 한도를 채운 사람의 막대가 110%가 된다. 소유자가 예로 든 148.5만원이 합계 쪽 값이고 그것이 실증이다. (2) 공제율은 **그 사람에게 걸릴 수 있는 가장 높은 율**이다 — 개정안의 청년 우대가 붙으면 본문 구간으로 만든 축을 실제 공제액이 125%까지 넘는다. **`design-system.md` 5.31.3절의 정의식과 5.14.8절의 캡션 문구가 이 정정을 반영해야 한다.**"
+  - "**산출세액 한도를 축의 최댓값에 반영하지 않기로 판정했다**(`engine-design.md` 9.2절). 근거 넷 — 한도가 0이면 축이 무너지고, 잘린 몫이 그림에서 사라지며, 한도를 아는 사람과 모르는 사람의 축이 다른 것을 뜻하게 되고, 같은 사실이 이미 다른 자리에서 값으로 나가고 있다. **이것은 「이론적 상한」의 뜻을 이 유닛이 정한 것이므로 관리자 확인이 필요하다.** 반대 선택(`min(상한, 한도)`)을 택하면 GC-64와 단위 시험 둘이 그 자리에서 실패하도록 고정해 두었다."
+  - "**확정 축 캡션의 「(총급여 기준 계산값)」은 세 사용자 중 둘에게 거짓이다**(`design-system.md` 5.31.3절). 공제율 판정 축은 총급여·종합소득금액·본문 구간 셋이고 계약이 `basis_code`로 그것을 낸다. 캡션이 축을 하나로 못 박으면 종합소득이 있는 사용자와 금액을 모르는 사용자에게 틀린 말이 나간다. **`designer` 확인이 필요하다.**"
+  - "**연금 저율과세 세율표를 계약이 일곱 행으로 낸다 — 화면이 그리는 것은 넷이다**(5.16절). 룰셋이 사실로 적은 「기준금액 초과 갈래」 둘(부호 미정)과 「혼합 성격」 하나(0을 가로지름)를 계약이 빼면 화면이 그 사실을 낼 방법 자체가 없어져서 다 낸다. **무엇을 그릴지는 `designer`·관리자 판정이다.**"
+  - "**계좌 밖 이자·배당 세율(14%)이 룰셋 안에 두 번 전사되어 있다** — `pension.rate_gap.quantifiability.rate_table`과 `isa.benefit.quantification.statable_amounts`. 엔진이 둘을 대조하려 했으나 **ISA 쪽만 비트는 기존 회귀 시험이 정당하게 존재해** 대조를 걸면 그 좌표에서 계산 전체가 멈춘다. 그래서 대조하지 않는다 — **이중 전사를 맞추는 것은 `tax-domain`의 몫이다**(`engine-design.md` 9.4절). 계좌 안 세율은 원 규칙 넷과 집합으로 대조하고 어긋나면 멈춘다."
+  - "**`tax-rules-report.md` 23.2절이 적은 세율차 축의 경계(「`N − C ≥ 11`원이라야 1원이 된다」)가 엔진의 축 산술과 맞지 않는다.** 그 계산은 `0.099`를 한 번 곱한 것인데, 축은 **두 세액을 따로 절사해 뺀 값**이라 실제로는 `N − C = 8`원에서 이미 1원이 되고 **12~14원 구간에서 다시 0으로 돌아간다**(단조가 아니다). 계약과 화면이 쓰는 판정은 `rate_gap_krw`가 아니라 순소득과 한도의 비교이므로 **이 어긋남이 화면을 틀리게 하지는 않는다.** 다만 정답지 문서의 그 문장은 사실과 다르고, 축 분해를 두 절사로 둘지 한 절사로 둘지는 `tax-domain` 판정이다 — 바꾸면 GC-53~61의 축 값이 움직인다."
+  - "**골든 케이스 두 건(GC-63·GC-64)을 이 유닛이 썼다.** 골든 케이스의 저자는 `tax-domain`이 원칙이고, 관리자가 D36 후속으로 지시해 예외로 썼다. 기대값은 전부 조문 두 개의 곱이고 엔진을 돌려 얻은 수가 하나도 없다(`golden-cases.md` 16절). **`tax-domain`의 검토가 필요하다.**"
   - "**계약을 8.0.0(major)으로 올렸다 — 값이 아니라 서술이 틀렸다**(0.12·0.13절). `7.0.0`이 월 환산 이탈 범위를 `±(개월수 − 1)`로 적었으나 실제는 **−(개월수 − 1) 이상 (갈래 수 − 1) × (개월수 − 1) 이하**이고, 한 갈래가 조정을 둘·셋 받는 좌표가 **엔진에서 실제로 도달 가능하다**(회귀 좌표 둘을 0.12절 표에 적고 `src/engine/monthly.test.mjs` 3부로 고정했다). **응답은 한 원도 바뀌지 않는다.** major로 올린 근거는 규약의 「응답 쪽 보장을 거두는 것」과 0.1절의 선례이며, **오늘 이 값을 읽는 화면 코드는 없어서 실제로 고칠 것은 목의 버전 문자열과 대조 시험 한 줄이다.** 그 비용을 알고도 규약을 따른 이유를 0.13절에 적었고, **관리자가 patch(7.0.1)로 되돌리기로 판단하면 0.12절의 서술 정정만 남기면 된다.**"
   - "**정답지가 `NonQuantifiedEffect.facts`를 주장할 어휘를 열었다**(5.6절은 그대로다). `tax-domain`이 두 회차 연속 올린 지적이고, D32가 그 효과를 기본안으로 옮겨 무게가 커졌다. **계약은 한 글자도 바뀌지 않았다** — 넓힌 것은 정답지의 블록 어휘(`src/engine/golden-block.mjs`)와 그 형식 명세(`golden-cases.md` 1-A절)이며, **값을 채우는 것은 `tax-domain`의 몫이다.** 응답 쪽 결함 주입으로 「사실 하나가 사라지거나 뒤집히면 대조가 문다」를 확인했고, 넓히기 전 어휘로는 통과한다는 것도 같은 파일에 시험으로 남겼다."
   - "**계약을 7.0.0(major)으로 올렸다**(0.12절). 소유자가 신고한 「월 배분 총액 1원 부족」을 고치면서 `Allocation.monthly_krw`가 더 이상 `floor(연 ÷ 개월수)`가 아니게 됐다. **연간 금액·한도·세액공제액은 한 원도 움직이지 않았다.** `src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다 — 이 유닛은 `src/web/`을 열지 않았고 마이그레이션은 `web-dev`·관리자의 몫이다. 목이 맞춰야 할 것: 월 금액 산식, 새 필드 다섯, 그리고 **도넛 가운데 값을 네 조각의 합으로 계산할 것**."
@@ -57,10 +65,11 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `8.0.0`.**
+**현재 계약 버전: `8.1.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
+| `8.1.0` | **D36 — 축을 둘로 가른 화면이 그려지려면 계약에 없던 값 둘이 필요했다.** `ScenarioResult`에 `pension_credit_ceiling`(확정 축의 최댓값)과 `pension_withdrawal_tax_reference`(연금 저율과세 세율표, **금액 없음**)가 붙는다. `AssumptionBasedIsaEstimate`에 `axis_breakdown_bound_code`·`rate_gap_axis_zero_reason_code`가 붙고, 안내 코드 `isa_rate_gap_axis_zero_because_within_tax_free_limit`이 늘었다. **기존 필드는 하나도 바뀌지 않고 금액도 한 원도 움직이지 않는다.** **왜 minor인지는 0.14절** |
 | `8.0.0` | **`7.0.0`이 적은 월 환산 이탈 범위가 산술로 틀렸다.** `monthly_annualized_krw − annual_krw`의 범위를 `±(개월수 − 1)`로 적었으나 실제는 **−(개월수 − 1) 이상 (갈래 수 − 1) × (개월수 − 1) 이하**다 — 한 갈래가 조정을 둘·셋 받는 좌표가 실재한다. **응답은 한 원도 바뀌지 않는다. 필드도 요청 형태도 그대로다.** 그런데도 major인 이유는 **계약이 준 범위 보장을 거두기 때문**이고, 규약과 0.1절이 그것을 major로 정한다. **왜 major인지는 0.13절** |
 | `7.0.0` | **소유자 신고 — 월 배분 총액이 1원 모자란다.** 계좌별 월 금액이 더 이상 `floor(연 ÷ 개월수)`가 아니다. 내림으로 버려지던 잔차를 **납입 한도 여유가 남은 갈래에 얹어** 월 표시 금액의 합이 월 납입 여력과 정확히 같아진다. `Allocation`에 `monthly_annualized_krw`·`monthly_rounding_adjustment_krw`가, `Plan`에 `monthly_unassigned_krw`·`monthly_unassigned_reason_code`·`unallocated_monthly_rounding_adjustment_krw`가 붙는다. **연간 금액·한도·세액공제액은 한 원도 움직이지 않는다.** **왜 major인지는 0.12절** |
 | `6.0.0` | **D32 — 소유자가 기본안의 배분을 바꿨다.** 기본안의 충당 순서에 「연금계좌를 **납입** 한도까지」 단계가 붙어 **네 안이 전부 납입 한도까지 채운다.** `plan_id` 열거형에서 `pension_contribution_limit_fill`이 빠지고 `pension_contribution_before_isa`가 그 자리에 들어온다. `limited_by`의 `credit_limit`이 **사라진다.** `pension_contribution_without_credit` 효과가 기본안에서도 나온다. **왜 major인지는 0.11절** |
@@ -310,6 +319,37 @@ open_questions:
 - **문장을 지우고 범위를 아예 말하지 않기.** 기각한다. 화면은 이 차이를 어떻게 다룰지 정해야 하고, 계약이 침묵하면 각 소비자가 스스로 상한을 추측한다. **틀린 상한보다 나은 것은 맞는 상한이지 없는 상한이 아니다.**
 
 **깨지는 소비자를 정직하게 적는다.** 오늘 이 값을 읽는 화면 코드는 없다(`monthly_annualized_krw`를 읽는 곳이 `src/web`에 없다). 그래서 이번 major가 실제로 고치는 코드는 **버전 문자열과 목의 대조 시험 한 줄**이다. 그 비용을 알고도 규약을 따르는 이유는 위 2번이다 — 이 저장소가 같은 자리에서 patch를 한 번 기각한 적이 있고, 같은 형태를 두 번 다르게 다루면 규약이 규약이 아니게 된다.
+
+### 0.14 왜 `8.1.0`(minor)인가 — 그리고 확정 축의 최댓값을 무엇으로 정했나 (D36)
+
+**minor인 근거.** 이번 개정은 **추가만 있다.**
+
+- 새 필수 입력이 없다. 요청 형태가 한 칸도 바뀌지 않는다.
+- 기존 필드의 뜻이 바뀌지 않는다. `0.6절 (3)`이 major의 근거로 든 「이름과 자료형은 그대로인데 값이 다른 축에서 나온다」가 이번에는 없다.
+- **금액이 한 원도 움직이지 않는다.** 새 값은 전부 새 자리에 실린다.
+- 계약이 준 보장을 거두지 않는다(`8.0.0`·`0.1절`이 major로 판정한 형태가 이번에는 없다).
+
+`5.1.0`이 같은 형태였다 — 응답 필드와 안내 코드가 늘었고 기존 소비자가 깨지지 않았다. **`8.0.0`에 맞춰 만든 목은 새 필드를 무시하면 그대로 동작한다.**
+
+**다만 화면 쪽에는 「조용히 틀릴 길」이 하나 열려 있고, 그것이 이 절의 나머지다.**
+
+#### 확정 축의 최댓값은 소득세분이 아니라 **합계**다
+
+`designer`가 정의를 `credit_rate_bracket.income_tax_rate × pension_combined_credit_limit_krw`로 적었다(design-system 5.31.3절). **그 식은 소득세분만 낸다.** 그런데 막대에 실리는 금액은 `DeterministicBenefit.pension_credit_total_krw`이고 그것은 **소득세분 + 개인지방소득세분**이다.
+
+**두 값을 그대로 쓰면 한도를 채운 사람의 막대가 트랙 밖으로 나간다.** 15% 구간·합산한도 900만원에서 축의 끝이 `9,000,000 × 0.15 = 1,350,000`이고 막대가 `1,485,000`이므로 길이가 **110%**가 된다. 소유자가 예로 든 148.5만원이 바로 그 `1,485,000`이고, 그것은 **개인지방소득세를 포함한 값**이다(`tax.local.personal_income_surtax`의 부가율 10%가 `0.15`를 `0.165`로 만든다).
+
+그래서 이 계약은 **축의 끝으로 쓸 값을 `ceiling_krw`(합계)로 정하고**, 소득세분·지방소득세분을 따로도 낸다. **화면은 `ceiling_krw`를 쓴다.** 다른 칸을 축에 쓰면 위 계산이 그대로 어긋난다.
+
+#### 산출세액 한도는 이 상한을 내리지 않는다
+
+`pension.credit.tax_liability_cap`이 이 사람의 **실제 수령액**을 자를 수 있다. 그런데도 축의 끝은 한도를 반영하지 않은 값이다. 근거 넷은 `engine-design.md` 9.2절에 있고, 계약이 지는 것은 그 결과다 — **한도가 걸리는지는 `tax_liability_cap_relation_code`로 따로 나간다.**
+
+`cap_below_ceiling`이면 화면은 축의 끝을 그대로 적되 **「낼 세금이 적어 실제 공제는 이보다 적을 수 있다」**는 사실을 함께 적어야 한다. 그 사실은 이미 같은 안의 `tax_liability_cap.applied`·`reduced_total_krw`가 금액으로 말하고 있으므로 새로 계산할 것은 없다.
+
+#### 「연금 저율과세」에는 금액 칸을 두지 않았다
+
+`pension.rate_gap.quantifiability`가 금액으로도 구간으로도 낼 수 없다고 확정했고 D36이 승인했다. 그래서 5.16절에는 **`*_krw`로 끝나는 필드가 하나뿐이고 그것은 조문의 기준금액(1,500만원)이지 혜택이 아니다.** `0`을 실을 자리를 아예 만들지 않은 것이 이 설계의 요점이다 — 칸이 있으면 언젠가 0이 들어간다.
 
 ### 0.10 수익률을 들이면서 지킨 선 셋 (D28·D31)
 
@@ -717,6 +757,8 @@ accounts.isa               : IsaAccountState
 | `account_eligibility` | AccountEligibility[] | 항상 | 세 계좌 각각 |
 | `limits` | LimitBreakdown | 항상 | 5.3절 |
 | `pension_credit_tax_liability_cap` | TaxLiabilityCap | 항상 | 5.10절. 세액 한도와 그것을 어떻게 알았는지 |
+| `pension_credit_ceiling` | PensionCreditCeiling | 항상 | 5.15절. **확정 축의 최댓값**(D36). 이 사람이 올해 받을 수 있는 세액공제의 상한 |
+| `pension_withdrawal_tax_reference` | PensionWithdrawalTaxReference | 항상 | 5.16절. 연금계좌를 나중에 받을 때의 **세율표**(D36). **금액은 한 칸도 없다** |
 | `pension_withdrawal_start` | PensionWithdrawalStart[] | 항상 | 5.11절. 두 연금계좌 각각의 개시 가능 시점 |
 | `isa_transfer_extra_limit` | IsaTransferExtraLimit \| null | 항상 | 요청에 `isa_transfer`가 없으면 `null` |
 | `fund_use_horizon_boundaries` | FundUseHorizonBoundaries | 항상 | 5.9절. 화면이 선택지 라벨과 경고 문구에 넣을 실제 연수. **룰셋에서 읽은 값이다** |
@@ -1073,6 +1115,8 @@ accounts.isa               : IsaAccountState
 | `lower_bound_krw` | integer \| null | 원(기간 합계) | 구간의 아래 끝(`taxable_share_min`에 대응) |
 | `upper_bound_krw` | integer \| null | 원(기간 합계) | 구간의 위 끝(`taxable_share_max`에 대응). `comparison_side_tax_krw − isa_side_tax_krw`와 같다 |
 | `axis_breakdown` | IsaAxisBreakdown \| null | — | 세 축과 절사 잔차. 아래 |
+| `axis_breakdown_bound_code` | `"point"` \| `"upper_bound"` \| null | — | **세 축 금액이 점인가 구간의 위 끝인가**(D36). `state`가 `"computed"`가 아니면 `null`. 아래 |
+| `rate_gap_axis_zero_reason_code` | `"within_tax_free_limit"` \| null | — | **세율차 축이 0인 것이 「혜택 없음」이 아니라는 사실**(D36). 아래 |
 | `comparison_baseline_code` | `"withholding_at_general_rate"` | — | 비교 기준. 원천징수로 종결되는 경우다 |
 | `is_lower_bound_for_aggregate_taxpayer` | `true` | — | **상수.** 금융소득종합과세 대상자에게는 실제 혜택이 이보다 **크다** — 오차 방향이 과소다 |
 | `assumes_contract_held_to_settlement` | `true` | — | **상수.** 정산 시점까지 계약을 유지하는 것을 전제한다. 아래 |
@@ -1100,6 +1144,128 @@ accounts.isa               : IsaAccountState
 **세 축을 나눠 내는 이유.** 합계만 보이면 **손익통산이 혜택의 일부라는 사실이 사라진다.** 세 축은 각각 다른 조문에서 나오므로 화면이 값 옆에 근거를 짝지을 수 있다. 실수 산술에서는 셋의 합이 혜택과 항등적으로 같고, 정수에서는 절사가 축마다 걸려 몇 원이 어긋날 수 있어 그 몫을 넷째 칸으로 낸다 — `monthly_rounding_residual_krw`와 같은 규율이다.
 
 **`assumes_contract_held_to_settlement`가 뜻하는 것과 엔진이 하지 않는 것.** 의무가입기간 전에 해지하면 감면세액이 추징되어 이 값이 0이 된다(`isa.early_termination.clawback`). **엔진은 그 경우를 계산하지 않는다** — 해지는 사실이 아니라 미래의 선택이고 요청에 그 입력이 없다. `profile.fund_use_horizon`이 `within_isa_lock_in`인 것은 "쓸 **가능성**이 있다"는 진술이지 "해지한다"가 아니므로, 그것으로 금액을 0으로 덮으면 **침묵에서 답을 만드는 것**이고 D14가 세운 원칙에 정면으로 어긋난다. 화면은 이 상수와 같은 안의 `warnings`(`early_termination_clawback_isa`)를 **함께** 읽어야 한다.
+
+#### `axis_breakdown_bound_code` — 세 축이 점인가 위 끝인가 (D36)
+
+`IsaAxisBreakdown`은 **`upper_bound_krw`의 분해**다(위 "넷의 합" 문장). 소득 성격이 확정적이지 않아 `point_estimate_krw`가 `null`인 요청에서는 세 축 금액도 전부 구간의 위 끝이고, **그것을 점처럼 적으면 실제보다 크게 말하는 것**이다.
+
+**화면이 `point_estimate_krw === null`을 보고 이 판단을 스스로 하게 두지 않는다.** 그러면 「축 금액이 무엇인가」라는 세법 판단이 화면 코드로 새고, 계약이 분해의 정의를 바꾸면 화면이 조용히 낡는다. `tax-domain`이 이 칸을 이름까지 지정해 요청했다(`tax-rules-report.md` 23.3절).
+
+| 값 | 뜻 | 화면이 할 일 |
+|---|---|---|
+| `point` | 세 축이 점 추정의 분해다 | 금액을 그대로 적는다 |
+| `upper_bound` | 세 축이 구간 위 끝의 분해다 | 금액 앞에 `최대`를 붙인다(design-system 5.6절) |
+| `null` | `state`가 `computed`가 아니다 | 금액 자체가 없다 |
+
+#### `rate_gap_axis_zero_reason_code` — 0이 결핍이 아닌 경우 (D36)
+
+세율차 축은 `max(0, N − C)`에 걸리므로 **계약기간 전체의 순소득 `N`이 비과세 한도 `C`를 넘지 않으면 정확히 0**이다. 그 0의 뜻은 「저율 분리과세 혜택이 없다」가 아니라 **「아직 한도 안이라 9%가 아니라 0%로 과세되고 있다」**는, 오히려 **더 유리한** 사실이다. 대다수 사용자가 여기에 있다.
+
+값이 `"within_tax_free_limit"`이 되는 자리는 하나다 — `state`가 `"computed"`이고 `net_income_krw`가 `tax_free_limit_krw` **이하**일 때. 그 밖의 모든 경우는 `null`이다.
+
+**⚠ 화면이 `rate_gap_krw === 0`으로 이 상태를 판정하면 안 된다.** 순소득이 한도를 **근소하게 넘는** 구간에서는 초과분이 있는데도 원 미만 절사로 이 축이 0이 된다 — `tax-domain`이 경계를 계산했다(`N − C`가 11원 이상이라야 이 축이 1원이 되므로, `N = C + 1`인 사람의 축도 0이다. `tax-rules-report.md` 23.2절). **그 0은 `within_tax_free_limit`이 아니다.** 판정 축은 순소득과 한도의 비교 하나이고, 그 판정을 엔진이 한다.
+
+시나리오 단위 안내 `isa_rate_gap_axis_zero_because_within_tax_free_limit`(8.2절)은 **이 필드의 메아리**다. 배분안마다 원금이 달라 값이 갈릴 수 있으므로 **행을 그리는 판정은 언제나 이 필드로 한다.**
+
+### 5.15 `PensionCreditCeiling` — 확정 축의 최댓값 (D36)
+
+**막대의 축이 둘로 갈렸고**(design-system 5.31.3절) 확정 축에 자기 눈금이 필요해졌다. 이 객체가 그 눈금의 끝이다.
+
+**정의: 연금계좌 합산 인정한도를 전액 채웠을 때의 세액공제액.** ISA 만기 전환 추가한도가 있으면 그것까지 포함한 한도로 계산한다. **`DeterministicBenefit.pension_credit_total_before_cap_krw`로 대체할 수 없다** — 그것은 이 배분안이 실제로 넣은 금액 기준이고, 이것은 한도 기준이다.
+
+| 필드 | 자료형 | 단위 | 필수 | 설명 |
+|---|---|---|---|---|
+| `ceiling_krw` | integer | 원/연 | 항상 | **축의 끝으로 쓸 값.** 소득세분 + 개인지방소득세분. `pension_credit_total_krw`와 **같은 자**다 |
+| `income_tax_krw` | integer | 원/연 | 항상 | 위 값의 소득세분 |
+| `local_tax_krw` | integer | 원/연 | 항상 | 위 값의 개인지방소득세분 |
+| `credit_limit_krw` | integer | 원/연 | 항상 | 계산에 쓴 합산 인정한도. `limits.pension_combined_credit_limit_krw`와 같다 |
+| `isa_transfer_extra_limit_krw` | integer | 원/연 | 항상 | 위 한도에 들어간 ISA 전환 추가한도. 전환이 없으면 `0` |
+| `income_tax_rate` | number | 비율(0~1) | 항상 | 상한을 만든 소득세 공제율 |
+| `local_tax_rate` | number | 비율(0~1) | 항상 | 개인지방소득세 부가율 |
+| `effective_rate` | number | 비율(0~1) | 항상 | 위 둘을 합친 실효율 |
+| `rate_source_code` | `"credit_rate_bracket"` \| `"proposed_youth_irp_rate"` | — | 항상 | 그 율이 어디서 왔는가. 아래 |
+| `basis_code` | `"total_salary"` \| `"global_income"` \| `"statutory_default"` | — | 항상 | `echo.credit_rate_bracket.basis_code`와 같은 값 |
+| `measured_amount_krw` | integer \| null | 원/연 | 항상 | 판정에 실제로 쓴 금액. `statutory_default`면 `null` |
+| `fallback_applied` | boolean | — | 항상 | `echo.credit_rate_bracket.fallback_applied`와 같은 값 |
+| `fallback_direction_code` | `"understated_or_equal"` \| null | — | 항상 | 같은 규약. 아래 |
+| `tax_liability_cap_relation_code` | `"cap_unknown"` \| `"cap_at_or_above_ceiling"` \| `"cap_below_ceiling"` | — | 항상 | 산출세액 한도가 이 상한에 걸리는가. 아래 |
+| `is_axis_degenerate` | boolean | — | 항상 | `ceiling_krw === 0`인가. `true`면 **축이 성립하지 않는다** |
+| `period_code` | `"current_tax_year"` | — | 항상 | **상수.** 이 값이 재는 기간 |
+| `meaning_code` | `"full_pension_combined_credit_limit_at_this_persons_rate"` | — | 항상 | **상수.** 이 값이 무엇인지의 안정적 이름 |
+| `basis_rule_ids` | string[] | — | 항상 | |
+
+**`ceiling_krw`가 축의 끝이다. 다른 칸을 쓰지 않는다.** `income_tax_krw`로 축을 만들면 한도를 채운 사람의 막대가 트랙 밖으로 나간다(0.14절의 계산).
+
+**`rate_source_code`.** 확정 시나리오에서는 계좌에 따라 공제율이 갈리지 않으므로 언제나 `credit_rate_bracket`이다. 개정안 시나리오에서 청년 우대(`proposed.pension.credit.youth_irp_rate`)가 본문 구간보다 **높으면** 그쪽이 상한을 정한다 — 그 우대는 퇴직연금 납입분에만 걸리는데 **그 계좌에는 단독 한도가 없어**(합산한도 규칙의 `asymmetry_is_statutory`) 합산 한도 전액을 그 율로 채울 수 있기 때문이다. 낮은 율로 축을 만들면 실제 공제액이 축을 넘는다.
+
+**`fallback_applied`가 `true`일 때.** 구간을 몰라 본문 구간을 적용한 사람에게는 이 상한도 **과소이거나 같다.** 화면은 `echo.credit_rate_bracket`에 쓰는 것과 **같은 표기**를 이 캡션에도 붙인다(「적어도」). 세액 한도 쪽의 「최대 이만큼」과 방향이 반대이므로 두 표기를 같은 문장 틀로 쓰면 한쪽이 거짓이 된다(4.2절).
+
+**막대 길이는 공제율 구간에 거의 영향을 받지 않는다.** 분자(`pension_credit_total_krw`)와 분모(`ceiling_krw`)가 같은 율로 함께 움직이기 때문이다 — 실수 산술에서는 정확히 상쇄되고 정수에서는 절사만큼만 어긋난다. **구간의 불확실성이 흔드는 것은 캡션의 금액이지 막대의 길이가 아니다.** 화면이 이 사실을 뒤집어 말하지 않게 여기 적는다.
+
+**`tax_liability_cap_relation_code`.** 비교는 **소득세분끼리** 한다(`pension_credit_tax_liability_cap.cap_krw` 대 `income_tax_krw`) — 한도는 산출세액에서 나온 소득세의 값이고 `ceiling_krw`는 지방소득세를 포함하므로, 그대로 비교하면 단위가 다른 두 수를 재는 것이 된다.
+
+| 값 | 뜻 | 화면 |
+|---|---|---|
+| `cap_unknown` | 한도를 모른다 | 축은 그대로. 한도를 모른다는 사실은 `tax_liability_cap`이 이미 말한다 |
+| `cap_at_or_above_ceiling` | 한도가 이 상한 이상이다 | 축의 끝까지 실제로 받을 수 있다 |
+| `cap_below_ceiling` | 한도가 이 상한보다 낮다 | 축은 그대로 두되 **「낼 세금이 적어 실제 공제는 이보다 적을 수 있다」**를 함께 적는다 |
+
+**한도를 축에 반영하지 않는 이유는 `engine-design.md` 9.2절에 있다.** 요약하면 (a) 한도가 0이면 축이 무너지고, (b) 잘린 몫이 그림에서 사라지며, (c) 한도를 아는 사람과 모르는 사람의 축이 다른 것을 뜻하게 된다.
+
+**`is_axis_degenerate`가 `true`면 화면은 막대를 그리지 않는다.** 나눗셈의 분모가 0이다. 확정 룰셋에서는 일어나지 않으나 계약이 그 보장을 하지 않는다 — 한도가 0인 룰셋이 오면 이 값이 참이 된다.
+
+### 5.16 `PensionWithdrawalTaxReference` — 연금계좌를 나중에 받을 때의 세율 (D36)
+
+**금액이 없다. 세율만 있다.** `pension.rate_gap.quantifiability`가 「금액으로도 구간으로도 낼 수 없다」고 확정했고 D36이 승인했다 — 부호가 소득 성격 × 인출 방식에 따라 뒤집히므로 **0을 가로지르는 구간은 「아낀 금액」 막대의 재료가 아니다.** 그래서 이 객체에는 혜택 금액을 실을 칸 자체가 없다.
+
+**이 객체는 요청의 어떤 값에도 반응하지 않는다.** 새 입력 0개·가정 0개가 이 표가 성립하는 조건이고, 입력에 반응하는 순간 그 조건이 깨진다. 같은 룰셋에서는 모든 요청에 같은 값이 나간다.
+
+| 필드 | 자료형 | 단위 | 필수 | 설명 |
+|---|---|---|---|---|
+| `computability_code` | `"not_computable_by_design"` | — | 항상 | **상수.** `0`이 아니다 — 「계산했더니 0」과 「계산 자체를 못 한다」는 다른 사실이다 |
+| `unresolved_codes` | string[] | — | 항상 | 최소 입력을 다 받아도 남는 미지수의 id. 룰셋에서 읽어 정렬한다 |
+| `minimum_input_count` | integer | 개 | 항상 | 점 하나를 내는 데 더 필요한 입력의 수. 룰셋의 항목을 센 값이다 |
+| `unresolved_count` | integer | 개 | 항상 | `unresolved_codes`의 길이 |
+| `separate_taxation_threshold_krw` | integer | 원/연 | 항상 | 분리과세 기준금액. **혜택이 아니라 조문의 기준금액이다** |
+| `rate_table` | PensionRateRow[] | — | 항상 | 아래. 조문 그대로의 세율표 |
+| `rate_gap_cases` | PensionRateGapCase[] | — | 항상 | 아래. 계좌 밖 − 계좌 안의 **폭과 부호** |
+| `principal_retaxed_on_withdrawal` | `true` | — | 항상 | **상수.** 세액공제를 받은 납입액이 나중에 연금으로 받을 때 다시 과세되는가 |
+| `basis_rule_ids` | string[] | — | 항상 | |
+
+**`principal_retaxed_on_withdrawal`이 고정 문장의 근거다.** 화면이 표보다 먼저 적어야 하는 문장 — 「세액공제를 받은 납입액은 나중에 연금으로 받을 때 다시 과세됩니다」 — 이 이 값 위에 선다. **이 문장에는 금액이 없으므로 인출 단계를 여는 것이 아니다**(D3 경계를 넘지 않는다). 근거 조문은 `basis_rule_ids`의 `pension.rate_gap.quantifiability`가 `the_half_ledger_problem`에서 지목한다.
+
+**`PensionRateRow`**
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `situation_code` | string | — | 룰셋이 쓰는 상황 이름. 예: `pension_annuity_under_70` |
+| `description` | string \| null | — | 룰셋이 그 상황에 붙인 설명. **화면이 이 문구를 지어내지 않게 하는 자리다** |
+| `side_code` | `"outside_account"` \| `"inside_account"` | — | 계좌 밖 세율인가 계좌 안 세율인가 |
+| `withdrawal_branch_code` | 인출 갈래 \| null | — | 계좌 안이면 `annuity_within_threshold` / `annuity_over_threshold` / `non_annuity`. 계좌 밖이면 `null` |
+| `income_tax_rate` | number \| null | 비율(0~1) | 소득세율. **조문이 닫지 않는 상황은 `null`이다**(기준금액 초과 구간) |
+| `effective_rate` | number \| null | 비율(0~1) | 위에 개인지방소득세 부가율을 얹은 실효율. **룰셋의 참고용 칸을 읽지 않고 부가율 규칙으로 산출한다** |
+| `law` | string | — | 그 세율의 조문. **화면이 조항 번호를 지어내지 않게 하는 자리다** |
+| `note` | string \| null | — | 룰셋이 붙인 단서(있으면) |
+
+**`PensionRateGapCase` — 폭과 부호. 여기에도 금액은 없다.**
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `income_character_code` | `"interest_dividend"` \| `"listed_equity_capital_gain"` \| `"mixed_or_unknown"` | — | 수익의 성격. `isa_return_assumption.income_character`와 같은 어휘다 |
+| `withdrawal_branch_code` | 인출 갈래 | — | `annuity_within_threshold` / `annuity_over_threshold` / `non_annuity` / `any` |
+| `outside_situation_codes` | string[] | — | 이 폭을 만든 계좌 밖 행 |
+| `inside_situation_codes` | string[] | — | 이 폭을 만든 계좌 안 행 |
+| `undetermined_situation_codes` | string[] | — | 그중 **세율이 조문으로 닫히지 않아 폭에서 빠진** 행. 비어 있지 않으면 폭이 전부가 아니다 |
+| `gap_min_rate` | number \| null | 비율(%p를 소수로) | `계좌 밖 실효율 − 계좌 안 실효율`의 아래 끝. 예: `0.099`는 `+9.9%p` |
+| `gap_max_rate` | number \| null | 비율(%p를 소수로) | 위 끝 |
+| `sign_code` | `"positive"` \| `"negative"` \| `"crosses_zero"` \| `"not_determined"` | — | 폭에서 **산술로** 정해진다. 아래 |
+| `basis_rule_ids` | string[] | — | |
+
+**`sign_code`는 해석이 아니라 산술이다.** `gap_min > 0`이면 `positive`, `gap_max < 0`이면 `negative`, 둘을 걸치면 `crosses_zero`, 폭이 `null`이면 `not_determined`다. **엔진이 유불리를 판단하지 않는다** — 세율표의 뺄셈이 그렇게 나올 뿐이다.
+
+**행이 일곱이고 화면이 그리는 것은 그중 넷이다.** design-system 5.31.3절의 표는 소득 성격 둘 × 인출 방식 둘을 그린다. 계약은 거기에 **기준금액 초과 갈래 둘**(`not_determined`)과 **`mixed_or_unknown`**(`crosses_zero`)을 더해 낸다 — 룰셋이 그 셋도 사실로 적고 있고, 계약이 그것을 빼면 화면이 그 사실을 낼 방법 자체가 없어지기 때문이다. **무엇을 그릴지는 화면이 정한다.**
+
+**`mixed_or_unknown` 행은 세율이 닫히는 모든 조합의 합집합이다.** 계좌 밖도 계좌 안도 하나로 좁혀지지 않으므로 폭이 양쪽 끝을 다 본다. 그 결과가 0을 가로지른다는 것이 D36의 판정이고, 이 계약에서는 그것이 룰셋 문장의 옮겨 적기가 아니라 **표의 뺄셈에서 그대로 나온다.**
 
 ### 5.8 `UnappliedRule`
 
@@ -1319,6 +1485,7 @@ accounts.isa               : IsaAccountState
 | `isa_return_estimate_reported_as_range` | info | 소득 성격이 확정적이지 않아 점이 아니라 **구간**으로 냈다. `point_estimate_krw`가 `null`인 배분안이 하나 이상 있다는 뜻이다 |
 | `isa_return_estimate_not_computable` | warning | 수익률 가정은 받았으나 계산에 필요한 값을 얻지 못함. `params.reason_code`가 `"isa_tax_free_limit_unknown"`(ISA 유형 미선언) 또는 `"amount_not_representable"`(정수 연산으로 낼 수 없는 입력) |
 | `isa_return_estimate_display_suppressed` | info | `options.assumption_based_isa_estimate`가 `"suppress"`여서 계산은 돌았으나 금액을 싣지 않음(0.11절). **이 상태가 조용하면 안 된다**(D19) |
+| `isa_rate_gap_axis_zero_because_within_tax_free_limit` | info | 배분안 하나 이상에서 `assumption_based_isa_estimate.rate_gap_axis_zero_reason_code`가 `"within_tax_free_limit"`이다. **세율차 축의 0이 「혜택 없음」이 아니라 「아직 비과세 한도 안이라 9%가 아니라 0%로 과세되고 있다」는 더 유리한 사실**임을 말한다(D36). **행을 그리는 판정은 이 안내가 아니라 배분안 단위 필드로 한다** — 안마다 원금이 달라 값이 갈릴 수 있다(5.14절) |
 | `pension_tax_deferral_not_quantified` | info | 수익률 가정이 실려 ISA 칸에 금액이 나갈 때 함께 나간다. 연금계좌 쪽 과세이연 효과는 **꺼내는 시점에 정해지므로 지금 계산할 수 없고 부호까지 가정에 달려 있다.** ISA 칸에만 금액이 보이는 것을 "ISA가 더 낫다"로 읽으면 안 된다 |
 
 ### 8.3 가정 코드

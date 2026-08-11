@@ -66,6 +66,11 @@ export const SCENARIO_KEYS = [
   'isa_reason_codes',
   'limits',
   'boundaries',
+  /**
+   * D36 — **확정 축의 최댓값.** 배분안이 아니라 시나리오 단위다: 축은 배분안을 바꿔도
+   * 움직이지 않아야 하고, 움직이면 같은 길이가 안마다 다른 금액을 뜻하게 된다.
+   */
+  'pension_credit_ceiling',
   // 6차에 계약 4.0.0이 낸 축. 배분 비율이 아니라 **시점**이라 시나리오 단위에 둔다.
   'pension_withdrawal_start',
   'notice_codes',
@@ -246,6 +251,20 @@ export const LIMIT_KEYS = [
   'isa_contribution_remaining_krw',
   'isa_tax_free_limit_krw',
   'isa_transfer_extra_credit_limit_krw',
+];
+/**
+ * 확정 축의 최댓값(D36). **정답지가 「축의 끝이 소득세분이 아니라 합계」임을 스스로
+ * 주장할 수 있어야 한다** — 셋을 다 적을 수 있으므로 정답지가 그 관계를 진다.
+ */
+export const CEILING_KEYS = [
+  'ceiling_krw',
+  'income_tax_krw',
+  'local_tax_krw',
+  'credit_limit_krw',
+  'rate_source_code',
+  'tax_liability_cap_relation_code',
+  'fallback_applied',
+  'is_axis_degenerate',
 ];
 export const BOUNDARY_KEYS = [
   'isa_lock_in_years',
@@ -896,6 +915,21 @@ function validateScenario(expectation, where, errors) {
     unknownKeys(expectation.limits, LIMIT_KEYS, `${where}.limits`, errors);
   }
   if (
+    'pension_credit_ceiling' in expectation &&
+    requireNonEmptyObject(
+      expectation.pension_credit_ceiling,
+      `${where}.pension_credit_ceiling`,
+      errors,
+    )
+  ) {
+    unknownKeys(
+      expectation.pension_credit_ceiling,
+      CEILING_KEYS,
+      `${where}.pension_credit_ceiling`,
+      errors,
+    );
+  }
+  if (
     'boundaries' in expectation &&
     requireNonEmptyObject(expectation.boundaries, `${where}.boundaries`, errors)
   ) {
@@ -1011,6 +1045,7 @@ export const VOCABULARY = [
   ...SCENARIO_KEYS.filter((k) => k !== 'plans').map((k) => `scenario.${k}`),
   ...LIMIT_KEYS.map((k) => `limits.${k}`),
   ...BOUNDARY_KEYS.map((k) => `boundaries.${k}`),
+  ...CEILING_KEYS.map((k) => `pension_credit_ceiling.${k}`),
   ...PENSION_START_KEYS.map((k) => `pension_withdrawal_start.${k}`),
   ...LEGAL_BASIS_KEYS.map((k) => `legal_basis.${k}`),
   ...UNAPPLIED_KEYS.map((k) => `unapplied_proposed_rules.${k}`),
@@ -1034,6 +1069,9 @@ export function vocabularyUsedBy(parsed) {
     }
     for (const key of Object.keys(expectation.limits ?? {})) used.add(`limits.${key}`);
     for (const key of Object.keys(expectation.boundaries ?? {})) used.add(`boundaries.${key}`);
+    for (const key of Object.keys(expectation.pension_credit_ceiling ?? {})) {
+      used.add(`pension_credit_ceiling.${key}`);
+    }
     for (const entry of Object.values(expectation.pension_withdrawal_start ?? {})) {
       for (const key of Object.keys(entry ?? {})) used.add(`pension_withdrawal_start.${key}`);
     }
@@ -1458,6 +1496,9 @@ function checkScenario(scenario, expected, label) {
   }
   for (const [key, value] of Object.entries(expected.boundaries ?? {})) {
     assert.equal(scenario.fund_use_horizon_boundaries[key], value, `${label} 경계값(${key})`);
+  }
+  for (const [key, value] of Object.entries(expected.pension_credit_ceiling ?? {})) {
+    assert.equal(scenario.pension_credit_ceiling[key], value, `${label} 확정 축 최댓값(${key})`);
   }
   if (expected.pension_withdrawal_start) {
     checkPensionStart(scenario, expected.pension_withdrawal_start, label);

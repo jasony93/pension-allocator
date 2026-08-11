@@ -81,6 +81,17 @@ const CAP_APPLIED = (() => {
     ),
     expect: {
       current: {
+        // D36 — 확정 축의 최댓값. **한도가 이 상한을 무는 좌표**라 관계 코드까지 함께 진다.
+        pension_credit_ceiling: {
+          ceiling_krw: uncapped + surtaxOf(uncapped),
+          income_tax_krw: uncapped,
+          local_tax_krw: surtaxOf(uncapped),
+          credit_limit_krw: COMBINED_LIMIT,
+          rate_source_code: 'credit_rate_bracket',
+          tax_liability_cap_relation_code: 'cap_below_ceiling',
+          fallback_applied: false,
+          is_axis_degenerate: false,
+        },
         plans: {
           max_tax_credit: {
             // 동점 구간이므로 인출이 자유로운 연금저축이 자기 한도까지 먼저 찬다.
@@ -517,6 +528,8 @@ const setPath = (block, path, value) => {
 };
 
 const P = (planId, ...rest) => ['expect', 'current', 'plans', planId, ...rest];
+/** 확정 축의 최댓값(D36). 시나리오 단위이므로 배분안을 지나지 않는다. */
+const CEIL = (key) => ['expect', 'current', 'pension_credit_ceiling', key];
 const S = (account, key) => ['expect', 'current', 'pension_withdrawal_start', account, key];
 const L = (ruleId, key) => ['expect', 'current', 'legal_basis', ruleId, key];
 const CR = (key) => ['credit_rate', key];
@@ -541,6 +554,19 @@ const INJECTIONS = [
   { via: 'compare', block: CAP_APPLIED, name: 'tax_credit_before_cap.local_tax', path: P('max_tax_credit', 'tax_credit_before_cap'), value: { income_tax: UNCAPPED, local_tax: surtaxOf(UNCAPPED) + 1, total: UNCAPPED + surtaxOf(UNCAPPED) + 1 }, mentions: ['GC-90', 'max_tax_credit', '자르기 전'] },
   // 합계만 1원 틀리면 대조까지 가기 전에 형식이 문다(소득세 + 지방세 = 합계).
   { via: 'format', block: CAP_APPLIED, name: 'tax_credit_before_cap.total 단독', path: P('max_tax_credit', 'tax_credit_before_cap', 'total'), value: UNCAPPED + surtaxOf(UNCAPPED) + 1, token: '옮겨 적으면서 어긋났다' },
+
+  // ── 확정 축의 최댓값 여덟 항목 (D36) ──
+  // **이 층이 없으면 GC-63·GC-64가 적은 축의 끝이 조용히 건너뛰어진다.** 결함 주입으로
+  // 확인한 자리다 — 대조 루프를 지우면 골든 케이스가 그대로 통과했다.
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.ceiling_krw', path: CEIL('ceiling_krw'), value: 1, mentions: ['GC-90', 'current', '확정 축', 'ceiling_krw'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.income_tax_krw', path: CEIL('income_tax_krw'), value: 1, mentions: ['GC-90', '확정 축', 'income_tax_krw'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.local_tax_krw', path: CEIL('local_tax_krw'), value: 1, mentions: ['GC-90', '확정 축', 'local_tax_krw'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.credit_limit_krw', path: CEIL('credit_limit_krw'), value: 1, mentions: ['GC-90', '확정 축', 'credit_limit_krw'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.rate_source_code', path: CEIL('rate_source_code'), value: 'proposed_youth_irp_rate', mentions: ['GC-90', '확정 축', 'rate_source_code'] },
+  // **한도가 무는 좌표에서 관계 코드를 뒤집는다.** 축을 한도로 자르는 구현이면 여기가 갈린다.
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.tax_liability_cap_relation_code', path: CEIL('tax_liability_cap_relation_code'), value: 'cap_at_or_above_ceiling', mentions: ['GC-90', '확정 축', 'tax_liability_cap_relation_code'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.fallback_applied', path: CEIL('fallback_applied'), value: true, mentions: ['GC-90', '확정 축', 'fallback_applied'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'pension_credit_ceiling.is_axis_degenerate', path: CEIL('is_axis_degenerate'), value: true, mentions: ['GC-90', '확정 축', 'is_axis_degenerate'] },
 
   // ── 배분안 단위 세액 한도 네 항목 ──
   { via: 'compare', block: START_UNKNOWN, name: 'tax_liability_cap.known', path: P('max_tax_credit', 'tax_liability_cap', 'known'), value: false, mentions: ['GC-93', 'max_tax_credit', 'known'] },
