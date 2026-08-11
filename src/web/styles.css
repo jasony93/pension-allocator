@@ -527,6 +527,22 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .amount-card-direction p { margin: 0; }
 .amount-card-direction .btn-text { height: auto; padding: 0; }
 
+/* D38 — AmountCard 구간 변형의 슬롯5(구성 두 줄, design-system 5.6절). **가정
+   성분이 합계에 들어 있을 때만, 접지 않는다** — 슬롯2'(합계)을 적으려면 이
+   블록이 반드시 같은 화면에 있어야 한다. 헤드라인(`type-display`)보다 한 단
+   아래(18px/600) — 구성은 합계를 "푸는" 설명이지 합계와 동격이 아니다
+   (design-system 5.31.4절 위계 표). */
+.amount-card-composition {
+  margin-top: var(--space-2); padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: var(--space-1);
+}
+.amount-card-composition-line { margin: 0; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 슬롯4(상한 변형 방향 고지)가 구성 줄① 바로 아래로 들어올 때(design-system
+   5.6절 "슬롯4와 이 변형이 겹치는 경우") — 위 border-top과 겹치지 않게
+   자체 여백만 남긴다. */
+.amount-card-composition .amount-card-direction { margin-top: 0; padding-top: 0; border-top: none; }
+
 .warning-note { display: flex; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-m); margin-top: var(--space-2); font-size: 14px; }
 .warning-note-warning { background: var(--state-warning-subtle); border-left: 3px solid var(--state-warning); }
 .warning-note-info { background: var(--state-info-subtle); border-left: 3px solid var(--state-info); }
@@ -539,6 +555,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .proposed-badge { display: inline-block; margin-left: var(--space-2); padding: 2px 6px; border-radius: var(--radius-s); background: var(--state-info-subtle); color: var(--state-info); font-size: 12.5px; font-weight: 600; }
 
 .chart-area { display: flex; flex-direction: column; gap: var(--space-4); }
+/* D38 소유자 3번(screens.md 5.14.9절) — 도넛이 "무엇의" 배분인지 말하는
+   제목·배분안 이름. 도넛 바로 위, 차트 영역과 같은 좌측 정렬. */
+.donut-section-header { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-2); }
+.donut-plan-name { color: var(--text-secondary); }
 /* 도넛 + `[4-C']` 위젯을 한 컬럼으로 묶는다 — 위젯이 도넛 카드의 자식이지
    넷째 층이 아니라는 것을 구조로도 지킨다(screens.md 5.14절). */
 .donut-with-strip { display: flex; flex-direction: column; }
@@ -574,6 +594,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   display: flex; flex-direction: column; gap: var(--space-1);
 }
 .benefit-strip-ref-caption { margin: 0 0 var(--space-1); font-size: 12.5px; color: var(--text-secondary); }
+/* D38 재개정(design-system 5.31.4절) — 위계 복원. 실측으로 찾은 진짜 결손은
+   제목 크기(17→16px, 거의 안 보임)가 아니라 행 이름·행 금액이 C-2 짝보다
+   얇고 작았다는 데 있었다. 제목은 17px/600으로 되돌리고(D33 이전), 행
+   이름·행 금액을 C-2와 같은 굵기(16px/600)로 올린다. */
+.account-benefit-strip h4 { font-size: 17px; font-weight: 600; }
 
 /* D36 — 확정 축과 가정 축을 물리적으로 가른다. 두 축의 길이는 비교
    대상이 아니라는 사실을 배치가 먼저 말해야 한다는 것이 관리자 D36의
@@ -611,9 +636,15 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    벌어졌다). `flex: 1`을 주면 이 상자가 행에 남는 폭 전부(점 칸 제외)를
    차지하고, 그 안에서 막대가 그만큼 길어진다. */
 .benefit-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.benefit-row-names { color: var(--text-primary); }
+/* D38 재개정 — C-2 계좌명(`.allocation-bar-labels .type-body-strong`)과 같은
+   굵기. 실측으로 찾은 결손이 여기였다(design-system 5.31.4절 "실측으로 찾은
+   진짜 결손") — 크기가 아니라 이 굵기가 빠져 있었다. */
+.benefit-row-names { color: var(--text-primary); font-weight: 600; }
 .benefit-row-note { font-size: 12.5px; color: var(--text-secondary); }
-.benefit-row-amount { font-size: 14px; }
+/* D38 재개정 — C-2 금액(`.type-num`, 16px/600)과 짝. 사용자가 이 위젯에서
+   가장 먼저 읽는 숫자가 C-2보다 얇고 작았던 것이 D33 이후 계속된 신고의
+   진짜 원인이었다. */
+.benefit-row-amount { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .benefit-row-subnote { font-size: 12.5px; color: var(--text-secondary); }
 
 /* `BenefitMeter`(design-system 5.31절) — `AllocationBar`의 트랙-채움 대비
@@ -654,11 +685,23 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .benefit-meter-axis-caption { font-size: 12.5px; color: var(--text-secondary); }
 /* 확정(solid) — 계좌색 솔리드 채움. */
 .benefit-meter-fill-solid { border: none; }
-/* 가정(assumption) — 채움 없이 값의 위치까지 계좌색 **윤곽선만**(D28). 속은
-   표면색이라 트랙 배경 위에서 "잉크가 비어 있다"는 사실이 그대로 보인다.
-   실선이다 — 점선은 `data-excluded`(배제)가 이미 쓰고 있어 겹치면 안 된다. */
+/* 가정(assumption) — 값의 위치까지 계좌색 윤곽선 + 대각선 해칭(D28·D38 5번).
+   **속을 채우지 않는다** — 채우면 확정(solid) 등급과 같아져 "확정된 세금
+   감면과 가정 위의 추정치를 같은 확실성으로 보이지 않게 한다"는 구분이
+   형태로 사라진다(D28·D35). 해칭은 잉크 자체를 옅게 만들지 않는다 — 줄무늬
+   한 올 한 올이 계좌색 100% 그대로이고, 다만 그 잉크가 트랙 면적의 절반만
+   덮는다(design-system 5.31.4절 5번, 대비 실측 라이트 4.79 / 다크 4.24 —
+   기존 `outline` 등급의 테두리색이 이미 통과한 값을 그대로 물려받는다).
+   기존 1.5px 실선 윤곽은 지우지 않고 함께 남긴다 — 해칭이 새 채널이라면
+   윤곽은 이미 있던 채널이고, 이 시스템이 반복해 온 "누적 방어"와 같은
+   원칙이다. 실선이다 — 점선은 `data-excluded`(배제)가 이미 쓰고 있어 겹치면
+   안 된다. **45°, 잉크 2px + 간격 2px(주기 4px, 커버리지 50%) 고정** — 값에
+   따라 질감이 달라지면 채움 폭과 이중으로 값을 나르게 된다(같은 절 "왜
+   채움 비율이 아니라 항상 50%인가"). */
 .benefit-meter-fill-outline {
-  box-sizing: border-box; background: var(--surface-raised); border: 1.5px solid; margin: -1px 0;
+  box-sizing: border-box; border: 1.5px solid; margin: -1px 0;
+  background-color: transparent;
+  background-image: repeating-linear-gradient(45deg, currentColor 0px, currentColor 2px, transparent 2px, transparent 4px);
 }
 /* `가정 기반` 칩 — ProvisionalStatusNote·note-tag-product와 같은 state-info 색 규약.
    **`align-self: flex-start`가 필수다.** 이 칩의 부모(`.benefit-row-body`)가

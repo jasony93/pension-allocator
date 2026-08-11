@@ -37,7 +37,8 @@ import {
   FILL_ORDER_TAG_PRODUCT,
   fillOrderFactMessage,
   fillOrderDecisionMessage,
-  AMOUNT_CARD_LABEL,
+  AMOUNT_CARD_LABEL_CREDIT_ONLY,
+  AMOUNT_CARD_LABEL_COMPOSITE,
   AMOUNT_CARD_LABEL_ZERO,
   BOUNDED_AMOUNT_PREFIX,
   BOUNDED_BACK_LINK,
@@ -47,17 +48,23 @@ import {
   AMOUNT_CARD_CAPTION_BOUNDED_CLAUSE,
   AMOUNT_CARD_CAPTION_REDUCED_CLAUSE,
   AMOUNT_CARD_CAPTION_ZERO_CLAUSE,
+  headlineValueText,
+  headlineComponentDeterminedLine,
+  headlineComponentAssumptionLine,
   STACKBAR_CAP_APPLIED_NOTE,
   STACKBAR_BOUNDED_NOTE,
   ACCOUNT_BENEFIT_STRIP_TITLE,
   ACCOUNT_BENEFIT_STRIP_REF_CAPTION,
-  benefitMeterAxisCaption,
   ACCOUNT_BENEFIT_POOLED_NOTE,
   ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE,
   ACCOUNT_BENEFIT_REDUCED_NOTE,
   ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE,
-  confirmedAxisCaption,
+  confirmedAxisAmountSentence,
+  confirmedAxisBasisSentence,
   assumptionAxisCaption,
+  ASSUMPTION_AXIS_CEILING_EXPLAINER,
+  isaTaxFreeCeilingSentence,
+  ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX,
   boundedAxisAmountText,
   ACCOUNT_BENEFIT_ISA_NARRATIVE,
   ACCOUNT_BENEFIT_EXCLUDED_LABEL,
@@ -80,11 +87,13 @@ import {
   ISA_RETURN_SUPPRESSED_NOTE,
   isaReturnEstimateAmountText,
   isaReturnAssumptionCaption,
+  donutSectionTitle,
+  donutPlanNameCaption,
   PDF_EXPORT_LABEL,
   PDF_EXPORT_NOTE,
   PDF_EXPORT_BLOCKED_NOTE,
 } from '../copy.js';
-import { formatKrw, formatKrwAbbreviated, formatPercent, formatPlanRowAmount } from '../format.js';
+import { formatKrw, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
 import { taxCreditHeadlineView, isBoundedHeadline, anyPlanCapApplied, HEADLINE_MODE } from '../tax-credit-view.js';
 import {
@@ -310,40 +319,56 @@ function blockedPanel(fatalError, store) {
 
 /**
  * `AmountCard` — 금액 표시의 유일한 통로(design-system 5.6절). 슬롯 셋이 필수이고
- * 상한 변형에서는 넷이 된다.
+ * 상한 변형에서는 넷, 구간 변형(D38)에서는 다섯이 된다.
  *
- * **`screens.md` 4.8절의 세 상태가 여기서 갈린다.** 어느 상태인지는
- * `tax-credit-view.js`가 엔진 응답에서 **고르기만** 하고, 이 함수는 그 결과를
- * 그린다 — 화면이 뺄셈을 시작하면 그 순간 세법 판단이 화면 코드로 들어온다.
+ * **D38 — 헤드라인은 `plan.headline_composite_total`을 그대로 읽는다. 화면이
+ * 조립하지 않는다.** 소유자가 제품의 목적을 "세액공제가 얼마냐"에서 "얼마나
+ * 아꼈냐"로 다시 정의했다(관리자 D38) — 세액공제와 ISA 혜택의 합계가 헤드라인이
+ * 된다. 단, 두 성분의 단위 기간이 달라(세액공제=과세기간, ISA=계약기간) 합계에는
+ * 「연간」 같은 기간 이름을 붙일 수 없고, 가정 성분이 들어 있으면 **구성 두 줄이
+ * 같은 화면에 없는 채로 합계만 적는 것이 금지된다**(design-system 5.6절 "구간
+ * 변형", 계약 5.17절).
  *
- * **셋 다 오류가 아니다.** `state-error`·`state-warning` 색을 쓰지 않는다.
- * 사용자가 무언가를 잘못해서 생긴 상태가 아니다.
+ * **`screens.md` 4.8절의 낼 세금 세 상태**(모름=bounded·잘림=reduced·0=zero)는
+ * 여전히 `tax-credit-view.js`가 엔진 응답에서 **고르기만** 하고, 이 함수는 그
+ * 결과와 `headline_composite_total`을 함께 그린다 — 화면이 뺄셈·덧셈을
+ * 시작하면 그 순간 세법 판단이 화면 코드로 들어온다.
+ *
+ * **오류가 아니다.** `state-error`·`state-warning` 색을 쓰지 않는다. 사용자가
+ * 무언가를 잘못해서 생긴 상태가 아니다.
  */
-function amountCard(plan, scenario) {
+function amountCard(plan, scenario, annualReturnRate = null) {
   const view = taxCreditHeadlineView(plan);
+  const headline = plan.headline_composite_total;
   const laws = lawEntriesFor(scenario, view.basisRuleIds);
   const baseCaption = `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영`;
 
-  if (view.mode === HEADLINE_MODE.ZERO) {
-    // `—`나 빈칸을 넣지 않는다 — `AmountCard`의 오류 상태가 `—`이므로 그것을
-    // 쓰면 계산 실패로 읽힌다. **이것은 오류가 아니라 결과다**(4.8절 (3)).
-    return el('div', { class: 'amount-card' }, [
-      el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL_ZERO]),
-      el('p', { class: 'amount-card-value type-display' }, [formatKrw(view.totalKrw)]),
-      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_ZERO_CLAUSE}`]),
-      lawChipRow(laws, 'note-laws'),
-    ]);
-  }
+  // **합계에 가정 성분이 들어 있는가**(headline.includes_assumption_component)가
+  // 이 카드의 모든 다른 판정보다 먼저 온다 — 「절세액」이라는 낱말을 쓸 수
+  // 있는지, 구성 두 줄을 그려야 하는지가 전부 이 값 하나로 갈린다(계약 5.17절).
+  const includesAssumption = headline.includes_assumption_component;
+  const isBounded = view.mode === HEADLINE_MODE.BOUNDED;
+  // ZERO 문구("이 배분에서 계산되는 세액공제액이 없습니다")는 세액공제만 없다는
+  // 뜻이다 — 가정 성분이 실제로 합계에 들어 있으면(이 배분이 ISA에도 넣었고
+  // 정산액을 냈으면) 합계 전체가 0인 것은 아니므로 이 특수 문구를 쓰지 않는다.
+  const isZero = view.mode === HEADLINE_MODE.ZERO && !includesAssumption;
+  const isReduced = view.mode === HEADLINE_MODE.REDUCED;
 
-  if (view.mode === HEADLINE_MODE.BOUNDED) {
-    return el('div', { class: 'amount-card' }, [
-      el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL]),
-      // 상한 접두는 금액과 **한 덩어리**다. 줄바꿈으로 분리되지 않는다.
-      el('p', { class: 'amount-card-value type-display' }, [`${BOUNDED_AMOUNT_PREFIX} ${formatKrwAbbreviated(view.totalKrw)}`]),
-      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_BOUNDED_CLAUSE}`]),
-      // 슬롯4 — **금액 아래 24px 이내, 같은 카드 안**(D11). 다른 카드로 밀거나
-      // 접으면 위반이다. 임계값은 엔진이 낸 값이고 화면이 만들지 않는다(E4).
-      el('div', { class: 'amount-card-direction' }, [
+  const label = includesAssumption
+    ? AMOUNT_CARD_LABEL_COMPOSITE
+    : isZero
+      ? AMOUNT_CARD_LABEL_ZERO
+      : AMOUNT_CARD_LABEL_CREDIT_ONLY;
+
+  // 슬롯2/슬롯2' — `bound_code`가 `range`면 두 끝을, `point`면 한 수를 적는다.
+  // **소득 성격을 고른 사용자는 「최소=세액공제」 항등식이 성립하지 않는다** —
+  // point인데 가정 성분이 있으면(예: 이자·배당처럼 확정적인 성격) 합계 전체가
+  // 가정 위에 선다. 그 구분은 이 값이 아니라 **구성 두 줄의 유무**가 진다(아래).
+  const valueText = headlineValueText(headline, { boundedPrefix: isBounded });
+
+  // 슬롯4(상한 변형 방향 고지) — bounded일 때만.
+  const boundedDirectionBlock = isBounded
+    ? el('div', { class: 'amount-card-direction' }, [
         el('p', { class: 'type-body-s' }, [
           view.thresholdIncomeTaxKrw != null ? boundedDirectionNote(view.thresholdIncomeTaxKrw) : '',
         ]),
@@ -352,14 +377,52 @@ function amountCard(plan, scenario) {
         el('button', { type: 'button', class: 'btn btn-text', onclick: () => focusField('priorTaxAmount') }, [
           BOUNDED_BACK_LINK,
         ]),
-      ]),
+      ])
+    : null;
+
+  // 슬롯5(구성 두 줄, D38) — **가정 성분이 있을 때만, 접지 않는다.** 슬롯2'을
+  // 적으려면 슬롯5가 반드시 같은 화면에 있어야 한다(design-system 5.6절). 줄①은
+  // `bound_code`와 무관하게 언제나 슬롯2'의 {최소}(또는 point) 안에 든 확정
+  // 성분과 같은 수다(항등식). bounded와 겹치면 **슬롯4가 줄① 바로 아래로**
+  // 들어간다 — 낼 세금을 모르는 사용자에게는 그 줄①(올해 세액공제)이 바로
+  // 방향 고지가 걸리는 대상이기 때문이다.
+  const compositionBlock = includesAssumption
+    ? el('div', { class: 'amount-card-composition' }, [
+        el('p', { class: 'amount-card-composition-line type-num' }, [headlineComponentDeterminedLine(headline)]),
+        boundedDirectionBlock,
+        el('p', { class: 'amount-card-composition-line type-num' }, [
+          headlineComponentAssumptionLine(headline, annualReturnRate),
+        ]),
+      ])
+    : null;
+
+  if (isZero) {
+    // `—`나 빈칸을 넣지 않는다 — `AmountCard`의 오류 상태가 `—`이므로 그것을
+    // 쓰면 계산 실패로 읽힌다. **이것은 오류가 아니라 결과다**(4.8절 (3)).
+    return el('div', { class: 'amount-card' }, [
+      el('p', { class: 'amount-card-label' }, [label]),
+      el('p', { class: 'amount-card-value type-display' }, [valueText]),
+      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_ZERO_CLAUSE}`]),
+      lawChipRow(laws, 'note-laws'),
     ]);
   }
 
-  if (view.mode === HEADLINE_MODE.REDUCED) {
+  if (isBounded) {
     return el('div', { class: 'amount-card' }, [
-      el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL]),
-      el('p', { class: 'amount-card-value type-display' }, [formatKrwAbbreviated(view.totalKrw)]),
+      el('p', { class: 'amount-card-label' }, [label]),
+      // 상한 접두는 금액과 **한 덩어리**다. 줄바꿈으로 분리되지 않는다.
+      el('p', { class: 'amount-card-value type-display' }, [valueText]),
+      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_BOUNDED_CLAUSE}`]),
+      // 슬롯4 — **금액 아래 24px 이내, 같은 카드 안**(D11). 구성이 있으면
+      // `compositionBlock`이 슬롯4를 이미 품고 있으므로 중복으로 그리지 않는다.
+      includesAssumption ? compositionBlock : boundedDirectionBlock,
+    ]);
+  }
+
+  if (isReduced) {
+    return el('div', { class: 'amount-card' }, [
+      el('p', { class: 'amount-card-label' }, [label]),
+      el('p', { class: 'amount-card-value type-display' }, [valueText]),
       el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_REDUCED_CLAUSE}`]),
       el('div', { class: 'amount-card-direction' }, [
         // 자르기 전 금액을 함께 보인다 — 잘린 뒤 금액만 보이면 사용자는 배분이
@@ -368,13 +431,15 @@ function amountCard(plan, scenario) {
         view.contributionCarryoverAvailable ? el('p', { class: 'type-body-s' }, [CAP_CARRYOVER_NOTE]) : null,
         lawChipRow(laws, 'note-laws'),
       ]),
+      compositionBlock,
     ]);
   }
 
   return el('div', { class: 'amount-card' }, [
-    el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL]),
-    el('p', { class: 'amount-card-value type-display' }, [formatKrwAbbreviated(view.totalKrw)]),
+    el('p', { class: 'amount-card-label' }, [label]),
+    el('p', { class: 'amount-card-value type-display' }, [valueText]),
     el('p', { class: 'amount-card-caption' }, [baseCaption]),
+    compositionBlock,
   ]);
 }
 
@@ -576,6 +641,16 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
   const singleSlice = donutSingleSliceAccount(plan, excluded);
 
   return el('div', { class: 'chart-area' }, [
+    // D38 소유자 3번(screens.md 5.14.9절) — 도넛이 "무엇의" 배분인지 이름으로
+    // 답한다. **「최적」은 쓰지 않는다**(design-system 5.8절 배분안 이름
+    // 규약) — 기본안이 항상 세액공제 최댓값은 아니라는 사실과도 어긋난다.
+    // 이미 있는 배분안 이름 규약을 그대로 재사용한다 — 새 어휘를 만들지 않는다.
+    el('div', { class: 'donut-section-header' }, [
+      // 도넛 중앙과 같은 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
+      // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
+      el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
+      el('p', { class: 'type-body-s donut-plan-name' }, [donutPlanNameCaption(plan.plan_id, plan.is_baseline)]),
+    ]),
     el('div', { class: 'donut-with-strip' }, [
       el('div', { class: 'donut-wrap' }, [donut]),
       // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
@@ -655,9 +730,11 @@ function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
   const rows = accountBenefitRows(scenario, plan);
 
   return el('div', { class: 'account-benefit-strip' }, [
-    // D33(design-system 5.31.1절 장치①) — 헤더 위계를 C-2 계좌명과 같은 등급
-    // (`type-body-strong`)으로 낮춘다. `<h4>`는 스크린리더 랜드마크로 유지한다.
-    el('h4', { class: 'type-body-strong' }, [ACCOUNT_BENEFIT_STRIP_TITLE]),
+    // D38 재개정 — D33이 낮춘 17px를 16px로 되돌린 것이 진짜 결손이 아니었다
+    // (design-system 5.31.4절 "실측으로 찾은 진짜 결손"). 17px/600으로
+    // 되돌린다(`.account-benefit-strip h4`, styles.css). `<h4>`는 스크린리더
+    // 랜드마크로 유지한다.
+    el('h4', {}, [ACCOUNT_BENEFIT_STRIP_TITLE]),
     el('p', { class: 'benefit-strip-ref-caption' }, [ACCOUNT_BENEFIT_STRIP_REF_CAPTION]),
     confirmedAxisSection(scenario, plan, rows.pension),
     el('hr', { class: 'benefit-axis-divider' }),
@@ -684,7 +761,7 @@ function confirmedAxisSection(scenario, plan, p) {
       el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
         el('span', { class: 'benefit-row-dots' }, dots.length ? dots : [el('span', { class: 'benefit-dot' })]),
         el('span', { class: 'benefit-row-body' }, [
-          el('span', { class: 'benefit-row-names type-body-s' }, [names]),
+          el('span', { class: 'benefit-row-names' }, [names]),
           el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_EXCLUDED_LABEL]),
         ]),
       ]),
@@ -695,10 +772,11 @@ function confirmedAxisSection(scenario, plan, p) {
   // pooled — 낼 세금 상태와 동기화한다(모름 → 최대 / 잘림 → 축약 문구 /
   // 0 → 0원 + 차이 없음 문구).
   const view = taxCreditHeadlineView(plan);
-  const amountText =
-    view.mode === HEADLINE_MODE.BOUNDED
-      ? `${BOUNDED_AMOUNT_PREFIX} ${formatKrwAbbreviated(view.totalKrw)}`
-      : formatKrwAbbreviated(view.totalKrw);
+  // D38 재개정(design-system 5.31.4절) — 한 줄로 합친다. 위쪽 별도 캡션은 없앤다.
+  // **여기서만 전체 자릿수를 쓴다**(`formatKrw`) — 연말정산 서류의 숫자와
+  // 그대로 대조할 수 있어야 한다(D37 1번).
+  const actualAmountText =
+    view.mode === HEADLINE_MODE.BOUNDED ? `${BOUNDED_AMOUNT_PREFIX} ${formatKrw(view.totalKrw)}` : formatKrw(view.totalKrw);
   const zeroNote = view.mode === HEADLINE_MODE.ZERO ? ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE : null;
   const reducedNote = view.mode === HEADLINE_MODE.REDUCED ? ACCOUNT_BENEFIT_REDUCED_NOTE : null;
   // D37 2번 — 짧은 막대의 이유. 「덜 넣어서」가 아니라 「낼 세금이 적어서」다.
@@ -716,41 +794,37 @@ function confirmedAxisSection(scenario, plan, p) {
       ? Math.min(100, Math.max(0, ((p.afterCapKrw ?? 0) / ceiling.ceiling_krw) * 100))
       : null;
   const meter = fillPercent != null ? benefitMeter({ account: p.accounts[0], grade: 'solid', fillPercent }) : null;
-  const axisCaption = fillPercent != null ? benefitMeterAxisCaption(fillPercent) : null;
-  const ariaLabel = `${names}, ${amountText}${axisCaption ? `, ${axisCaption}` : ''}`;
+  // D38 재개정 — 「최대 X 중 Y」 한 줄이 이 행에서 유일한 "행 = 소구획 전체"
+  // 자리다. 판정 기준 문장(basis_code)은 그 아래 별도 줄로 둔다.
+  const sentence = ceiling ? confirmedAxisAmountSentence(ceiling, actualAmountText) : actualAmountText;
+  const basisSentence = ceiling ? confirmedAxisBasisSentence(ceiling) : null;
+  const ariaLabel = `${names}, ${sentence}`;
 
   const row = el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
     el('span', { class: 'benefit-row-dots' }, dots),
     el('span', { class: 'benefit-row-body' }, [
-      el('span', { class: 'benefit-row-names type-body-s' }, [names]),
+      el('span', { class: 'benefit-row-names' }, [names]),
       p.accounts.length > 1 ? el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_POOLED_NOTE]) : null,
       meter,
-      axisCaption ? el('span', { class: 'benefit-meter-axis-caption' }, [axisCaption]) : null,
-      el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
+      el('span', { class: 'benefit-row-amount' }, [sentence]),
+      basisSentence ? el('span', { class: 'benefit-row-subnote' }, [basisSentence]) : null,
       zeroNote ? el('span', { class: 'benefit-row-subnote' }, [zeroNote]) : null,
       reducedNote ? el('span', { class: 'benefit-row-subnote' }, [reducedNote]) : null,
       capBelowNote ? el('span', { class: 'benefit-row-subnote' }, [capBelowNote]) : null,
     ]),
   ]);
 
-  return el('div', { class: 'benefit-axis benefit-axis-confirmed' }, [
-    // D37 1번 — 지방소득세를 포함한 값임을 캡션이 밝힌다. 기간 표기는
-    // 「올해」로 고정하고 조건절을 붙이지 않는다(D36 "문구" 절).
-    ceiling ? el('p', { class: 'benefit-axis-caption' }, [confirmedAxisCaption(ceiling)]) : null,
-    // 공제율 구간을 몰라 본문 구간을 적용했으면(fallback) 이 상한도 "적어도
-    // 이만큼"이다 — 세액 한도 쪽 "최대 이만큼"과 방향이 반대다(계약 5.15절).
-    ceiling?.fallback_applied
-      ? el('p', { class: 'benefit-axis-caption-note' }, [noticeMessage({ code: 'credit_rate_global_income_missing', params: {} })])
-      : null,
-    row,
-  ]);
+  return el('div', { class: 'benefit-axis benefit-axis-confirmed' }, [row]);
 }
 
 /**
- * 가정 축(D36) — ISA 비과세·저율분리과세·손익통산(보조 행) 셋. 최댓값은
- * `AssumptionBasedIsaEstimate.upper_bound_krw`(구간의 위 끝, 계약 5.14절).
- * 가정 자체가 없거나 계산하지 못했으면(narrative) 축 캡션 없이 서술만 남는다
- * — 잴 값 자체가 없다.
+ * 가정 축(D36 → D38 재개정) — ISA 비과세·저율분리과세·손익통산(보조 행) 셋.
+ * **세법 재판정(관리자 메시지, 커밋 `13c42e4`)으로 행 구조가 비대칭이 됐다** —
+ * 법정 상한이 있는 축은 비과세뿐이라, 막대(윤곽+해칭)를 갖는 행도 이제
+ * 하나뿐이다(design-system 5.31.4절). 나머지 둘(저율분리·손익통산)은 숫자 +
+ * `법정 상한 없음`만 낸다 — 상한 없는 값에 막대를 그리면 분모를 지어내는
+ * 것이다. 가정 자체가 없거나 계산하지 못했으면(narrative) 축 캡션 없이
+ * 서술만 남는다 — 잴 값 자체가 없다.
  */
 function assumptionAxisSection(i, isaReturnAssumption) {
   const onClick = () => scrollAndHighlight('account-row-isa');
@@ -761,7 +835,7 @@ function assumptionAxisSection(i, isaReturnAssumption) {
       el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
         el('span', { class: 'benefit-row-dots' }, [el('span', { class: 'benefit-dot benefit-dot-excluded' })]),
         el('span', { class: 'benefit-row-body' }, [
-          el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
+          el('span', { class: 'benefit-row-names' }, [ACCOUNT_LABEL.isa]),
           el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_EXCLUDED_LABEL]),
         ]),
       ]),
@@ -773,20 +847,20 @@ function assumptionAxisSection(i, isaReturnAssumption) {
   // 그린다. 그 외(가정 자체가 없음 / 계산 못 함 / 표시 끔)는 여전히
   // narrative다 — ISA는 계약상 `DeterministicBenefit`을 갖지 않는다.
   if (est?.state === 'computed') {
+    // D38 재개정 — 머리글은 기간·조건절만 말한다. 공통 최댓값 개념이
+    // 성립하지 않으므로(둘은 법정 상한이 없다) 그 아래 한 번만 이유를 적는다.
     const axisCaption = assumptionAxisCaption({ estimate: est, annualReturnRate: isaReturnAssumption?.annual_return_rate ?? null });
     const breakdown = est.axis_breakdown;
-    const denom = est.upper_bound_krw > 0 ? est.upper_bound_krw : 0;
-    const fillFor = (amountKrw) => (denom > 0 ? Math.min(100, Math.max(0, (amountKrw / denom) * 100)) : 0);
+    const ceiling = est.axis_ceilings;
+    const taxFreeDenom = ceiling?.tax_free_krw > 0 ? ceiling.tax_free_krw : 0;
+    const taxFreeFill = taxFreeDenom > 0 ? Math.min(100, Math.max(0, (breakdown.tax_free_krw / taxFreeDenom) * 100)) : 0;
 
-    const taxFreeFill = fillFor(breakdown.tax_free_krw);
     // D36 — 0인 것은 「혜택 없음」이 아니다. 판정은 오직 이 필드로 한다
     // (`rate_gap_krw === 0`으로 화면이 스스로 판정하지 않는다, 계약 5.14절).
     const rateGapFavorableZero = est.rate_gap_axis_zero_reason_code === 'within_tax_free_limit';
-    const rateGapFill = fillFor(breakdown.rate_gap_krw);
-    const residualKrw = breakdown.loss_offset_krw + breakdown.rounding_residual_krw;
-    const residualFill = fillFor(residualKrw);
-
     const rateGapAmountText = rateGapFavorableZero ? '0원' : boundedAxisAmountText(breakdown.rate_gap_krw, est.axis_breakdown_bound_code);
+    const residualKrw = breakdown.loss_offset_krw + breakdown.rounding_residual_krw;
+    const residualAmountText = boundedAxisAmountText(residualKrw, est.axis_breakdown_bound_code);
 
     const assumptionCaption = isaReturnAssumption
       ? isaReturnAssumptionCaption({
@@ -797,76 +871,82 @@ function assumptionAxisSection(i, isaReturnAssumption) {
         })
       : null;
 
-    const rows = [
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'benefit-row',
-          onclick: onClick,
-          'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL}, ${boundedAxisAmountText(breakdown.tax_free_krw, est.axis_breakdown_bound_code)}`,
-        },
-        [
-          el('span', { class: 'benefit-row-dots' }, [dot]),
-          el('span', { class: 'benefit-row-body' }, [
-            el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL]),
-            el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
-            benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: taxFreeFill }),
-            el('span', { class: 'benefit-meter-axis-caption' }, [benefitMeterAxisCaption(taxFreeFill)]),
-            el('span', { class: 'benefit-row-amount type-num' }, [boundedAxisAmountText(breakdown.tax_free_krw, est.axis_breakdown_bound_code)]),
-          ]),
-        ],
-      ),
-      el(
-        'button',
-        {
-          type: 'button',
-          class: `benefit-row${rateGapFavorableZero ? ' benefit-row-favorable-zero' : ''}`,
-          onclick: onClick,
-          'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL}, ${rateGapFavorableZero ? ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE : rateGapAmountText}`,
-        },
-        [
-          el('span', { class: 'benefit-row-dots' }, [dot]),
-          el('span', { class: 'benefit-row-body' }, [
-            el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL]),
-            rateGapFavorableZero
-              ? el('span', { class: 'benefit-row-info-chip' }, [ACCOUNT_BENEFIT_FAVORABLE_ZERO_CHIP_LABEL])
-              : el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
-            benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: rateGapFill }),
-            !rateGapFavorableZero ? el('span', { class: 'benefit-meter-axis-caption' }, [benefitMeterAxisCaption(rateGapFill)]) : null,
-            el('span', { class: 'benefit-row-amount type-num' }, [rateGapAmountText]),
-            rateGapFavorableZero ? el('span', { class: 'benefit-row-subnote' }, [ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE]) : null,
-          ]),
-        ],
-      ),
-      // 보조 행 — 손익통산·절사 잔차. 지우면 "넷의 합이 upper_bound_krw와
-      // 같다"는 항등식이 깨지므로 지우지 않되, 소유자가 요청한 둘과 같은
-      // 무게로 두지 않는다(더 작은 글자·더 얇은 트랙, design-system 5.31.3절).
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'benefit-row benefit-row-secondary',
-          onclick: onClick,
-          'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL}, ${boundedAxisAmountText(residualKrw, est.axis_breakdown_bound_code)}`,
-        },
-        [
-          el('span', { class: 'benefit-row-dots' }, [dot]),
-          el('span', { class: 'benefit-row-body' }, [
-            el('span', { class: 'benefit-row-names type-caption' }, [ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL]),
-            benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: residualFill }),
-            el('span', { class: 'benefit-row-amount type-num' }, [boundedAxisAmountText(residualKrw, est.axis_breakdown_bound_code)]),
-          ]),
-        ],
-      ),
-    ];
+    // 행 1 — ISA 비과세로 아낀 금액. 이 위젯에서 유일하게 막대(윤곽+해칭)를
+    // 갖는 가정 축 행이다. 「최대 X 중 Y」 형태이고 기간이 문장 맨 앞이다.
+    const taxFreeSentence = ceiling ? isaTaxFreeCeilingSentence(est) : boundedAxisAmountText(breakdown.tax_free_krw, est.axis_breakdown_bound_code);
+    const taxFreeRow = el(
+      'button',
+      {
+        type: 'button',
+        class: 'benefit-row',
+        onclick: onClick,
+        'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL}, ${taxFreeSentence}`,
+      },
+      [
+        el('span', { class: 'benefit-row-dots' }, [dot]),
+        el('span', { class: 'benefit-row-body' }, [
+          el('span', { class: 'benefit-row-names' }, [ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL]),
+          el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
+          benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: taxFreeFill }),
+          el('span', { class: 'benefit-row-amount' }, [taxFreeSentence]),
+        ]),
+      ],
+    );
+
+    // 행 2 — ISA 저율 분리과세로 아낀 금액. **법정 상한이 없다**(D38 6번·7번,
+    // 세법 재판정) — 막대를 그리지 않는다. 값만 + `법정 상한 없음`.
+    const rateGapRow = el(
+      'button',
+      {
+        type: 'button',
+        class: `benefit-row${rateGapFavorableZero ? ' benefit-row-favorable-zero' : ''}`,
+        onclick: onClick,
+        'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL}, ${rateGapFavorableZero ? ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE : rateGapAmountText}`,
+      },
+      [
+        el('span', { class: 'benefit-row-dots' }, [dot]),
+        el('span', { class: 'benefit-row-body' }, [
+          el('span', { class: 'benefit-row-names' }, [ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL]),
+          rateGapFavorableZero
+            ? el('span', { class: 'benefit-row-info-chip' }, [ACCOUNT_BENEFIT_FAVORABLE_ZERO_CHIP_LABEL])
+            : el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
+          rateGapFavorableZero
+            ? el('span', { class: 'benefit-row-amount' }, [rateGapAmountText])
+            : el('span', { class: 'benefit-row-amount' }, [`${rateGapAmountText} · ${ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX}`]),
+          rateGapFavorableZero ? el('span', { class: 'benefit-row-subnote' }, [ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE]) : null,
+        ]),
+      ],
+    );
+
+    // 행 3 — 보조 행(손익통산·절사 잔차). 지우면 "넷의 합이 upper_bound_krw와
+    // 같다"는 항등식이 깨지므로 지우지 않되, 소유자가 요청한 둘과 같은
+    // 무게로 두지 않는다(design-system 5.31.3절). 막대는 없다 — 상단의 공통
+    // 안내 한 줄이 이미 이 행도 포괄하므로 「법정 상한 없음」을 반복하지 않는다.
+    const residualRow = el(
+      'button',
+      {
+        type: 'button',
+        class: 'benefit-row benefit-row-secondary',
+        onclick: onClick,
+        'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL}, ${residualAmountText}`,
+      },
+      [
+        el('span', { class: 'benefit-row-dots' }, [dot]),
+        el('span', { class: 'benefit-row-body' }, [
+          el('span', { class: 'benefit-row-names type-caption' }, [ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL]),
+          el('span', { class: 'benefit-row-amount' }, [residualAmountText]),
+        ]),
+      ],
+    );
 
     return el('div', { class: 'benefit-axis benefit-axis-assumption' }, [
-      // D36 — 기간 표기 「{n}년 동안」 + 조건절 「수익률이 연 {n}%라면」이 「(세액공제
-      // 아님)」 부기가 하던 일을 대신한다. 점 추정이 없으면(`upper_bound`) 값 앞에
-      // `최대`를 붙인다.
+      // D38 재개정 — 조건절만(기간 + 「수익률이 연 ○%라면」). 그 아래 상한이
+      // 갈리는 이유를 한 번만 밝힌다(행마다 반복하지 않는다).
       el('p', { class: 'benefit-axis-caption' }, [axisCaption]),
-      ...rows,
+      el('p', { class: 'benefit-axis-caption-note' }, [ASSUMPTION_AXIS_CEILING_EXPLAINER]),
+      taxFreeRow,
+      rateGapRow,
+      residualRow,
       assumptionCaption ? el('p', { class: 'benefit-row-assumption-caption' }, [assumptionCaption]) : null,
     ]);
   }
@@ -884,7 +964,7 @@ function assumptionAxisSection(i, isaReturnAssumption) {
     el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
       el('span', { class: 'benefit-row-dots' }, [dot]),
       el('span', { class: 'benefit-row-body' }, [
-        el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
+        el('span', { class: 'benefit-row-names' }, [ACCOUNT_LABEL.isa]),
         el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_ISA_NARRATIVE]),
         // **표시를 끈 상태를 조용한 빈칸으로 두지 않는다**(D19) — 왜 안 보이는지 말한다.
         subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
@@ -1380,7 +1460,10 @@ function resultPanelForScenario(
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
 
   return el('div', { class: 'result-body' }, [
-    amountCard(plan, scenario),
+    // 5.1.0(D28) — "무엇을 주었는가"(echo)를 헤드라인 구성 줄②의 조건절에도
+    // 그대로 쓴다. 화면이 수익률을 제안하거나 미리 채우지 않는다(0.10절) —
+    // 여기서도 사용자가 준 값을 되비출 뿐 새 값을 만들지 않는다.
+    amountCard(plan, scenario, response.echo.isa_return_assumption?.annual_return_rate ?? null),
     // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
     // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,

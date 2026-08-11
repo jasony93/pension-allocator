@@ -532,6 +532,23 @@ export function donutSingleSliceCaption(account) {
   return `이번 배분은 전액이 ${accountWithParticle(account, 'direction')} 갑니다. 계좌별 한도와 남은 여력은 아래에서 볼 수 있습니다.`;
 }
 
+/** 도넛 위 섹션 제목 (screens.md 5.14.9절 3번). 월 납입 여력을 그대로 되비춘다. */
+export function donutSectionTitle(monthlyCapacityKrw) {
+  return `월 납입 여력 ${formatKrw(monthlyCapacityKrw)}을 이렇게 나눕니다`;
+}
+
+/**
+ * D38 소유자 3번(screens.md 5.14.9절) — 도넛이 "무엇의" 배분인지 이름으로
+ * 답한다. **「최적」은 쓰지 않는다** — 이미 이 시스템의 확정 규칙(design-system
+ * 5.8절 배분안 이름 규약)이자 세무사법 위험 회피 장치(`tax-rules-report.md`
+ * 15.5절)와 부딪히고, 기본안이 항상 세액공제 최댓값은 아니라는 사실과도
+ * 어긋난다. 기존 배분안 이름 규약을 그대로 재사용해 새 어휘를 만들지 않는다.
+ */
+export function donutPlanNameCaption(planId, isBaseline) {
+  const name = PLAN_LABEL[planId] ?? planId;
+  return isBaseline ? `${name} · 기본` : name;
+}
+
 // ---------------------------------------------------------------------------
 // 왜 이 순서로 채웠는가 — 세제상 동점의 순서 (계약 0.4·5.6절 `PriorityBasis.tie_break`)
 //
@@ -840,11 +857,65 @@ export const WITHHOLDING_RECEIPT_DIVIDER = '원천징수영수증에서 오는 �
 // 끼우기만 한다 — 어떤 산술도 하지 않는다.
 // ---------------------------------------------------------------------------
 
-export const AMOUNT_CARD_LABEL = '이 배분으로 계산된 연간 절세액';
-/** 한도가 0으로 확정된 상태의 라벨. 주어가 세액공제액이다(P3). */
+/**
+ * D38 — 소유자가 제품의 목적을 다시 정의했다("세액공제가 얼마냐가 아니라 얼마나
+ * 아꼈냐"). 헤드라인이 세액공제와 ISA 혜택의 합계를 낸다.
+ *
+ * **「연간」을 지운다.** 합계는 「올해 세액공제 + 앞으로 N년 ISA」라 어느 한 해의
+ * 값도, N년치 평균도 아니다 — 기간 이름을 붙이면 그 줄이 틀린 수가 된다
+ * (`headline_composite_total.is_annual === false`, 계약 5.17절). **「이 배분으로
+ * 계산된」은 그대로 남긴다** — 합계에 못 들어간 성분이 있고(연금 저율과세) 그중
+ * 하나는 부호가 반대(재과세)라, 이 한정이 실제로 필요하다.
+ *
+ * **「절세액」은 가정 성분이 합계에 들어 있을 때만 쓴다**(`includes_assumption_
+ * component === true`, design-system 7.1절 어휘 규약). 가정 성분이 없으면(ISA를
+ * 이 배분에 넣지 않았거나 가정을 아예 주지 않은 경우) 합계는 확정된 세액공제액과
+ * 같은 수이고, 그때는 「세액공제액」이라는 정직한 이름을 쓴다.
+ */
+export const AMOUNT_CARD_LABEL_CREDIT_ONLY = '이 배분으로 계산된 세액공제액';
+export const AMOUNT_CARD_LABEL_COMPOSITE = '이 배분으로 계산된 절세액';
+/** 한도가 0으로 확정된 상태(가정 성분도 없는 경우)의 라벨. 주어가 세액공제액이다(P3). */
 export const AMOUNT_CARD_LABEL_ZERO = '이 배분에서 계산되는 세액공제액';
-/** 상한 접두 — `최대`는 상한 변형에서만 쓴다(design-system 7.1절). */
+/** 상한 접두 — `최대`는 상한 변형·구간 변형·「최대 X 중 Y」에서만 쓴다(design-system 7.1절). */
 export const BOUNDED_AMOUNT_PREFIX = '최대';
+
+/**
+ * D38 — 헤드라인 구간 변형의 슬롯5(구성 두 줄). **화면이 조립하지 않는다** —
+ * `headline_composite_total`이 이미 낸 값만 문장에 끼운다(design-system 5.6절
+ * "구간 변형"). 줄①은 슬롯2'의 {최소}와 항상 같은 수다(항등식, 계약 5.17절).
+ */
+export function headlineComponentDeterminedLine(headline) {
+  return `올해 세액공제 ${formatKrw(headline.determined_component_krw)}`;
+}
+
+/**
+ * 줄② — ISA 성분. **`bound_code`가 `range`일 때만 `최대`를 붙인다** — 구간의 위
+ * 끝을 적는 것이므로 상한 접두가 맞다. `point`(소득 성격이 확정적)면 그 자체가
+ * 점 추정이므로 접두를 붙이지 않는다(design-system 5.6절 슬롯5 줄②).
+ */
+export function headlineComponentAssumptionLine(headline, annualReturnRate) {
+  const yearsText = headline.assumption_settlement_years != null ? formatYears(headline.assumption_settlement_years) : '';
+  const rateText = annualReturnRate != null ? formatPercentTrimmed(annualReturnRate) : null;
+  const amountText = formatKrw(headline.assumption_component_krw);
+  const amountWithPrefix = headline.bound_code === 'range' ? `${BOUNDED_AMOUNT_PREFIX} ${amountText}` : amountText;
+  const rateClause = rateText != null ? ` (연 ${rateText} 가정)` : '';
+  return `+ 앞으로 ${yearsText} 동안 ISA ${amountWithPrefix}${rateClause}`;
+}
+
+/**
+ * 슬롯2/슬롯2' — 헤드라인 금액. `bound_code`가 `range`면 두 끝을, `point`면 한
+ * 수를 적는다(design-system 5.6절). **같은 헤드라인이 `bound_code`에 따라
+ * 「최소~최대」와 「한 수」로 갈리므로, 그 둘은 이 값 하나로만 구분되고 부가
+ * 어휘를 새로 만들지 않는다** — 가정 성분이 섞여 있다는 사실은 값이 아니라
+ * 슬롯5(구성 두 줄)의 유무가 진다(`amountCard`).
+ */
+export function headlineValueText(headline, { boundedPrefix = false } = {}) {
+  const prefix = boundedPrefix ? `${BOUNDED_AMOUNT_PREFIX} ` : '';
+  if (headline.bound_code === 'range') {
+    return `${prefix}${formatKrw(headline.lower_bound_krw)} ~ ${formatKrw(headline.upper_bound_krw)}`;
+  }
+  return `${prefix}${formatKrw(headline.point_estimate_krw)}`;
+}
 
 /** 슬롯4 — **임계값과 틀릴 방향을 한 문장에** 담는다. 비울 수 없다. */
 export function boundedDirectionNote(thresholdIncomeTaxKrw) {
@@ -928,26 +999,74 @@ export const ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE =
  * 표기는 **「올해」**로 고정하고 조건절을 붙이지 않는다(D36 "문구" 절) — 이
  * 축은 조문이 당해 연도에 하나로 확정하는 값이기 때문이다.
  */
-export function confirmedAxisCaption(ceiling) {
-  return `막대 길이 기준 · 올해: 세액공제 최대 한도 ${formatKrw(ceiling.ceiling_krw)}(소득세 ${formatKrw(
+/**
+ * D38 재개정(design-system 5.31.4절) — **한 줄로 합친다.** 이 행이 위젯에서
+ * 유일하게 "행 하나 = 소구획 전체"인 자리라 위쪽 별도 캡션이 애초에 중복이었다.
+ * `actualAmountText`는 한도 미확정(`모름`)일 때 `최대` 접두를 이미 포함한
+ * 문자열을 그대로 받는다 — 이 함수는 뺄셈도 접두 판단도 하지 않는다.
+ */
+export function confirmedAxisAmountSentence(ceiling, actualAmountText) {
+  return `세액공제 최대 한도 ${formatKrw(ceiling.ceiling_krw)}(소득세 ${formatKrw(
     ceiling.income_tax_krw,
-  )} + 지방소득세 ${formatKrw(ceiling.local_tax_krw)})`;
+  )} + 지방소득세 ${formatKrw(ceiling.local_tax_krw)}) 중 ${actualAmountText}`;
+}
+
+const CONFIRMED_AXIS_BASIS_SENTENCE = {
+  total_salary: '총급여 기준으로 계산한 값입니다.',
+  global_income: '종합소득금액 기준으로 계산한 값입니다.',
+};
+
+/**
+ * D38 재개정 — 판정 축이 셋(`basis_code`)이므로 캡션이 하나로 못 박지 않는다
+ * (design-system 5.31.4절). `statutory_default`(=`fallback_applied`)는 기존
+ * `credit_rate_global_income_missing` 안내 문구를 그대로 재사용한다 — 새
+ * 표기를 만들지 않는다. **금액을 되비추지 않는다** — 판정 축의 이름만 밝힌다.
+ */
+export function confirmedAxisBasisSentence(ceiling) {
+  if (ceiling.fallback_applied) return noticeMessage({ code: 'credit_rate_global_income_missing', params: {} });
+  return CONFIRMED_AXIS_BASIS_SENTENCE[ceiling.basis_code] ?? null;
 }
 
 /**
- * D36·D37 — 가정 축 소구획의 캡션. 기간 표기는 **「{정산기간}년 동안」**,
- * 조건절은 **「수익률이 연 {n}%라면」**을 반드시 붙인다 — 이 축의 값이 사용자가
- * 준 가정(수익률·소득 성격) 위에서 나온다는 것을 문장이 스스로 말하게 한다.
- * `axis_breakdown_bound_code === 'upper_bound'`이면(점 추정이 없으면) 금액
- * 앞에 `최대`를 붙인다 — 점처럼 적으면 실제보다 크게 말하는 것이다(D36).
+ * D38 재개정(design-system 5.31.4절) — 가정 축 섹션의 공통 머리글. **공통
+ * 최댓값을 더 이상 적지 않는다** — 셋 중 둘(저율분리·손익통산)에 법정 상한이
+ * 없어 "가정 축의 최댓값"이라는 개념 자체가 성립하지 않는다(세법 재판정,
+ * 커밋 `13c42e4`). 조건절만 남긴다.
  */
 export function assumptionAxisCaption({ estimate, annualReturnRate }) {
   const yearsText = estimate.settlement_years != null ? `${formatYears(estimate.settlement_years)} 동안` : '정산 기간 동안';
   const rateText = annualReturnRate != null ? formatPercentTrimmed(annualReturnRate) : null;
-  const amountText = boundedAxisAmountText(estimate.upper_bound_krw, estimate.axis_breakdown_bound_code);
   const conditionClause = rateText != null ? `, 수익률이 연 ${rateText}라면` : '';
-  return `막대 길이 기준 · ${yearsText}${conditionClause}: ${amountText}`;
+  return `${yearsText}${conditionClause}`;
 }
+
+/** 가정 축 머리글 바로 아래에 한 번만 두는 설명 — 행마다 반복하지 않는다(design-system 5.31.4절). */
+export const ASSUMPTION_AXIS_CEILING_EXPLAINER =
+  '비과세분에는 계약 전체 한도가 있고(아래), 저율 분리과세분·손익통산분에는 법정 상한이 없습니다.';
+
+/**
+ * D38 6번·7번(design-system 5.31.4절) — ISA 비과세 행. **기간을 문장 맨 앞에
+ * 못박는다** — 기간이 없으면 옆(위) 소구획인 확정 축(연 단위)과 나란한 배치가
+ * "같은 기간의 두 수"로 읽힌다. 분자가 구간의 위 끝이면 분모에 이미 있는
+ * `최대`와 겹치지 않게 접두 대신 괄호 부기(`구간 위 끝`)를 쓴다 — 이 자리
+ * 하나만의 예외다(design-system 7.1절).
+ */
+export function isaTaxFreeCeilingSentence(estimate) {
+  const ceiling = estimate.axis_ceilings;
+  const breakdown = estimate.axis_breakdown;
+  const yearsText = formatYears(ceiling.tax_free_settlement_years);
+  const numeratorPlain = formatKrw(breakdown.tax_free_krw);
+  const numeratorText =
+    estimate.axis_breakdown_bound_code === 'upper_bound' ? `${numeratorPlain}(구간 위 끝)` : numeratorPlain;
+  const sourceNote =
+    ceiling.tax_free_settlement_years_source === 'ruleset_min_contract_years'
+      ? ' (계약기간을 입력하지 않아 최소 기간으로 계산 — 실제 계약기간이 더 길면 결과가 달라집니다)'
+      : '';
+  return `${yearsText} 계약 전체에서 최대 ${formatKrw(ceiling.tax_free_krw)} 중 ${numeratorText}${sourceNote}`;
+}
+
+/** D38 6번·7번 — 법정 상한이 없는 두 행(저율분리·손익통산)에 붙는 접미사. */
+export const ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX = '법정 상한 없음';
 
 /**
  * `axis_breakdown_bound_code`가 `upper_bound`면 금액 앞에 `최대`를 붙인다

@@ -722,7 +722,11 @@ export function benefitMeter({ account, grade, fillPercent }) {
     const fill = el('div', {
       class: `benefit-meter-fill ${fillClass}`,
       style: isAssumption
-        ? { width: `${fillPercent}%`, borderColor: ACCOUNT_COLOR[account] }
+        // D38 5번 — 해칭(`repeating-linear-gradient(45deg, currentColor …)`,
+        // styles.css)이 `color`를 읽는다. 윤곽선과 같은 계좌색을 `color`로도
+        // 실어야 줄무늬가 윤곽과 같은 색으로 나온다 — 새 색·새 알파를 쓰지
+        // 않는다(design-system 5.31.4절 5번).
+        ? { width: `${fillPercent}%`, borderColor: ACCOUNT_COLOR[account], color: ACCOUNT_COLOR[account] }
         : { width: `${fillPercent}%`, background: ACCOUNT_COLOR[account] },
     });
     track.append(fill);

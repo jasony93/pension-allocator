@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {
   ACCOUNT_BENEFIT_STRIP_REF_CAPTION,
   benefitMeterAxisCaption,
-  confirmedAxisCaption,
+  confirmedAxisAmountSentence,
+  confirmedAxisBasisSentence,
   assumptionAxisCaption,
+  isaTaxFreeCeilingSentence,
+  ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX,
 } from './copy.js';
 
 /**
@@ -42,30 +45,68 @@ test('행 아래 축 캡션은 C-2(AllocationBar)의 "납입 잔여 한도" 어�
   assert.ok(!caption.includes('납입 잔여 한도'), `축 캡션이 C-2 어휘를 재사용했습니다: "${caption}"`);
 });
 
-test('확정 축 캡션(D37 1번)은 「올해」를 쓰고 지방소득세 포함을 밝힌다', () => {
-  const caption = confirmedAxisCaption({ ceiling_krw: 1485000, income_tax_krw: 1350000, local_tax_krw: 135000 });
-  assert.ok(caption.includes('올해'), '확정 축은 조건절 없이 「올해」로만 기간을 말해야 한다(D36)');
-  assert.ok(!caption.includes('라면'), '확정 축에는 조건절(가정)을 붙이지 않는다');
+test('확정 축 한 줄(D38 재개정)은 지방소득세 포함 상한과 실제 공제액을 한 줄로 합친다', () => {
+  const sentence = confirmedAxisAmountSentence(
+    { ceiling_krw: 1485000, income_tax_krw: 1350000, local_tax_krw: 135000 },
+    '550,000원',
+  );
   // D37 1번 — 사용자의 연말정산 서류는 소득세분·지방소득세분을 따로 적는다.
   // 합계만 적으면 사용자가 자기 서류에서 그 수를 못 찾는다.
-  assert.ok(caption.includes('소득세'), '소득세분을 밝혀야 한다');
-  assert.ok(caption.includes('지방소득세'), '지방소득세분을 밝혀야 한다');
-  assert.ok(caption.includes('1,350,000') && caption.includes('135,000'), '두 몫이 실제 값이어야 한다');
+  assert.ok(sentence.includes('소득세'), '소득세분을 밝혀야 한다');
+  assert.ok(sentence.includes('지방소득세'), '지방소득세분을 밝혀야 한다');
+  assert.ok(sentence.includes('1,350,000') && sentence.includes('135,000'), '두 몫이 실제 값이어야 한다');
+  assert.ok(sentence.includes('중 550,000원'), '「최대 X 중 Y」 형태로 실제 공제액이 함께 있어야 한다');
 });
 
-test('가정 축 캡션(D36)은 정산 기간과 수익률 조건절을 반드시 붙인다', () => {
+test('확정 축 판정 기준 문장은 basis_code 세 갈래로 갈린다', () => {
+  assert.equal(confirmedAxisBasisSentence({ basis_code: 'total_salary', fallback_applied: false }), '총급여 기준으로 계산한 값입니다.');
+  assert.equal(
+    confirmedAxisBasisSentence({ basis_code: 'global_income', fallback_applied: false }),
+    '종합소득금액 기준으로 계산한 값입니다.',
+  );
+  const fallback = confirmedAxisBasisSentence({ basis_code: 'statutory_default', fallback_applied: true });
+  assert.ok(fallback.includes('우대 공제율'), 'fallback은 기존 안내 문구(credit_rate_global_income_missing)를 재사용해야 한다');
+});
+
+test('가정 축 머리글(D38 재개정)은 정산 기간과 수익률 조건절만 붙이고 금액을 적지 않는다', () => {
   const caption = assumptionAxisCaption({
-    estimate: { settlement_years: 3, upper_bound_krw: 90000, axis_breakdown_bound_code: 'point' },
+    estimate: { settlement_years: 3, axis_breakdown_bound_code: 'point' },
     annualReturnRate: 0.07,
   });
   assert.ok(caption.includes('3년 동안'), '가정 축은 정산 기간을 명시해야 한다');
   assert.ok(caption.includes('수익률이 연 7%라면'), '가정 축은 조건절을 반드시 붙여야 한다(D36)');
+  assert.ok(!/\d/.test(caption.replace('3', '').replace('7', '')), '공통 최댓값을 더 이상 적지 않는다(D38 재개정)');
 });
 
-test('가정 축 캡션은 점 추정이 없으면(구간의 위 끝) 「최대」를 붙인다', () => {
-  const caption = assumptionAxisCaption({
-    estimate: { settlement_years: 5, upper_bound_krw: 90000, axis_breakdown_bound_code: 'upper_bound' },
-    annualReturnRate: 0.05,
+test('ISA 비과세 행은 기간을 문장 맨 앞에 못박고 「최대 X 중 Y」로 적는다', () => {
+  const sentence = isaTaxFreeCeilingSentence({
+    axis_ceilings: {
+      tax_free_krw: 308000,
+      tax_free_settlement_years: 5,
+      tax_free_settlement_years_source: 'user',
+    },
+    axis_breakdown: { tax_free_krw: 210000 },
+    axis_breakdown_bound_code: 'point',
   });
-  assert.ok(caption.includes('최대'), '점 추정이 없으면(구간의 위 끝) 실제보다 크게 말하지 않도록 「최대」를 붙여야 한다(D36)');
+  assert.ok(sentence.startsWith('5년 계약 전체에서'), '기간이 문장 맨 앞이어야 한다');
+  assert.ok(sentence.includes('최대 308,000원 중 210,000원'), '「최대 X 중 Y」 형태여야 한다');
+});
+
+test('ISA 비과세 행은 분자가 구간 위 끝이면 괄호 부기를 쓰고 「최대」를 두 번 쓰지 않는다', () => {
+  const sentence = isaTaxFreeCeilingSentence({
+    axis_ceilings: {
+      tax_free_krw: 308000,
+      tax_free_settlement_years: 5,
+      tax_free_settlement_years_source: 'ruleset_min_contract_years',
+    },
+    axis_breakdown: { tax_free_krw: 210000 },
+    axis_breakdown_bound_code: 'upper_bound',
+  });
+  assert.ok(sentence.includes('210,000원(구간 위 끝)'), '분자는 접두 대신 괄호 부기를 써야 한다');
+  assert.equal((sentence.match(/최대/g) ?? []).length, 1, '한 줄에 「최대」가 두 번 나오면 안 된다');
+  assert.ok(sentence.includes('계약기간을 입력하지 않아'), '계약기간 하한 대입 사실을 밝혀야 한다');
+});
+
+test('법정 상한이 없는 축에는 고정 접미사가 있다', () => {
+  assert.equal(ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX, '법정 상한 없음');
 });

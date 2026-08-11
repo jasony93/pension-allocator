@@ -1,11 +1,18 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 8.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 8.2.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `8.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `8.2.0`으로 맞췄다.
+ *
+ * **8.2.0에서 따라온 것(D38, minor).** 헤드라인이 「올해 세액공제 + 앞으로 N년
+ * ISA」의 합계를 낼 수 있게 됐다. `Plan`에 `headline_composite_total`이 새로
+ * 붙고(5.17절 — 확정 성분·가정 성분을 화면이 더하지 않도록 계약이 이미 더한
+ * 값이다), `AssumptionBasedIsaEstimate`에 `axis_ceilings`가 붙는다(축마다
+ * 상한의 유무가 다르다 — 비과세 축에만 계약 단위 상한이 있다, D38 6번·7번).
+ * 값이 한 원도 움직이지 않는 추가뿐이라 minor다.
  *
  * **8.0.0에서 따라온 것(0.12·0.13절, major).** `7.0.0`이 적은 월 환산 이탈의
  * 위쪽 끝 `±(개월수 − 1)`이 산술로 틀렸다 — 실제는 **−(개월수 − 1) 이상
@@ -88,7 +95,7 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
 const KNOWN_SCHEMA_MAJOR = '8';
-export const MOCK_SCHEMA_VERSION = '8.0.0';
+export const MOCK_SCHEMA_VERSION = '8.2.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 const PRIOR_TAX_STATES = ['amount', 'zero', 'nonzero_amount_unknown', 'unknown'];
 // 5.1.0(D28·D29) — 수익이 어떤 형태로 들어오는가. 자산군이 아니다(계약 3.6절).
@@ -498,6 +505,84 @@ function readGeneralWithholdingRate(quantRule) {
   return typeof gap?.income_tax?.general === 'number' ? gap.income_tax.general : undefined;
 }
 
+/** 소득세를 매기고 지방소득세 부가율을 얹는다. `settlementAt` 안의 계산과 같은 두 단계다. */
+function taxOf(amountKrw, rate, surtaxRate) {
+  const incomeTax = applyRate(amountKrw, rate);
+  if (incomeTax === null) return null;
+  const localTax = applyRate(incomeTax, surtaxRate);
+  if (localTax === null) return null;
+  return incomeTax + localTax;
+}
+
+/**
+ * 축마다 **상한이 있는지**를 룰셋에서 읽는다(D38 6번·7번, `isa.benefit.axis_ceiling`).
+ * **없다는 것이 조문의 판정이지 우리가 못 낸 것이 아니다.** 이 계약이 낼 수 있는 형태
+ * (비과세 축에만 상한, 나머지 둘엔 없음)를 벗어나면 값을 고르지 않고 멈춘다 — 조용히
+ * `false`를 내보내면 룰셋이 바뀐 사실이 응답에서 사라진다.
+ */
+function readAxisCeilingFlags(rule) {
+  if (!rule) return null;
+  const taxFree = rule.value?.tax_free_axis?.has_a_ceiling;
+  const rateGap = rule.value?.rate_gap_axis?.has_a_ceiling;
+  const lossOffset = rule.value?.loss_offset_axis?.has_a_ceiling;
+  const unit = rule.value?.tax_free_axis?.the_unit_of_this_ceiling;
+  if (taxFree === undefined || rateGap === undefined || lossOffset === undefined) return null;
+  if (typeof unit !== 'string') return null;
+  if (taxFree !== true || rateGap !== false || lossOffset !== false) return null;
+  return { taxFree, rateGap, lossOffset };
+}
+
+/**
+ * 배분안 하나의 헤드라인 합계(D38, 계약 5.17절). **`DeterministicBenefit`과
+ * `AssumptionBasedIsaEstimate`를 화면이 더하지 않게, 그 덧셈을 여기서 대신 한다.**
+ *
+ * 가정 성분이 합계에 들어가려면 정산액을 실제로 냈어야 하고(`state === 'computed'`)
+ * **이 배분안이 ISA에 넣은 돈이 있어야 한다** — 없으면 그 정산액은 이 배분안이 만든
+ * 것이 아니므로 "이 배분으로 계산된"이라는 한정 밖이다.
+ */
+function headlineCompositeTotalFor({ determinedCreditKrw, estimate, isaAllocatedKrw, basisRuleIds }) {
+  const hasAssumption = estimate !== null && estimate.state === 'computed' && isaAllocatedKrw > 0;
+
+  if (!hasAssumption) {
+    return {
+      lower_bound_krw: determinedCreditKrw,
+      upper_bound_krw: determinedCreditKrw,
+      point_estimate_krw: determinedCreditKrw,
+      bound_code: 'point',
+      includes_assumption_component: false,
+      determined_component_krw: determinedCreditKrw,
+      determined_component_period_code: 'current_tax_year',
+      assumption_component_krw: null,
+      assumption_settlement_years: null,
+      assumption_settlement_years_source: null,
+      is_annual: false,
+      has_statutory_ceiling: false,
+      basis_rule_ids: basisRuleIds,
+    };
+  }
+
+  const point = estimate.point_estimate_krw;
+  const isPoint = point !== null;
+
+  return {
+    // 아래 끝 = 확정 성분 + 가정 성분의 아래 끝. 소득 성격이 확정적이지 않은 요청에서는
+    // 뒤 항이 0이고, 그래서 이 값이 확정된 세액공제액과 같은 수가 된다(항등식, 계약 5.17절).
+    lower_bound_krw: determinedCreditKrw + estimate.lower_bound_krw,
+    upper_bound_krw: determinedCreditKrw + estimate.upper_bound_krw,
+    point_estimate_krw: isPoint ? determinedCreditKrw + point : null,
+    bound_code: isPoint ? 'point' : 'range',
+    includes_assumption_component: true,
+    determined_component_krw: determinedCreditKrw,
+    determined_component_period_code: 'current_tax_year',
+    assumption_component_krw: isPoint ? point : estimate.upper_bound_krw,
+    assumption_settlement_years: estimate.settlement_years,
+    assumption_settlement_years_source: estimate.settlement_years_source,
+    is_annual: false,
+    has_statutory_ceiling: false,
+    basis_rule_ids: basisRuleIds,
+  };
+}
+
 /**
  * 과세 비율 `s` 하나에 대한 정산. `혜택 = G×일반세율×(1+부가율) − max(0,N−C)×ISA세율×(1+부가율)`.
  * 비교 기준의 과세표준이 `N`이 아니라 `G`인 것이 손익통산 축을 살리는 알맹이다.
@@ -566,6 +651,9 @@ function isaEstimateShell(state, ctx, extra = {}) {
     lower_bound_krw: null,
     upper_bound_krw: null,
     axis_breakdown: null,
+    // 8.2.0(D38 6번·7번) — 축마다 상한의 유무. 금액이 없으면 분모도 없다 —
+    // 축 금액이 없는데 「한도 중 얼마」를 적을 자리를 만들지 않는다.
+    axis_ceilings: null,
     // 8.1.0(D36) — 세 축 금액이 점인가 구간의 위 끝인가, 세율차 축이 0인
     // 것이 결핍이 아닌 자리인가. `state`가 `computed`가 아니면 둘 다 null이다
     // (계약 5.14절).
@@ -614,7 +702,10 @@ function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw, surta
 
   const upper = at(context.share.max);
   const lower = context.share.point ? upper : at(context.share.min);
-  if (upper === null || lower === null) {
+  // 비과세 축의 상한 = `C × 일반세율 × (1+부가율)`. 축의 정의가 `min(N, C) × …`이고
+  // `min(N, C) ≤ C`이므로 이 값이 그 축이 넘을 수 없는 값이다(D38 6번, isa.benefit.axis_ceiling).
+  const taxFreeCeiling = taxOf(taxFreeLimitKrw, context.generalRate, surtaxRate);
+  if (upper === null || lower === null || taxFreeCeiling === null) {
     return isaEstimateShell('not_computable', context, { not_computable_reason_code: 'amount_not_representable' });
   }
 
@@ -632,6 +723,22 @@ function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw, surta
     lower_bound_krw: lower.settlementKrw,
     upper_bound_krw: upper.settlementKrw,
     axis_breakdown: upper.axes,
+    // **축마다 상한의 유무가 다르다**(D38 6번·7번). 있다고 룰셋이 적은 축(비과세)에만
+    // 금액을 만든다 — 나머지 둘에 칸을 두면 언젠가 값이 들어가고, 조문에 없는 분모는
+    // 지어낸 분모다.
+    axis_ceilings: {
+      tax_free_krw: taxFreeCeiling,
+      // **계약 1건당이다.** 옆의 세액공제 축은 연간이므로 기간이 값으로 나가지 않으면
+      // 두 축을 나란히 둔 배치가 이 값을 연간으로 읽게 만든다.
+      tax_free_period_code: 'contract_settlement_period',
+      tax_free_settlement_years: context.settlementYears,
+      // **이 값은 「법이 정한 최대 절세액」이 아니라 이 계산이 낼 수 있는 값의
+      // 최댓값이다.** 비교 세율이 14%보다 높아질 여지가 있고 그 여지는 실제 값을
+      // 키우는 방향이라, 오차 방향은 과소다.
+      tax_free_is_lower_bound: true,
+      rate_gap_has_ceiling: context.axisCeilings.rateGap,
+      loss_offset_has_ceiling: context.axisCeilings.lossOffset,
+    },
     // D36 — 세 축은 언제나 `upper`(taxable_share_max)의 분해다. 점 추정이
     // 있으면(share.point) 그 분해가 점이고, 없으면 구간의 위 끝이다. 화면이
     // `point_estimate_krw === null`로 스스로 판정하지 않게 값으로 낸다.
@@ -1340,18 +1447,21 @@ function computeScenario(scenario, request, rulesets) {
     const formulaRule = use('isa.benefit.formula', 'plans[].assumption_based_isa_estimate');
     const settlementPeriodRule = use('isa.benefit.settlement_period', 'plans[].assumption_based_isa_estimate');
     const lossOffsetRule = use('isa.net_income.loss_offset', 'plans[].assumption_based_isa_estimate');
+    // D38 6번·7번 — 축마다 상한의 유무가 다르다는 판정. 축 금액을 낼 때만 읽는다.
+    const axisCeilingRule = use('isa.benefit.axis_ceiling', 'plans[].assumption_based_isa_estimate');
     // 연금계좌 칸이 비어 있는 것을 "효과가 없다"로 읽지 않게 하는 근거(D28 18.5절).
     use('pension.tax_deferral.with_return_rate', 'notices[pension_tax_deferral_not_quantified]');
 
-    if (quantRule && isaExcessRule && accountReqRuleForReturn && incomeCharacterRule && formulaRule && settlementPeriodRule && lossOffsetRule) {
+    if (quantRule && isaExcessRule && accountReqRuleForReturn && incomeCharacterRule && formulaRule && settlementPeriodRule && lossOffsetRule && axisCeilingRule) {
       const generalRate = readGeneralWithholdingRate(quantRule);
       const isaRate = isaExcessRule.value.rate;
       const minContractYears = accountReqRuleForReturn.value.min_contract_years;
       const options = incomeCharacterRule.value?.what_to_ask_instead?.options ?? [];
       const option = options.find((item) => item?.id === isaReturnAssumptionInput.income_character);
       const share = parseTaxableShareRange(option?.s_range);
+      const axisCeilings = readAxisCeilingFlags(axisCeilingRule);
 
-      if (generalRate !== undefined && isaRate != null && minContractYears != null && share !== null) {
+      if (generalRate !== undefined && isaRate != null && minContractYears != null && share !== null && axisCeilings !== null) {
         const settlementFromUser = isaReturnAssumptionInput.settlement_years != null;
         isaReturnContext = {
           supplied: true,
@@ -1359,10 +1469,12 @@ function computeScenario(scenario, request, rulesets) {
           share,
           generalRate,
           isaRate,
+          axisCeilings,
           settlementYears: settlementFromUser ? isaReturnAssumptionInput.settlement_years : minContractYears,
           settlementSource: settlementFromUser ? 'user' : 'ruleset_min_contract_years',
           basisRuleIds: [
             accountReqRuleForReturn.id,
+            axisCeilingRule.id,
             formulaRule.id,
             incomeCharacterRule.id,
             quantRule.id,
@@ -1376,6 +1488,17 @@ function computeScenario(scenario, request, rulesets) {
       }
     }
   }
+
+  // -- 헤드라인 합계의 근거 (D38, 계약 5.17절) ------------------------------
+  //
+  // **가정이 없어도 읽는다** — ISA 성분이 없는 사용자에게도 헤드라인 합계는
+  // 나가고, 그때 「합계 = 확정 성분」이라는 것도 이 규칙이 정한다. 규칙이 없으면
+  // `use()`가 missingRules에 기록해 ok:false로 조기 반환한다 — 대체값을 만들지 않는다.
+  const headlineRule = use('benefit.headline.composite_total', 'plans[].headline_composite_total');
+  const headlineSettlementPeriodRule = use('isa.benefit.settlement_period', 'plans[].headline_composite_total');
+  const headlineBasisRuleIds = [headlineRule?.id, creditRateRule?.id, headlineSettlementPeriodRule?.id]
+    .filter(Boolean)
+    .sort();
 
   // -- ISA 연간 납입 가능액 -----------------------------------------------
   const isaRequirementsRule = use('isa.account.requirements', 'scenarios[].limits.by_account[isa]');
@@ -1922,6 +2045,16 @@ function computeScenario(scenario, request, rulesets) {
       ].filter(Boolean),
     };
 
+    // 5.1.0(D28·D29·D31) — 원금은 「가입 이후 누적 납입액 + 이 배분안의 ISA
+    // 배분액」이다. 헤드라인 합계(아래)가 이 값을 다시 필요로 하므로 먼저 뽑아 둔다.
+    const planIsaEstimate = isaEstimateFor({
+      context: isaReturnContext,
+      display: isaEstimateDisplay,
+      taxFreeLimitKrw: taxFreeLimit,
+      principalKrw: accounts.isa.cumulative_contribution_krw + (p.allocByAccount.isa ?? 0),
+      surtaxRate: localRateOfIncomeTax,
+    });
+
     return {
       plan_id: p.planId,
       is_baseline: false,
@@ -2005,12 +2138,14 @@ function computeScenario(scenario, request, rulesets) {
       // 5.1.0(D28·D29·D31) — **`DeterministicBenefit`과 같은 축에 놓거나 더하지
       // 않는다.** 원금이 이 안의 ISA 배분액을 포함하므로 안마다 값이 다를 수
       // 있다(계약 5.14절). 가정을 보내지 않았으면 `null`이다.
-      assumption_based_isa_estimate: isaEstimateFor({
-        context: isaReturnContext,
-        display: isaEstimateDisplay,
-        taxFreeLimitKrw: taxFreeLimit,
-        principalKrw: accounts.isa.cumulative_contribution_krw + (p.allocByAccount.isa ?? 0),
-        surtaxRate: localRateOfIncomeTax,
+      assumption_based_isa_estimate: planIsaEstimate,
+      // 8.2.0(D38) — **위 두 값을 더해도 되는 자리는 여기 하나뿐이고, 그 덧셈은
+      // 이미 했다.** 화면이 다시 더하지 않는다(계약 5.17절).
+      headline_composite_total: headlineCompositeTotalFor({
+        determinedCreditKrw: totalCreditKrw,
+        estimate: planIsaEstimate,
+        isaAllocatedKrw: p.allocByAccount.isa ?? 0,
+        basisRuleIds: headlineBasisRuleIds,
       }),
       _allocationVector: ACCOUNTS.map((a) => p.allocByAccount[a] ?? 0).join('|'),
       _totalCredit: totalCreditKrw,
@@ -2120,7 +2255,9 @@ function computeScenario(scenario, request, rulesets) {
     const computedEstimate = estimates.find((e) => e.state === 'computed');
     if (computedEstimate) {
       // 이 금액은 정산 기간 전체의 값이다. 연 환산은 비과세 한도를 해마다 새로
-      // 주는 계산이 되어 최대 1.75배 과대다(`isa.benefit.settlement_period`).
+      // 주는 계산이 되어 **적어도** 1.75배 과대다(계약 3년) — 계약이 길수록
+      // 커져 2.8배에 수렴한다. **1.75는 상한이 아니라 하한이다**
+      // (`isa.benefit.settlement_period`, 계약 0.16절 정정).
       notices.push({
         code: 'isa_return_estimate_is_not_annual',
         severity: 'info',
