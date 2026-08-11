@@ -31,7 +31,24 @@
   --surface-base: #f7f8fa;
   --surface-raised: #ffffff;
   --surface-sunken: #edeff2;
-  --surface-overlay: #ffffff;
+  /* 2026-08-11 재수정 — 색조 복귀(위 주석)가 `surface-raised`·`surface-overlay`를
+     둘 다 `#ffffff`로 되돌렸는데, **되돌리기 전에는 이 둘이 이미 서로 다른
+     값이었다**(초록 팔레트에서 raised `#F0FDF4` vs overlay `#F7FEFA`, design-
+     system 5.31.2절이 인용한 검증기 출력). 복귀가 "색조만 되돌린다"고 적었지만
+     실제로는 두 표면을 같은 흰색으로 뭉갰다 — 관리자가 라이트 모드 스크린샷에서
+     `AccountBenefitStrip` 박스의 바닥이 카드와 구분되지 않는다고 잡은 결함이
+     이것이다. `surface-sunken`(#EDEFF2)은 대안이 아니다 — 라이트 IRP(#DA7134)가
+     이 표면 대비 2.85:1로 3:1 미달이다(design-system 5.31.2절이 이미 기각).
+     팔레트 검증기(`validate_palette.js`)가 저장소에 없어(찾아지지 않음) 같은
+     WCAG 상대휘도 산식(`styles-tokens.test.mjs`의 `contrast()`와 동일)으로
+     직접 재계산했다 — 카드(#FFFFFF) 대비 구분 가능한 옅은 회색조 중 계좌 색
+     셋이 전부 3:1을 넘는 가장 짙은 값을 찾았다:
+       #F4F6F8 — 연금저축 3.19 · IRP 3.03 · ISA 4.62 · 미배분 5.81 (모두 ≥3)
+       카드(#FFFFFF) 대비 1.083(대체로 미묘하지만 0이 아니다 — 아래 1px
+       `border-subtle` 테두리와 함께 육안으로 구분된다, 브라우저 실측으로 확인).
+     `styles-tokens.test.mjs`의 "[light] 값을 나르는 색은 마크 표면 대비 3:1"
+     검사가 이 값을 그대로 대조한다 — 값을 다시 바꾸면 그 검사가 잡는다. */
+  --surface-overlay: #f4f6f8;
   --surface-scrim: rgba(16, 18, 20, 0.48);
   --border-subtle: #e1e5ea;
   /* D23 — 입력 필드의 경계는 **뜻을 나르는 경계**다(WCAG 1.4.11, 비텍스트 3:1).
@@ -171,7 +188,7 @@
   :root, :root[data-theme="dark"], :root[data-theme="light"] {
     color-scheme: light;
     --surface-base: #f7f8fa; --surface-raised: #ffffff; --surface-sunken: #edeff2;
-    --surface-overlay: #ffffff; --surface-scrim: rgba(16, 18, 20, 0.48);
+    --surface-overlay: #f4f6f8; --surface-scrim: rgba(16, 18, 20, 0.48);
     --border-subtle: #e1e5ea; --border-strong: #7c848d;
     --text-primary: #14181c; --text-secondary: #4a535c; --text-muted: #7c858e;
     --text-on-accent: #ffffff; --text-link: #1f5c99;
@@ -527,37 +544,56 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .donut-with-strip { display: flex; flex-direction: column; }
 .donut-wrap { display: flex; justify-content: center; }
 
-/* `AccountBenefitStrip`(design-system 5.31.1절, D33 재개정) — 도넛 바로
-   아래, 우측 정렬, **도넛 카드 내용 폭의 50%, 최소 240px**(768px 이상).
-   모바일은 "오른쪽 아래"를 포기하고 전체 폭으로 내려온다(screens.md 5.7절).
+/* `AccountBenefitStrip`(design-system 5.31.3절, D36 재개정) — 도넛 카드
+   **내용 폭 그대로(100%), 모든 뷰포트.**
 
-   **옛 정의는 폐기됐다.** "도넛 외경의 50%"(데스크톱 130px·태블릿 120px)는
-   관리자 실측(트랙 98px)에서 "사이드바의 작은 진행바로 읽힌다"고 판정됐다.
-   332px(카드 내용 폭 663px의 50%)에서야 막대로 뚜렷이 읽히면서도 아래 C-2
-   막대(≈639px)보다 짧아 시각적으로 종속된다 — 자세한 실측표는
-   design-system.md 5.31.1절. 이 폭 확대가 되살릴 수 있는 오독(C-2와의 혼동)은
-   크기가 아니라 아래 네 장치로 막는다 — ① 헤더 위계를 낮춘다
-   (`.account-benefit-strip h4`를 `type-body-strong`으로, `result-panel.js`),
-   ② 참조 캡션이 "새 계산이 아니다"를 명시한다(`.benefit-strip-ref-caption`),
-   ③ 막대 아래 축 캡션을 화면에도 보이게 적는다(`.benefit-meter-axis-caption`),
-   ④ 트랙 굵기 6px을 유지한다(C-2는 20px, 아래 `.benefit-meter-track`). 넷은
-   누적 관계이지 대체 관계가 아니다 — 하나가 실패해도 나머지가 남는다.
+   **폭으로 겹침을 막는 시도(D33·5.31.1절)는 폐기됐다.** 소유자가 "반
+   사이즈로 하란 말 취소"(D35)해 폭을 100%로 키웠는데, 관리자 실측(design-
+   system 5.31.2절)에서 100% 폭이 바로 아래 C-2 배분 막대와 색·시작점·길이가
+   거의 같아 "비슷한 두 초록 막대"로 겹쳐 읽힌다는 것이 확인됐다 — 70%·80%
+   같은 중간값도 "커지지만 여전히 헷갈리는" 어중간한 지점만 있었다. **오독
+   방지는 폭이 아니라 컨테이너(이 배경·테두리 박스)가 진다.**
 
-   **2026-08-10 재실측 — 자리는 맞는데 붙어 보였다.** `.donut-wrap`의 svg는
-   직접 라벨이 들어갈 자리까지 자기 높이에 이미 포함하고 있어(`donutGeometry`),
-   라벨(특히 오른쪽 라벨)이 svg 상자 바닥 가까이 올 수 있다. 그 바로 뒤에
-   `margin-top: 8px`만 두면 라벨과 이 위젯 사이 간격이 12px까지 좁아지고,
-   x축도 겹쳐(오른쪽 라벨이 x:1155~1251, 위젯이 x:1190~1320 — 실측) "도넛
-   오른쪽 라벨 목록의 연장"처럼 읽힌다. 소유자가 "도넛 옆 좁은 칸"이라 부른
-   것이 이것이다. 위쪽 여백을 키우고 구분선을 그어 라벨 목록과 분리한다 —
-   `border-subtle`은 뜻을 나르는 마크가 아니라 구조적 구분선이므로 3:1 마크
-   대비 검사 대상이 아니다. */
+   `surface-overlay`를 쓴다(`surface-sunken`은 기각 — 라이트 IRP가 표면 대비
+   2.85:1로 3:1 미달, 아래 토큰 정의부 주석 참고). 이 표면은 3.1.1절이 이미
+   "마크 표면"(계좌색을 올려도 되는 표면) 등급으로 분류해 뒀다.
+
+   **2026-08-11 재수정 — "새 표면이 아니므로 재검증이 필요 없다"는 처음에
+   틀렸다.** 색조 복귀가 `surface-raised`·`surface-overlay`를 둘 다 `#FFFFFF`로
+   만들어 놔서, 이 박스가 라이트에서 카드와 같은 색이었다 — 테두리 1px만
+   남고 "박스"라는 인상 자체가 사라졌다(관리자가 스크린샷에서 잡음). 그때의
+   자동 검사(`account-benefit-strip-width.test.mjs`)는 "테두리가 투명하지
+   않다"만 쟀고 **배경이 뒤 표면과 같은 색인지는 묻지 않아** 통과하면서
+   아무것도 증명하지 못했다. 토큰 정의부(위 `:root`)에서 `--surface-overlay`
+   값을 카드와 실제로 다른 값(`#F4F6F8`)으로 고쳤고, 검사도 "배경색 ≠
+   `surface-raised`"와 실제 대비비를 재는 것으로 다시 썼다. */
 .account-benefit-strip {
-  align-self: flex-end; width: 50%; min-width: 240px; margin-top: var(--space-6);
-  padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);
+  width: 100%; margin-top: var(--space-6);
+  background: var(--surface-overlay); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-m); padding: var(--space-4); padding-top: var(--space-3);
   display: flex; flex-direction: column; gap: var(--space-1);
 }
 .benefit-strip-ref-caption { margin: 0 0 var(--space-1); font-size: 12.5px; color: var(--text-secondary); }
+
+/* D36 — 확정 축과 가정 축을 물리적으로 가른다. 두 축의 길이는 비교
+   대상이 아니라는 사실을 배치가 먼저 말해야 한다는 것이 관리자 D36의
+   핵심 요구다 — 문구만으로는 부족하다(사람은 나란히 선 막대의 길이를
+   먼저 비교하고 글자는 나중에 읽는다). */
+.benefit-axis { display: flex; flex-direction: column; gap: var(--space-1); }
+/* `-confirmed`/`-assumption`은 지금 별도 스타일이 없는 훅 클래스다 — 배치
+   구분은 `.benefit-axis-divider`(구분선)와 DOM 순서(확정이 먼저)가 이미
+   지고 있고, 등급(solid/outline) 자체가 `BenefitMeter`에서 이미 갈린다.
+   그래도 이름을 남겨 둔다 — 나중에 소구획별 스타일이 필요해지면(예: 배경
+   틴트) 여기에 붙일 자리가 이미 있다. */
+.benefit-axis-confirmed,
+.benefit-axis-assumption { /* 스타일 없음 — 배치 구분 훅 클래스 */ }
+.benefit-axis-caption { margin: 0 0 var(--space-1); font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.benefit-axis-caption-note { margin: 0 0 var(--space-1); font-size: 12.5px; color: var(--text-secondary); }
+.benefit-axis-divider { border: none; border-top: 1px solid var(--border-subtle); margin: var(--space-3) 0; width: 100%; }
+/* D36 — 세율차 축이 `favorable_zero`(0원이지만 더 유리한 사실)일 때의 행.
+   막대는 그대로 빈 트랙이므로 이 클래스 자체에는 시각 효과가 없다 — 배지
+   (`.benefit-row-info-chip`)와 서술(`.benefit-row-subnote`)이 뜻을 진다. */
+.benefit-row-favorable-zero { /* 스타일 없음 — 훅 클래스, 배지·서술이 뜻을 진다 */ }
 .benefit-row {
   display: flex; align-items: flex-start; gap: var(--space-2); width: 100%;
   border: none; background: transparent; cursor: pointer; text-align: left;
@@ -579,18 +615,37 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .benefit-row-note { font-size: 12.5px; color: var(--text-secondary); }
 .benefit-row-amount { font-size: 14px; }
 .benefit-row-subnote { font-size: 12.5px; color: var(--text-secondary); }
-/* ISA `narrative` 행의 괄호 — 절세액과 구분됨을 항상 병기한다. 이 괄호를
-   빼면 서술도 금액이라고 오독한다(design-system 5.31절 `narrative` 행). */
-.benefit-row-suffix { font-size: 12.5px; color: var(--text-secondary); }
 
 /* `BenefitMeter`(design-system 5.31절) — `AllocationBar`의 트랙-채움 대비
    표를 그대로 물려받는다(3.5.4절, 새 색을 만들지 않으므로 재검증이 필요
-   없다). 높이 6px — `AllocationBar` 20px의 절반 굵기 미만. */
+   없다).
+
+   **2026-08-11 재수정 — 6px는 D33 시절(취소된 "반 사이즈로" 지시)의 잔재였다.**
+   소유자가 D35 1번에서 그 지시를 명시로 취소했다("가로 막대 길이를 더 크고
+   눈에 띄게 해줘. 내가 반 사이즈로 하란 말 취소할게") — 그런데 이 위젯은
+   길이만 D35·D36에서 100%/두 축으로 커졌고 **굵기는 그 취소를 반영하지
+   않은 채 6px로 남아 있었다.** 관리자가 렌더 실측에서 "길이만 늘고 눈에
+   띄는 정도는 그대로"라고 잡았다.
+
+   **12px로 올린다.** 브라우저로 6/8/10/12/14px 다섯 값을 실제로 그려
+   C-2(20px)와 나란히 비교했다 — 8px 이하는 여전히 "가는 선"으로 읽히고,
+   14px부터는 C-2와의 굵기 비율(14/20=0.7)이 D35가 겹침으로 지목한 위험
+   구간에 가까워지기 시작한다(스크린샷 비교, `track-Npx-vs-c2.png`).
+   12px(비율 0.6)에서 두 조건이 함께 성립했다 — 확정 축 채움·가정 축 윤곽선
+   모두 뚜렷한 막대로 읽히면서도, C-2는 여전히 solid 채움 + 더 굵은 트랙 +
+   계좌별 큰 라벨이라는 다른 시각 언어로 남아 하나로 읽히지 않았다(C-2는
+   solid fill, 이 위젯의 가정 축은 outline — 형태 자체가 다르다). */
 .benefit-meter-track {
-  height: 6px; border-radius: var(--radius-full); background: var(--data-track);
+  height: 12px; border-radius: var(--radius-full); background: var(--data-track);
   border: 1px solid var(--border-subtle); overflow: visible; width: 100%; margin: 2px 0;
 }
 .benefit-meter-fill { height: 100%; border-radius: var(--radius-full); min-width: 3px; }
+/* D36 — 보조 행(ISA 손익통산·절사 잔차). 소유자가 요청한 두 행(비과세·
+   저율분리)과 같은 무게로 두지 않는다 — 더 작은 글자·더 얇은 트랙(기본
+   12px의 2/3). 기본 트랙 규칙 **뒤에** 두어 재정의로 읽히게 한다. */
+.benefit-row-secondary .benefit-row-names { font-size: 12.5px; color: var(--text-secondary); }
+.benefit-row-secondary .benefit-row-amount { font-size: 12.5px; color: var(--text-secondary); }
+.benefit-row-secondary .benefit-meter-track { height: 8px; }
 /* D33(design-system 5.31.1절 장치③) — 막대 아래 축(denominator) 캡션. 지금까지
    `aria-label`에만 있던 `세액공제 인정 한도 대비 {n}%`를 화면에도 적는다.
    C-2의 `.field-help`(납입 잔여 한도 …)와 어휘가 겹치지 않으므로 폰트 크기는
@@ -605,22 +660,50 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .benefit-meter-fill-outline {
   box-sizing: border-box; background: var(--surface-raised); border: 1.5px solid; margin: -1px 0;
 }
-/* `가정 기반` 칩 — ProvisionalStatusNote·note-tag-product와 같은 state-info 색 규약. */
+/* `가정 기반` 칩 — ProvisionalStatusNote·note-tag-product와 같은 state-info 색 규약.
+   **`align-self: flex-start`가 필수다.** 이 칩의 부모(`.benefit-row-body`)가
+   `flex-direction: column`인데 `align-items`의 기본값이 `stretch`라, 이 값이
+   없으면 `display: inline-block`이어도 flex 아이템으로서 가로축(행 전체 폭)
+   까지 늘어난다 — 관리자가 스크린샷에서 잡은 결함이다("가정 기반" 칩이
+   트랙 전체 폭의 옅은 파란 사각형으로 렌더되어 실제 막대(그 아래 가는 선)
+   보다 더 크고 확실한 것처럼 보였다. 가정 위의 추정치가 확정 금액보다 커
+   보이면 D28이 막으려던 것을 정확히 뒤집는다). */
 .benefit-row-assumption-chip {
-  display: inline-block; margin-bottom: 2px; padding: 1px 6px; border-radius: var(--radius-s);
+  display: inline-block; align-self: flex-start; margin-bottom: 2px; padding: 1px 6px; border-radius: var(--radius-s);
   font-size: 12.5px; font-weight: 600; background: var(--state-info-subtle);
   border: 1px solid var(--state-info); color: var(--state-info);
 }
 .benefit-row-assumption-caption { font-size: 12.5px; color: var(--text-secondary); }
-/* 모바일(<768px) — D33 재개정으로 "높이로 절반 크기를 지킨다"는 옛 근거는
-   폐기됐다(design-system 5.31.1절 "모바일 재검토"). 오독 방지는 크기가
-   아니라 위 네 장치로만 지므로, 모바일에서도 전체 폭을 그대로 쓴다. */
-@media (max-width: 767px) {
-  .account-benefit-strip { align-self: stretch; width: 100%; min-width: 0; }
+/* D36 — 세율차 축이 0인 것이 「혜택 없음」이 아니라는 사실을 알리는 배지.
+   `가정 기반` 칩과 같은 state-info 색 규약이지만 다른 사실을 말하므로
+   라벨이 다르다(design-system 5.31.3절 `favorable_zero`). 같은 이유로
+   `align-self: flex-start`가 필수다(위 주석). */
+.benefit-row-info-chip {
+  display: inline-block; align-self: flex-start; margin-bottom: 2px; padding: 1px 6px; border-radius: var(--radius-s);
+  font-size: 12.5px; font-weight: 600; background: var(--state-info-subtle);
+  border: 1px solid var(--state-info); color: var(--state-info);
 }
-/* 태블릿(768~1023px) — 옛 고정값(120px)은 폐기됐다. 데스크톱과 같은 공식
-   (`width: 50%, min-width: 240px`)이 두 구간을 함께 커버하므로 별도 규칙이
-   없다(design-system 5.31.1절 "태블릿도 같은 공식을 쓴다"). */
+/* D36·D37 — 폭 전용 미디어쿼리는 없다. 폭이 이제 모든 뷰포트에서 카드 내용
+   폭 그대로이므로, D33이 남긴 50%/100% 두 갈래 규칙이 필요 없어졌다
+   (design-system 5.31.2절 "폭 전용 미디어 쿼리를 지운다"). */
+
+/* D36·D37 — 연금저축·IRP 참고 구역. 축도 등급도 없다(계약 5.16절) — 이
+   위젯 안에서 유일하게 `<table>`을 쓰는 곳이다. 기본 접힘이 허용된다
+   (D25) — 접는 것과 자르는 것은 다르다, 일곱 행 전부가 안에 있다. */
+.benefit-reference { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.benefit-reference-summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--space-1);
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+}
+.benefit-reference-summary::-webkit-details-marker { display: none; }
+.benefit-reference[open] > .benefit-reference-summary > .block-summary-chevron { transform: rotate(90deg); }
+.benefit-reference-body { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.benefit-reference-body h5 { margin: 0; }
+.benefit-reference-body p { margin: 0; }
+.benefit-reference-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.benefit-reference-table th,
+.benefit-reference-table td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border-subtle); }
+.benefit-reference-table th { color: var(--text-secondary); font-weight: 600; }
 
 .chart-donut { max-width: 100%; height: auto; }
 /* `chart-donut-entering`은 진입 애니메이션이 필요하다는 표시로만 쓰인다

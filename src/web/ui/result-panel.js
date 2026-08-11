@@ -55,9 +55,26 @@ import {
   ACCOUNT_BENEFIT_POOLED_NOTE,
   ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE,
   ACCOUNT_BENEFIT_REDUCED_NOTE,
+  ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE,
+  confirmedAxisCaption,
+  assumptionAxisCaption,
+  boundedAxisAmountText,
   ACCOUNT_BENEFIT_ISA_NARRATIVE,
-  ACCOUNT_BENEFIT_ISA_SUFFIX,
   ACCOUNT_BENEFIT_EXCLUDED_LABEL,
+  ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL,
+  ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL,
+  ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL,
+  ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE,
+  ACCOUNT_BENEFIT_FAVORABLE_ZERO_CHIP_LABEL,
+  PENSION_REFERENCE_TITLE,
+  PENSION_REFERENCE_RETAX_SENTENCE,
+  PENSION_REFERENCE_NOT_COMPUTABLE_SENTENCE,
+  PENSION_REFERENCE_TABLE_HEADERS,
+  PENSION_REFERENCE_SUMMARY_LABEL,
+  pensionRateGapRangeText,
+  pensionIncomeCharacterLabel,
+  pensionWithdrawalBranchLabel,
+  pensionGapSignLabel,
   ISA_RETURN_ASSUMPTION_CHIP_LABEL,
   ISA_RETURN_NOT_COMPUTABLE_NOTE,
   ISA_RETURN_SUPPRESSED_NOTE,
@@ -77,7 +94,6 @@ import {
   stackBarSegments,
   computeTrackScalePercent,
   benefitMeter,
-  benefitMeterFillPercent,
   placeholderRing,
   prefersReducedMotion,
   nextSeatStep,
@@ -622,153 +638,299 @@ function isaTaxFreeBlock(scenario, view) {
 }
 
 /**
- * `AccountBenefitStrip` — design-system 5.31절 · screens.md 5.14절. 도넛 바로
- * 아래, 우측 정렬로 붙는 절반 크기 위젯. `[4-D]` 표를 대체하지 않고 요약만
- * 앞으로 끌어온다 — 근거(`LawChip`)는 이 위젯이 아니라 표에 있고, 행을 누르면
- * 그 행으로 스크롤 + 하이라이트한다(P2, 5.31절 "근거" 규약).
+ * `AccountBenefitStrip` — design-system 5.31.3절 · screens.md 5.14.8절(D36).
+ * 도넛 카드 내용 폭 그대로(100%), `surface-overlay` 컨테이너(D35) 안에서 두
+ * 축을 물리적으로 가른다 — **확정 축**(연금저축·IRP 세액공제, 올해)과
+ * **가정 축**(ISA 비과세·저율분리과세·손익통산, 사용자가 준 수익률 위의
+ * 추정)은 서로 다른 저울이다. 하나의 자에 올리면 확정 세액과 가정 위의
+ * 추정치가 길이로 직접 비교되고, 그것은 룰셋이 금지한 "같은 저울"을 형태로
+ * 실행하는 것이 된다(D36). 맨 아래 연금저축·IRP 참고 구역은 축도 등급도
+ * 없다 — 잴 금액 자체가 없기 때문이다(계약 5.16절).
  *
- * **새 데이터를 만들지 않는다.** `accountBenefitRows`가 계약이 이미 낸 값만
- * 고르고, 이 함수는 그것을 그리기만 한다.
+ * **새 데이터를 만들지 않는다.** `accountBenefitRows`·`scenario.pension_credit_
+ * ceiling`·`plan.assumption_based_isa_estimate`·`scenario.pension_withdrawal_
+ * tax_reference`가 계약이 이미 낸 값만 고르고, 이 함수는 그것을 그리기만 한다.
  */
 function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
   const rows = accountBenefitRows(scenario, plan);
 
-  const pensionRow = () => {
-    const p = rows.pension;
-    const dots = p.accounts.map((a) =>
-      el('span', { class: 'benefit-dot', style: { background: `var(--data-${a === 'annuity_savings' ? 'pension' : 'irp'})` } }),
-    );
-    const names = p.accounts.map((a) => ACCOUNT_LABEL[a]).join(' · ');
-    const onClick = () => scrollAndHighlight(`account-row-${p.accounts[0]}`);
+  return el('div', { class: 'account-benefit-strip' }, [
+    // D33(design-system 5.31.1절 장치①) — 헤더 위계를 C-2 계좌명과 같은 등급
+    // (`type-body-strong`)으로 낮춘다. `<h4>`는 스크린리더 랜드마크로 유지한다.
+    el('h4', { class: 'type-body-strong' }, [ACCOUNT_BENEFIT_STRIP_TITLE]),
+    el('p', { class: 'benefit-strip-ref-caption' }, [ACCOUNT_BENEFIT_STRIP_REF_CAPTION]),
+    confirmedAxisSection(scenario, plan, rows.pension),
+    el('hr', { class: 'benefit-axis-divider' }),
+    assumptionAxisSection(rows.isa, isaReturnAssumption),
+    pensionReferenceSection(scenario),
+  ]);
+}
 
-    if (p.state === 'excluded') {
-      return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+/**
+ * 확정 축(D36) — 연금저축·IRP 세액공제 하나뿐이다. 최댓값은
+ * `pension_credit_ceiling.ceiling_krw`(소득세분+지방소득세분, 계약 5.15절) —
+ * **소득세분만 쓰지 않는다**, 그러면 한도를 채운 사람의 막대가 트랙 밖으로
+ * 나간다(D37 — 소유자의 148.5만원 예시가 이 결함을 잡았다).
+ */
+function confirmedAxisSection(scenario, plan, p) {
+  const onClick = () => scrollAndHighlight(`account-row-${p.accounts[0]}`);
+  const dots = p.accounts.map((a) =>
+    el('span', { class: 'benefit-dot', style: { background: `var(--data-${a === 'annuity_savings' ? 'pension' : 'irp'})` } }),
+  );
+  const names = p.accounts.map((a) => ACCOUNT_LABEL[a]).join(' · ');
+
+  if (p.state === 'excluded') {
+    return el('div', { class: 'benefit-axis benefit-axis-confirmed' }, [
+      el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
         el('span', { class: 'benefit-row-dots' }, dots.length ? dots : [el('span', { class: 'benefit-dot' })]),
         el('span', { class: 'benefit-row-body' }, [
           el('span', { class: 'benefit-row-names type-body-s' }, [names]),
           el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_EXCLUDED_LABEL]),
         ]),
-      ]);
-    }
-
-    // pooled — 낼 세금 상태와 동기화한다(모름 → 최대 / 잘림 → 축약 문구 /
-    // 0 → 0원 + 차이 없음 문구, 5.31절 "낼 세금 상태와 동기화한다").
-    const view = taxCreditHeadlineView(plan);
-    const amountText =
-      view.mode === HEADLINE_MODE.BOUNDED
-        ? `${BOUNDED_AMOUNT_PREFIX} ${formatKrwAbbreviated(view.totalKrw)}`
-        : formatKrwAbbreviated(view.totalKrw);
-    const subNote =
-      view.mode === HEADLINE_MODE.ZERO
-        ? ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE
-        : view.mode === HEADLINE_MODE.REDUCED
-          ? ACCOUNT_BENEFIT_REDUCED_NOTE
-          : null;
-
-    // 확정(solid) 등급 — 트랙 = 한도 적용 전, 채움 = 적용 후(design-system
-    // 5.31절 "값의 출처"). `beforeCapKrw`가 없으면(방어적으로만) 막대를 생략한다.
-    const fillPercent = p.beforeCapKrw != null ? benefitMeterFillPercent(p.afterCapKrw ?? 0, p.beforeCapKrw) : null;
-    const meter =
-      fillPercent != null
-        ? benefitMeter({ account: p.accounts[0], grade: 'solid', fillPercent })
-        : null;
-    // D33(design-system 5.31.1절 장치③) — 같은 문구를 `aria-label`과 화면
-    // 둘 다에 낸다. 스크린리더 사용자와 눈으로 보는 사용자가 같은 축을 안다.
-    const axisCaption = fillPercent != null ? benefitMeterAxisCaption(fillPercent) : null;
-    const ariaLabel = `${names}, ${amountText}${axisCaption ? `, ${axisCaption}` : ''}`;
-
-    return el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
-      el('span', { class: 'benefit-row-dots' }, dots),
-      el('span', { class: 'benefit-row-body' }, [
-        el('span', { class: 'benefit-row-names type-body-s' }, [names]),
-        p.accounts.length > 1 ? el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_POOLED_NOTE]) : null,
-        meter,
-        axisCaption ? el('span', { class: 'benefit-meter-axis-caption' }, [axisCaption]) : null,
-        el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
-        subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
       ]),
     ]);
-  };
+  }
 
-  const isaRow = () => {
-    const i = rows.isa;
-    const onClick = () => scrollAndHighlight('account-row-isa');
-    if (i.state === 'excluded') {
-      return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+  const ceiling = scenario.pension_credit_ceiling;
+  // pooled — 낼 세금 상태와 동기화한다(모름 → 최대 / 잘림 → 축약 문구 /
+  // 0 → 0원 + 차이 없음 문구).
+  const view = taxCreditHeadlineView(plan);
+  const amountText =
+    view.mode === HEADLINE_MODE.BOUNDED
+      ? `${BOUNDED_AMOUNT_PREFIX} ${formatKrwAbbreviated(view.totalKrw)}`
+      : formatKrwAbbreviated(view.totalKrw);
+  const zeroNote = view.mode === HEADLINE_MODE.ZERO ? ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE : null;
+  const reducedNote = view.mode === HEADLINE_MODE.REDUCED ? ACCOUNT_BENEFIT_REDUCED_NOTE : null;
+  // D37 2번 — 짧은 막대의 이유. 「덜 넣어서」가 아니라 「낼 세금이 적어서」다.
+  // 강도는 낮게(`.benefit-row-subnote`, 무색) — 경고가 아니라 설명이다.
+  const capBelowNote =
+    ceiling && !ceiling.is_axis_degenerate && ceiling.tax_liability_cap_relation_code === 'cap_below_ceiling'
+      ? ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE
+      : null;
+
+  // 확정(solid) 등급 — 트랙 = 축의 끝(`ceiling.ceiling_krw`), 채움 = 실제
+  // 세액공제액(한도 적용 후). `is_axis_degenerate`(축의 끝이 0)면 나눗셈이
+  // 성립하지 않으므로 막대를 그리지 않는다(계약 5.15절).
+  const fillPercent =
+    ceiling && !ceiling.is_axis_degenerate
+      ? Math.min(100, Math.max(0, ((p.afterCapKrw ?? 0) / ceiling.ceiling_krw) * 100))
+      : null;
+  const meter = fillPercent != null ? benefitMeter({ account: p.accounts[0], grade: 'solid', fillPercent }) : null;
+  const axisCaption = fillPercent != null ? benefitMeterAxisCaption(fillPercent) : null;
+  const ariaLabel = `${names}, ${amountText}${axisCaption ? `, ${axisCaption}` : ''}`;
+
+  const row = el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
+    el('span', { class: 'benefit-row-dots' }, dots),
+    el('span', { class: 'benefit-row-body' }, [
+      el('span', { class: 'benefit-row-names type-body-s' }, [names]),
+      p.accounts.length > 1 ? el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_POOLED_NOTE]) : null,
+      meter,
+      axisCaption ? el('span', { class: 'benefit-meter-axis-caption' }, [axisCaption]) : null,
+      el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
+      zeroNote ? el('span', { class: 'benefit-row-subnote' }, [zeroNote]) : null,
+      reducedNote ? el('span', { class: 'benefit-row-subnote' }, [reducedNote]) : null,
+      capBelowNote ? el('span', { class: 'benefit-row-subnote' }, [capBelowNote]) : null,
+    ]),
+  ]);
+
+  return el('div', { class: 'benefit-axis benefit-axis-confirmed' }, [
+    // D37 1번 — 지방소득세를 포함한 값임을 캡션이 밝힌다. 기간 표기는
+    // 「올해」로 고정하고 조건절을 붙이지 않는다(D36 "문구" 절).
+    ceiling ? el('p', { class: 'benefit-axis-caption' }, [confirmedAxisCaption(ceiling)]) : null,
+    // 공제율 구간을 몰라 본문 구간을 적용했으면(fallback) 이 상한도 "적어도
+    // 이만큼"이다 — 세액 한도 쪽 "최대 이만큼"과 방향이 반대다(계약 5.15절).
+    ceiling?.fallback_applied
+      ? el('p', { class: 'benefit-axis-caption-note' }, [noticeMessage({ code: 'credit_rate_global_income_missing', params: {} })])
+      : null,
+    row,
+  ]);
+}
+
+/**
+ * 가정 축(D36) — ISA 비과세·저율분리과세·손익통산(보조 행) 셋. 최댓값은
+ * `AssumptionBasedIsaEstimate.upper_bound_krw`(구간의 위 끝, 계약 5.14절).
+ * 가정 자체가 없거나 계산하지 못했으면(narrative) 축 캡션 없이 서술만 남는다
+ * — 잴 값 자체가 없다.
+ */
+function assumptionAxisSection(i, isaReturnAssumption) {
+  const onClick = () => scrollAndHighlight('account-row-isa');
+  const dot = el('span', { class: 'benefit-dot', style: { background: 'var(--data-isa)' } });
+
+  if (i.state === 'excluded') {
+    return el('div', { class: 'benefit-axis benefit-axis-assumption' }, [
+      el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
         el('span', { class: 'benefit-row-dots' }, [el('span', { class: 'benefit-dot benefit-dot-excluded' })]),
         el('span', { class: 'benefit-row-body' }, [
           el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
           el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_EXCLUDED_LABEL]),
         ]),
-      ]);
-    }
+      ]),
+    ]);
+  }
 
-    const dot = el('span', { class: 'benefit-dot', style: { background: 'var(--data-isa)' } });
+  const est = i.estimate;
+  // 5.1.0(D28·D29·D31) — 가정 기반 정산액이 **계산되어 있을 때만** 세 행으로
+  // 그린다. 그 외(가정 자체가 없음 / 계산 못 함 / 표시 끔)는 여전히
+  // narrative다 — ISA는 계약상 `DeterministicBenefit`을 갖지 않는다.
+  if (est?.state === 'computed') {
+    const axisCaption = assumptionAxisCaption({ estimate: est, annualReturnRate: isaReturnAssumption?.annual_return_rate ?? null });
+    const breakdown = est.axis_breakdown;
+    const denom = est.upper_bound_krw > 0 ? est.upper_bound_krw : 0;
+    const fillFor = (amountKrw) => (denom > 0 ? Math.min(100, Math.max(0, (amountKrw / denom) * 100)) : 0);
 
-    // 5.1.0(D28·D29·D31) — 가정 기반 정산액이 **계산되어 있을 때만** 가정
-    // 등급으로 승격한다. 그 외(가정 자체가 없음 / 계산 못 함 / 표시 끔)는
-    // 여전히 narrative다 — ISA는 계약상 `DeterministicBenefit`을 갖지 않는다.
-    if (i.estimate?.state === 'computed') {
-      const est = i.estimate;
-      const referenceKrw = est.point_estimate_krw ?? est.upper_bound_krw ?? 0;
-      // 자기정규화 — 다른 계좌·다른 행과 길이를 비교하지 않는다(값이 있으면
-      // 윤곽이 트랙 전체를 잇는다. 0이면 빈 트랙만 — 0을 채움으로 그리지 않는다).
-      const fillPercent = referenceKrw > 0 ? 100 : 0;
-      const meter = benefitMeter({ account: 'isa', grade: 'assumption', fillPercent });
-      const amountText = isaReturnEstimateAmountText(est);
-      const caption = isaReturnAssumption
-        ? isaReturnAssumptionCaption({
-            annualReturnRate: isaReturnAssumption.annual_return_rate,
-            incomeCharacter: isaReturnAssumption.income_character,
-            settlementYears: est.settlement_years,
-            settlementYearsSource: est.settlement_years_source,
-          })
+    const taxFreeFill = fillFor(breakdown.tax_free_krw);
+    // D36 — 0인 것은 「혜택 없음」이 아니다. 판정은 오직 이 필드로 한다
+    // (`rate_gap_krw === 0`으로 화면이 스스로 판정하지 않는다, 계약 5.14절).
+    const rateGapFavorableZero = est.rate_gap_axis_zero_reason_code === 'within_tax_free_limit';
+    const rateGapFill = fillFor(breakdown.rate_gap_krw);
+    const residualKrw = breakdown.loss_offset_krw + breakdown.rounding_residual_krw;
+    const residualFill = fillFor(residualKrw);
+
+    const rateGapAmountText = rateGapFavorableZero ? '0원' : boundedAxisAmountText(breakdown.rate_gap_krw, est.axis_breakdown_bound_code);
+
+    const assumptionCaption = isaReturnAssumption
+      ? isaReturnAssumptionCaption({
+          annualReturnRate: isaReturnAssumption.annual_return_rate,
+          incomeCharacter: isaReturnAssumption.income_character,
+          settlementYears: est.settlement_years,
+          settlementYearsSource: est.settlement_years_source,
+        })
+      : null;
+
+    const rows = [
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'benefit-row',
+          onclick: onClick,
+          'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL}, ${boundedAxisAmountText(breakdown.tax_free_krw, est.axis_breakdown_bound_code)}`,
+        },
+        [
+          el('span', { class: 'benefit-row-dots' }, [dot]),
+          el('span', { class: 'benefit-row-body' }, [
+            el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL]),
+            el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
+            benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: taxFreeFill }),
+            el('span', { class: 'benefit-meter-axis-caption' }, [benefitMeterAxisCaption(taxFreeFill)]),
+            el('span', { class: 'benefit-row-amount type-num' }, [boundedAxisAmountText(breakdown.tax_free_krw, est.axis_breakdown_bound_code)]),
+          ]),
+        ],
+      ),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: `benefit-row${rateGapFavorableZero ? ' benefit-row-favorable-zero' : ''}`,
+          onclick: onClick,
+          'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL}, ${rateGapFavorableZero ? ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE : rateGapAmountText}`,
+        },
+        [
+          el('span', { class: 'benefit-row-dots' }, [dot]),
+          el('span', { class: 'benefit-row-body' }, [
+            el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL]),
+            rateGapFavorableZero
+              ? el('span', { class: 'benefit-row-info-chip' }, [ACCOUNT_BENEFIT_FAVORABLE_ZERO_CHIP_LABEL])
+              : el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
+            benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: rateGapFill }),
+            !rateGapFavorableZero ? el('span', { class: 'benefit-meter-axis-caption' }, [benefitMeterAxisCaption(rateGapFill)]) : null,
+            el('span', { class: 'benefit-row-amount type-num' }, [rateGapAmountText]),
+            rateGapFavorableZero ? el('span', { class: 'benefit-row-subnote' }, [ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE]) : null,
+          ]),
+        ],
+      ),
+      // 보조 행 — 손익통산·절사 잔차. 지우면 "넷의 합이 upper_bound_krw와
+      // 같다"는 항등식이 깨지므로 지우지 않되, 소유자가 요청한 둘과 같은
+      // 무게로 두지 않는다(더 작은 글자·더 얇은 트랙, design-system 5.31.3절).
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'benefit-row benefit-row-secondary',
+          onclick: onClick,
+          'aria-label': `${ACCOUNT_LABEL.isa}, ${ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL}, ${boundedAxisAmountText(residualKrw, est.axis_breakdown_bound_code)}`,
+        },
+        [
+          el('span', { class: 'benefit-row-dots' }, [dot]),
+          el('span', { class: 'benefit-row-body' }, [
+            el('span', { class: 'benefit-row-names type-caption' }, [ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL]),
+            benefitMeter({ account: 'isa', grade: 'assumption', fillPercent: residualFill }),
+            el('span', { class: 'benefit-row-amount type-num' }, [boundedAxisAmountText(residualKrw, est.axis_breakdown_bound_code)]),
+          ]),
+        ],
+      ),
+    ];
+
+    return el('div', { class: 'benefit-axis benefit-axis-assumption' }, [
+      // D36 — 기간 표기 「{n}년 동안」 + 조건절 「수익률이 연 {n}%라면」이 「(세액공제
+      // 아님)」 부기가 하던 일을 대신한다. 점 추정이 없으면(`upper_bound`) 값 앞에
+      // `최대`를 붙인다.
+      el('p', { class: 'benefit-axis-caption' }, [axisCaption]),
+      ...rows,
+      assumptionCaption ? el('p', { class: 'benefit-row-assumption-caption' }, [assumptionCaption]) : null,
+    ]);
+  }
+
+  // narrative — 정산액을 아직 낼 수 없다. **금액을 쓰지 않는다** — ISA는
+  // 세액공제 대상이 아닐 뿐 혜택이 없는 것이 아니다(tax-rules-report.md
+  // 15.4.5절). 축 캡션이 없다 — 잴 값 자체가 없다.
+  const subNote =
+    est?.state === 'not_computable'
+      ? ISA_RETURN_NOT_COMPUTABLE_NOTE
+      : est?.state === 'display_suppressed'
+        ? ISA_RETURN_SUPPRESSED_NOTE
         : null;
-      const ariaLabel = `${ACCOUNT_LABEL.isa}, ${ISA_RETURN_ASSUMPTION_CHIP_LABEL}, ${amountText}`;
-
-      return el('button', { type: 'button', class: 'benefit-row', onclick: onClick, 'aria-label': ariaLabel }, [
-        el('span', { class: 'benefit-row-dots' }, [dot]),
-        el('span', { class: 'benefit-row-body' }, [
-          el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
-          el('span', { class: 'benefit-row-assumption-chip' }, [ISA_RETURN_ASSUMPTION_CHIP_LABEL]),
-          meter,
-          el('span', { class: 'benefit-row-amount type-num' }, [amountText]),
-          el('span', { class: 'benefit-row-suffix' }, [ACCOUNT_BENEFIT_ISA_SUFFIX]),
-          caption ? el('span', { class: 'benefit-row-assumption-caption' }, [caption]) : null,
-        ]),
-      ]);
-    }
-
-    // narrative — **금액을 쓰지 않는다.** ISA는 세액공제 대상이 아닐 뿐 혜택이
-    // 없는 것이 아니다(tax-rules-report.md 15.4.5절). 서술과 절세액이
-    // 다른 축이라는 것을 괄호로 항상 병기한다.
-    const subNote =
-      i.estimate?.state === 'not_computable'
-        ? ISA_RETURN_NOT_COMPUTABLE_NOTE
-        : i.estimate?.state === 'display_suppressed'
-          ? ISA_RETURN_SUPPRESSED_NOTE
-          : null;
-    return el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
+  return el('div', { class: 'benefit-axis benefit-axis-assumption' }, [
+    el('button', { type: 'button', class: 'benefit-row', onclick: onClick }, [
       el('span', { class: 'benefit-row-dots' }, [dot]),
       el('span', { class: 'benefit-row-body' }, [
         el('span', { class: 'benefit-row-names type-body-s' }, [ACCOUNT_LABEL.isa]),
         el('span', { class: 'benefit-row-note' }, [ACCOUNT_BENEFIT_ISA_NARRATIVE]),
-        el('span', { class: 'benefit-row-suffix' }, [ACCOUNT_BENEFIT_ISA_SUFFIX]),
-        // **표시를 끈 상태를 조용한 빈칸으로 두지 않는다**(D19) — 왜 안
-        // 보이는지 말한다.
+        // **표시를 끈 상태를 조용한 빈칸으로 두지 않는다**(D19) — 왜 안 보이는지 말한다.
         subNote ? el('span', { class: 'benefit-row-subnote' }, [subNote]) : null,
       ]),
-    ]);
-  };
+    ]),
+  ]);
+}
 
-  // D33(design-system 5.31.1절 장치①) — 헤더 위계를 C-2 계좌명과 같은 등급
-  // (`type-body-strong`)으로 낮춘다. `<h4>`는 스크린리더 랜드마크로 유지하되
-  // 시각적 크기·굵기는 "이 카드 안의 한 요소"로 읽히게 한다.
-  return el('div', { class: 'account-benefit-strip' }, [
-    el('h4', { class: 'type-body-strong' }, [ACCOUNT_BENEFIT_STRIP_TITLE]),
-    el('p', { class: 'benefit-strip-ref-caption' }, [ACCOUNT_BENEFIT_STRIP_REF_CAPTION]),
-    pensionRow(),
-    isaRow(),
+/**
+ * 연금저축·IRP를 나중에 받을 때 — 참고 구역(D36, 계약 5.16절). 축도 등급도
+ * 없다. `principal_retaxed_on_withdrawal`의 고정 문장이 표보다 먼저 온다 —
+ * 이 문장이 곧 이 표가 "세제 혜택 요약" 안에 있는 이유다. **일곱 행 전부를
+ * 보인다**(D37 3번) — 넷만 보이면 표의 모든 행에 확정된 부호가 붙어 있어
+ * "그럼 계산되잖아"로 읽히고, 못 낸다고 판정한 바로 그 사실이 화면에서
+ * 사라진다. 기본 접힘은 허용된다(D25) — 접는 것과 자르는 것은 다르다.
+ */
+function pensionReferenceSection(scenario) {
+  const ref = scenario.pension_withdrawal_tax_reference;
+  if (!ref) return null;
+  const laws = lawEntriesFor(scenario, ref.basis_rule_ids);
+
+  const rows = ref.rate_gap_cases.map((c) =>
+    el('tr', {}, [
+      el('td', {}, [pensionIncomeCharacterLabel(c.income_character_code)]),
+      el('td', {}, [pensionWithdrawalBranchLabel(c.withdrawal_branch_code)]),
+      el('td', {}, [`${pensionRateGapRangeText(c)} (${pensionGapSignLabel(c.sign_code)})`]),
+    ]),
+  );
+
+  return el('details', { class: 'benefit-reference' }, [
+    el('summary', { class: 'benefit-reference-summary' }, [
+      el('span', { class: 'block-summary-chevron', 'aria-hidden': 'true' }, ['▸']),
+      PENSION_REFERENCE_SUMMARY_LABEL,
+    ]),
+    el('div', { class: 'benefit-reference-body' }, [
+      el('h5', { class: 'type-body-strong' }, [PENSION_REFERENCE_TITLE]),
+      // 고정 문장이 표보다 먼저 — 이것이 곧 표가 이 위젯 안에 있는 이유다.
+      el('p', { class: 'type-body-s' }, [PENSION_REFERENCE_RETAX_SENTENCE]),
+      // **`0원`으로 적지 않는다** — 계산했더니 0인 것과 계산 자체를 못 하는 것은 다른 사실이다.
+      el('p', { class: 'type-body-s' }, [PENSION_REFERENCE_NOT_COMPUTABLE_SENTENCE]),
+      el('table', { class: 'benefit-reference-table' }, [
+        el('thead', {}, [el('tr', {}, PENSION_REFERENCE_TABLE_HEADERS.map((h) => el('th', {}, [h])))]),
+        el('tbody', {}, rows),
+      ]),
+      lawChipRow(laws, 'note-laws'),
+    ]),
   ]);
 }
 

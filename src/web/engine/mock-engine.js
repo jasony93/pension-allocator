@@ -223,6 +223,174 @@ function applyRate(amountKrw, rate) {
 const clampToZero = (value) => (value < 0 ? 0 : value);
 
 /**
+ * 소득세율에 지방소득세 부가율을 얹은 실효율. 분수를 합쳐 한 번에 나눈다 —
+ * 소수를 두 번 곱하면 꼬리 오차가 화면까지 새어 나간다(`src/engine/ratio.mjs`의
+ * `effectiveRate`와 같은 규율을 이 목이 독립적으로 다시 옮겨 적은 것이다).
+ */
+function effectiveRateOf(incomeTaxRate, surtaxRate) {
+  const income = toRatio(incomeTaxRate);
+  const surtax = toRatio(surtaxRate);
+  if (income === null || surtax === null) return null;
+  return (income.num * (surtax.den + surtax.num)) / (income.den * surtax.den);
+}
+
+// ---------------------------------------------------------------------------
+// 연금저축·IRP를 나중에 받을 때의 세율표 (계약 5.16절, D36). 금액은 한 칸도
+// 없다 — 세율만 낸다. **요청의 어떤 입력에도 반응하지 않는다**(새 입력
+// 0개·가정 0개가 이 표의 성립 조건이다). 세법 수치는 전부 룰셋에서 읽고,
+// 이 파일에 있는 문자열은 상황 이름(situation_code)을 가르는 접두사뿐이다.
+// ---------------------------------------------------------------------------
+
+const PENSION_OUTSIDE_PREFIX = 'outside_account_';
+const PENSION_OUTSIDE_CHARACTER = {
+  outside_account_interest_dividend: 'interest_dividend',
+  outside_account_listed_equity_capital_gain: 'listed_equity_capital_gain',
+};
+const PENSION_OVER_THRESHOLD_CODE = 'pension_annuity_over_separate_threshold';
+const PENSION_NON_ANNUITY_CODE = 'pension_non_annuity';
+const PENSION_ANNUITY_PREFIX = 'pension_annuity_';
+
+/** 세율표의 상황 이름을 계좌 밖(`null`)/계좌 안 갈래로 나눈다. 분류할 수 없으면 `undefined`. */
+function pensionWithdrawalBranchOf(situationCode) {
+  if (situationCode.startsWith(PENSION_OUTSIDE_PREFIX)) return null;
+  if (situationCode === PENSION_OVER_THRESHOLD_CODE) return 'annuity_over_threshold';
+  if (situationCode === PENSION_NON_ANNUITY_CODE) return 'non_annuity';
+  if (situationCode.startsWith(PENSION_ANNUITY_PREFIX)) return 'annuity_within_threshold';
+  return undefined;
+}
+
+/** 소득 성격 × 인출 갈래 — 세율표를 두 축으로 갈라 낼 조합. 이름만 있고 수치는 없다. */
+const PENSION_GAP_COMBINATIONS = [
+  { character: 'interest_dividend', branch: 'annuity_within_threshold' },
+  { character: 'interest_dividend', branch: 'non_annuity' },
+  { character: 'interest_dividend', branch: 'annuity_over_threshold' },
+  { character: 'listed_equity_capital_gain', branch: 'annuity_within_threshold' },
+  { character: 'listed_equity_capital_gain', branch: 'non_annuity' },
+  { character: 'listed_equity_capital_gain', branch: 'annuity_over_threshold' },
+  { character: 'mixed_or_unknown', branch: 'any' },
+];
+
+/** 두 실효율의 차. 정수 분수로 바꿔 빼고 마지막에 한 번만 나눈다. */
+function subtractRatesForPensionGap(a, b) {
+  const left = toRatio(a);
+  const right = toRatio(b);
+  if (left === null || right === null) return null;
+  return (left.num * right.den - right.num * left.den) / (left.den * right.den);
+}
+
+function pensionGapSignOf(minGap, maxGap) {
+  if (minGap === null || maxGap === null) return 'not_determined';
+  if (minGap > 0) return 'positive';
+  if (maxGap < 0) return 'negative';
+  return 'crosses_zero';
+}
+
+/**
+ * 참고 구역 전체를 만든다(계약 5.16절). `use`는 `computeScenario`의 규칙
+ * 조회 헬퍼다 — 규칙을 찾지 못하면 `missingRules`에 기록하고 여기서는
+ * `null`을 돌려준다(대체값을 만들지 않는다. 상위에서 `ok:false`로 조기
+ * 반환된다).
+ */
+function resolvePensionWithdrawalTaxReferenceMock(use, surtaxRateRuleId, surtaxRate) {
+  const gapRule = use('pension.rate_gap.quantifiability', 'pension_withdrawal_tax_reference');
+  const thresholdRule = use('pension.income.separate_taxation.threshold', 'pension_withdrawal_tax_reference');
+  const earlyWithdrawalRule = use('pension.early_withdrawal.other_income_rate', 'pension_withdrawal_tax_reference');
+  const byAgeRule = use('pension.income.withholding_rate.by_age', 'pension_withdrawal_tax_reference');
+  const lifetimeRule = use('pension.income.withholding_rate.lifetime_annuity', 'pension_withdrawal_tax_reference');
+  const electiveRule = use('pension.income.separate_taxation.elective_rate', 'pension_withdrawal_tax_reference');
+  if (!gapRule || !thresholdRule || !earlyWithdrawalRule || !byAgeRule || !lifetimeRule || !electiveRule) return null;
+
+  const rows = gapRule.value?.rate_table?.rows;
+  const unresolved = gapRule.value?.what_remains_unknown_even_with_all_of_them;
+  const minimumInputs = gapRule.value?.minimum_input_set?.items;
+  const thresholdKrw = thresholdRule.value?.amount_krw;
+  if (!Array.isArray(rows) || !Array.isArray(unresolved) || !Array.isArray(minimumInputs) || typeof thresholdKrw !== 'number') {
+    return null;
+  }
+
+  const table = [];
+  const outside = new Map();
+  const inside = new Map();
+
+  for (const row of rows) {
+    const code = row?.situation_code;
+    if (typeof code !== 'string' || typeof row.law !== 'string') return null;
+    const incomeTaxRate = typeof row.income_tax_rate === 'number' ? row.income_tax_rate : null;
+    const rowEffective = incomeTaxRate === null ? null : effectiveRateOf(incomeTaxRate, surtaxRate);
+    if (incomeTaxRate !== null && rowEffective === null) return null;
+    const branch = pensionWithdrawalBranchOf(code);
+    if (branch === undefined) return null;
+
+    table.push({
+      situation_code: code,
+      description: typeof row['설명'] === 'string' ? row['설명'] : null,
+      side_code: branch === null ? 'outside_account' : 'inside_account',
+      withdrawal_branch_code: branch,
+      income_tax_rate: incomeTaxRate,
+      effective_rate: rowEffective,
+      law: row.law,
+      note: typeof row.note === 'string' ? row.note : null,
+    });
+
+    const bucket = branch === null ? outside : inside;
+    const key = branch === null ? PENSION_OUTSIDE_CHARACTER[code] : branch;
+    if (key === undefined) return null;
+    if (!bucket.has(key)) bucket.set(key, []);
+    bucket.get(key).push({ situation_code: code, effective_rate: rowEffective });
+  }
+
+  const gapCases = PENSION_GAP_COMBINATIONS.map(({ character, branch }) => {
+    const outsideRows = character === 'mixed_or_unknown' ? [...outside.values()].flat() : (outside.get(character) ?? []);
+    const insideRows = branch === 'any' ? [...inside.values()].flat() : (inside.get(branch) ?? []);
+    const determinedInside = insideRows.filter((row) => row.effective_rate !== null);
+    const undetermined = insideRows
+      .filter((row) => row.effective_rate === null)
+      .map((row) => row.situation_code)
+      .sort();
+
+    let minGap = null;
+    let maxGap = null;
+    if (outsideRows.length > 0 && determinedInside.length > 0) {
+      const gaps = [];
+      for (const out of outsideRows) {
+        for (const inRow of determinedInside) {
+          gaps.push(subtractRatesForPensionGap(out.effective_rate, inRow.effective_rate));
+        }
+      }
+      minGap = Math.min(...gaps);
+      maxGap = Math.max(...gaps);
+    }
+
+    return {
+      income_character_code: character,
+      withdrawal_branch_code: branch,
+      outside_situation_codes: outsideRows.map((row) => row.situation_code).sort(),
+      inside_situation_codes: insideRows.map((row) => row.situation_code).sort(),
+      undetermined_situation_codes: undetermined,
+      gap_min_rate: minGap,
+      gap_max_rate: maxGap,
+      sign_code: pensionGapSignOf(minGap, maxGap),
+      basis_rule_ids: [gapRule.id],
+    };
+  });
+
+  return {
+    // **0원이 아니다.** 계산했더니 0인 것과 계산 자체를 못 하는 것은 다른 사실이다.
+    computability_code: 'not_computable_by_design',
+    unresolved_codes: unresolved.map((item) => item?.id).filter((id) => typeof id === 'string').sort(),
+    minimum_input_count: minimumInputs.length,
+    unresolved_count: unresolved.length,
+    separate_taxation_threshold_krw: thresholdKrw,
+    rate_table: table,
+    rate_gap_cases: gapCases,
+    principal_retaxed_on_withdrawal: true,
+    basis_rule_ids: [earlyWithdrawalRule.id, byAgeRule.id, lifetimeRule.id, gapRule.id, electiveRule.id, thresholdRule.id, surtaxRateRuleId]
+      .filter(Boolean)
+      .sort(),
+  };
+}
+
+/**
  * 연간 금액을 월 표시 금액으로 나눈다 — `engine-interface.md` 0.12절의 산식을
  * 그대로 옮긴 것이다. **세법 수치가 한 줄도 없는 순수 산술**이라 룰셋을 읽지
  * 않는다(`src/engine/monthly.mjs`가 실제 엔진 쪽의 같은 산식이다. 이 목은 그
@@ -398,6 +566,11 @@ function isaEstimateShell(state, ctx, extra = {}) {
     lower_bound_krw: null,
     upper_bound_krw: null,
     axis_breakdown: null,
+    // 8.1.0(D36) — 세 축 금액이 점인가 구간의 위 끝인가, 세율차 축이 0인
+    // 것이 결핍이 아닌 자리인가. `state`가 `computed`가 아니면 둘 다 null이다
+    // (계약 5.14절).
+    axis_breakdown_bound_code: null,
+    rate_gap_axis_zero_reason_code: null,
     comparison_baseline_code: 'withholding_at_general_rate',
     is_lower_bound_for_aggregate_taxpayer: true,
     assumes_contract_held_to_settlement: true,
@@ -459,6 +632,15 @@ function isaEstimateFor({ context, display, taxFreeLimitKrw, principalKrw, surta
     lower_bound_krw: lower.settlementKrw,
     upper_bound_krw: upper.settlementKrw,
     axis_breakdown: upper.axes,
+    // D36 — 세 축은 언제나 `upper`(taxable_share_max)의 분해다. 점 추정이
+    // 있으면(share.point) 그 분해가 점이고, 없으면 구간의 위 끝이다. 화면이
+    // `point_estimate_krw === null`로 스스로 판정하지 않게 값으로 낸다.
+    axis_breakdown_bound_code: context.share.point ? 'point' : 'upper_bound',
+    // D36 — 세율차 축이 0인 것이 「혜택 없음」이 아니라 「9%가 아니라 0%로
+    // 과세되고 있다」는 더 유리한 사실인 자리. 판정 축은 순소득과 비과세
+    // 한도의 비교 하나이고(원 미만 절사로 rate_gap_krw만 보면 근소 초과
+    // 구간을 놓친다), 그 판정을 여기서 한다.
+    rate_gap_axis_zero_reason_code: upper.netKrw <= taxFreeLimitKrw ? 'within_tax_free_limit' : null,
   });
 }
 
@@ -1439,6 +1621,51 @@ function computeScenario(scenario, request, rulesets) {
   const carryoverRule = use('pension.credit.unused.contribution_carryover');
   const creditCarryforward = capRule?.value?.credit_carryforward ?? false;
 
+  // -- 확정 축의 최댓값 (계약 5.15절, D36) -----------------------------------
+  // 연금계좌 합산 인정한도를 전액 채웠을 때의 세액공제액. **소득세분만 내지
+  // 않는다** — 막대에 실리는 금액(`pension_credit_total_krw`)은 소득세분 +
+  // 개인지방소득세분이므로 축의 끝도 같은 자로 재야 한다.
+  const combinedCreditLimitForCeiling = baseCombinedCreditCap + extraCreditLimit;
+  // 배분안이 쓰는 것과 같은 두 단계 산식(`Math.floor(대상 × 율)`)이다 — 다른
+  // 산술을 쓰면 한도를 채운 사람에게서 축과 막대가 1원 어긋난다.
+  const ceilingIncomeTaxKrw = Math.floor(combinedCreditLimitForCeiling * incomeTaxRate);
+  const ceilingLocalTaxKrw = Math.floor(combinedCreditLimitForCeiling * localTaxRate);
+  // 이 목은 청년 우대(개정안 `proposed.pension.credit.youth_irp_rate`)를 입력
+  //으로 받지 않는다 — `unapplied_proposed_rules`에 `requires_input_not_collected`
+  // 로 실린다. 언제나 본문 구간(`credit_rate_bracket`)에서 온다.
+  let ceilingCapRelation = 'cap_unknown';
+  if (capKnown) {
+    // **소득세분끼리 비교한다** — 한도는 산출세액에서 나온 소득세의 값이고
+    // 상한의 합계는 지방소득세를 포함하므로, 그대로 비교하면 단위가 다른
+    // 두 수를 재는 것이 된다.
+    ceilingCapRelation = capKrw < ceilingIncomeTaxKrw ? 'cap_below_ceiling' : 'cap_at_or_above_ceiling';
+  }
+  const pensionCreditCeiling = {
+    ceiling_krw: ceilingIncomeTaxKrw + ceilingLocalTaxKrw,
+    income_tax_krw: ceilingIncomeTaxKrw,
+    local_tax_krw: ceilingLocalTaxKrw,
+    credit_limit_krw: combinedCreditLimitForCeiling,
+    isa_transfer_extra_limit_krw: extraCreditLimit,
+    income_tax_rate: incomeTaxRate,
+    local_tax_rate: localTaxRate,
+    effective_rate: effectiveRate,
+    rate_source_code: 'credit_rate_bracket',
+    basis_code: creditRateBasis.code,
+    measured_amount_krw: creditRateBasis.amount,
+    fallback_applied: creditRateFallbackApplied,
+    fallback_direction_code: creditRateFallbackApplied ? 'understated_or_equal' : null,
+    tax_liability_cap_relation_code: ceilingCapRelation,
+    // 축의 끝이 0이면 눈금이 성립하지 않는다 — 화면이 나눗셈 앞에서 먼저 본다.
+    is_axis_degenerate: ceilingIncomeTaxKrw + ceilingLocalTaxKrw === 0,
+    period_code: 'current_tax_year',
+    meaning_code: 'full_pension_combined_credit_limit_at_this_persons_rate',
+    basis_rule_ids: [combinedCreditLimitRule?.id, creditRateRule?.id, surtaxRule?.id].filter(Boolean).sort(),
+  };
+
+  // -- 연금저축·IRP를 나중에 받을 때의 세율표 (계약 5.16절, D36) -------------
+  // 요청의 어떤 값에도 반응하지 않는다 — 새 입력 0개·가정 0개가 성립 조건이다.
+  const pensionWithdrawalTaxReference = resolvePensionWithdrawalTaxReferenceMock(use, surtaxRule?.id, localRateOfIncomeTax);
+
   // 월 환산 잔차를 얹을 수 있는 풀이 열려 있는가(0.12절) — 두 연금계좌 중
   // 하나라도 배분 대상이면 연금 풀이 열려 있다. 계좌별 여유가 아니라 안마다
   // 「이 배분을 실행한 뒤 남는 값」(`p.pensionPoolRemaining`/`p.isaPoolRemaining`)을
@@ -2051,6 +2278,10 @@ function computeScenario(scenario, request, rulesets) {
       credit_carryforward: creditCarryforward,
       basis_rule_ids: capBasisRuleIds,
     },
+    // 5.15절. 확정 축의 최댓값(D36) — 이 사람이 올해 받을 수 있는 세액공제의 상한.
+    pension_credit_ceiling: pensionCreditCeiling,
+    // 5.16절. 연금계좌를 나중에 받을 때의 세율표(D36). 금액은 한 칸도 없다.
+    pension_withdrawal_tax_reference: pensionWithdrawalTaxReference,
     pension_withdrawal_start: pensionWithdrawalStart,
     limits: {
       by_account: ACCOUNTS.map((account) => {

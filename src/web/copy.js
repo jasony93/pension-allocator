@@ -888,38 +888,180 @@ export const STACKBAR_BOUNDED_NOTE = `${PRIOR_TAX_LABEL}을 받지 않아 아래
 
 export const ACCOUNT_BENEFIT_STRIP_TITLE = '계좌별 세제혜택';
 /**
- * D33 재개정(design-system 5.31.1절 장치②) — "조건이 같다"만으로는 이 블록이
- * 별개로 다시 계산한 값처럼 읽힐 수 있다. "요약"·"나눠 보여주는"이라는 말로
- * 이 블록이 파생물이지 원본이 아니라는 것을 문장으로 못박는다. 옛 문구
- * (`위 절세액과 같은 조건 — {과세연도} 기준`)는 폐기됐다 — `taxYear`는 더 이상
- * 쓰지 않는다.
+ * D36 재개정(design-system 5.31.3절) — 위젯이 이제 세액공제만이 아니라 이
+ * 결과에서 새로 계산한 다른 절세 효과(ISA 비과세·저율분리과세)도 담으므로
+ * "위 절세액"만 가리키던 옛 문구로는 부족하다. "새로 계산한 값이 아니다"는
+ * 세액공제 쪽에만, "이 결과에서 계산된"은 ISA 쪽에도 걸리게 넓혔다.
  */
 export const ACCOUNT_BENEFIT_STRIP_REF_CAPTION =
-  '위에서 계산한 절세액을 계좌별로 나눠 보여주는 요약입니다 — 새로 계산한 값이 아닙니다.';
+  '위에서 계산한 절세액과 이 결과에서 계산된 다른 절세 효과를 계좌·성격별로 나눠 보여주는 요약입니다 — 새로 계산한 값이 아닙니다.';
 /** 연금 두 계좌가 묶여 있다는 사실 자체를 문구가 메운다(`open_questions`). */
 export const ACCOUNT_BENEFIT_POOLED_NOTE = '합산 세액공제';
 /**
- * D33(design-system 5.31.1절 장치③) — `aria-label`에만 있던 축(denominator)
- * 문구를 화면에도 보이는 글자로 올린다. C-2의 `납입 잔여 한도 … 사용`과
- * 어휘를 겹치지 않게 해, 길이가 비슷해 보여도 두 막대가 서로 다른 것을 재고
- * 있다는 사실을 캡션이 즉시 말해 준다. `fillPercent`는 0~100 스케일이다.
+ * D33(design-system 5.31.1절 장치③) → D36(5.31.3절)에서 축 중립 문구로 다시
+ * 쓴다. **축이 둘로 갈렸으므로** 모든 행에 "세액공제 인정 한도 대비"를 쓰면
+ * ISA·저율분리 행에서 성립하지 않는 비교("ISA 비과세액이 세액공제 한도의
+ * 몇 %")로 읽힌다. "이 축"이 가리키는 실제 값은 소구획 캡션(confirmedAxisCaption
+ * ·assumptionAxisCaption)이 이미 밝히므로, 행 캡션은 그 캡션을 다시 가리키기만
+ * 한다. `fillPercent`는 0~100 스케일이다.
  */
 export function benefitMeterAxisCaption(fillPercent) {
-  return `세액공제 인정 한도 대비 ${formatPercent(fillPercent / 100)}`;
+  return `이 축 기준 ${formatPercent(fillPercent / 100)}`;
 }
 export const ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE = '세액공제액으로는 계좌 간 차이가 없음';
 export const ACCOUNT_BENEFIT_REDUCED_NOTE = '일부는 낼 세금 한도로 반영되지 않음';
 
 /**
- * ISA 행 서술. **금액이 아니다.** tax-rules-report.md 15.4.1·15.4.2절의 근거를
- * 그대로 옮긴다 — 세액공제 대상이 아니라는 사실과 혜택이 놓인 축(비과세·저율
- * 분리과세)을 함께 적어, "빈칸 = 혜택 없음"으로 오독되지 않게 한다(15.4.5절).
+ * D37 2번 — `tax_liability_cap_relation_code === 'cap_below_ceiling'`인 사람의
+ * 짧은 막대에 붙는 이유. **「덜 넣어서」가 아니라 「낼 세금이 적어서」**다 —
+ * 안 쓰면 사용자가 "더 넣어야겠다"고 오해하는데, 세금이 한도인 사람은 더
+ * 넣어도 공제가 늘지 않으므로 그것은 틀린 권유가 된다. **강도는 낮게** —
+ * 경고가 아니라 설명이므로 `.benefit-row-subnote`(무색)에만 쓴다.
+ */
+export const ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE =
+  '이 막대가 짧은 것은 덜 넣어서가 아니라, 낼 세금이 이 한도보다 적기 때문입니다.';
+
+/**
+ * D36·D37 — 확정 축 소구획의 캡션. **지방소득세를 포함한 값임을 밝힌다**
+ * (D37 1번) — 사용자의 연말정산 서류는 소득세분과 지방소득세분을 따로
+ * 적으므로, 합계만 적으면 사용자가 자기 서류에서 그 수를 못 찾는다. 기간
+ * 표기는 **「올해」**로 고정하고 조건절을 붙이지 않는다(D36 "문구" 절) — 이
+ * 축은 조문이 당해 연도에 하나로 확정하는 값이기 때문이다.
+ */
+export function confirmedAxisCaption(ceiling) {
+  return `막대 길이 기준 · 올해: 세액공제 최대 한도 ${formatKrw(ceiling.ceiling_krw)}(소득세 ${formatKrw(
+    ceiling.income_tax_krw,
+  )} + 지방소득세 ${formatKrw(ceiling.local_tax_krw)})`;
+}
+
+/**
+ * D36·D37 — 가정 축 소구획의 캡션. 기간 표기는 **「{정산기간}년 동안」**,
+ * 조건절은 **「수익률이 연 {n}%라면」**을 반드시 붙인다 — 이 축의 값이 사용자가
+ * 준 가정(수익률·소득 성격) 위에서 나온다는 것을 문장이 스스로 말하게 한다.
+ * `axis_breakdown_bound_code === 'upper_bound'`이면(점 추정이 없으면) 금액
+ * 앞에 `최대`를 붙인다 — 점처럼 적으면 실제보다 크게 말하는 것이다(D36).
+ */
+export function assumptionAxisCaption({ estimate, annualReturnRate }) {
+  const yearsText = estimate.settlement_years != null ? `${formatYears(estimate.settlement_years)} 동안` : '정산 기간 동안';
+  const rateText = annualReturnRate != null ? formatPercentTrimmed(annualReturnRate) : null;
+  const amountText = boundedAxisAmountText(estimate.upper_bound_krw, estimate.axis_breakdown_bound_code);
+  const conditionClause = rateText != null ? `, 수익률이 연 ${rateText}라면` : '';
+  return `막대 길이 기준 · ${yearsText}${conditionClause}: ${amountText}`;
+}
+
+/**
+ * `axis_breakdown_bound_code`가 `upper_bound`면 금액 앞에 `최대`를 붙인다
+ * (design-system 5.6절 상한 변형, D36). `point`거나 `null`이면 그대로 적는다.
+ */
+export function boundedAxisAmountText(amountKrw, boundCode) {
+  const text = formatKrw(amountKrw);
+  return boundCode === 'upper_bound' ? `${BOUNDED_AMOUNT_PREFIX} ${text}` : text;
+}
+
+/**
+ * ISA 행 서술(narrative — 정산액을 아직 낼 수 없을 때). **금액이 아니다.**
+ * tax-rules-report.md 15.4.1·15.4.2절의 근거를 그대로 옮긴다 — 세액공제
+ * 대상이 아니라는 사실과 혜택이 놓인 축(비과세·저율분리과세)을 함께 적어,
+ * "빈칸 = 혜택 없음"으로 오독되지 않게 한다(15.4.5절).
+ *
+ * **D35 3번 — 「(세액공제 아님)」 괄호를 지운다.** 이 괄호가 하던 일("무엇이
+ * 아닌지" 말하기)은 이제 두 소구획으로 나뉜 배치와 기간 표기·조건절이 대신
+ * 한다("무엇인지" 말하기) — `tax-domain`이 지적했듯 후자가 조문에서 나오므로
+ * 더 강한 근거다. 이 서술 행은 가정 축 소구획 안에 놓이므로 소구획 캡션이
+ * 이미 그 구분을 지고 있다.
  */
 export const ACCOUNT_BENEFIT_ISA_NARRATIVE = '비과세 한도 적용';
-/** 절세액과 구분됨을 항상 병기한다 — 이 괄호를 빼면 서술도 금액이라고 오독한다. */
-export const ACCOUNT_BENEFIT_ISA_SUFFIX = '(세액공제 아님)';
 
 export const ACCOUNT_BENEFIT_EXCLUDED_LABEL = '배분 대상 아님';
+
+// ---------------------------------------------------------------------------
+// D36 — 가정 축의 ISA 세 행(`AssumptionBasedIsaEstimate.axis_breakdown`).
+// 손익통산·절사 잔차는 소유자가 요청한 둘(비과세·저율분리)과 같은 무게로
+// 두지 않고 보조 행 하나로 낮춘다(design-system 5.31.3절).
+// ---------------------------------------------------------------------------
+
+export const ACCOUNT_BENEFIT_ISA_TAX_FREE_LABEL = 'ISA 비과세로 아낀 금액';
+export const ACCOUNT_BENEFIT_ISA_RATE_GAP_LABEL = 'ISA 저율 분리과세로 아낀 금액';
+export const ACCOUNT_BENEFIT_ISA_RESIDUAL_LABEL = 'ISA 손익통산·절사 잔차 반영분';
+
+/**
+ * D36 — 세율차 축(`rate_gap_krw`)이 0인 것은 「혜택 없음」이 아니다. 계약기간
+ * 순소득이 비과세 한도를 넘지 않아 정확히 0인 경우, 그것은 **9%가 아니라
+ * 0%로 과세되고 있다는 더 유리한 사실**이다(대다수 사용자가 여기다). 빈
+ * 막대만 두면 "혜택이 없다"로 읽히므로 사실을 문장으로 적는다. **세율
+ * 수치를 코드에 박지 않는다** — "9%" 같은 숫자를 적지 않고 방향만 말한다.
+ */
+export const ACCOUNT_BENEFIT_RATE_GAP_FAVORABLE_ZERO_NOTE =
+  '0원 · 한도를 넘지 않아 저율 분리과세가 아니라 비과세로 적용되고 있습니다 — 혜택이 없는 것이 아닙니다.';
+/** 위 문장 옆에 붙는 짧은 배지 — 결핍이 아니라 사실 확인이라는 것을 형태로도 보인다. */
+export const ACCOUNT_BENEFIT_FAVORABLE_ZERO_CHIP_LABEL = '한도 안';
+
+// ---------------------------------------------------------------------------
+// D36 — 연금저축·IRP를 나중에 받을 때(참고 구역). 축도 등급도 없다 — 금액이
+// 없기 때문이다(`PensionWithdrawalTaxReference`, 계약 5.16절). 조항 번호와
+// 상황 설명은 전부 계약이 낸 값을 쓰고 이 파일에서 지어내지 않는다.
+// ---------------------------------------------------------------------------
+
+export const PENSION_REFERENCE_TITLE = '참고 — 연금저축·IRP를 나중에 받을 때';
+/** 계약 5.16절 `principal_retaxed_on_withdrawal`이 근거인 고정 문장. 표보다 먼저 온다. */
+export const PENSION_REFERENCE_RETAX_SENTENCE =
+  '세액공제를 받은 납입액은 나중에 연금으로 받을 때 다시 과세됩니다.';
+export const PENSION_REFERENCE_NOT_COMPUTABLE_SENTENCE =
+  '지금 계산할 수 없음 — 인출 시점·방식·소득 성격에 따라 세율이 달라지고, 그 셋은 전부 아직 정해지지 않은 미래의 선택입니다.';
+export const PENSION_REFERENCE_TABLE_HEADERS = ['소득 성격', '인출 방식', '종전 대비 세율'];
+export const PENSION_REFERENCE_SUMMARY_LABEL = '연금저축·IRP를 나중에 받을 때 (참고)';
+
+/** `PensionRateGapCase.income_character_code` — 자산군이 아니라 수익의 성격(계약 5.16절). */
+const PENSION_INCOME_CHARACTER_LABEL = {
+  interest_dividend: '이자·배당',
+  listed_equity_capital_gain: '국내 상장주식 차익',
+  mixed_or_unknown: '성격 혼재·미정',
+};
+
+/** `PensionRateGapCase.withdrawal_branch_code` — 이름만 있고 세율은 없다. */
+const PENSION_WITHDRAWAL_BRANCH_LABEL = {
+  annuity_within_threshold: '연금 수령',
+  annuity_over_threshold: '연금 수령(기준금액 초과)',
+  non_annuity: '연금 외 수령',
+  any: '수령 방식 미정',
+};
+
+/**
+ * `sign_code`는 계좌 밖·안 실효율의 뺄셈에서 **산술로만** 정해진다(계약 5.16절
+ * "해석이 아니라 산술이다") — 엔진이 유불리를 판단하지 않는다. 화면이 그 산술
+ * 결과를 짧게 표기하는 것도 같은 이유로 평가가 아니라 부호의 요약이다.
+ */
+const PENSION_GAP_SIGN_LABEL = {
+  positive: '유리',
+  negative: '불리',
+  crosses_zero: '성격에 따라 갈림',
+  not_determined: '세율 미정',
+};
+
+/** 백분율포인트(%p) 표기. 부호를 명시하고 불필요한 소수 0을 잘라낸다. */
+function formatRateGapPercentPoint(rate) {
+  const pct = Math.round(rate * 100 * 1000) / 1000; // 부동소수점 꼬리 제거
+  const sign = pct > 0 ? '+' : pct < 0 ? '−' : '';
+  const text = String(Math.abs(pct)).replace(/\.0+$/, '');
+  return `${sign}${text}%p`;
+}
+
+/** 세율표 한 행의 「종전 대비 세율」 칸. 폭이 정해지지 않으면(`not_determined`) 값 대신 사실을 말한다. */
+export function pensionRateGapRangeText(row) {
+  if (row.gap_min_rate == null || row.gap_max_rate == null) return '조문으로 닫히지 않음';
+  if (row.gap_min_rate === row.gap_max_rate) return formatRateGapPercentPoint(row.gap_min_rate);
+  return `${formatRateGapPercentPoint(row.gap_min_rate)} ~ ${formatRateGapPercentPoint(row.gap_max_rate)}`;
+}
+
+export function pensionIncomeCharacterLabel(code) {
+  return PENSION_INCOME_CHARACTER_LABEL[code] ?? code;
+}
+export function pensionWithdrawalBranchLabel(code) {
+  return PENSION_WITHDRAWAL_BRANCH_LABEL[code] ?? code;
+}
+export function pensionGapSignLabel(code) {
+  return PENSION_GAP_SIGN_LABEL[code] ?? code;
+}
 
 // ---------------------------------------------------------------------------
 // D28·D29·D31 — 수익률 가정 입력 · `AccountBenefitStrip`의 가정 등급
