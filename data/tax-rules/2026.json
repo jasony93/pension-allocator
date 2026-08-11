@@ -2908,6 +2908,359 @@
         "verified_on": "2026-08-11",
         "verified_by": "tax-domain"
       }
+    },
+    {
+      "id": "irp.eligibility",
+      "title": "개인형퇴직연금(IRP) 가입 자격 — 누가 계좌를 설정할 수 있는가",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "퇴직연금계좌" }
+      ],
+      "value": {
+        "type": "eligibility",
+        "applies_to_account_id": "retirement_pension",
+        "question_this_rule_answers": "개인형퇴직연금(IRP) 계좌를 설정(개설)할 수 있는 사람인가.",
+        "not_this_question": "그 납입액으로 세액공제를 받을 수 있는가는 다른 물음이고 다른 법이 정한다 — pension.credit.taxpayer_eligibility(소득세법 제59조의3 제1항). 두 자격은 일치하지 않으며 어긋나는 자리를 divergence_from_credit_eligibility에 열거했다.",
+        "scope_note": "확정기여형(DC) 가입자부담금 계좌도 세법상 '퇴직연금계좌'(소득세법 시행령 제40조의2 제1항 제2호 가목)이지만, 이 규칙이 정하는 것은 같은 호 나목의 개인형퇴직연금제도 계좌다. 배분 대상으로 쓰는 계좌가 그것이다.",
+        "structure_of_the_provision": "법 제24조 제2항은 '다음 각 호의 어느 하나에 해당하는 사람은 개인형퇴직연금제도를 설정할 수 있다'는 한정 열거다. 열거 밖의 사람에게 설정을 허용하는 문언이 법에도 시행령에도 없다.",
+        "any_of": [
+          {
+            "id": "retirement_lumpsum_received",
+            "rule": "퇴직급여제도의 일시금을 수령한 사람",
+            "law": "근로자퇴직급여 보장법 제24조 제2항 제1호",
+            "requires_current_income": false,
+            "note": "이 호에는 소득 요건이 없고 수령 시점으로부터의 기간 제한도 없다. 지금 아무 소득이 없어도 이 호로 설정할 수 있다."
+          },
+          {
+            "id": "db_dc_smef_member",
+            "rule": "확정급여형퇴직연금제도, 확정기여형퇴직연금제도 또는 중소기업퇴직연금기금제도의 가입자로서 자기의 부담으로 개인형퇴직연금제도를 추가로 설정하려는 사람",
+            "law": "근로자퇴직급여 보장법 제24조 제2항 제2호",
+            "requires_current_income": true
+          },
+          {
+            "id": "self_employed",
+            "rule": "자영업자",
+            "law": "근로자퇴직급여 보장법 시행령 제17조 제1호 (법 제24조 제2항 제3호의 위임)",
+            "requires_current_income": true,
+            "scope_is_undefined_in_the_text": true
+          },
+          {
+            "id": "worker_outside_retirement_benefit_plan",
+            "rule": "법 제4조 제1항 단서에 따라 퇴직급여제도가 설정되어 있지 아니한 근로자 — 가. 계속근로기간이 1년 미만인 근로자, 나. 4주간을 평균하여 1주간의 소정근로시간이 15시간 미만인 근로자",
+            "law": "근로자퇴직급여 보장법 시행령 제17조 제2호",
+            "requires_current_income": true
+          },
+          {
+            "id": "severance_pay_system_worker",
+            "rule": "법 제8조 제1항에 따른 퇴직금제도를 적용받고 있는 근로자",
+            "law": "근로자퇴직급여 보장법 시행령 제17조 제3호",
+            "requires_current_income": true
+          },
+          {
+            "id": "occupational_pension_member",
+            "rule": "「공무원연금법」의 적용을 받는 공무원 · 「군인연금법」의 적용을 받는 군인 · 「사립학교교직원 연금법」의 적용을 받는 교직원 · 「별정우체국법」의 적용을 받는 별정우체국 직원",
+            "law": "근로자퇴직급여 보장법 시행령 제17조 제4호부터 제7호까지",
+            "requires_current_income": true
+          }
+        ],
+        "no_income_person": {
+          "finding": "위 여섯 갈래 어디에도 들지 않는 무소득자는 IRP를 설정할 수 없다.",
+          "basis": "법 제24조 제2항의 한정 열거(structure_of_the_provision). 열거 밖을 허용하는 문언이 없다.",
+          "owner_sheet_wording_is_a_summary_not_the_text": {
+            "owner_wrote": "「IRP · 가입 자격 · 소득 있는 자 · 무소득자 가입 불가 · 근로자퇴직급여보장법」",
+            "verdict": "무소득자를 막는다는 결론은 조문과 같다. 다만 조문의 요건은 「소득의 유무」가 아니라 여섯 갈래의 지위이고, 그 차이가 두 방향으로 결과를 바꾼다.",
+            "summary_is_too_narrow_here": "제24조 제2항 제1호(퇴직급여제도의 일시금을 수령한 사람)에는 소득 요건이 없다. 과거에 퇴직급여 일시금을 받은 무소득자는 조문상 설정할 수 있는데 「소득 있는 자」로 읽으면 잘못 배제된다.",
+            "summary_is_too_broad_here": "소득이 있어도 그 소득이 이자·배당·연금·기타소득뿐이면 여섯 갈래 어디에도 들지 않는다. 「소득 있는 자」로 읽으면 이 사람을 잘못 허용한다."
+          }
+        },
+        "spouse_income_does_not_qualify": {
+          "finding": "배우자의 소득이나 지위로는 가입 자격이 생기지 않는다.",
+          "basis": "법 제24조 제2항 각 호와 시행령 제17조 각 호가 지목하는 것은 전부 그 제도를 설정하려는 사람 자신의 지위다. 가구·배우자의 소득이나 지위를 자격으로 삼는 문언이 두 조문 어디에도 없다.",
+          "credit_side_is_the_same": "세액공제 쪽도 같다 — pension.credit.taxpayer_eligibility.spouse_contribution."
+        },
+        "wage_earner_closure": {
+          "claim": "근로소득이 있는 근로자는 위 여섯 갈래 중 적어도 하나에 반드시 든다.",
+          "is_a_derivation_not_a_transcription": true,
+          "chain": [
+            "법 제4조 제1항 본문 — 사용자는 퇴직하는 근로자에게 급여를 지급하기 위하여 퇴직급여제도 중 하나 이상을 설정하여야 한다.",
+            "법 제4조 제1항 단서 — 계속근로기간이 1년 미만인 근로자와 4주간을 평균하여 1주간의 소정근로시간이 15시간 미만인 근로자는 그러하지 아니하다. 이 단서로 제외된 근로자는 시행령 제17조 제2호가 그대로 덮는다.",
+            "법 제11조 — 제4조 제1항 본문 및 제5조에도 불구하고 사용자가 퇴직급여제도나 제25조 제1항에 따른 개인형퇴직연금제도를 설정하지 아니한 경우에는 제8조 제1항에 따른 퇴직금제도를 설정한 것으로 본다. 설정 의무를 이행하지 않은 사업장의 근로자도 퇴직금제도 적용 근로자가 되어 시행령 제17조 제3호가 덮는다.",
+            "설정된 제도가 DB·DC·중소기업퇴직연금기금이면 법 제24조 제2항 제2호가, 퇴직금제도면 시행령 제17조 제3호가 덮는다. 세 경우의 합집합이 근로자 전체다."
+          ],
+          "public_sector_note": "공무원·군인·사립학교교직원·별정우체국 직원은 근퇴법의 근로자가 아니지만 시행령 제17조 제4호부터 제7호까지가 따로 덮는다. 결과는 같다."
+        },
+        "self_employed_scope_is_unresolved": {
+          "text": "시행령 제17조 제1호는 「자영업자」라고만 적고 그 범위를 정의하지 않는다.",
+          "question": "사업자등록 없이 인적용역 대가를 받고 원천징수되는 프리랜서(소득세법상 사업소득자)가 이 호의 「자영업자」인가.",
+          "readings": [
+            {
+              "id": "substantive",
+              "reading": "사업소득이 있으면 자영업자다. 조문이 사업자등록을 요건으로 적지 않았고, 제17조가 퇴직급여제도의 보호를 받지 못하는 소득자에게 노후소득 확보 수단을 여는 조항이라는 점이 이 읽기를 뒷받침한다."
+            },
+            {
+              "id": "registration",
+              "reading": "「자영업자」를 사업자등록을 한 사람으로 좁게 읽는다. 조문에 그렇게 적혀 있지는 않다."
+            }
+          ],
+          "practice_observed": "퇴직연금사업자가 공시한 가입자격 증빙 목록은 자영업자에 대해 「사업자등록증, 사업소득원천징수영수증 등」을 받는다고 적는다. 사업소득원천징수영수증만으로도 받는다는 뜻이므로 실무는 substantive 쪽에 서 있는 것으로 관찰된다. 다만 이것은 조문의 해석이 아니라 사업자의 실무이고, 유권해석을 확인하지 못했다.",
+          "this_unit_does_not_decide": "어느 쪽으로도 확정하지 않는다. 엔진은 이 갈래를 스스로 판정하지 말고 engine_evaluation의 미정 분기로 보낸다."
+        },
+        "divergence_from_credit_eligibility": [
+          {
+            "situation": "지금 아무 소득이 없으나 과거에 퇴직급여 일시금을 수령한 사람",
+            "can_open_irp": true,
+            "gets_pension_credit": false,
+            "basis": "설정은 법 제24조 제2항 제1호. 공제는 종합소득이 없어 소득세법 제59조의3 제1항의 요건을 갖추지 못한다."
+          },
+          {
+            "situation": "근로소득이 있는 사람",
+            "can_open_irp": true,
+            "gets_pension_credit": true,
+            "basis": "설정은 wage_earner_closure. 공제는 산출세액 한도 안에서(pension.credit.tax_liability_cap)."
+          },
+          {
+            "situation": "그 해에 퇴직소득만 있고 종합소득이 없는 사람",
+            "can_open_irp": true,
+            "gets_pension_credit": false,
+            "basis": "퇴직소득은 종합소득이 아니라 따로 구분되는 소득이다(소득세법 제4조 제1항 제2호)."
+          },
+          {
+            "situation": "이자·배당소득만 있어 종합과세되는 사람(근로도 사업도 하지 않는다)",
+            "can_open_irp": false,
+            "gets_pension_credit": true,
+            "basis": "여섯 갈래 어디에도 들지 않아 IRP를 열 수 없다. 다만 종합소득이 있으므로 연금저축계좌 납입액으로는 공제를 받을 수 있다 — 이 사람에게 연금 세액공제의 통로는 연금저축뿐이다."
+          }
+        ],
+        "engine_evaluation": {
+          "purpose": "엔진이 산문을 해석하지 않고 배분에서 계좌를 뺄 수 있도록 분기를 코드 칸으로 적는다.",
+          "engine_reads": ["branches[].outcome_code", "branches[].direction_code", "branches[].when"],
+          "engine_must_not_read": "basis",
+          "branches_reading_rule": "각 분기의 결론은 outcome_code 칸 하나로, 오차 방향은 direction_code 칸 하나로 정해진다. basis 칸은 사람이 읽는 산문이며 엔진이 그 문자열을 파싱하거나 접두사를 검사해서는 안 된다(D41과 같은 형태다). 두 칸 중 하나라도 없으면 방향이나 결론을 지어내지 말고 rule_missing으로 멈춘다.",
+          "decidable_from_current_inputs": false,
+          "evaluation_order": "first_match_wins",
+          "allowed_outcome_codes": ["irp_eligible", "irp_not_eligible", "irp_eligibility_undetermined"],
+          "allowed_direction_codes": ["overstated_or_equal", "understated_or_equal", "direction_indeterminate", "not_applicable"],
+          "code_definition_sites": {
+            "irp_eligible": "이 규칙의 engine_evaluation.allowed_outcome_codes. 룰셋이 정의 자리이고 계약과 엔진이 전사한다.",
+            "irp_not_eligible": "같은 자리.",
+            "irp_eligibility_undetermined": "같은 자리.",
+            "overstated_or_equal": "정의 자리는 pension.credit.tax_liability_cap.current_year_estimate.error_direction.code다. 여기서는 그 문자열을 같은 뜻으로 쓴다.",
+            "understated_or_equal": "정의 자리는 계약 8.2절 credit_rate_global_income_missing의 params.error_direction이다. 여기서는 그 문자열을 같은 뜻으로 쓴다.",
+            "direction_indeterminate": "정의 자리는 pension.credit.tax_liability_cap.current_year_estimate.branches.global_income_amount_missing.direction_code다. 여기서는 그 문자열을 같은 뜻으로 쓴다.",
+            "not_applicable": "이 규칙의 allowed_direction_codes. 결론이 조문으로 닫히는 분기에는 오차가 없다는 뜻이다."
+          },
+          "branches": [
+            {
+              "id": "wage_income_present",
+              "when": { "all_of": [{ "field": "profile.current_year_total_salary_krw", "op": "gt", "value": 0 }] },
+              "outcome_code": "irp_eligible",
+              "direction_code": "not_applicable",
+              "basis": "근로소득이 있으면 근로자이거나 직역연금 대상자이고, wage_earner_closure에 따라 여섯 갈래 중 하나에 반드시 든다."
+            },
+            {
+              "id": "retirement_benefit_received",
+              "when": { "any_of": [{ "field": "accounts.retirement_pension.has_deferred_retirement_income", "op": "eq", "value": true }, { "field": "accounts.retirement_pension.retirement_transfer_in_krw", "op": "gt", "value": 0 }] },
+              "outcome_code": "irp_eligible",
+              "direction_code": "not_applicable",
+              "basis": "이연퇴직소득이 있거나 퇴직급여 입금액이 있다는 것은 퇴직급여를 수령했다는 뜻이고, 법 제24조 제2항 제1호가 소득 요건 없이 이 사람을 덮는다."
+            },
+            {
+              "id": "account_already_open",
+              "when": { "any_of": [{ "field": "accounts.retirement_pension.ytd_contribution_krw", "op": "gt", "value": 0 }, { "field": "accounts.retirement_pension.opened_on", "op": "not_null", "value": null }] },
+              "outcome_code": "irp_eligible",
+              "direction_code": "not_applicable",
+              "basis_kind": "observed_not_statutory",
+              "basis": "이미 IRP가 열려 있고 자기부담금이 납입되고 있다는 것은 퇴직연금사업자가 법 제24조 제2항의 자격을 이미 확인한 결과다. 이 분기는 조문의 판정이 아니라 입력이 드러내는 사실의 관찰이며, 그래서 basis_kind를 따로 적었다."
+            },
+            {
+              "id": "no_qualifying_status_evidenced",
+              "when": { "all_of": [{ "field": "profile.current_year_total_salary_krw", "op": "eq", "value": 0 }, { "field": "profile.has_non_wage_global_income_current_year", "op": "eq", "value": false }] },
+              "outcome_code": "irp_not_eligible",
+              "direction_code": "understated_or_equal",
+              "basis": "근로소득도 없고 종합소득과세표준에 합산되는 다른 소득도 없으며 퇴직급여 유입도 기존 계좌도 없다. 여섯 갈래 중 어느 것도 성립할 수 있는 입력이 없다.",
+              "residual_false_exclusion": "이 분기는 조문상 자격이 있는 한 부류를 잘못 배제할 수 있다 — 과거 과세기간에 퇴직급여 일시금을 수령했으나 그 사실이 어느 입력에도 남아 있지 않은 사람이다(법 제24조 제2항 제1호에는 기간 제한이 없다). 배제하면 그 계좌의 배분이 0이 되어 절세액이 작아지므로 방향은 understated_or_equal이고, 이 서비스가 지켜 온 방향이다. 이 잔여 오배제를 닫는 방법은 requested_inputs[1] 하나뿐이다.",
+              "engine_action": "IRP를 배분 대상에서 제외한다. 사유 코드를 함께 낸다."
+            },
+            {
+              "id": "non_wage_income_of_unknown_character",
+              "when": { "all_of": [{ "field": "profile.current_year_total_salary_krw", "op": "eq", "value": 0 }, { "field": "profile.has_non_wage_global_income_current_year", "op": "eq", "value": true }] },
+              "outcome_code": "irp_eligibility_undetermined",
+              "direction_code": "direction_indeterminate",
+              "basis": "근로소득은 없고 합산되는 다른 소득이 있다고만 답한 상태다. 그 소득이 사업소득이면 시행령 제17조 제1호로 자격이 있고, 이자·배당·연금·기타소득뿐이면 여섯 갈래 어디에도 들지 않는다. 현재 입력이 그 둘을 가르지 못한다.",
+              "default_treatment": "do_not_exclude",
+              "why_that_default": "이 분기에는 조문상 자격이 확실히 있는 사람(사업소득자 = 시행령 제17조 제1호)이 포함되어 있고, 배제하면 그 사람을 잘못 막는다. 배제하지 않으면 이자·배당소득만 있는 사람에게 과대 권고가 남는다. 어느 쪽도 조문이 정하지 않으므로 부호가 정해지지 않는다.",
+              "manager_decision_required": true,
+              "engine_action": "배분에서 빼지 않되, 자격을 확인하지 못했다는 사실을 사유 코드로 함께 낸다. 침묵하면 안 된다."
+            }
+          ],
+          "requested_inputs": [
+            {
+              "id": "has_business_income_current_year",
+              "closes_branch": "non_wage_income_of_unknown_character",
+              "type": "boolean",
+              "ask_only_when": "profile.current_year_total_salary_krw === 0 이고 profile.has_non_wage_global_income_current_year === true 인 경우에만 묻는다. 그 밖의 사용자에게는 입력이 늘지 않는다.",
+              "question_text_must_not_ask_for_legal_analysis": "「IRP 가입 자격이 있습니까」로 묻지 않는다. 그것은 사용자에게 법령 해석을 시키는 물음이다. 사실만 묻는다 — 「그 소득에 사업소득(자영업·프리랜서 포함)이 있습니까」.",
+              "residual_after_this_input": "self_employed_scope_is_unresolved의 registration 읽기를 취하면 사업자등록 없는 프리랜서가 여전히 미정으로 남는다. 이 유닛은 그 읽기를 취하지 않았다."
+            },
+            {
+              "id": "received_retirement_lumpsum_ever",
+              "closes_branch": "no_qualifying_status_evidenced",
+              "type": "boolean",
+              "ask_only_when": "no_qualifying_status_evidenced 분기가 걸리는 경우에만 묻는다.",
+              "question_text_must_not_ask_for_legal_analysis": "「퇴직금이나 퇴직연금을 일시금으로 받은 적이 있습니까」. 있으면 법 제24조 제2항 제1호로 자격이 있다."
+            }
+          ],
+          "requested_reason_code": "irp_excluded_no_qualifying_status",
+          "requested_notice_code": "irp_eligibility_not_determined",
+          "code_ownership_note": "위 두 코드는 이 룰셋이 이름만 요청하는 것이고 정의 자리는 계약 8.2절이다. 엔진 상수와 계약 표에 넣는 일은 calc-engine-dev의 몫이다."
+        },
+        "confidence": "corroborated",
+        "verification_note": "법 제24조 제2항·제4조 제1항·제9조 제2항·제11조는 조문 전문을 텍스트로 확인했다. 시행령의 조번호는 지난 조사(리포트 10절)가 제16조의2로 적었으나 이번에 제17조(개인형퇴직연금제도의 설정 대상)로 정정한다 — 법제처 「찾기쉬운 생활법령정보」가 근거 조문을 법 제24조 제2항과 시행령 제17조로 병기하고, 조문 전문을 싣는 두 곳이 같은 조번호로 각 호를 재현했다. 국가법령정보센터의 조문 화면은 이번에도 스크립트로 렌더링되어 원문 페이지에서 직접 읽지 못했으므로 confidence를 verified로 올리지 않았다. 각 호의 문언은 여러 독립 출처에서 동일하게 재현된다. 시행령의 최근 개정(대통령령 제36220호, 2026-03-24)은 제44조만 건드렸으므로 제17조는 그대로다."
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "근로자퇴직급여 보장법 제24조 제2항 제1호부터 제3호까지, 같은 법 시행령 제17조 제1호부터 제7호까지, 같은 법 제4조 제1항·제8조 제1항·제11조",
+        "law_version": "법 제24조 제2항은 중소기업퇴직연금기금제도를 제2호에 넣은 법률 제18752호(2022.1.11. 일부개정, 2022.7.12. 시행) 이후의 문언이다. 시행령은 대통령령 제36220호(2026.3.24. 일부개정·시행)가 최신이며 그 개정은 제44조만 대상으로 하여 제17조는 변동이 없다.",
+        "url": "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=999&ccfNo=1&cciNo=2&cnpClsNo=1",
+        "corroborating_url": "https://casenote.kr/법령/근로자퇴직급여_보장법/제24조",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension_savings.eligibility",
+      "title": "연금저축계좌 가입 자격 — 세법이 정한 연령·소득 요건이 없다",
+      "conditions": [
+        { "field": "account.type", "op": "eq", "value": "연금저축계좌" }
+      ],
+      "value": {
+        "type": "eligibility",
+        "applies_to_account_id": "annuity_savings",
+        "question_this_rule_answers": "연금저축계좌를 설정(개설)할 수 있는 사람인가.",
+        "finding": "세법에 가입 연령 하한도 소득 요건도 없다.",
+        "no_age_floor": true,
+        "no_income_requirement": true,
+        "this_rule_records_an_absence": {
+          "why_that_needs_care": "숫자를 옮겨 적는 규칙과 달리 이것은 '조문에 없다'는 판정이다. 어디를 보고 없다고 했는지를 함께 적지 않으면 재검증할 수 없다.",
+          "where_checked": [
+            "소득세법 제20조의3 제1항 제2호 — 연금계좌에서 받는 소득을 연금소득으로 정할 뿐 계좌를 설정할 수 있는 사람을 정하지 않는다.",
+            "소득세법 시행령 제40조의2 제1항 제1호 — 연금저축계좌를 '연금저축'이라는 명칭으로 신탁업자와 체결하는 신탁계약, 투자중개업자와 체결하는 집합투자증권 중개계약, 보험계약을 취급하는 기관과 체결하는 보험계약에 따라 설정하는 계좌로 정의한다. 계약을 체결할 수 있는 사람의 연령·소득·지위 요건이 없다.",
+            "소득세법 시행령 제40조의2 제2항 — 납입 요건(연 1,800만원 한도, 연금수령 개시 이후 납입 금지)이고 가입 자격이 아니다.",
+            "소득세법 시행령 제40조의2 제3항 — 55세 이후·가입일부터 5년 경과 등 연금수령 요건이고 가입 자격이 아니다(pension.withdrawal.eligibility)."
+          ],
+          "contrast_with_isa": "ISA는 세법이 연령을 명문으로 정한다(조특법 제91조의18 제1항 제1호·제2호 — 19세 이상, 또는 15세 이상으로서 직전 과세기간에 근로소득이 있는 자). 연금저축에는 그 대응 문언이 없다. 두 계좌는 이 지점에서 대칭이 아니다.",
+          "contrast_with_irp": "IRP는 세법이 아니라 근로자퇴직급여 보장법이 설정 주체를 한정 열거한다(irp.eligibility). 연금저축에는 그 대응 조항이 없다."
+        },
+        "minor_can_open": {
+          "tax_law_answer": "세법상 연령 하한이 없으므로 미성년자의 가입을 막는 조문이 없다.",
+          "outside_this_ruleset": "미성년자의 계약 체결에는 민법 제5조의 법정대리인 동의가 필요하고, 금융회사가 어떤 서류를 요구하는지는 세법이 정하지 않는다. 이 룰셋은 그것을 규칙으로 담지 않는다 — 세법 판단이 아니기 때문이다.",
+          "credit_is_a_separate_question": "가입이 되는 것과 세액공제를 받는 것은 다르다. 종합소득이 없는 미성년자는 pension.credit.taxpayer_eligibility의 요건을 갖추지 못해 공제액이 0이다.",
+          "lock_up_is_the_binding_constraint": "pension.withdrawal.earliest_start가 만 55세를 정한다. 가입 나이가 어릴수록 잠기는 기간이 길고, 그 기간은 세법이 정한 사실이다."
+        },
+        "engine_evaluation": {
+          "excludes_account": false,
+          "rule": "엔진은 연금저축계좌를 연령이나 소득으로 배분에서 빼지 않는다. 뺄 근거가 조문에 없다.",
+          "existing_notice_stays_true": "계약 8.2절의 pension_age_not_evaluated(연금계좌 최소 가입 연령 규칙이 룰셋에 없어 판정하지 않음)는 이 규칙이 생긴 뒤에도 참이다. 이 규칙은 연령 규칙을 만든 것이 아니라 없다는 것을 확정한 것이다.",
+          "do_not_read_this_as_a_recommendation": "가입할 수 있다는 것과 가입하는 것이 유리하다는 것은 다른 말이다. 이 규칙은 앞의 것만 말한다."
+        }
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 시행령 제40조의2 제1항 제1호·제2항·제3항, 소득세법 제20조의3 제1항 제2호",
+        "law_version": "대통령령 제36343호(2026.5.22. 일부개정, 2026.7.1. 시행). 이 규칙이 기록하는 것은 해당 조문에 가입 자격 요건이 존재하지 않는다는 부재이며, 부재의 확인 범위는 value.this_rule_records_an_absence.where_checked에 적었다.",
+        "url": "https://www.law.go.kr/법령/소득세법시행령/제40조의2",
+        "corroborating_url": "https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=2056&ccfNo=3&cciNo=2&cnpClsNo=1",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
+    },
+    {
+      "id": "pension.credit.taxpayer_eligibility",
+      "title": "연금계좌 세액공제를 받을 수 있는 사람 — 종합소득이 있는 거주자",
+      "conditions": [
+        { "field": "taxpayer.is_resident", "op": "eq", "value": true }
+      ],
+      "value": {
+        "type": "eligibility",
+        "question_this_rule_answers": "연금계좌 납입액으로 세액공제를 받을 수 있는 사람인가.",
+        "not_this_question": "계좌를 열 수 있는가는 다른 물음이다 — irp.eligibility(근로자퇴직급여 보장법), pension_savings.eligibility(요건 없음).",
+        "requirement": "종합소득이 있는 거주자",
+        "statutory_text": "종합소득이 있는 거주자가 연금계좌에 납입한 금액 중 다음 각 호에 해당하는 금액을 제외한 금액(이하 \"연금계좌 납입액\"이라 한다)의 100분의 12[해당 과세기간에 종합소득과세표준을 계산할 때 합산하는 종합소득금액이 4천 500만원 이하(근로소득만 있는 경우에는 총급여액 5천 500만원 이하)인 거주자에 대해서는 100분의 15]에 해당하는 금액을 해당 과세기간의 종합소득산출세액에서 공제한다.",
+        "what_counts_as_global_income": {
+          "components": "이자소득·배당소득·사업소득·근로소득·연금소득·기타소득",
+          "law": "소득세법 제4조 제1항 제1호",
+          "excluded": [
+            "퇴직소득 — 종합소득과 따로 구분되는 소득이다(소득세법 제4조 제1항 제2호). 그 해에 퇴직소득만 있는 사람에게는 종합소득이 없다.",
+            "양도소득 — 같은 항에서 따로 구분된다.",
+            "분리과세로 종결되는 소득 — 종합소득과세표준에 합산되지 않는다(소득세법 제14조 제3항)."
+          ]
+        },
+        "two_stages_and_why_the_order_matters": {
+          "stage_1_requirement": "종합소득이 있는 거주자여야 한다. 아니면 공제가 성립하지 않고 금액은 0이다.",
+          "stage_2_cap": "요건을 갖추어도 공제액은 산출세액을 넘을 수 없다(pension.credit.tax_liability_cap).",
+          "why_it_matters": "종합소득이 없는 사람의 공제액이 0인 이유는 「산출세액이 0이라 잘렸다」가 아니라 「요건을 갖추지 못했다」다. 금액은 같지만 화면이 적을 수 있는 문장이 다르다 — 전자는 「소득이 늘면 그만큼 공제받는다」를 함의하고, 후자는 그 과세기간에 대한 사실의 진술이다."
+        },
+        "spouse_contribution": {
+          "finding": "배우자·부양가족 명의 연금계좌에 납입한 금액은 이 공제의 대상이 아니다.",
+          "textual_basis": "제59조의3 제1항은 「거주자가 연금계좌에 납입한 금액」이라고만 적고, 기본공제대상자를 위하여 지급한 금액을 대상에 넣는 문언을 두지 않는다.",
+          "contrast_in_the_same_act": "같은 법 제59조의4는 대상을 넓힐 때 그 문언을 명시한다 — 제2항(의료비) 「기본공제대상자(나이 및 소득의 제한을 받지 아니한다)를 위하여 해당 과세기간에 대통령령으로 정하는 의료비를 지급한 경우」, 제3항(교육비) 「그 거주자와 기본공제대상자(…)를 위하여 해당 과세기간에 대통령령으로 정하는 교육비를 지급한 경우」. 제59조의3에는 그 확장 문언이 없다.",
+          "reading_type": "명문 대비에 의한 읽기다. 제59조의3이 「배우자 명의 납입은 안 된다」고 적고 있는 것은 아니다.",
+          "product_consequence": "소득이 없는 배우자 명의로 연금저축을 열고 소득이 있는 배우자가 납입해도 그 납입액으로 공제를 받지 못한다. 화면이 그 배분을 절세로 제시하면 과대다."
+        },
+        "engine_evaluation": {
+          "decidable_from_current_inputs": true,
+          "engine_reads": ["branches[].outcome_code", "branches[].direction_code", "branches[].when"],
+          "engine_must_not_read": "basis",
+          "branches_reading_rule": "결론은 outcome_code, 오차 방향은 direction_code 칸 하나로 정해진다. basis는 사람이 읽는 산문이며 파싱 대상이 아니다.",
+          "evaluation_order": "first_match_wins",
+          "allowed_outcome_codes": ["pension_credit_available", "pension_credit_zero_no_global_income"],
+          "allowed_direction_codes": ["not_applicable"],
+          "code_definition_sites": {
+            "pension_credit_available": "이 규칙의 engine_evaluation.allowed_outcome_codes. 룰셋이 정의 자리다.",
+            "pension_credit_zero_no_global_income": "같은 자리.",
+            "not_applicable": "irp.eligibility.engine_evaluation.allowed_direction_codes와 같은 뜻이다 — 결론이 조문으로 닫혀 오차가 없다."
+          },
+          "branches": [
+            {
+              "id": "wage_income_present",
+              "when": { "all_of": [{ "field": "profile.current_year_total_salary_krw", "op": "gt", "value": 0 }] },
+              "outcome_code": "pension_credit_available",
+              "direction_code": "not_applicable",
+              "basis": "총급여액이 0보다 크면 근로소득이 있고 근로소득은 종합소득의 한 갈래다."
+            },
+            {
+              "id": "other_global_income_present",
+              "when": { "all_of": [{ "field": "profile.has_non_wage_global_income_current_year", "op": "eq", "value": true }] },
+              "outcome_code": "pension_credit_available",
+              "direction_code": "not_applicable",
+              "basis": "이 입력이 묻는 것이 '종합소득과세표준에 합산되는 소득'의 유무이므로, true는 곧 종합소득이 있다는 답이다."
+            },
+            {
+              "id": "no_global_income",
+              "when": { "all_of": [{ "field": "profile.current_year_total_salary_krw", "op": "eq", "value": 0 }, { "field": "profile.has_non_wage_global_income_current_year", "op": "eq", "value": false }] },
+              "outcome_code": "pension_credit_zero_no_global_income",
+              "direction_code": "not_applicable",
+              "basis": "합산되는 소득이 하나도 없으므로 종합소득이 없고 제59조의3 제1항의 요건을 갖추지 못한다.",
+              "is_exact": true,
+              "engine_action": "두 연금계좌의 세액공제액을 0으로 낸다. 이것은 추정이 아니라 조문에서 나오는 등식이다. 배분 자체를 막지는 않는다 — 납입은 할 수 있고 미공제 원금이 될 뿐이다(pension.withdrawal.non_deducted_principal).",
+              "edge_case_note": "근로소득이 전액 비과세여서 총급여액이 0인 사람은 이 분기에 들어오지만, 그 경우에도 종합소득금액이 0이라 산출세액이 0이고 공제액은 같은 0이다(pension.credit.tax_liability_cap). 결과가 갈리지 않는다."
+            }
+          ],
+          "requested_notice_code": "pension_credit_zero_no_global_income",
+          "code_ownership_note": "안내 코드의 정의 자리는 계약 8.2절이다. 이 룰셋은 이름과 조건만 요청한다."
+        }
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "소득세법 제59조의3 제1항, 제4조 제1항 제1호·제2호, 제59조의4 제2항·제3항(대비 인용)",
+        "law_version": "법률 제21221호(2025.12.23. 일부개정) 기준의 제59조의3 제1항 문언. 첫 문장 '종합소득이 있는 거주자가'는 2026-08-11에 확인했다.",
+        "url": "https://casenote.kr/법령/소득세법/제59조의3",
+        "corroborating_url": "https://casenote.kr/법령/소득세법/제59조의4",
+        "verified_on": "2026-08-11",
+        "verified_by": "tax-domain"
+      }
     }
   ]
 }
