@@ -40,6 +40,7 @@ import {
   fillOrderDecisionMessage,
   AMOUNT_CARD_LABEL_CREDIT_ONLY,
   AMOUNT_CARD_LABEL_COMPOSITE,
+  AMOUNT_CARD_LABEL_DELTA,
   capReducedNote,
   CAP_CARRYOVER_NOTE,
   TAX_CAP_ESTIMATE_NOTE,
@@ -82,6 +83,7 @@ import {
   isaReturnAssumptionCaption,
   donutSectionTitle,
   donutPlanNameCaption,
+  DONUT_OPTIMAL_KICKER_LABEL,
   PDF_EXPORT_LABEL,
   PDF_EXPORT_NOTE,
   PDF_EXPORT_BLOCKED_NOTE,
@@ -312,6 +314,26 @@ function blockedPanel(fatalError, store) {
 // ---------------------------------------------------------------------------
 
 /**
+ * D45 3번(관리자, 2026-08-11) — 헤드라인 자리의 대안 미리보기 형태. **`plan`의
+ * `delta_vs_baseline_krw`를 새로 계산하지 않는다** — `formatPlanRowAmount`가
+ * 스택바 비교 행에서 이미 쓰는 바로 그 함수이고, 여기서 `plan.is_baseline`이
+ * 이미 `false`임을 호출부(`amountCard`)가 확인했으므로 반환값은 언제나
+ * `formatDelta(plan.delta_vs_baseline_krw)`와 같다(`format.js`) — 스택바 행에
+ * 뜨는 문자열과 글자 그대로 같다.
+ *
+ * 구성 두 줄(슬롯5)이 없다 — 차이는 세액공제액만의 차이이고(계약 9.0.0
+ * `delta_vs_baseline_krw` 정의: "기본안 대비 세액공제액 차이"), 없는 합계를
+ * 구성하는 두 줄을 그릴 대상이 없다.
+ */
+function alternativePlanDeltaCard(plan, baseCaption) {
+  return el('div', { class: 'amount-card amount-card-delta' }, [
+    el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL_DELTA]),
+    el('p', { class: 'amount-card-value type-display' }, [formatPlanRowAmount(plan)]),
+    el('p', { class: 'amount-card-caption' }, [baseCaption]),
+  ]);
+}
+
+/**
  * `AmountCard` — 금액 표시의 유일한 통로(design-system 5.6절). 슬롯 셋이 필수이고
  * 상한 변형에서는 넷, 구간 변형(D38)에서는 다섯이 된다.
  *
@@ -322,6 +344,16 @@ function blockedPanel(fatalError, store) {
  * 「연간」 같은 기간 이름을 붙일 수 없고, 가정 성분이 들어 있으면 **구성 두 줄이
  * 같은 화면에 없는 채로 합계만 적는 것이 금지된다**(design-system 5.6절 "구간
  * 변형", 계약 5.17절).
+ *
+ * **[2026-08-11, D45 3번] 이 헤드라인은 기본안이 그려질 때만 있다.** 대안을
+ * 눌러 미리 보면 `plan`이 대안으로 바뀌는데, 대안은 확정 성분(세액공제)이
+ * 0인 경우가 있어 그 합계 구간의 아래 끝이 「최소 0원」이 되는 조합이
+ * 나왔다 — 소유자가 그것을 보고 "기본안만 붙여줘"라고 답했다. 대안일 때는
+ * 이 자리에 **기본안 대비 차이**가 온다(`alternativePlanDeltaCard`) — 스택바
+ * 비교 행이 이미 낸 값(`formatPlanRowAmount`)을 그대로 옮기고, 화면은 새로
+ * 계산하지 않는다. 구성 두 줄(슬롯5)도 함께 빠진다 — 합계가 없으면 그 두
+ * 줄이 무엇의 구성인지 말할 대상이 없다(design-system 5.6절 "구간 변형"의
+ * 뒷면).
  *
  * **`screens.md` 4.8절의 세액 한도 두 상태**(정상=plain·잘림=reduced, 2026-08-11
  * D39 전면 개정 — 옛 세 상태에서 "모름"이 빠졌다)는 여전히 `tax-credit-view.js`가
@@ -334,13 +366,20 @@ function blockedPanel(fatalError, store) {
  * 무언가를 잘못해서 생긴 상태가 아니다.
  */
 function amountCard(plan, scenario, annualReturnRate = null) {
-  const view = taxCreditHeadlineView(plan);
-  const headline = plan.headline_composite_total;
-  const laws = lawEntriesFor(scenario, view.basisRuleIds);
   // D40 — **언제나** 붙는다. 이 한도가 총급여액에서 계산한 상한이고 다른
   // 소득공제·세액공제를 반영하지 않았으며, 그래서 실제 공제는 이보다 적을 수
   // 있다는 사실이 금액과 같은 화면에 있어야 한다(계약 8.7절 `required_display`).
+  // 대안 미리보기(아래)에서도 같은 캡션을 쓴다 — 차이도 같은 과세연도·같은
+  // 한도 규칙 위에서 계산된 세액공제액의 차이이기 때문이다.
   const baseCaption = `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영 · ${TAX_CAP_ESTIMATE_NOTE}`;
+
+  if (!plan.is_baseline) {
+    return alternativePlanDeltaCard(plan, baseCaption);
+  }
+
+  const view = taxCreditHeadlineView(plan);
+  const headline = plan.headline_composite_total;
+  const laws = lawEntriesFor(scenario, view.basisRuleIds);
 
   // **합계에 가정 성분이 들어 있는가**(headline.includes_assumption_component)가
   // 이 카드의 모든 다른 판정보다 먼저 온다 — 「절세액」이라는 낱말을 쓸 수
@@ -491,6 +530,32 @@ function fillOrderNote(plan, scenario) {
   ]);
 }
 
+/**
+ * D45 5번(관리자, 2026-08-11) — 「최적 월 배분표」. 헌장(`docs/org/charter.md`
+ * "쓸 수 있다"/조건부 표 "최적화")은 "계산 대상이 명시될 때만" 이 낱말을
+ * 허용한다("납입 배분 최적화"는 되고 "세무 최적화"는 안 된다). 계산 대상(월
+ * 배분)이 라벨 자체에 있어 그 절반은 항상 채워지지만, **"무엇에 대해
+ * 최적인지"는 이 라벨 혼자 말하지 못한다** — 그래서 바로 아래 배분안 이름
+ * 캡션(`donutPlanNameCaption`)이 그 기준을 진술하는 것을 조건으로 건다
+ * (`tax-rules-report.md` 15.5절 "순위를 화면이 매기면 그것은 판단이다").
+ *
+ * **캡션이 사라지면 이 함수가 던진다.** 우연히 같은 화면에 있는 것이 아니라
+ * 코드로 묶는다 — 누군가 나중에 `donut-section-header`를 고치며 캡션 줄을
+ * 지우고 이 kicker만 남기면, 여기서 즉시 예외가 난다(테스트가 실제로 이
+ * 실패를 재현해 확인한다, `ui/donut-optimal-kicker.test.mjs`).
+ *
+ * **이 한 자리에만 쓴다.** 다른 화면 요소·서비스 이름에 이 상수를 재사용하지
+ * 않는다 — 조건은 자리마다 다시 판정되어야 한다.
+ */
+export function donutOptimalKicker(planNameCaptionText) {
+  if (!planNameCaptionText) {
+    throw new Error(
+      'donutOptimalKicker: 배분안 이름 캡션(donutPlanNameCaption) 없이 "최적"을 표시할 수 없습니다 — D45 5번 조건 위반',
+    );
+  }
+  return el('p', { class: 'donut-optimal-kicker type-caption' }, [DONUT_OPTIMAL_KICKER_LABEL]);
+}
+
 function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssumption = null } = {}) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
@@ -591,16 +656,24 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
 
   const singleSlice = donutSingleSliceAccount(plan, excluded);
 
+  // D38 소유자 3번(screens.md 5.14.9절) — 도넛이 "무엇의" 배분인지 이름으로
+  // 답한다. 이미 있는 배분안 이름 규약을 그대로 재사용한다 — 새 어휘를
+  // 만들지 않는다. **[2026-08-11, D45 5번] 이 문자열이 이제 "최적"의 조건도
+  // 함께 진다** — 한 번만 계산해 두 자리(캡션 자체 + 아래 kicker 가드)에
+  // 같은 값을 준다. 여기서 비면 둘 다 그 사실을 반영한다.
+  const planNameCaptionText = donutPlanNameCaption(plan.plan_id, plan.is_baseline);
+
   return el('div', { class: 'chart-area' }, [
-    // D38 소유자 3번(screens.md 5.14.9절) — 도넛이 "무엇의" 배분인지 이름으로
-    // 답한다. **「최적」은 쓰지 않는다**(design-system 5.8절 배분안 이름
-    // 규약) — 기본안이 항상 세액공제 최댓값은 아니라는 사실과도 어긋난다.
-    // 이미 있는 배분안 이름 규약을 그대로 재사용한다 — 새 어휘를 만들지 않는다.
     el('div', { class: 'donut-section-header' }, [
+      // D45 5번 — 「최적」은 이 한 자리에만 쓴다. 조건(무엇에 대해 최적인지)은
+      // 바로 아래 배분안 이름 캡션이 진다 — `donutOptimalKicker`가 그 캡션
+      // 없이는 이 요소를 만들지 않는다(가드가 실제로 문다는 것은
+      // `ui/donut-optimal-kicker.test.mjs`가 확인한다).
+      donutOptimalKicker(planNameCaptionText),
       // 도넛 중앙과 같은 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
       // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
       el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
-      el('p', { class: 'type-body-s donut-plan-name' }, [donutPlanNameCaption(plan.plan_id, plan.is_baseline)]),
+      el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
     ]),
     el('div', { class: 'donut-with-strip' }, [
       el('div', { class: 'donut-wrap' }, [donut]),

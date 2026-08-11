@@ -564,15 +564,33 @@ export function donutSectionTitle(monthlyCapacityKrw) {
 
 /**
  * D38 소유자 3번(screens.md 5.14.9절) — 도넛이 "무엇의" 배분인지 이름으로
- * 답한다. **「최적」은 쓰지 않는다** — 이미 이 시스템의 확정 규칙(design-system
- * 5.8절 배분안 이름 규약)이자 세무사법 위험 회피 장치(`tax-rules-report.md`
- * 15.5절)와 부딪히고, 기본안이 항상 세액공제 최댓값은 아니라는 사실과도
- * 어긋난다. 기존 배분안 이름 규약을 그대로 재사용해 새 어휘를 만들지 않는다.
+ * 답한다. **이 캡션 자체에는 「최적」을 쓰지 않는다** — design-system 5.8절
+ * 배분안 이름 규약이 여전히 막는다. 기존 배분안 이름 규약을 그대로 재사용해
+ * 새 어휘를 만들지 않는다.
+ *
+ * **[2026-08-11, D45 5번] 그런데 이 함수의 반환값이 바로 옆 `DONUT_OPTIMAL_
+ * KICKER_LABEL`의 "무엇에 대해 최적인지" 조건을 채우는 문장이 됐다.** 관리자가
+ * 헌장의 "최적화" 조건부 허용(계산 대상 명시)을 재확인해 「최적 월 배분표」를
+ * 도넛 위에 한 자리만 쓰도록 승인했고, 그 승인의 전제가 이 캡션이 항상 함께
+ * 렌더되는 것이다(`result-panel.js`의 `donutOptimalKicker`가 이 문자열이 비면
+ * 던진다).
  */
 export function donutPlanNameCaption(planId, isBaseline) {
   const name = PLAN_LABEL[planId] ?? planId;
   return isBaseline ? `${name} · 기본` : name;
 }
+
+/**
+ * D45 5번(관리자, 2026-08-11) — 「최적」은 이 한 자리에만 쓴다. **조건이 있다:
+ * 바로 아래 `donutPlanNameCaption`이 "무엇에 대해 최적인지"(계산 대상 = 이
+ * 배분안이 우선한 기준)를 진술할 때만 참이다** — 기준 없이 쓰면 화면이 순위를
+ * 매기는 것이 된다(`tax-rules-report.md` 15.5절). 헌장의 "최적화" 조건부
+ * 허용("계산 대상이 명시될 때만")을 이 라벨의 계산 대상(월 배분)이 채운다.
+ *
+ * **다른 화면 요소나 서비스 이름에는 쓰지 않는다** — 조건이 자리마다 다시
+ * 판정되어야 한다(D45).
+ */
+export const DONUT_OPTIMAL_KICKER_LABEL = '최적 월 배분표';
 
 // ---------------------------------------------------------------------------
 // 왜 이 순서로 채웠는가 — 세제상 동점의 순서 (계약 0.4·5.6절 `PriorityBasis.tie_break`)
@@ -891,6 +909,17 @@ export const YOUTH_DECLARED_RANGE_NOTE =
  */
 export const AMOUNT_CARD_LABEL_CREDIT_ONLY = '이 배분으로 계산된 세액공제액';
 export const AMOUNT_CARD_LABEL_COMPOSITE = '이 배분으로 계산된 절세액';
+
+/**
+ * D45 3번(관리자, 2026-08-11) — 대안을 미리 보는 동안 헤드라인 자리에 오는
+ * 라벨. **합계 헤드라인은 기본안이 그려질 때만 있다.** 대안 행을 눌렀을 때
+ * 세액공제와 ISA 성분을 새로 합치면 확정 성분이 0인 대안에서 아래 끝이
+ * 0원으로 내려가는 조합이 나온다 — 소유자가 그것을 보고 "기본안만"이라고
+ * 답했다. **화면이 여기서 새로 계산하지 않는다** — `formatPlanRowAmount`가
+ * 스택바 비교 행에서 이미 낸 값(`delta_vs_baseline_krw`, 세액공제액 기준)을
+ * 그대로 옮긴다.
+ */
+export const AMOUNT_CARD_LABEL_DELTA = '기본안 대비 세액공제액 차이';
 // **`AMOUNT_CARD_LABEL_ZERO`가 여기 있었다**(D39로 폐기). 한도가 0으로 잘려
 // 세액공제액이 0원이 되는 것은 이제 「잘림」 상태의 극단일 뿐 별도 상태가
 // 아니고, 라벨도 잘림과 같은 것을 쓴다(screens.md 4.8절 "극단").
