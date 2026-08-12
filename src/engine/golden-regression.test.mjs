@@ -227,31 +227,53 @@ test('M1 / GC-25·GC-26 — 금액이 같아도 배분이 정반대인 경계 �
 // `all_accounts_have_early_exit_penalty`는 horizon 값만 보고 그대로 나갔다.
 // "어느 안도 피하지 못한다"고 말하면서 실제로는 피하는 안이 목록에 있었다.
 
-test('M3 / GC-21 — 피할 수 있는 안이 있으면 그 안내를 내지 않는다', () => {
+//
+// **D52 2번이 이 자리를 다시 건드렸다.** 그 시점의 배분이 전부 0이 되면서 경고가 붙을
+// 자리가 사라졌고, 「모든 안이 경고를 진다」로는 더 이상 잴 수 없다. 그래서 엔진이
+// **가상의 배분**을 같은 경고 판정 함수에 물어 세 계좌가 빠짐없이 걸릴 때만 이 안내를
+// 낸다. **M3이 잡은 진술은 그대로다** — 성립하지 않는 불이익을 주장하지 않는다.
+
+test('M3 / GC-21 — 성립할 수 없는 불이익이 있으면 그 안내를 내지 않는다', () => {
   const scenario = scenarioOf(compute(elapsedLockInRequest(), rulesets));
 
   assert.equal(scenario.fund_use_horizon_boundaries.isa_lock_in_years_remaining, 0);
-  assert.ok(
-    scenario.plans.some((p) => p.warnings.length === 0),
-    '불이익을 지지 않는 배분안이 실제로 존재하는 상황이어야 의미 있는 검증이다',
+  // 같은 프로필을 `unknown`으로 물으면 ISA에는 경고가 붙지 않는다 — 추징 요건이
+  // 성립하지 않기 때문이고, 그것이 이 안내를 내지 않는 이유다.
+  const asUnknown = scenarioOf(
+    compute(elapsedLockInRequest({ profile: { fund_use_horizon: 'unknown' } }), rulesets),
   );
+  assert.equal(
+    asUnknown.plans[0].warnings.some((w) => w.code === 'early_termination_clawback_isa'),
+    false,
+    '불이익이 성립하지 않는 계좌가 실제로 있어야 의미 있는 검증이다',
+  );
+
   assert.equal(
     scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'),
     false,
   );
 });
 
-test('M3 / 모든 안이 실제로 불이익을 지면 그 안내는 그대로 나간다', () => {
-  const scenario = scenarioOf(
+test('M3 / 세 계좌가 전부 불이익을 지면 그 안내는 그대로 나간다', () => {
+  const overrides = {
+    accounts: { isa: { years_since_opening: 0, cumulative_contribution_krw: 0 } },
+  };
+  const scenario = scenarioOf(compute(elapsedLockInRequest(overrides), rulesets));
+
+  // 전제 — 같은 프로필을 `unknown`으로 물으면 세 계좌 전부에 경고가 붙는다.
+  const asUnknown = scenarioOf(
     compute(
-      elapsedLockInRequest({
-        accounts: { isa: { years_since_opening: 0, cumulative_contribution_krw: 0 } },
-      }),
+      elapsedLockInRequest({ ...overrides, profile: { fund_use_horizon: 'unknown' } }),
       rulesets,
     ),
   );
+  const covered = new Set(asUnknown.plans[0].warnings.map((w) => w.account));
+  assert.deepStrictEqual(
+    [...covered].sort(),
+    ['annuity_savings', 'isa', 'retirement_pension'],
+    '세 계좌 전부가 불이익을 지는 상황이어야 의미 있는 검증이다',
+  );
 
-  assert.ok(scenario.plans.every((p) => p.warnings.length > 0));
   assert.ok(scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
 });
 
@@ -276,8 +298,15 @@ function elapsedLockInRequest(overrides = {}) {
   }, overrides));
 }
 
+// **D52 2번 이후 이 프로필을 `within_isa_lock_in`으로 물으면 배분이 없다.** 경고가 붙을
+// 자리가 없으므로 그 시점으로는 M2를 잴 수 없고, 잴 수 있는 자리는 배분이 살아 있는
+// `unknown`이다(아래 두 시험과 「unknown horizon에서도」 시험). **잠금을 옮긴 것이지 푼
+// 것이 아니다** — 조건은 계약 8.4절 한 곳에 그대로 있고 세 시험이 양방향으로 문다.
+
 test('M2 / GC-21 — 의무가입기간이 지났으면 추징 경고를 내지 않는다', () => {
-  const scenario = scenarioOf(compute(elapsedLockInRequest(), rulesets));
+  const scenario = scenarioOf(
+    compute(elapsedLockInRequest({ profile: { fund_use_horizon: 'unknown' } }), rulesets),
+  );
 
   assert.equal(scenario.fund_use_horizon_boundaries.isa_lock_in_years_remaining, 0);
 
@@ -289,6 +318,10 @@ test('M2 / GC-21 — 의무가입기간이 지났으면 추징 경고를 내지 
       `${plan.plan_id}에 성립할 수 없는 추징 경고가 붙었다 (ISA 배분 ${isaAllocated})`,
     );
   }
+  assert.ok(
+    scenario.plans.some((plan) => allocationOf(plan, 'isa').annual_krw > 0),
+    'ISA에 실제로 배분된 상태여야 경고의 부재가 뜻을 갖는다',
+  );
 
   // 연금 쪽 경고는 오답이 아니다 — 5년 보유요건은 입력이 없어 판정되지 않았다.
   assert.ok(scenario.plans[0].warnings.some((w) => w.code === 'early_withdrawal_penalty_pension'));
@@ -301,6 +334,22 @@ test('M2 / GC-21 — 의무가입기간이 지났으면 추징 경고를 내지 
     scenario.limits.by_account.find((l) => l.account === 'isa').contribution_limit_remaining_krw,
     60_000_000,
   );
+});
+
+test('M2 / GC-21을 원래 시점으로 물으면 배분 자체가 없다 (D52 2번)', () => {
+  const scenario = scenarioOf(compute(elapsedLockInRequest(), rulesets));
+
+  assert.equal(scenario.plans.length, 1);
+  for (const allocation of scenario.plans[0].allocations) {
+    assert.equal(allocation.annual_krw, 0);
+  }
+  assert.deepStrictEqual(scenario.plans[0].warnings, [], '넣지 않은 돈에 경고가 붙었다');
+  assert.equal(
+    scenario.plans[0].unallocated_breakdown.reason_code,
+    'no_account_beneficial_within_fund_use_horizon',
+  );
+  // 입력과 현실이 어긋난다는 통지는 그대로 나간다 — 화면이 그 예외를 읽을 수 있어야 한다.
+  assert.ok(noticeCodes(scenario).includes('isa_lock_in_already_elapsed'));
 });
 
 test('M2 / 입력과 현실이 어긋나면 경고를 끄되 그 사실을 알린다', () => {
@@ -317,17 +366,25 @@ test('M2 / 입력과 현실이 어긋나면 경고를 끄되 그 사실을 알�
 });
 
 test('M2 / 기간이 남아 있으면 추징 경고는 그대로 나간다', () => {
+  const overrides = {
+    accounts: { isa: { years_since_opening: 0, cumulative_contribution_krw: 0 } },
+  };
+  // 경고는 배분이 살아 있는 시점에서 잰다(위 머리말).
   const scenario = scenarioOf(
-    compute(elapsedLockInRequest({
-      accounts: { isa: { years_since_opening: 0, cumulative_contribution_krw: 0 } },
-    }), rulesets),
+    compute(
+      elapsedLockInRequest({ ...overrides, profile: { fund_use_horizon: 'unknown' } }),
+      rulesets,
+    ),
   );
 
   assert.ok(scenario.fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0);
   const plan = planOf(scenario, 'max_tax_credit');
   assert.ok(allocationOf(plan, 'isa').annual_krw > 0);
   assert.ok(plan.warnings.some((w) => w.code === 'early_termination_clawback_isa'));
-  assert.ok(scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
+
+  // 비교 안내는 그 시점의 것이므로 원래 시점에서 잰다.
+  const locked = scenarioOf(compute(elapsedLockInRequest(overrides), rulesets));
+  assert.ok(locked.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
 });
 
 test('M2 / unknown horizon에서도 잔여 기간 조건이 함께 걸린다', () => {

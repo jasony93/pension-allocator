@@ -208,8 +208,25 @@ test('주입 / 3단계 몫을 더 묶이는 계좌에 먼저 넣으면 I36이 �
     to: 'const flexibleFirst = [...(ctx.withdrawalOrder ?? pensionPart)].reverse();',
   });
 
-  const before = baselineOf(compute(FULL, rulesets));
-  const after = baselineOf(mutated(FULL, rulesets));
+  // **기본안으로는 이 주입을 더 이상 볼 수 없다**(D52 1번). 기본안 후보는 공제를 낳지
+  // 않는 몫을 IRP에 아예 넣지 않으므로, 순서를 뒤집어도 그 몫은 연금저축에 남는다 —
+  // **다른 규칙이 같은 결과를 지고 있어 주입이 가려진다.** 그러므로 그 규칙이 걸리지
+  // 않는 안, 즉 기본안 후보가 아닌 안에서 본다. 검사를 완화한 것이 아니라 **주입이
+  // 실제로 보이는 자리로 옮긴 것**이고, 기본안 쪽은 I44가 따로 잠근다.
+  const untouched = (response) => {
+    assert.equal(response.ok, true, JSON.stringify(response.errors));
+    const plan = response.scenarios[0].plans.find((p) => p.plan_id === 'annuity_savings_first');
+    assert.ok(plan !== undefined, '기본안 후보가 아닌 안이 응답에 없다');
+    return plan;
+  };
+
+  // 그 안 하나만 요청한다 — 함께 요청하면 벡터가 같아질 때 합쳐져 사라진다.
+  const request = baseRequest({
+    profile: { monthly_capacity_krw: 5_000_000 },
+    options: { plan_variants: ['annuity_savings_first'] },
+  });
+  const before = untouched(compute(request, rulesets));
+  const after = untouched(mutated(request, rulesets));
 
   const withoutCreditAccounts = (plan) =>
     plan.non_quantified_effects

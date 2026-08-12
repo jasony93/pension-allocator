@@ -100,9 +100,15 @@ const CASES = [
     capacityMan: 3000,
     horizon: 'within_isa_lock_in',
     owner: { annuity: 300, pension: 0, isa: 0, other: 2700 },
-    // 표는 2년 뒤 쓸 돈이라는 이유로 계좌를 **비운다.** 우리 엔진은 자금 사용 시점으로 금액을
-    // 바꾸지 않고 **경고만** 낸다(D10, 계약 3.1절의 보장). 세법이 정하는 것은 중도해지 시의
-    // 과세이지 「넣지 마라」가 아니다.
+    // **D52 2번으로 이 케이스가 표 쪽으로 크게 움직였다.** 표는 2년 뒤 쓸 돈이라는 이유로
+    // 계좌를 비웠고, 우리는 D10을 근거로 「시점은 금액을 바꾸지 않는다」며 세 계좌를
+    // 채우고 있었다. **소유자가 D10을 뒤집었다** — 3년 안에 쓸 돈이면 전액 미배분이다.
+    //
+    // **그래도 완전히 같지는 않다.** 표에는 연금저축 300만이 남아 있고 그 옆에
+    // 「노후 전용 자금에 한정」이라는 단서가 붙어 있다. **이번 지시가 그것보다 나중이고
+    // 더 명확하므로 이번 것을 따른다** — 사용자가 「이 돈을 3년 안에 쓴다」고 답한 이상
+    // 그 돈에 대해서는 전액 미배분이다. 남은 어긋남은 그 한 칸뿐이고, 아래 전용 시험이
+    // 무엇이 같아졌고 무엇이 남았는지를 값으로 못 박는다. **관리자에게 보고했다.**
     verdict: VERDICT.DIVERGES_BY_DESIGN,
   },
   {
@@ -125,8 +131,13 @@ const CASES = [
     capacityMan: 1000,
     horizon: 'unknown',
     owner: { annuity: 200, pension: 0, isa: 800, other: 0 },
-    // 축이 둘 겹친다 — (가) 세액 한도의 값이 다르고(아래 별도 시험), (나) 한도가 배분을
-    // 줄이지 않는다는 계약 5.12절의 판정이다.
+    // **D52 1번으로 IRP 칸이 표와 같아졌다.** 총급여 2,500만의 세액 한도는 연금저축
+    // 600만만으로 이미 넘으므로 그 위의 IRP는 세액공제를 한 원도 낳지 않는다 — 소유자가
+    // 그것을 짚었고 표는 처음부터 0을 적고 있었다. 아래 전용 시험이 그 칸을 못 박는다.
+    //
+    // **남은 어긋남은 축 하나다** — 우리 한도는 총급여액에서 산출한 **상한**이라 표가
+    // 쓴 결정세액(36.7만)보다 크고, 그래서 「공제를 낳는 납입액」의 경계가 표의 200만보다
+    // 위에 있다. 그 축은 D39·D40이 소유자와 함께 택한 거래이고 아래 두 시험이 크기를 잰다.
     verdict: VERDICT.DIVERGES_BY_DESIGN,
   },
   {
@@ -668,30 +679,80 @@ test('소유자 표 / 케이스 7·11·13 — 한도 0을 이유로 연금저축
   }
 });
 
-test('소유자 표 / 케이스 2 — ISA 의무가입기간이 남았다는 사실은 경고로 나가고 금액은 바꾸지 않는다', () => {
+test('소유자 표 / 케이스 2 — 3년 안에 쓸 돈이면 전액 미배분이다 (D52 2번)', () => {
+  // **표가 옳았고 우리가 D10을 근거로 반대편에 서 있었다.** 그 판정이 뒤집혔다.
   const scenario = scenarioOf(compute(requestFor(CASES[1]), rulesets));
   const boundaries = scenario.fund_use_horizon_boundaries;
 
   // 표가 쓴 근거(2년 < 의무보유 3년)를 엔진도 값으로 낸다.
   assert.ok(boundaries.isa_lock_in_years_remaining > 0);
-  const isaWarnings = scenario.plans
-    .flatMap((plan) => plan.warnings)
-    .filter((warning) => warning.code === 'early_termination_clawback_isa');
-  assert.ok(isaWarnings.length > 0, 'ISA 중도해지 경고가 하나도 없다');
-  assert.ok(
-    isaWarnings.every((warning) => warning.severity === 'warning' && warning.trigger === 'declared_horizon'),
-    '사용자가 시점을 밝혔는데 경고가 info로 나간다',
+
+  // 세 계좌 전부가 비었다 — 표의 「기타」 열이 뜻하던 것이다.
+  assert.equal(scenario.plans.length, 1);
+  const baseline = scenario.plans[0];
+  assert.deepStrictEqual(vectorOf(baseline), {
+    annuity: 0,
+    pension: 0,
+    isa: 0,
+    other: CASES[1].capacityMan * MAN - (CASES[1].capacityMan * MAN) % MONTHS,
+  });
+
+  // **그리고 그 이유가 「한도가 없어서」가 아니라는 것이 값으로 나간다.**
+  assert.equal(
+    baseline.unallocated_breakdown.reason_code,
+    'no_account_beneficial_within_fund_use_horizon',
   );
 
-  // 그러나 금액은 바뀌지 않는다 — 같은 요청에서 horizon만 바꾸면 배분 벡터가 같아야 한다.
+  // **표와 남은 어긋남은 연금저축 한 칸이다.** 표는 300만을 두고 「노후 전용 자금에
+  // 한정」이라는 단서를 달았고, 이번 지시가 더 나중이고 더 명확하므로 이번 것을 따른다.
+  // 그 어긋남을 값으로 고정해 둔다 — 나중에 누가 다시 볼 때 크기를 알 수 있어야 한다.
+  assert.equal(ownerVectorOf(CASES[1]).annuity, 3_000_000);
+  assert.equal(vectorOf(baseline).annuity, 0);
+
+  // 같은 요청을 다른 시점으로 물으면 금액이 돌아온다 — 이 시점만 다르다는 것의 확인이다.
   const asLongTerm = { ...CASES[1], horizon: 'at_or_after_pension_age' };
   const other = scenarioOf(compute(requestFor(asLongTerm), rulesets));
-  const byId = new Map(other.plans.map((plan) => [plan.plan_id, vectorOf(plan)]));
-  for (const plan of scenario.plans) {
-    assert.deepStrictEqual(
-      vectorOf(plan),
-      byId.get(plan.plan_id),
-      `${plan.plan_id}: 자금 사용 시점이 금액을 바꿨다 — 계약 3.1절의 보장이 깨졌다`,
+  assert.ok(
+    other.plans.every((plan) => plan.total_allocated_annual_krw > 0),
+    '다른 시점에서도 배분이 비었다 — 이 변경이 시점 밖으로 번졌다',
+  );
+});
+
+test('소유자 표 / 케이스 4 — 결정세액이 낮으면 IRP를 권하지 않는다 (D52 1번)', () => {
+  // **표가 옳았다.** 총급여 2,500만의 세액 한도는 연금저축 600만이 낳는 공제액보다
+  // 작으므로, 그 위의 IRP 300만은 세액공제를 한 원도 더 낳지 않으면서 중도인출 제한만
+  // 진다. 엔진은 그 배분을 내고 있었고 소유자가 짚었다.
+  const scenario = scenarioOf(compute(requestFor(CASES[3]), rulesets));
+  const baseline = scenario.plans.find((plan) => plan.is_baseline);
+
+  assert.equal(allocationOf(baseline, 'retirement_pension').annual_krw, 0);
+  assert.equal(ownerVectorOf(CASES[3]).pension, 0, '표의 IRP 칸이 0이 아니면 이 시험의 전제가 다르다');
+  assert.equal(
+    allocationOf(baseline, 'retirement_pension').limited_by,
+    'no_additional_tax_credit',
+  );
+  // 그 판정이 IRP에만 걸리는 근거가 함께 나간다 — 연금저축은 같은 제한을 받지 않는다.
+  assert.ok(
+    allocationOf(baseline, 'retirement_pension').basis_rule_ids.includes(
+      'pension.withdrawal.midterm_restriction',
+    ),
+  );
+
+  // **연금저축은 건드리지 않았다**(소유자가 그은 선). 공제를 낳지 않아도 과세이연과
+  // 인출 자유가 남고 조문이 이월 신청을 예정한다.
+  assert.ok(allocationOf(baseline, 'annuity_savings').annual_krw > 0);
+
+  // **그리고 그 대가는 0이다** — 손대지 않은 안과 공제액이 같다.
+  const untouched = scenario.plans.find((plan) => plan.plan_id === 'annuity_savings_first');
+  if (untouched) {
+    assert.equal(
+      baseline.deterministic_benefit.pension_credit_total_krw,
+      untouched.deterministic_benefit.pension_credit_total_krw,
+      'IRP를 잘라 세액공제를 잃었다 — 그러면 이 변경의 전제가 거짓이다',
+    );
+    assert.ok(
+      allocationOf(untouched, 'retirement_pension').annual_krw > 0,
+      '비교 대상 안이 IRP를 채우지 않으면 「대가가 0」이 아무것도 재지 않는다',
     );
   }
 });

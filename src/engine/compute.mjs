@@ -20,6 +20,7 @@ import {
   UNAPPLIED_REASON,
 } from './constants.mjs';
 import { boundariesFrom, boundariesSource, dedupeErrors } from './boundaries.mjs';
+import { resolveHorizonSuppression } from './fund-use-horizon.mjs';
 import { buildPlans } from './plans.mjs';
 import { resolveTaxLiabilityCap } from './liability-cap.mjs';
 import { resolveHeadlineRule } from './headline.mjs';
@@ -57,6 +58,7 @@ export function compute(request, rulesets) {
   let creditRateBracket = null;
   let ageReckoning = null;
   let isaReturn = null;
+  let horizonSuppression = null;
 
   for (const scenarioId of normalized.scenarios) {
     const outcome = computeScenario(scenarioId, normalized, rulesets);
@@ -70,6 +72,10 @@ export function compute(request, rulesets) {
     ageReckoning ??= outcome.ageReckoning;
     // 정산 기간·계약기간 하한도 개정 대상이 아니다. 가정 목록은 응답 단위이므로 하나만 쓴다.
     isaReturn ??= outcome.isaReturn;
+    // 전액 미배분 판정도 개정 대상이 아니다(두 룰셋의 의무가입기간·기타소득세율이 같다).
+    // **가정 목록이 이 판정을 읽어야 한다** — 「시점은 금액에 반영하지 않는다」는 가정이
+    // 걸리는 시점과 걸리지 않는 시점을 이 값 하나가 가른다. 조건을 두 번 적지 않는다.
+    horizonSuppression ??= outcome.horizonSuppression;
   }
 
   if (errors.length > 0) return failure(request, dedupeErrors(errors));
@@ -85,10 +91,16 @@ export function compute(request, rulesets) {
       months_remaining_in_tax_year: months,
       annual_budget_krw: normalized.profile.monthly_capacity_krw * months,
       fund_use_horizon: normalized.profile.fund_use_horizon,
-      // 계약이 스스로 선언한다 — 이 입력은 금액을 바꾸지 않는다.
+      // 계약이 스스로 선언한다. **`12.0.0`에서 앞의 두 값이 뒤집혔다**(D52 2번) —
+      // `within_isa_lock_in`이면 전액 미배분이므로 이 입력이 금액을 바꾼다.
+      //
+      // **고정 객체를 유지한다.** 이 객체가 말하는 것은 「이 요청에서 무엇이 달라졌는가」가
+      // 아니라 **「이 입력이 무엇을 바꿀 수 있는가」**이고, 그래야 qa가 선언과 동작을
+      // 요청에 상관없이 대조할 수 있다. 이 요청에서 실제로 걸렸는지는
+      // `unallocated_breakdown.reason_code`가 값으로 말한다.
       fund_use_horizon_affects: {
-        allocation_amounts: false,
-        tax_credit_amounts: false,
+        allocation_amounts: true,
+        tax_credit_amounts: true,
         limits: false,
         plan_ordering: true,
         baseline_selection: true,
@@ -120,8 +132,12 @@ export function compute(request, rulesets) {
       },
       // 세액 한도가 무엇을 바꾸고 무엇을 바꾸지 않는지. fund_use_horizon과 같은 형태의
       // 자기 선언이고, 값이 고정이라 qa가 실제 동작과 대조할 수 있다.
+      //
+      // **`12.0.0`에서 첫 값이 뒤집혔다**(D52 1번). 한도는 이제 IRP 배분의 상한을 정한다 —
+      // 한도를 넘어서는 IRP 납입은 공제를 한 원도 낳지 않으면서 중도인출 제한만 지기
+      // 때문이다. **연금저축과 ISA에는 여전히 닿지 않는다**(5.12절의 판정은 그대로다).
       tax_liability_cap_affects: {
-        allocation_amounts: false,
+        allocation_amounts: true,
         tax_credit_amounts: true,
         limits: false,
         plan_ordering: false,
@@ -130,7 +146,7 @@ export function compute(request, rulesets) {
       },
     },
     scenarios: scenarioResults,
-    assumptions: buildAssumptions(normalized, ageReckoning, isaReturn),
+    assumptions: buildAssumptions(normalized, ageReckoning, isaReturn, horizonSuppression),
   };
 }
 
@@ -234,6 +250,14 @@ function computeScenario(scenarioId, request, rulesets) {
   //      새 입력 0개·가정 0개가 이 표가 성립하는 조건이다. 금액은 없다.
   const pensionRateReference = resolvePensionWithdrawalTaxReference(access);
 
+  // 6.75. **자금 사용 시점이 금액에 닿는 유일한 판정**(D52 2번). 3년 안에 쓸 돈이면
+  //       세 계좌 중 어느 것도 이롭지 않다 — ISA는 의무가입기간을 못 채워 과세특례를
+  //       잃고 연금계좌는 55세 전 인출이라 기타소득세가 붙는다. **연수도 세율도
+  //       룰셋에서 읽는다.** 걸리지 않는 시점에서는 규칙을 한 건도 읽지 않는다.
+  const horizonSuppression = resolveHorizonSuppression(access, {
+    horizon: request.profile.fund_use_horizon,
+  });
+
   const boundaries = boundariesFrom(access, {
     birthDate: request.profile.birth_date,
     taxYear: request.tax_year,
@@ -271,6 +295,7 @@ function computeScenario(scenarioId, request, rulesets) {
     isaReturn === null ||
     headlineRule === null ||
     pensionRateReference === null ||
+    horizonSuppression === null ||
     creditCeiling === null
   ) {
     return { errors: dedupeErrors(missing.length > 0 ? missing : [ruleMissingFallback()]) };
@@ -297,6 +322,7 @@ function computeScenario(scenarioId, request, rulesets) {
     isaCumulativeContributionKrw: request.accounts.isa.cumulative_contribution_krw,
     options: request.options,
     horizon: request.profile.fund_use_horizon,
+    horizonSuppression,
     months,
     budget,
     // 월 표시 금액의 합이 맞춰야 할 값. `budget / months`로 되돌려 계산하지 않는다 —
@@ -326,8 +352,11 @@ function computeScenario(scenarioId, request, rulesets) {
   if (request.profile.monthly_capacity_krw === 0) {
     notices.push(notice(NOTICE.ZERO_CAPACITY, 'info', 'profile.monthly_capacity_krw'));
   }
+  // **이 안내는 「한도가 모자란다」고 말한다.** 전액 미배분이 자금 사용 시점에서 나온
+  // 경우에는 한도가 멀쩡히 남아 있으므로 그 말이 거짓이 된다(D52 2번). 같은 사실을
+  // `unallocated_breakdown.reason_code`가 갈라서 말한다.
   const maxFillable = Math.max(...plans.map((p) => p.total_allocated_annual_krw));
-  if (budget > maxFillable) {
+  if (budget > maxFillable && !horizonSuppression.applies) {
     notices.push(notice(NOTICE.BUDGET_EXCEEDS_ALL_LIMITS, 'info', null, { unallocated_krw: budget - maxFillable }));
   }
   if (plans.length === 1) {
@@ -365,6 +394,7 @@ function computeScenario(scenarioId, request, rulesets) {
   return {
     ageReckoning,
     isaReturn,
+    horizonSuppression,
     creditRateBracket: {
       income_tax_rate: rates.incomeTaxRate,
       local_tax_rate: rates.surtaxRate,
@@ -537,7 +567,7 @@ function unappliedReason(ruleId, request) {
   return UNAPPLIED_REASON[ruleId] ?? DEFAULT_UNAPPLIED_REASON;
 }
 
-function buildAssumptions(request, ageReckoning, isaReturn) {
+function buildAssumptions(request, ageReckoning, isaReturn, horizonSuppression) {
   const scenarios = request.scenarios;
   const out = [];
   const add = (code, params = {}, basisRuleIds = []) =>
@@ -609,7 +639,10 @@ function buildAssumptions(request, ageReckoning, isaReturn) {
   if (isaReturn === null || !isaReturn.supplied) {
     add(ASSUMPTION.ISA_BENEFIT_NOT_QUANTIFIED, {}, [RULE.ISA_TAX_FREE_LIMIT]);
   }
-  add(ASSUMPTION.HORIZON_EXCLUDED_FROM_AMOUNTS);
+  // **이 가정에 조건이 붙었다**(`12.0.0`, D52 2번). 세 시점에서는 여전히 참이다 —
+  // 자금 사용 시점이 순서와 경고만 바꾼다. `within_isa_lock_in`에서는 **거짓**이므로
+  // 내지 않는다. 거짓이 된 가정을 계속 싣는 것이 이 저장소가 반복해 밟은 결함이다.
+  if (!horizonSuppression.applies) add(ASSUMPTION.HORIZON_EXCLUDED_FROM_AMOUNTS);
   add(ASSUMPTION.EARLY_EXIT_NOT_QUANTIFIED, {}, [
     RULE.ISA_CLAWBACK,
     RULE.PENSION_EARLY_WITHDRAWAL_RATE,

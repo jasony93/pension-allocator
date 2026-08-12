@@ -281,7 +281,10 @@ test('ISA를 뒤로 미루는 안은 어떤 자금 사용 시점에서도 기본
   for (const horizon of HORIZONS) {
     const scenario = scenarioFor({ profile: { fund_use_horizon: horizon } });
     assert.notEqual(scenario.plans[0].plan_id, BEFORE_ISA, horizon);
-    assert.equal(planOf(scenario, BEFORE_ISA).is_baseline, false, horizon);
+    // **전액 미배분 시점에서는 네 안의 벡터가 같아져 하나로 합쳐진다**(D52 2번).
+    // 그때 남는 하나가 이 안이 아니라는 것은 위 줄이 이미 잰다.
+    const found = scenario.plans.find((plan) => plan.plan_id === BEFORE_ISA);
+    if (found) assert.equal(found.is_baseline, false, horizon);
   }
 });
 

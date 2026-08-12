@@ -18,6 +18,7 @@ import {
   ACCOUNT_ORDER,
   ASSUMPTION,
   COMPARISON_NOTE,
+  IRP_CREDIT_PRODUCTIVE_ONLY_PLANS,
   LIMITED_BY,
   HORIZONS,
   ISA_ESTIMATE_DISPLAY,
@@ -334,10 +335,20 @@ function checkScenario(scenario, response, request, at) {
   const allocOf = (plan, account) => plan.allocations.find((a) => a.account === account);
 
   // I1 — 사실이 아닌 안내가 배분 비교보다 앞서지 않는다 (M3)
+  //
+  // **`12.0.0`에서 재는 방법이 바뀌었다**(D52 2번). 그 시점에는 배분이 전부 0이라
+  // 「모든 안이 경고를 진다」로는 아무것도 재지 못한다. 대신 **열려 있는 계좌 전부에
+  // 불이익이 걸리는가**를 본다 — 그것이 이 코드의 이름이 말하는 것이고, M3이 잡은
+  // 진술(성립하지 않는 불이익을 주장하지 않는다)이 그대로 걸린다.
+  //
+  // 이 시점에서 연금 두 계좌는 언제나 걸리고(8.4절), ISA만 잔여 의무가입기간이
+  // 조건이다. 그러므로 안내가 빠지는 자리는 **ISA가 열려 있는데 기간이 끝난 경우**뿐이다.
+  const openAccounts = ['retirement_pension', 'annuity_savings', 'isa'].filter(eligibleOf);
+  const isaCarriesPenalty = !eligibleOf('isa') || boundaries.isa_lock_in_years_remaining > 0;
   assert.equal(
     notes.includes(COMPARISON_NOTE.ALL_ACCOUNTS_PENALTY),
-    horizon === 'within_isa_lock_in' && plans.length > 0 && plans.every((p) => p.warnings.length > 0),
-    `${at} I1: "어느 안도 피하지 못한다"는 안내가 실제 경고와 어긋난다`,
+    horizon === 'within_isa_lock_in' && openAccounts.length > 0 && isaCarriesPenalty,
+    `${at} I1: "어느 안도 피하지 못한다"는 안내가 실제 불이익과 어긋난다`,
   );
 
   for (const plan of plans) {
@@ -650,6 +661,11 @@ function checkScenario(scenario, response, request, at) {
   // I18 — 인출 편의로 세액을 깎지 않는다.
   // 동점 판정이 들어오면서 가장 먼저 무너질 수 있는 선이다. 순서를 무엇으로 정하든
   // `max_tax_credit`의 공제액은 어떤 안보다 작아서는 안 된다.
+  //
+  // **D52 1번의 전제 전체가 이 한 줄에 걸린다.** 기본안 후보에서 잘라 낸 IRP 몫이
+  // 세액공제를 한 원이라도 낳고 있었다면, 손대지 않은 `annuity_savings_first`의 공제액이
+  // 여기서 더 커진다. 그러면 이름이 거짓이 되고 **사용자가 실제로 돈을 잃는다.**
+  // 「아무것도 낳지 않는 몫만 잘랐다」를 응답만으로 재는 자리가 여기다.
   const maxCreditPlan = plans.find((p) => p.plan_id === PLAN.MAX_CREDIT);
   if (maxCreditPlan) {
     for (const plan of plans) {
@@ -921,6 +937,70 @@ function checkScenario(scenario, response, request, at) {
     }
     if (!eligibleOf('retirement_pension') && !eligibleOf('annuity_savings')) {
       assert.equal(b.pension_contribution_headroom_krw, 0, `${label}: 막힌 연금계좌에 여력이 있다고 말한다`);
+    }
+  }
+
+  // I43 — **미배분이 왜 미배분인지가 값으로 나가고, 그 값이 실제 상태와 맞물린다**(D52 2번).
+  //
+  // 「한도가 남지 않아서」와 「그 시점에는 어느 계좌도 이롭지 않아서」는 화면에서 다른
+  // 문장이 된다. 두 뜻이 한 이름으로 나가면 화면이 그 둘을 구별할 수 없고, **한도가
+  // 멀쩡히 남은 사용자에게 「넣을 자리가 없습니다」를 적게 된다.**
+  const suppressed = horizon === 'within_isa_lock_in';
+  for (const plan of plans) {
+    const b = plan.unallocated_breakdown;
+    const label = `${at} I43 [${plan.plan_id}]`;
+
+    if (plan.unallocated_annual_krw === 0) {
+      assert.equal(b.reason_code, null, `${label}: 설명할 미배분이 없는데 이유가 붙었다`);
+    } else {
+      assert.equal(
+        b.reason_code,
+        suppressed ? 'no_account_beneficial_within_fund_use_horizon' : 'contribution_room_exhausted',
+        `${label}: 미배분의 이유가 실제 이유와 다르다`,
+      );
+    }
+
+    for (const allocation of plan.allocations) {
+      if (allocation.limited_by !== LIMITED_BY.FUND_USE_HORIZON) continue;
+      assert.ok(suppressed, `${label}: 그 시점이 아닌데 시점이 막았다고 말한다`);
+      assert.equal(allocation.annual_krw, 0, `${label}: 시점이 막았다면서 돈이 들어갔다`);
+    }
+
+    if (suppressed) {
+      // 전액 미배분이다. 한 계좌라도 돈이 들어가면 이유 코드가 거짓이 된다.
+      assert.equal(plan.total_allocated_annual_krw, 0, `${label}: 그 시점에 돈이 들어갔다`);
+      assert.deepStrictEqual(plan.warnings, [], `${label}: 넣지 않은 돈에 경고가 붙었다`);
+      for (const allocation of plan.allocations) {
+        assert.ok(
+          [LIMITED_BY.FUND_USE_HORIZON, LIMITED_BY.NOT_ELIGIBLE].includes(allocation.limited_by),
+          `${label}: ${allocation.account}이 막힌 이유를 시점으로도 자격으로도 말하지 않는다`,
+        );
+      }
+    }
+  }
+
+  // I44 — **아무것도 낳지 않는 IRP 배분을 기본안 후보가 내지 않는다**(D52 1번).
+  //
+  // 여기서는 그 판정이 **어디에 붙을 수 있는가**만 본다 — 이 코드가 연금저축이나 ISA에
+  // 붙으면 소유자가 그은 선(연금저축은 건드리지 않는다)이 무너진 것이고, 기본안 후보가
+  // 아닌 안에 붙으면 「다른 배분안은 그대로 둔다」가 무너진 것이다.
+  // 금액이 실제로 옳은지는 별도 시험이 경계 양쪽에서 잡는다.
+  for (const plan of plans) {
+    for (const allocation of plan.allocations) {
+      if (allocation.limited_by !== LIMITED_BY.NO_ADDITIONAL_CREDIT) continue;
+      assert.equal(
+        allocation.account,
+        'retirement_pension',
+        `${at} I44: 중도인출 제한을 받지 않는 계좌에 「공제를 늘리지 않는다」를 붙였다`,
+      );
+      assert.ok(
+        IRP_CREDIT_PRODUCTIVE_ONLY_PLANS.has(plan.plan_id),
+        `${at} I44: 기본안 후보가 아닌 ${plan.plan_id}의 배분을 잘랐다`,
+      );
+      assert.ok(
+        allocation.basis_rule_ids.includes('pension.withdrawal.midterm_restriction'),
+        `${at} I44: 그 판정이 IRP에만 걸리는 근거가 근거 목록에 없다`,
+      );
     }
   }
 
@@ -1309,9 +1389,13 @@ test('모든 응답이 교차 필드 불변식을 만족한다', () => {
   );
 });
 
-// I9 — 자금 사용 시점은 금액을 바꾸지 않는다.
-// 계약 4.2절이 스스로 한 선언과 실제 동작을 프로필군 전체에 걸쳐 대조한다.
-test('I9 — fund_use_horizon 네 값에서 금액·한도가 동일하다', () => {
+// I9 — 자금 사용 시점은 **세 값에서** 금액을 바꾸지 않는다.
+//
+// **D52 2번이 네 번째 값을 이 검사 밖으로 냈다.** `within_isa_lock_in`은 전액 미배분이고
+// 그것이 이 회차의 변경이다. 나머지 셋에서는 D10이 그은 선이 그대로 살아 있고, 그 선이
+// 살아 있다는 것 자체가 「변경이 한 값에만 걸렸다」의 증명이다. 네 번째 값은
+// `horizon.test.mjs`가 금액·이유 코드·근거 규칙까지 따로 잠근다.
+test('I9 — fund_use_horizon 세 값에서 금액·한도가 동일하다', () => {
   // 금액만 본다. `fill_order`는 배분안이 어떤 순서로 채웠는지를 나타내는 메타이고,
   // 같은 벡터를 내는 두 안이 합쳐질 때 어느 쪽이 남는지가 horizon에 달려 있어
   // 정당하게 달라진다. 계약이 보장한 것은 **금액**이 흔들리지 않는다는 것이다.
@@ -1330,14 +1414,17 @@ test('I9 — fund_use_horizon 네 값에서 금액·한도가 동일하다', () 
 
   for (const { label, patch } of PROFILES) {
     for (const scenarios of SCENARIO_SETS) {
-      const shapes = HORIZONS.map((horizon) => {
+      const stable = HORIZONS.filter((horizon) => horizon !== 'within_isa_lock_in');
+      const shapes = stable.map((horizon) => {
         const response = compute(
           baseRequest(deepMerge(patch, { scenarios, profile: { fund_use_horizon: horizon } })),
           rulesets,
         );
         assert.deepStrictEqual(response.echo.fund_use_horizon_affects, {
-          allocation_amounts: false,
-          tax_credit_amounts: false,
+          // **고정 객체다.** 「이 요청에서 달라졌는가」가 아니라 「이 입력이 무엇을
+          // 바꿀 수 있는가」를 말한다(D52 2번).
+          allocation_amounts: true,
+          tax_credit_amounts: true,
           limits: false,
           plan_ordering: true,
           baseline_selection: true,
@@ -1350,20 +1437,41 @@ test('I9 — fund_use_horizon 네 값에서 금액·한도가 동일하다', () 
         assert.deepStrictEqual(
           shapes[i],
           shapes[0],
-          `${label} / [${scenarios}]: ${HORIZONS[i]}의 금액이 ${HORIZONS[0]}과 다르다`,
+          `${label} / [${scenarios}]: ${stable[i]}의 금액이 ${stable[0]}과 다르다`,
         );
       }
+
+      // **한도만은 네 번째 값에서도 같아야 한다** — 전액 미배분은 배분 판정이지
+      // 한도 판정이 아니다. `limits: false` 선언이 그것을 말하고 여기서 잰다.
+      const locked = compute(
+        baseRequest(
+          deepMerge(patch, { scenarios, profile: { fund_use_horizon: 'within_isa_lock_in' } }),
+        ),
+        rulesets,
+      );
+      assert.deepStrictEqual(
+        locked.scenarios.map((s) => s.limits),
+        shapes[0].map((s) => s.limits),
+        `${label} / [${scenarios}]: 전액 미배분 시점에서 한도가 달라졌다`,
+      );
     }
   }
 });
 
-// I26 — 세액 한도는 배분을 바꾸지 않는다.
+// I26 — 세액 한도가 **기본안 후보의 IRP 말고는** 배분을 바꾸지 않는다.
 // 계약 4.2절의 `tax_liability_cap_affects` 선언과 실제 동작을 대조한다.
 //
-// **왜 이 선이 필요한가.** "공제를 늘리지 못하는 납입은 넣지 않는다"는 기존 규칙을
-// 한도에까지 밀면, 한도가 0인 사용자의 연금계좌 배분이 0이 된다. 그것은 세법이 정한
-// 결론이 아니다 — 시행령 §118의3이 그 납입액을 이후 과세기간으로 넘길 수 있게 하므로
-// "넣지 마라"는 제품 판단이지 조문의 결론이 아니다. 그래서 한도는 **공제액만** 자른다.
+// **`12.0.0`에서 이 선이 한 자리에서 움직였다**(D52 1번). 소유자가 「세액공제를 한 원도
+// 더 낳지 않는 IRP 배분을 기본안에서 내지 않는다」를 지시했고, 그 판정의 재료가 세액
+// 한도이므로 **기본안 후보의 IRP 배분은 이제 한도의 함수다.** 그 안에서는 IRP가 줄어든
+// 만큼이 ISA나 연금저축으로 흘러가므로 세 계좌가 모두 움직일 수 있다 — 그래서 그 두 안은
+// 이 검사의 대상이 아니고, 대신 **잘라 낸 몫이 세액을 깎지 않았다**는 것을 I45가 잰다.
+//
+// **연금저축과 ISA에 걸린 옛 선은 그대로 서 있다.** "공제를 늘리지 못하는 납입은 넣지
+// 않는다"를 연금저축에까지 밀면 한도가 0인 사용자의 연금저축 배분이 0이 되는데, 그것은
+// 세법이 정한 결론이 아니다 — 시행령 §118의3이 그 납입액을 이후 과세기간으로 넘길 수
+// 있게 한다. 두 계좌를 가르는 것은 **중도인출 제한의 비대칭**뿐이고 IRP만 그 제한을 진다.
+// 기본안 후보가 아닌 두 안에서는 그 선이 한 칸도 움직이지 않았고, 아래가 그것을 잰다.
 //
 // **한도를 어떻게 움직이는가가 D39·D40으로 바뀌었다.** 전에는 요청의 결정세액을 갈아
 // 끼웠고 지금은 그런 입력이 없다. 그래서 **총급여액**을 움직인다 — 다만 공제율 구간
@@ -1380,17 +1488,21 @@ test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', (
     50_000_000,
   ];
 
+  // 기본안 후보 둘은 IRP 배분이 한도의 함수가 됐으므로 이 검사의 대상이 아니다.
+  // **그 둘이 검사 밖으로 나가는 것이 아니다** — I18이 「잘라 낸 몫이 세액을 깎지
+  // 않았다」를 모든 응답에서 재고, 경계 양쪽은 `plans.test.mjs`의 골든 좌표가 잠근다.
+  const UNTOUCHED_PLANS = PLAN_ORDER.filter((id) => !IRP_CREDIT_PRODUCTIVE_ONLY_PLANS.has(id));
+
   const shape = (scenario) => ({
     limits: scenario.limits,
     plans: scenario.plans.map((plan) => ({
-      plan_id: plan.plan_id,
-      is_baseline: plan.is_baseline,
-      allocations: plan.allocations.map((a) => [a.account, a.annual_krw, a.limited_by, a.fill_order]),
-      warnings: plan.warnings.map((w) => [w.code, w.account, w.severity]),
-      credit_eligible_krw: plan.deterministic_benefit.credit_eligible_contribution_krw,
-      // 자르기 **전** 금액은 한도의 함수가 아니다. 자른 뒤 금액만 달라져야 한다.
-      before_cap: plan.deterministic_benefit.pension_credit_total_before_cap_krw,
-    })),
+        plan_id: plan.plan_id,
+        allocations: plan.allocations.map((a) => [a.account, a.annual_krw, a.limited_by, a.fill_order]),
+        warnings: plan.warnings.map((w) => [w.code, w.account, w.severity]),
+        credit_eligible_krw: plan.deterministic_benefit.credit_eligible_contribution_krw,
+        // 자르기 **전** 금액은 한도의 함수가 아니다. 자른 뒤 금액만 달라져야 한다.
+        before_cap: plan.deterministic_benefit.pension_credit_total_before_cap_krw,
+      })),
   });
 
   for (const { label, patch } of PROFILES) {
@@ -1410,6 +1522,10 @@ test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', (
                 // ISA 유형 교차확인은 직전 연도 값이 정한다. 한도 축과 섞지 않는다.
                 prior_year_total_salary_krw: 60_000_000,
               },
+              // **손대지 않는 두 안만 요청한다.** 네 안을 함께 요청하면 한도에 따라
+              // 이 둘이 기본안 후보와 같은 벡터가 되어 **합쳐져 사라지고**, 그러면
+              // 「배분이 달라졌다」와 「안이 합쳐졌다」를 이 검사가 구별하지 못한다.
+              options: { plan_variants: UNTOUCHED_PLANS },
             }),
           ),
           rulesets,
@@ -1419,7 +1535,9 @@ test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', (
       for (const response of responses) {
         assert.equal(response.ok, true, `${label}: 계산이 실패했다`);
         assert.deepStrictEqual(response.echo.tax_liability_cap_affects, {
-          allocation_amounts: false,
+          // **`12.0.0`에서 첫 값이 뒤집혔다**(D52 1번). 한도가 기본안 후보의 IRP
+          // 배분 상한을 정한다.
+          allocation_amounts: true,
           tax_credit_amounts: true,
           limits: false,
           plan_ordering: false,
@@ -1440,7 +1558,7 @@ test('I26 — 세액 한도가 배분·한도·순서를 바꾸지 않는다', (
         assert.deepStrictEqual(
           responses[i].scenarios.map(shape),
           first,
-          `${label} / ${horizon}: 한도 ${caps[i]}에서 배분이 달라졌다`,
+          `${label} / ${horizon}: 한도 ${caps[i]}에서 기본안 후보가 아닌 안의 배분이 달라졌다`,
         );
       }
     }

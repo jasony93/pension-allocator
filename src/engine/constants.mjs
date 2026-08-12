@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '11.0.0';
-export const SUPPORTED_MAJOR = 11;
+export const SCHEMA_VERSION = '12.0.0';
+export const SUPPORTED_MAJOR = 12;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -612,8 +612,34 @@ export const BASELINE_BY_HORIZON = {
   [HORIZON.UNKNOWN]: PLAN.MAX_CREDIT,
   [HORIZON.BEFORE_PENSION_AGE]: PLAN.ISA_FIRST,
   // 세 계좌 모두 불이익이 걸려 어느 안도 피하지 못한다. 순서로 푼 척하지 않는다.
+  // **D52 2번 이후로 이 자리에서는 어느 안도 금액을 내지 않는다** — 전액 미배분이므로
+  // 네 안의 벡터가 같아지고 하나로 합쳐진다. 그때 남는 것이 이 값이다.
   [HORIZON.WITHIN_ISA_LOCK_IN]: PLAN.MAX_CREDIT,
 };
+
+/**
+ * **아무것도 낳지 않는 IRP 배분을 내지 않는 안**(D52 1번).
+ *
+ * 소유자가 지적한 것은 이것이다 — 세액 한도가 이미 다 찼는데 IRP를 더 채우면
+ * **세액공제를 한 원도 더 낳지 않으면서 중도인출 제한만 진다**
+ * (`pension.withdrawal.midterm_restriction` — 연금저축은 그 제한을 받지 않는다).
+ * 얻는 것이 0이고 잃는 것이 0보다 크므로 **엄격하게 나쁘다.**
+ *
+ * **연금저축에는 걸지 않는다.** 공제를 낳지 않아도 과세이연과 인출 자유가 남고,
+ * §61③이 초과분을 「받지 아니한 것으로」 보아 시행령 §118의3의 이월 전환 신청을
+ * 예정한다. 두 계좌를 가르는 것은 세법이 실제로 가르는 축(중도인출 제한)뿐이다.
+ *
+ * **왜 「기본안」이 아니라 이 집합인가.** 소유자 지시는 「기본안에서 내지 않는다」이고
+ * 기본안은 `BASELINE_BY_HORIZON`이 자금 사용 시점으로 고른다. 그런데 「기본안일 때만」
+ * 잘라 내면 **같은 안의 금액이 자금 사용 시점에 따라 달라진다** — 그 축은 D52 2번
+ * 하나로 충분하고, 여기까지 번지면 어느 변경이 금액을 움직였는지 갈라 볼 수 없게 된다.
+ * 그래서 **기본안이 될 수 있는 안 전부**에 건다. 이 집합은 그 표에서 파생되므로
+ * 기본안 표가 바뀌면 함께 움직인다 — 두 곳에 적어 어긋날 자리를 만들지 않는다.
+ *
+ * 여기 없는 안(`annuity_savings_first`·`pension_contribution_before_isa`)은 **그대로 둔다.**
+ * 사용자가 다른 목적으로 고를 수 있고, 기본안이 그것을 앞세우지 않는 것이 이 변경이다.
+ */
+export const IRP_CREDIT_PRODUCTIVE_ONLY_PLANS = new Set(Object.values(BASELINE_BY_HORIZON));
 
 export const ERROR = {
   SCHEMA_VERSION_MISMATCH: 'schema_version_mismatch',
@@ -768,6 +794,32 @@ export const LIMITED_BY = {
   BUDGET: 'budget',
   CONTRIBUTION_LIMIT: 'contribution_limit',
   NOT_ELIGIBLE: 'not_eligible',
+  /**
+   * **`12.0.0` 신규 (D52 1번).** 더 넣어도 **세액공제가 한 원도 늘지 않아** 거기서 멈췄다.
+   * `retirement_pension`에만, 그리고 `IRP_CREDIT_PRODUCTIVE_ONLY_PLANS`의 안에서만 나온다.
+   *
+   * **`credit_limit`의 부활이 아니다.** 옛 값은 「세액공제 대상 **한도**가 막았다」였고
+   * 이 값은 「낼 세금이 모자라 그 납입이 공제를 못 낳는다」다 — 막는 것이 다르고, 그래서
+   * 연금저축에는 이 값이 붙지 않는다(연금저축은 공제를 못 낳아도 계속 채운다).
+   */
+  NO_ADDITIONAL_CREDIT: 'no_additional_tax_credit',
+  /**
+   * **`12.0.0` 신규 (D52 2번).** 자금 사용 시점이 `within_isa_lock_in`이라 어느 계좌에도
+   * 넣지 않았다. 세 계좌 전부에 붙는다(자격이 없는 계좌는 `not_eligible`이 이긴다).
+   */
+  FUND_USE_HORIZON: 'fund_use_horizon',
+};
+
+/**
+ * **미배분이 왜 미배분인가**(`UnallocatedBreakdown.reason_code`, `12.0.0` · D52 2번).
+ *
+ * **두 이유는 화면에서 다른 문장이 된다.** 앞은 「더 넣을 자리가 없다」이고 뒤는
+ * 「자리는 있는데 그 시점에는 어느 계좌도 이롭지 않다」다. 지금까지 미배분은 앞의 뜻으로만
+ * 쓰였고, 뒤의 뜻이 같은 이름으로 나가면 화면이 둘을 구별하지 못한다.
+ */
+export const UNALLOCATED_REASON = {
+  CONTRIBUTION_ROOM_EXHAUSTED: 'contribution_room_exhausted',
+  NO_ACCOUNT_BENEFICIAL: 'no_account_beneficial_within_fund_use_horizon',
 };
 
 /**

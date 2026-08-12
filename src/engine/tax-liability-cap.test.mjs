@@ -45,6 +45,8 @@ const MAX_CREDIT_RATE = Math.max(
 );
 const SURTAX_RATE = confirmedRule('tax.local.personal_income_surtax').value.rate_of_income_tax;
 const COMBINED_LIMIT = confirmedRule('pension.credit.limit.combined').value.amount_krw;
+/** 연금저축 단독 공제한도. **`12.0.0`부터 자르기 좌표의 자르기 전 금액이 여기서 나온다**(D52 1번). */
+const ANNUITY_LIMIT = confirmedRule('pension.credit.limit.annuity_savings').value.amount_krw;
 const CONTRIBUTION_LIMIT = confirmedRule('pension.contribution.annual_limit').value.amount_krw;
 const PENSION_REQUIREMENTS = confirmedRule('pension.withdrawal.eligibility').value.requirements;
 const MIN_AGE = PENSION_REQUIREMENTS.find((r) => r.id === 'age').min_age;
@@ -318,8 +320,16 @@ test('자르기 전 금액과 자른 뒤 금액을 둘 다 낸다', () => {
   const scenario = scenarioOf(compute(withSalary(salary, FULL_PENSION), rulesets));
   const benefit = planOf(scenario, 'max_tax_credit').deterministic_benefit;
 
-  const uncappedIncomeTax = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
+  // **`12.0.0`에서 자르기 전 금액의 출처가 바뀌었다**(D52 1번). 이 좌표의 한도는
+  // 연금저축 자기 한도만으로 나오는 공제액보다 **작으므로**, 그 위에 IRP를 채워도
+  // 세액공제가 한 원도 늘지 않는다. 기본안은 그 몫을 내지 않고 예산은 ISA로 간다.
+  // 그래서 인정 납입액이 합산 한도가 아니라 **연금저축 한도**다.
+  //
+  // **자르는 것은 그대로 있다** — 잘리는 것이 IRP가 아니라 연금저축의 공제액이기
+  // 때문이고, 이 시험이 재려던 「자르기 전과 후가 갈린다」는 그대로 성립한다.
+  const uncappedIncomeTax = Math.floor(ANNUITY_LIMIT * CREDIT_RATE);
   assert.equal(benefit.pension_credit_income_tax_before_cap_krw, uncappedIncomeTax);
+  assert.ok(uncappedIncomeTax > expected, '자르지 않는 좌표에서는 이 시험이 아무것도 재지 않는다');
   assert.equal(benefit.pension_credit_income_tax_krw, expected);
   assert.equal(benefit.tax_liability_cap.applied, true);
   assert.equal(benefit.tax_liability_cap.reduced_income_tax_krw, uncappedIncomeTax - expected);
@@ -333,7 +343,7 @@ test('자르기 전 금액과 자른 뒤 금액을 둘 다 낸다', () => {
   );
 
   // 인정된 **납입액**은 잘리지 않는다. 잘리는 것은 공제액이다.
-  assert.equal(benefit.credit_eligible_contribution_krw, COMBINED_LIMIT);
+  assert.equal(benefit.credit_eligible_contribution_krw, ANNUITY_LIMIT);
   // 그리고 그 납입액은 전환 신청의 대상으로 살아남는다 — "돈이 사라진다"가 아니다.
   assert.equal(benefit.tax_liability_cap.contribution_carryover_available, true);
   assert.equal(benefit.tax_liability_cap.credit_carryforward, false);
@@ -802,5 +812,12 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   // 1원 안에 놓인 사용자에게 `tax_liability_cap.applied`가 뒤집힌다 — **그 하나가 화면
   // 문구를 통째로 바꾼다.** 같은 요청이 다른 금액을 내고 기존 필드의 뜻이 바뀌므로
   // 규약의 두 범주에 동시에 걸린다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '11');
+  //
+  // **12로 올린 것은 같은 요청이 다시 다른 금액을 내기 때문이다**(계약 0.20절, D52).
+  // 둘이 겹쳤다 — (1) 세액공제를 한 원도 더 낳지 않는 IRP 배분을 기본안 후보가 내지
+  // 않는다(그 판정의 재료가 **세액 한도**라 `tax_liability_cap_affects.allocation_amounts`가
+  // `false`에서 `true`로 뒤집힌다), (2) 자금 사용 시점이 `within_isa_lock_in`이면
+  // **전액 미배분**이다(D10이 뒤집혔고 `fund_use_horizon_affects`의 두 칸이 함께 뒤집힌다).
+  // `limited_by`에 값이 둘 늘고 `unallocated_breakdown`에 `reason_code`가 붙는다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '12');
 });

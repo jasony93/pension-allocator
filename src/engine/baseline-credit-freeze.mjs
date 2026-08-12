@@ -24,12 +24,20 @@ const MONTHLY = [
   10_000_000,
 ];
 
-const HORIZONS = [
-  'at_or_after_pension_age',
-  'before_pension_age',
-  'within_isa_lock_in',
-  'unknown',
-];
+/**
+ * **`within_isa_lock_in`이 이 축에서 빠졌다 (D52 2번).**
+ *
+ * 그 시점의 기본안은 이제 **전액 미배분**이라 세액공제액이 0이다. 얼린 표가 묻는 것은
+ * 「D32가 기본안의 공제액을 바꾸지 않았는가」인데, **그 좌표에서는 나중의 판정(D52)이
+ * 의도적으로 값을 바꿨으므로 그 물음 자체가 성립하지 않는다.** 값을 다시 만들어 적으면
+ * 표는 「변경 후의 값」을 얼린 것이 되어 아무것도 증명하지 못한다 — 세액 한도 축을
+ * 지울 때(D39·D40)와 같은 이유이고 같은 처리다.
+ *
+ * **그 좌표가 검사되지 않는 것은 아니다.** 전액 미배분은 `horizon.test.mjs`가
+ * 금액·이유 코드·근거 규칙까지 직접 잠그고, 불변식 I9가 나머지 세 시점의 금액이
+ * 서로 같다는 것을 계속 본다.
+ */
+const HORIZONS = ['at_or_after_pension_age', 'before_pension_age', 'unknown'];
 
 /** 이미 납입한 금액. 공제 여력이 남았는가 / 납입 여력만 남았는가를 가른다. */
 const YTD = [
@@ -222,10 +230,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m0|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,0], ["isa_first",720000,72000,792000,792000,6000000,0]],
   ['m0|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,0], ["isa_first",360000,36000,396000,396000,3000000,0]],
   ['m0|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,0], ["isa_first",720000,72000,792000,792000,6000000,0]],
-  ['m0|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",0,0,0,0,0,0], ["max_tax_credit",0,0,0,0,0,0]],
-  ['m0|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
-  ['m0|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",360000,36000,396000,396000,3000000,0], ["max_tax_credit",360000,36000,396000,396000,3000000,0]],
-  ['m0|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
   ['m0|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",0,0,0,0,0,0], ["max_tax_credit",0,0,0,0,0,0]],
   ['m0|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
   ['m0|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",360000,36000,396000,396000,3000000,0], ["max_tax_credit",360000,36000,396000,396000,3000000,0]],
@@ -238,10 +242,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m100000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,1200000], ["isa_first",720000,72000,792000,792000,6000000,1200000]],
   ['m100000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,1200000], ["isa_first",360000,36000,396000,396000,3000000,1200000]],
   ['m100000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,1200000], ["isa_first",720000,72000,792000,792000,6000000,1200000]],
-  ['m100000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",144000,14400,158400,158400,1200000,0], ["max_tax_credit",144000,14400,158400,158400,1200000,0]],
-  ['m100000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",864000,86400,950400,950400,7200000,0], ["max_tax_credit",864000,86400,950400,950400,7200000,0]],
-  ['m100000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",504000,50400,554400,554400,4200000,0], ["max_tax_credit",504000,50400,554400,554400,4200000,0]],
-  ['m100000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",864000,86400,950400,950400,7200000,0], ["max_tax_credit",864000,86400,950400,950400,7200000,0]],
   ['m100000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",144000,14400,158400,158400,1200000,0], ["max_tax_credit",144000,14400,158400,158400,1200000,0]],
   ['m100000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",864000,86400,950400,950400,7200000,0], ["max_tax_credit",864000,86400,950400,950400,7200000,0]],
   ['m100000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",504000,50400,554400,554400,4200000,0], ["max_tax_credit",504000,50400,554400,554400,4200000,0]],
@@ -254,10 +254,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m250000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,3000000], ["isa_first",720000,72000,792000,792000,6000000,3000000]],
   ['m250000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,3000000], ["isa_first",360000,36000,396000,396000,3000000,3000000]],
   ['m250000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,3000000], ["isa_first",720000,72000,792000,792000,6000000,3000000]],
-  ['m250000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",360000,36000,396000,396000,3000000,0], ["max_tax_credit",360000,36000,396000,396000,3000000,0]],
-  ['m250000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
-  ['m250000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
-  ['m250000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
   ['m250000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",360000,36000,396000,396000,3000000,0], ["max_tax_credit",360000,36000,396000,396000,3000000,0]],
   ['m250000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
   ['m250000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
@@ -270,10 +266,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m500000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,6000000], ["isa_first",720000,72000,792000,792000,6000000,6000000]],
   ['m500000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,6000000], ["isa_first",360000,36000,396000,396000,3000000,6000000]],
   ['m500000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,6000000], ["isa_first",720000,72000,792000,792000,6000000,6000000]],
-  ['m500000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
-  ['m500000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
-  ['m500000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
-  ['m500000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
   ['m500000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",720000,72000,792000,792000,6000000,0], ["max_tax_credit",720000,72000,792000,792000,6000000,0]],
   ['m500000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
   ['m500000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
@@ -286,10 +278,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m750000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,9000000], ["isa_first",720000,72000,792000,792000,6000000,9000000]],
   ['m750000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,9000000], ["isa_first",360000,36000,396000,396000,3000000,9000000]],
   ['m750000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,9000000], ["isa_first",720000,72000,792000,792000,6000000,9000000]],
-  ['m750000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
-  ['m750000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000]],
-  ['m750000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
-  ['m750000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000]],
   ['m750000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,0]],
   ['m750000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000]],
   ['m750000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
@@ -302,10 +290,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m1000000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,12000000], ["isa_first",720000,72000,792000,792000,6000000,12000000]],
   ['m1000000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,12000000], ["isa_first",360000,36000,396000,396000,3000000,12000000]],
   ['m1000000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,12000000], ["isa_first",720000,72000,792000,792000,6000000,12000000]],
-  ['m1000000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
-  ['m1000000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000]],
-  ['m1000000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000]],
-  ['m1000000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000]],
   ['m1000000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,3000000]],
   ['m1000000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000]],
   ['m1000000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,6000000]],
@@ -318,10 +302,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m1500000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,18000000], ["isa_first",720000,72000,792000,792000,6000000,18000000]],
   ['m1500000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,18000000], ["isa_first",360000,36000,396000,396000,3000000,18000000]],
   ['m1500000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,18000000], ["isa_first",720000,72000,792000,792000,6000000,18000000]],
-  ['m1500000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000]],
-  ['m1500000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000]],
-  ['m1500000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,12000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,12000000]],
-  ['m1500000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000]],
   ['m1500000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,9000000]],
   ['m1500000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000]],
   ['m1500000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,12000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,12000000]],
@@ -334,10 +314,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m2000000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,24000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m2000000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,24000000], ["isa_first",840000,84000,924000,924000,7000000,20000000]],
   ['m2000000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,24000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m2000000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000]],
-  ['m2000000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,21000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m2000000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,18000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,18000000]],
-  ['m2000000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,21000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m2000000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,15000000]],
   ['m2000000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,21000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m2000000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,18000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,18000000]],
@@ -350,10 +326,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m3000000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,36000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m3000000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",360000,36000,396000,396000,3000000,36000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m3000000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",720000,72000,792000,792000,6000000,36000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m3000000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,27000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m3000000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,33000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m3000000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,30000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m3000000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,33000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m3000000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,27000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m3000000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,33000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m3000000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,30000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
@@ -366,10 +338,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m5000000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",1080000,108000,1188000,1188000,9000000,40000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m5000000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",1080000,108000,1188000,1188000,9000000,40000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m5000000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",1080000,108000,1188000,1188000,9000000,40000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m5000000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m5000000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m5000000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m5000000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m5000000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m5000000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m5000000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
@@ -382,10 +350,6 @@ export const BASELINE_CREDIT_FREEZE = [
   ['m10000000|before_pension_age|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",1080000,108000,1188000,1188000,9000000,40000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m10000000|before_pension_age|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",1080000,108000,1188000,1188000,9000000,40000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m10000000|before_pension_age|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["isa_first",1080000,108000,1188000,1188000,9000000,40000000], ["isa_first",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m10000000|within_isa_lock_in|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m10000000|within_isa_lock_in|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m10000000|within_isa_lock_in|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
-  ['m10000000|within_isa_lock_in|ytd3000000/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m10000000|unknown|ytd0/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m10000000|unknown|ytd6000000/0|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],
   ['m10000000|unknown|ytd0/3000000|sal60000000|isageneral|youthnull|startnot_started/not_started', ["max_tax_credit",1080000,108000,1188000,1188000,9000000,40000000], ["max_tax_credit",1080000,108000,1188000,1188000,9000000,20000000]],

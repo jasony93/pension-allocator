@@ -72,6 +72,15 @@ const withSalary = (salary, patch = {}) =>
     ),
   );
 
+/**
+ * `GC-90` 좌표에서 **실제로 공제를 낳는** 납입액의 소득세분(`12.0.0`, D52 1번).
+ *
+ * 그 좌표의 한도가 연금저축 자기 한도의 공제액보다 작으므로 IRP는 한 원도 배분되지
+ * 않는다. 따라서 자르기 **전** 금액도 합산 한도가 아니라 **연금저축 한도**에서 나온다.
+ * 수는 전부 룰셋에서 온다.
+ */
+const BEFORE_CAP = Math.floor(ANNUITY_LIMIT * CREDIT_RATE);
+
 const surtaxOf = (incomeTax) => Math.floor(incomeTax * SURTAX_RATE);
 const creditOf = (incomeTax) => ({
   income_tax: incomeTax,
@@ -94,6 +103,7 @@ const CAP_APPLIED = (() => {
     expect: {
       current: {
         // D36 — 확정 축의 최댓값. **한도가 이 상한을 무는 좌표**라 관계 코드까지 함께 진다.
+        // **이 축은 배분이 아니라 한도에서 나오므로 D52 1번이 움직이지 않는다.**
         pension_credit_ceiling: {
           ceiling_krw: uncapped + surtaxOf(uncapped),
           income_tax_krw: uncapped,
@@ -107,19 +117,26 @@ const CAP_APPLIED = (() => {
         plans: {
           max_tax_credit: {
             // 동점 구간이므로 인출이 자유로운 연금저축이 자기 한도까지 먼저 찬다.
+            //
+            // **`12.0.0`에서 IRP가 0이 됐다**(D52 1번). 이 좌표의 한도(899,999)는 연금저축
+            // 자기 한도의 공제액(900,000)보다 **작다.** 그러므로 그 위에 IRP를 채워도
+            // 세액공제가 한 원도 늘지 않고 중도인출 제한만 진다. 예산은 ISA로 간다.
+            //
+            // **한도가 여전히 문다** — 자르는 것은 IRP가 아니라 연금저축의 공제액이고
+            // 그 1원의 자름이 `applied`를 참으로 만든다. 그것이 이 블록이 재려던 것이다.
             allocation: {
               annuity_savings: ANNUITY_LIMIT,
-              retirement_pension: COMBINED_LIMIT - ANNUITY_LIMIT,
-              isa: 0,
+              retirement_pension: 0,
+              isa: COMBINED_LIMIT - ANNUITY_LIMIT,
             },
             tax_credit: creditOf(capKrw),
-            tax_credit_before_cap: creditOf(uncapped),
+            tax_credit_before_cap: creditOf(BEFORE_CAP),
             tax_liability_cap: {
               cap_krw: capKrw,
               applied: true,
               // 추정 한도가 상한이므로 이 자름은 실제 한도의 자름을 **증명한다**(D40).
               binding_code: 'binds_provably',
-              threshold_income_tax_krw: uncapped,
+              threshold_income_tax_krw: BEFORE_CAP,
             },
             warning_count: 0,
           },
@@ -579,8 +596,6 @@ const NQF = (key) => NQ('annuity_savings', 'facts', key);
 const H = (key) => P('max_tax_credit', 'headline_composite_total', key);
 const AC = (key) => E('axis_ceilings', key);
 
-const UNCAPPED = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
-
 /**
  * 잡히는 층을 행마다 밝힌다.
  *  - `compare` — 형식은 통과하고 **대조**가 문다. 선택 항목이 조용히 건너뛰어지면 여기서 걸린다.
@@ -589,11 +604,11 @@ const UNCAPPED = Math.floor(COMBINED_LIMIT * CREDIT_RATE);
 const INJECTIONS = [
   // ── 자르기 전 금액 ──
   // 소득세분을 1원 올리면 지방세·합계까지 따라 움직여야 형식을 통과한다. 그 상태로도 대조가 문다.
-  { via: 'compare', block: CAP_APPLIED, name: 'tax_credit_before_cap(전체)', path: P('max_tax_credit', 'tax_credit_before_cap'), value: creditOf(UNCAPPED + 1), mentions: ['GC-90', 'current', 'max_tax_credit', '자르기 전'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'tax_credit_before_cap(전체)', path: P('max_tax_credit', 'tax_credit_before_cap'), value: creditOf(BEFORE_CAP + 1), mentions: ['GC-90', 'current', 'max_tax_credit', '자르기 전'] },
   // 소득세분은 그대로 두고 지방세분만 어긋나게 한다 — 지방세분을 따로 보는지 확인한다.
-  { via: 'compare', block: CAP_APPLIED, name: 'tax_credit_before_cap.local_tax', path: P('max_tax_credit', 'tax_credit_before_cap'), value: { income_tax: UNCAPPED, local_tax: surtaxOf(UNCAPPED) + 1, total: UNCAPPED + surtaxOf(UNCAPPED) + 1 }, mentions: ['GC-90', 'max_tax_credit', '자르기 전'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'tax_credit_before_cap.local_tax', path: P('max_tax_credit', 'tax_credit_before_cap'), value: { income_tax: BEFORE_CAP, local_tax: surtaxOf(BEFORE_CAP) + 1, total: BEFORE_CAP + surtaxOf(BEFORE_CAP) + 1 }, mentions: ['GC-90', 'max_tax_credit', '자르기 전'] },
   // 합계만 1원 틀리면 대조까지 가기 전에 형식이 문다(소득세 + 지방세 = 합계).
-  { via: 'format', block: CAP_APPLIED, name: 'tax_credit_before_cap.total 단독', path: P('max_tax_credit', 'tax_credit_before_cap', 'total'), value: UNCAPPED + surtaxOf(UNCAPPED) + 1, token: '옮겨 적으면서 어긋났다' },
+  { via: 'format', block: CAP_APPLIED, name: 'tax_credit_before_cap.total 단독', path: P('max_tax_credit', 'tax_credit_before_cap', 'total'), value: BEFORE_CAP + surtaxOf(BEFORE_CAP) + 1, token: '옮겨 적으면서 어긋났다' },
 
   // ── 확정 축의 최댓값 여덟 항목 (D36) ──
   // **이 층이 없으면 GC-63·GC-64가 적은 축의 끝이 조용히 건너뛰어진다.** 결함 주입으로

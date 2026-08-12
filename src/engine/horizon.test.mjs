@@ -1,6 +1,9 @@
-// 필수 테스트 2 — fund_use_horizon 네 값 전부에서 금액이 같다.
-// 필수 테스트 4 — within_isa_lock_in에서 순서가 바뀌지 않고 안내 코드만 나온다.
-// 게이트 2 D10이 그은 선의 실증이다.
+// 자금 사용 시점이 무엇을 바꾸고 무엇을 바꾸지 않는가.
+//
+// **D10이 D52 2번으로 뒤집혔다.** 「자금 사용 시점은 금액을 바꾸지 않는다」는 이제
+// **세 값에서만** 참이다 — `within_isa_lock_in`이면 전액 미배분이다. 그래서 이 파일의
+// 금액 불변 시험은 그 값을 빼고 돌고, 뺀 값에 대해서는 **전액 미배분이라는 사실 자체**를
+// 따로 잠근다. **잠금을 푼 것이 아니라 옮긴 것이다.**
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +14,9 @@ import { loadRulesets, baseRequest, scenarioOf, planOf, allocationOf } from './t
 const rulesets = loadRulesets();
 
 const HORIZONS = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
+
+/** 금액이 서로 같아야 하는 값들. `within_isa_lock_in`만 그 밖이다(D52 2번). */
+const AMOUNT_STABLE_HORIZONS = HORIZONS.filter((horizon) => horizon !== 'within_isa_lock_in');
 
 /** 금액만 뽑는다. 순서·경고·기본안 표시는 일부러 제외한다. */
 function amountsOf(scenario) {
@@ -32,7 +38,7 @@ function amountsOf(scenario) {
   };
 }
 
-test('네 값 전부에서 배분 금액과 세액공제액이 동일하다', () => {
+test('세 값에서 배분 금액과 세액공제액이 동일하다 — 전액 미배분 시점만 그 밖이다', () => {
   const budgets = [0, 300_000, 900_000, 5_000_000];
   const planIds = ['max_tax_credit', 'annuity_savings_first', 'isa_first'];
 
@@ -40,7 +46,7 @@ test('네 값 전부에서 배분 금액과 세액공제액이 동일하다', ()
   // 같은 배분안끼리 금액을 직접 맞대볼 수 있다.
   for (const planId of planIds) {
     for (const monthly of budgets) {
-      const results = HORIZONS.map((horizon) =>
+      const results = AMOUNT_STABLE_HORIZONS.map((horizon) =>
         amountsOf(
           scenarioOf(
             compute(
@@ -58,7 +64,8 @@ test('네 값 전부에서 배분 금액과 세액공제액이 동일하다', ()
         assert.deepStrictEqual(
           results[i],
           results[0],
-          `${planId} / 월 여력 ${monthly}원에서 ${HORIZONS[i]}의 금액이 ${HORIZONS[0]}과 다르다`,
+          `${planId} / 월 여력 ${monthly}원에서 ${AMOUNT_STABLE_HORIZONS[i]}의 금액이 ` +
+            `${AMOUNT_STABLE_HORIZONS[0]}과 다르다`,
         );
       }
     }
@@ -77,7 +84,7 @@ test('세 배분안을 함께 요청해도 금액의 집합이 자금 사용 시
       .sort();
 
   for (const monthly of [300_000, 5_000_000]) {
-    const sets = HORIZONS.map((horizon) =>
+    const sets = AMOUNT_STABLE_HORIZONS.map((horizon) =>
       canonical(
         scenarioOf(
           compute(
@@ -88,7 +95,11 @@ test('세 배분안을 함께 요청해도 금액의 집합이 자금 사용 시
       ),
     );
     for (let i = 1; i < sets.length; i += 1) {
-      assert.deepStrictEqual(sets[i], sets[0], `월 여력 ${monthly}원에서 ${HORIZONS[i]}의 금액 집합이 다르다`);
+      assert.deepStrictEqual(
+        sets[i],
+        sets[0],
+        `월 여력 ${monthly}원에서 ${AMOUNT_STABLE_HORIZONS[i]}의 금액 집합이 다르다`,
+      );
     }
   }
 });
@@ -99,8 +110,10 @@ test('계약이 스스로 선언한다 — echo.fund_use_horizon_affects', () =>
     assert.equal(response.ok, true);
     assert.equal(response.echo.fund_use_horizon, horizon);
     assert.deepStrictEqual(response.echo.fund_use_horizon_affects, {
-      allocation_amounts: false,
-      tax_credit_amounts: false,
+      // **`12.0.0`에서 앞의 두 값이 뒤집혔다**(D52 2번). 이 객체는 「이 요청에서
+      // 달라졌는가」가 아니라 **「이 입력이 무엇을 바꿀 수 있는가」**를 말한다.
+      allocation_amounts: true,
+      tax_credit_amounts: true,
       limits: false,
       plan_ordering: true,
       baseline_selection: true,
@@ -131,22 +144,104 @@ test('기본안은 자금 사용 시점이 정하고 언제나 plans[0]이다', 
   }
 });
 
-test('within_isa_lock_in — 순서를 바꾸지 않고 안내 코드만 낸다', () => {
+test('within_isa_lock_in — 전액 미배분이고, 그 이유가 값으로 나간다 (D52 2번)', () => {
   const request = baseRequest({
     profile: { fund_use_horizon: 'within_isa_lock_in', monthly_capacity_krw: 300_000 },
   });
   const locked = scenarioOf(compute(request, rulesets));
-  const neutral = scenarioOf(
-    compute(baseRequest({ profile: { monthly_capacity_krw: 300_000 } }), rulesets),
-  );
 
-  assert.deepStrictEqual(
-    locked.plans.map((p) => p.plan_id),
-    neutral.plans.map((p) => p.plan_id),
-    '세 계좌 모두 불이익이 걸리므로 순서로 문제를 푼 척하지 않는다',
+  // 벡터가 전부 같아지므로 안이 하나로 합쳐진다 — 비교할 것이 남지 않는다.
+  assert.equal(locked.plans.length, 1);
+  const plan = locked.plans[0];
+  assert.equal(plan.plan_id, 'max_tax_credit');
+
+  for (const allocation of plan.allocations) {
+    assert.equal(allocation.annual_krw, 0, `${allocation.account}에 돈이 들어갔다`);
+    assert.equal(allocation.monthly_krw, 0, `${allocation.account}의 월 금액이 0이 아니다`);
+    assert.equal(allocation.fill_order, null);
+    assert.equal(
+      allocation.limited_by,
+      'fund_use_horizon',
+      `${allocation.account}: 막은 것이 자금 사용 시점이라고 말하지 않는다`,
+    );
+  }
+
+  assert.equal(plan.unallocated_annual_krw, 300_000 * 12);
+  assert.equal(plan.deterministic_benefit.pension_credit_total_krw, 0);
+
+  // **「한도가 없어서」가 아니다.** 그 구분이 이 회차의 요지다.
+  assert.equal(
+    plan.unallocated_breakdown.reason_code,
+    'no_account_beneficial_within_fund_use_horizon',
   );
+  // 한도는 멀쩡히 남아 있고, 그 사실이 값으로 함께 나간다 — 두 여력이 겹친다.
+  assert.ok(plan.unallocated_breakdown.pension_contribution_headroom_krw > 0);
+  assert.ok(plan.unallocated_breakdown.isa_contribution_headroom_krw > 0);
+  assert.equal(plan.unallocated_breakdown.headrooms_overlap, true);
+  assert.equal(plan.unallocated_breakdown.no_headroom_krw, 0);
+
+  // 판정의 근거가 근거 목록에 실린다. 세 계좌 각각의 불이익 조문이다.
+  for (const ruleId of [
+    'isa.account.requirements',
+    'isa.early_termination.clawback',
+    'pension.early_withdrawal.other_income_rate',
+  ]) {
+    assert.ok(
+      plan.unallocated_breakdown.basis_rule_ids.includes(ruleId),
+      `근거에 ${ruleId}가 없다`,
+    );
+  }
+
   assert.ok(locked.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
   assert.equal(locked.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon'), false);
+  // **「예산이 한도를 넘는다」고 말하지 않는다.** 한도는 남아 있다.
+  assert.equal(
+    locked.notices.some((n) => n.code === 'budget_exceeds_all_limits'),
+    false,
+  );
+});
+
+test('within_isa_lock_in — 「시점은 금액에 반영하지 않는다」는 가정을 더는 싣지 않는다', () => {
+  const codesFor = (horizon) =>
+    compute(
+      baseRequest({ profile: { fund_use_horizon: horizon, monthly_capacity_krw: 300_000 } }),
+      rulesets,
+    ).assumptions.map((a) => a.code);
+
+  assert.equal(
+    codesFor('within_isa_lock_in').includes('fund_use_horizon_excluded_from_amounts'),
+    false,
+  );
+  for (const horizon of AMOUNT_STABLE_HORIZONS) {
+    assert.ok(
+      codesFor(horizon).includes('fund_use_horizon_excluded_from_amounts'),
+      `${horizon}에서 여전히 참인 가정이 사라졌다`,
+    );
+  }
+});
+
+test('전액 미배분 판정은 룰셋에서 온다 — 근거 규칙을 지우면 계산이 멈춘다', () => {
+  // **주입.** 판정의 근거를 코드가 들고 있으면 룰셋을 지워도 답이 그대로 나온다.
+  // 그 상태에서는 「조문에서 왔다」가 거짓이다.
+  for (const ruleId of [
+    'isa.account.requirements',
+    'isa.early_termination.clawback',
+    'pension.early_withdrawal.other_income_rate',
+  ]) {
+    const stripped = structuredClone(rulesets);
+    for (const doc of Object.values(stripped)) {
+      doc.rules = doc.rules.filter((r) => r.id !== ruleId);
+    }
+    const response = compute(
+      baseRequest({ profile: { fund_use_horizon: 'within_isa_lock_in' } }),
+      stripped,
+    );
+    assert.equal(response.ok, false, `${ruleId}를 지웠는데도 계산이 끝났다`);
+    assert.ok(
+      response.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === ruleId),
+      `${ruleId}가 없는데 다른 이유로 멈췄다`,
+    );
+  }
 });
 
 test('before_pension_age — 기본안이 바뀌었다는 사실이 안내 코드로 나간다', () => {
@@ -195,10 +290,12 @@ test('기본안이 재정렬되면 delta_vs_baseline_krw가 양수가 될 수 �
 });
 
 test('경고는 배분액이 0보다 큰 계좌에만 붙는다', () => {
+  // **`within_isa_lock_in`으로는 이제 이것을 잴 수 없다** — 그 시점에는 배분이 없어
+  // 경고도 없다. 경고가 실제로 붙는 시점에서 잰다.
   const scenario = scenarioOf(
     compute(
       baseRequest({
-        profile: { fund_use_horizon: 'within_isa_lock_in', monthly_capacity_krw: 100_000 },
+        profile: { fund_use_horizon: 'before_pension_age', monthly_capacity_krw: 100_000 },
       }),
       rulesets,
     ),

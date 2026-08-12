@@ -1,8 +1,13 @@
 // 배분안 산출. 우선순위 기반 순차 충당이다.
 //
-// 중요: 이 파일에서 fund_use_horizon은 buildPlans 안의 **금액 계산이 끝난 뒤에만**
-// 쓰인다(경고 판정과 기본안 선택). engine-design.md 5절의 9단계와 11~12단계 분리가
-// "이 입력이 금액을 바꾸지 않는다"를 코드 구조로 보장한다.
+// **fund_use_horizon이 금액에 닿는 자리는 정확히 하나다**(D52 2번) — `allocate()` 첫머리의
+// 「전액 미배분」 갈래이고, 그 판정은 `fund-use-horizon.mjs`가 룰셋을 읽어 만든다.
+// **그 갈래를 빼면 D10이 세운 분리가 그대로다** — 나머지 계산은 자금 사용 시점을 읽지 않고,
+// 경고 판정과 기본안 선택은 금액이 다 나온 뒤에 온다(engine-design.md 5절 9 / 11~12단계).
+//
+// **머리말을 고쳐 적은 이유.** 이 자리에는 「fund_use_horizon은 금액 계산이 끝난 뒤에만
+// 쓰인다」가 적혀 있었다. D52 2번으로 그 문장이 거짓이 됐고, **거짓이 된 문장을 남겨 두는
+// 것이 이 저장소가 반복해 밟은 결함이다.**
 
 import {
   ACCOUNT,
@@ -13,6 +18,7 @@ import {
   FILL_SEQUENCE,
   HEADROOM_POOL,
   HORIZON,
+  IRP_CREDIT_PRODUCTIVE_ONLY_PLANS,
   LIMITED_BY,
   MONTHLY_BUCKET,
   MONTHLY_UNASSIGNED_REASON,
@@ -22,6 +28,7 @@ import {
   PRIORITY_BASIS,
   RULE,
   TIE_BREAK,
+  UNALLOCATED_REASON,
   WARNING,
 } from './constants.mjs';
 import { resolveCarryoverConditions } from './limits.mjs';
@@ -145,9 +152,77 @@ function observedSequence(fillOrder, planId, ctx) {
   return [...filled, ...rest];
 }
 
-/** 한 배분안의 금액. 자금 사용 시점을 읽지 않는다. */
+/**
+ * 세액공제 소득세분의 **자르기 전** 정확값. 인정액 산식이 사는 유일한 자리다.
+ *
+ * **떼어낸 이유**(D52 1번). 「이 IRP 납입이 세액공제를 한 원이라도 더 낳는가」를 재려면
+ * 배분 단계가 공제 산식을 알아야 한다. 산식을 그 자리에 다시 적으면 **두 벌이 되고**,
+ * 두 벌이 갈리는 날 배분과 공제액이 서로 다른 산식 위에 서게 된다. 그래서 한 벌만 둔다.
+ */
+function creditIncomeTaxExact({ annuityCounted, pensionCounted }, { state, rates }) {
+  const eligibleTotal = Math.min(annuityCounted + pensionCounted, state.combinedLimit);
+
+  // ⚠ 조문이 정하지 않아 엔진이 정한 지점(D17). engine-design.md 6.4절에 전말이 있다.
+  //   합산 한도가 걸릴 때 어느 쪽 납입분이 잘리는지를 조문이 말하지 않는다.
+  //   퇴직연금분을 먼저 인정하고 남는 만큼을 연금저축분으로 본다.
+  //   **답이 달라지면 고칠 곳은 아래 두 줄뿐이다.**
+  const pensionEligible = Math.min(pensionCounted, state.combinedLimit);
+  const annuityEligible = clampToZero(eligibleTotal - pensionEligible);
+
+  const pensionRate = rates.youthIrpRate ?? rates.incomeTaxRate;
+  const groups = new Map();
+  const add = (rate, amount) => groups.set(rate, (groups.get(rate) ?? 0) + amount);
+  add(pensionRate, pensionEligible);
+  add(rates.incomeTaxRate, annuityEligible);
+
+  // **율마다 따로 버리지 않는다.** 공제율이 둘인 경우(개정안의 청년 우대) 갈래마다
+  // 버리면 조문에 없는 절사 자리가 갈래 수만큼 생긴다. 정확값으로 더하고 표시 직전에
+  // 한 번 버린다 — 룰셋 `intermediate_amount`/`displayed_amount`의 규약이다.
+  let incomeTaxExact = EXACT_ZERO;
+  for (const [rate, amount] of groups) {
+    incomeTaxExact = addExact(incomeTaxExact, scaleExact(exactOf(amount), toRatio(rate)));
+  }
+  return { incomeTaxExact, eligibleTotal };
+}
+
+/**
+ * 자금 사용 시점 때문에 **어느 계좌에도 넣지 않은** 배분 결과 (D52 2번).
+ *
+ * 금액이 전부 0이므로 뒤따르는 계산(공제액·경고·월 환산·미배분 갈래)이 그대로 돌고,
+ * 특별한 갈래를 만들지 않는다. **자격이 없는 계좌에는 `not_eligible`이 이긴다** —
+ * 그 사실은 이 판정과 무관하게 참이고, 덮으면 화면이 자격 문제를 못 본다.
+ */
+function suppressedAllocation(ctx) {
+  const { state, budget, eligible } = ctx;
+  const limitedBy = {};
+  for (const account of ACCOUNT_ORDER) {
+    limitedBy[account] = eligible[account] ? LIMITED_BY.FUND_USE_HORIZON : LIMITED_BY.NOT_ELIGIBLE;
+  }
+
+  return {
+    amounts: { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0, [ACCOUNT.ISA]: 0 },
+    limitedBy,
+    fillOrder: {},
+    // 한 계좌도 채우지 않았으므로 「실제로 돈이 들어간 순서」가 없다. 고정 계좌 순서를
+    // 그대로 낸다 — 길이 3·중복 없음이라는 계약을 지키면서 순서를 지어내지 않는다.
+    observedSequence: [...ACCOUNT_ORDER],
+    annuityCounted: state.annuityCounted,
+    pensionCounted: state.pensionCounted,
+    remainingBudget: budget,
+    withoutCredit: { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0 },
+    pensionPoolRemaining: state.pensionContributionRemaining,
+    isaPoolRemaining: state.isaRemaining,
+  };
+}
+
+/** 한 배분안의 금액. */
 function allocate(planId, ctx) {
   const { state, budget, eligible, rates } = ctx;
+
+  // **자금 사용 시점이 금액에 닿는 유일한 자리다**(D52 2번). 판정은 룰셋을 읽어
+  // `fund-use-horizon.mjs`가 만들고, 여기서는 그 결론만 본다.
+  if (ctx.horizonSuppression.applies) return suppressedAllocation(ctx);
+
   // **D32 이후 모든 안이 납입 한도까지 채운다.** 그래서 어느 안에서든 공제를 낳지 않는
   // 납입분이 생길 수 있고, 그 몫은 인정액에 들어가지 않는다 — 아래 `counted`가 그
   // 분리를 강제한다. **그 분리가 기본안에서 무너지면 절세액이 조용히 과대가 된다.**
@@ -198,6 +273,46 @@ function allocate(planId, ctx) {
     return clampToZero(Math.min(state.annuityLimit - annuityCounted, combinedRoom));
   };
 
+  /**
+   * **이 IRP 납입이 세액공제를 한 원이라도 더 낳는 지점까지만** 자른다 (D52 1번).
+   *
+   * 인정 공제액은 `min(산식(인정 납입액), 세액 한도)`이고 납입액에 대해 **단조**다.
+   * 그러므로 「같은 인정 공제액을 내는 가장 작은 납입액」이 존재하고, 그 위의 몫은
+   * **한 원도 공제를 늘리지 않는다.** 그 몫을 IRP에 넣으면 얻는 것 없이
+   * 중도인출 제한만 진다(`pension.withdrawal.midterm_restriction`).
+   *
+   * **경계를 총급여로 자르지 않는다.** 자르는 것은 남은 세액 한도이고, 그 값은 이미
+   * 넣은 연금저축·ISA 전환 추가한도·개정안 청년 우대에 따라 사람마다 다르다.
+   * 총급여 3,069만원은 **기본 조건에서 이 함수가 0을 내는 지점**일 뿐이고
+   * 코드 어디에도 그 수가 없다.
+   *
+   * 닫힌 식 대신 이분 탐색을 쓰는 이유 — 공제율이 둘로 갈리는 분기(청년 우대)와
+   * D17의 밀어내기가 겹치면 기울기가 구간마다 다르다. 그 식을 여기 다시 유도해 적으면
+   * 공제 산식이 두 벌이 된다. **단조성만 쓰면 유도가 필요 없다.**
+   */
+  const creditProductiveCap = (maxAmount, creditRoom) => {
+    const recognizedAt = (amount) =>
+      minExact(
+        creditIncomeTaxExact(
+          { annuityCounted, pensionCounted: pensionCounted + Math.min(amount, creditRoom) },
+          ctx,
+        ).incomeTaxExact,
+        ctx.capExact,
+      );
+
+    const target = recognizedAt(maxAmount);
+    let low = 0;
+    let high = maxAmount;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (cmpExact(recognizedAt(mid), target) >= 0) high = mid;
+      else low = mid + 1;
+    }
+    return low;
+  };
+
+  const trimUnproductiveIrp = IRP_CREDIT_PRODUCTIVE_ONLY_PLANS.has(planId);
+
   for (const { account, creditBounded: stepIsCreditBounded } of fillStepsFor(planId, ctx)) {
     if (!eligible[account]) {
       limitedBy[account] = LIMITED_BY.NOT_ELIGIBLE;
@@ -221,9 +336,23 @@ function allocate(planId, ctx) {
         ];
 
     const reportedCap = Math.min(...stepCaps.map(([, value]) => value));
-    const amount = stepIsCreditBounded ? Math.min(reportedCap, creditRoom) : reportedCap;
+    let amount = stepIsCreditBounded ? Math.min(reportedCap, creditRoom) : reportedCap;
+    let reason = stepCaps.find(([, value]) => value === reportedCap)[0];
+
+    if (trimUnproductiveIrp && account === ACCOUNT.PENSION && amount > 0) {
+      const productive = creditProductiveCap(amount, creditRoom);
+      if (productive < amount) {
+        amount = productive;
+        reason = LIMITED_BY.NO_ADDITIONAL_CREDIT;
+      }
+    }
+
     // 뒤 단계가 앞 단계의 판정을 덮는다. **마지막에 실제로 막은 것**이 사실이기 때문이다.
-    limitedBy[account] = stepCaps.find(([, value]) => value === reportedCap)[0];
+    //
+    // **한 값만 덮이지 않는다.** 위에서 잘라 낸 IRP는 그 뒤 단계에서 예산이 이미 다른
+    // 계좌로 갔거나 3차 몫이 0이라 「예산」·「납입 한도」로 다시 판정되는데, **그 상태가
+    // 바로 이 판정의 결과다.** 덮으면 원인이 결과로 바뀌어 화면이 이유를 잃는다.
+    if (limitedBy[account] !== LIMITED_BY.NO_ADDITIONAL_CREDIT) limitedBy[account] = reason;
 
     if (amount > 0) {
       // 계좌가 두 단계에 걸쳐 채워질 수 있다. 순서는 **처음 받은 시점**이다 —
@@ -348,32 +477,11 @@ function applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, roundin
 }
 
 /** 세액공제액. 대상액을 계좌별 공제율로 나눠 적용한다. */
-function benefitOf({ annuityCounted, pensionCounted }, { state, rates, cap, capExact, rounding, access }) {
-  const eligibleTotal = Math.min(annuityCounted + pensionCounted, state.combinedLimit);
-
-  // ⚠ 조문이 정하지 않아 엔진이 정한 지점. engine-design.md 6.4절에 전말이 있고
-  //   tax-domain의 확인을 기다리는 중이다.
-  //   합산 한도가 걸릴 때 어느 쪽 납입분이 잘리는지를 조문이 말하지 않는다.
-  //   퇴직연금분을 먼저 인정하고 남는 만큼을 연금저축분으로 본다.
-  //   **답이 달라지면 고칠 곳은 아래 두 줄뿐이다.** 다른 파일은 손대지 않는다.
-  //   두 공제율이 같은 현행 기준에서는 총액에 영향이 없다 — 갈리는 것은 개정안의
-  //   청년 우대(퇴직연금분만 다른 공제율)가 적용될 때뿐이다.
-  const pensionEligible = Math.min(pensionCounted, state.combinedLimit);
-  const annuityEligible = clampToZero(eligibleTotal - pensionEligible);
-
-  const pensionRate = rates.youthIrpRate ?? rates.incomeTaxRate;
-  const groups = new Map();
-  const add = (rate, amount) => groups.set(rate, (groups.get(rate) ?? 0) + amount);
-  add(pensionRate, pensionEligible);
-  add(rates.incomeTaxRate, annuityEligible);
-
-  // **율마다 따로 버리지 않는다.** 공제율이 둘인 경우(개정안의 청년 우대) 갈래마다
-  // 버리면 조문에 없는 절사 자리가 갈래 수만큼 생긴다. 정확값으로 더하고 표시 직전에
-  // 한 번 버린다 — 룰셋 `intermediate_amount`/`displayed_amount`의 규약이다.
-  let incomeTaxExact = EXACT_ZERO;
-  for (const [rate, amount] of groups) {
-    incomeTaxExact = addExact(incomeTaxExact, scaleExact(exactOf(amount), toRatio(rate)));
-  }
+function benefitOf(counted, ctx) {
+  const { rates, cap, capExact, rounding, access } = ctx;
+  // **산식은 한 벌뿐이다.** 배분 단계의 「이 IRP 납입이 공제를 더 낳는가」 판정도
+  // 같은 함수를 부른다(D52 1번). 두 벌이 되면 배분과 공제액이 갈릴 수 있다.
+  const { incomeTaxExact, eligibleTotal } = creditIncomeTaxExact(counted, ctx);
   const localTaxExact = scaleExact(incomeTaxExact, toRatio(rates.surtaxRate));
 
   const capped = applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, rounding, access });
@@ -462,6 +570,24 @@ function warningsOf(amounts, { horizon, boundaries, startDates }) {
 }
 
 /**
+ * 열려 있는 계좌 **전부**에 중도 불이익이 걸리는가 (D52 2번).
+ *
+ * 전액 미배분이라 실제 배분에는 경고가 붙지 않는다. 그래서 **가상의 배분**을 만들어
+ * 같은 판정 함수에 묻는다 — 조건을 여기 다시 적으면 M2·M3·D18이 세 번 밟은 형태
+ * (한 사실을 두 곳에 적고 한쪽만 고침)가 네 번째로 나온다.
+ *
+ * 금액 1원은 **「배분액이 0보다 크다」를 satisfy 하기 위한 표시**이고 계산에 쓰이지 않는다.
+ */
+function everyOpenAccountHasPenalty(ctx) {
+  const open = ACCOUNT_ORDER.filter((account) => ctx.eligible[account]);
+  if (open.length === 0) return false;
+
+  const probe = Object.fromEntries(ACCOUNT_ORDER.map((a) => [a, ctx.eligible[a] ? 1 : 0]));
+  const covered = new Set(warningsOf(probe, ctx).map((warning) => warning.account));
+  return open.every((account) => covered.has(account));
+}
+
+/**
  * 금액으로 낼 수 없는 효과.
  *
  * 두 번째 항목이 D26의 자리다 — **세액공제를 낳지 않는 연금계좌 납입.** 세법이 유불리를
@@ -533,7 +659,7 @@ function nonQuantifiedOf(result, ctx) {
  * 두 번 센 것이므로 `headrooms_overlap`이 그 사실을 값으로 말한다.
  */
 function unallocatedBreakdownOf(result, unallocated, ctx) {
-  const { eligible, state } = ctx;
+  const { eligible, state, horizonSuppression } = ctx;
   // 두 연금계좌가 모두 막혀 있으면 납입 여력이 남아 있어도 넣을 수 없다.
   const pensionOpen = eligible[ACCOUNT.PENSION] || eligible[ACCOUNT.ANNUITY];
 
@@ -543,10 +669,27 @@ function unallocatedBreakdownOf(result, unallocated, ctx) {
       pensionRoom: pensionOpen ? clampToZero(result.pensionPoolRemaining) : 0,
       isaRoom: clampToZero(result.isaPoolRemaining),
     }),
+    // **왜 미배분인가**(D52 2번). 「한도가 남지 않아서」와 「그 시점에는 어느 계좌도
+    // 이롭지 않아서」는 화면에서 다른 문장이 되고, 이름 하나로 두 뜻을 나르면
+    // 화면이 그 둘을 구별할 수 없다. 미배분이 0원이면 설명할 것이 없으므로 `null`이다.
+    reason_code: unallocated === 0 ? null : reasonFor(horizonSuppression),
     basis_rule_ids: [
-      ...new Set([RULE.PENSION_CONTRIBUTION_LIMIT, RULE.PENSION_BEYOND_CREDIT_LIMIT, ...state.isaBasisRuleIds]),
+      ...new Set([
+        RULE.PENSION_CONTRIBUTION_LIMIT,
+        RULE.PENSION_BEYOND_CREDIT_LIMIT,
+        ...state.isaBasisRuleIds,
+        // 시점 때문에 미배분이라면 **그 시점 판정의 근거**가 함께 나가야 한다.
+        // 그 규칙들은 `fund-use-horizon.mjs`가 실제로 읽은 것뿐이다.
+        ...(unallocated === 0 ? [] : horizonSuppression.basis_rule_ids),
+      ]),
     ].sort(),
   };
+}
+
+function reasonFor(horizonSuppression) {
+  return horizonSuppression.applies
+    ? horizonSuppression.reason_code
+    : UNALLOCATED_REASON.CONTRIBUTION_ROOM_EXHAUSTED;
 }
 
 /**
@@ -705,7 +848,7 @@ export function buildPlans(ctx) {
       annual_krw: result.amounts[account],
       fill_order: result.fillOrder[account] ?? null,
       limited_by: result.limitedBy[account] ?? null,
-      basis_rule_ids: basisForAccount(account, ctx),
+      basis_rule_ids: basisForAccount(account, ctx, result.limitedBy[account] ?? null),
     }));
 
     const totalMonthly = allocations.reduce((sum, a) => sum + a.monthly_krw, 0);
@@ -819,17 +962,19 @@ export function buildPlans(ctx) {
   const comparisonNotes = [];
   if (plans.length === 1) comparisonNotes.push(COMPARISON_NOTE.PLANS_COLLAPSED_SINGLE);
   // 이 안내의 뜻은 "어느 배분안도 불이익을 피하지 못한다"이고, 계약은 이것을
-  // 배분 비교보다 앞세우라고 지시한다. 그러므로 **실제로 모든 안이 경고를 지고 있을 때만**
-  // 낸다. horizon 값만 보고 내면 피할 수 있는 선택지가 있는데 없다고 말하게 된다.
+  // 배분 비교보다 앞세우라고 지시한다.
   //
-  // ⚠ 이 조건은 8.4절 경고 조건과 같은 사실에 의존한다(M2가 ISA 경고에 잔여
-  //   의무가입기간 조건을 붙이자 이 안내가 그 파급을 놓쳐 M3이 됐다).
-  //   경고 조건을 건드리면 여기도 함께 본다 — 불변식 테스트가 그 연결을 강제한다.
-  if (
-    horizon === HORIZON.WITHIN_ISA_LOCK_IN &&
-    plans.length > 0 &&
-    plans.every((plan) => plan.warnings.length > 0)
-  ) {
+  // **`12.0.0`에서 재는 방법이 바뀌었다**(D52 2번). 전에는 「모든 안이 경고를 지고 있을
+  // 때」로 재었는데, 이제 그 시점에는 **어느 안도 한 원을 넣지 않으므로 경고가 붙을 배분이
+  // 없다.** 옛 조건을 그대로 두면 이 안내는 **어떤 입력에서도 나가지 않는 죽은 코드**가
+  // 되고, 화면은 전액 미배분의 이유를 잃는다.
+  //
+  // **그렇다고 시점만 보고 내지는 않는다.** 그것이 정확히 M3이 고친 결함이다 — 성립하지
+  // 않는 불이익을 「어느 안도 피하지 못한다」로 주장하던 자리. 그래서 **「이 시점에 이
+  // 계좌에 돈을 넣었다면 불이익이 걸리는가」를 경고 판정 함수에 그대로 물어** 세 계좌가
+  // 빠짐없이 걸릴 때만 낸다. 조건을 두 번 적지 않으므로 8.4절 경고 조건이 바뀌면
+  // 이 안내도 함께 움직인다(M2가 ISA 경고를 좁혔을 때 놓쳐서 M3이 됐다).
+  if (ctx.horizonSuppression.applies && everyOpenAccountHasPenalty(ctx)) {
     comparisonNotes.push(COMPARISON_NOTE.ALL_ACCOUNTS_PENALTY);
   }
   if (plans[0].plan_id !== PLAN.MAX_CREDIT) comparisonNotes.push(COMPARISON_NOTE.BASELINE_REORDERED);
@@ -846,10 +991,30 @@ export function buildPlans(ctx) {
   return { plans, comparisonNotes };
 }
 
-function basisForAccount(account, { state }) {
-  if (account === ACCOUNT.ISA) return state.isaBasisRuleIds;
+function basisForAccount(account, { state, horizonSuppression }, limitedBy) {
+  // 시점 때문에 막혔으면 그 판정의 근거를 함께 낸다 — 화면이 계좌 옆에서 바로 읽는다.
+  const horizonBasis =
+    limitedBy === LIMITED_BY.FUND_USE_HORIZON ? horizonSuppression.basis_rule_ids : [];
+
+  if (account === ACCOUNT.ISA) return [...new Set([...state.isaBasisRuleIds, ...horizonBasis])].sort();
   if (account === ACCOUNT.ANNUITY) {
-    return [RULE.CREDIT_LIMIT_ANNUITY, RULE.CREDIT_LIMIT_COMBINED, RULE.PENSION_CONTRIBUTION_LIMIT].sort();
+    return [
+      ...new Set([
+        RULE.CREDIT_LIMIT_ANNUITY,
+        RULE.CREDIT_LIMIT_COMBINED,
+        RULE.PENSION_CONTRIBUTION_LIMIT,
+        ...horizonBasis,
+      ]),
+    ].sort();
   }
-  return [RULE.CREDIT_LIMIT_COMBINED, RULE.PENSION_CONTRIBUTION_LIMIT].sort();
+  return [
+    ...new Set([
+      RULE.CREDIT_LIMIT_COMBINED,
+      RULE.PENSION_CONTRIBUTION_LIMIT,
+      ...horizonBasis,
+      // **더 넣어도 공제가 늘지 않아 멈춘 자리**(D52 1번). 그 판정이 IRP에만 걸리는
+      // 이유가 이 규칙이다 — 연금저축은 같은 제한을 받지 않는다.
+      ...(limitedBy === LIMITED_BY.NO_ADDITIONAL_CREDIT ? [RULE.PENSION_MIDTERM_RESTRICTION] : []),
+    ]),
+  ].sort();
 }
