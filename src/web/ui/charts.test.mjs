@@ -10,6 +10,8 @@ import {
   donutLabelLayout,
   donutGeometry,
   preferredLabelMode,
+  preferredDonutSizeMode,
+  WIDE_DONUT_MEDIA_QUERY,
   MIN_SLICE_DEG,
   LABEL_GUTTER,
   LABEL_TEXT_BUDGET,
@@ -293,7 +295,49 @@ test('a single full-ring slice still gets a label with a leader', () => {
 test('the donut is drawn at the outer diameter the design fixed, on both layouts', () => {
   assert.equal(donutGeometry('labelled').diameter, 260, 'screens.md 5.2절 데스크톱 외경');
   assert.equal(donutGeometry('legend').diameter, 200, 'screens.md 5.7절 모바일 외경');
-  assert.deepEqual(DONUT_OUTER_DIAMETER, { labelled: 260, legend: 200 });
+  assert.deepEqual(DONUT_OUTER_DIAMETER, { labelled: 260, labelledWide: 320, legend: 200 });
+});
+
+test('the R=130 gutter formula still lands exactly on the documented constant 176 — no silent drift', () => {
+  const g = donutGeometry('labelled');
+  const derivedGutter = (g.width - g.diameter) / 2;
+  assert.equal(derivedGutter, LABEL_GUTTER, 'labelGutterFor(130)이 LABEL_GUTTER(176)와 달라지면 두 값이 따로 논다는 뜻이다');
+});
+
+// --- 넓은 데스크톱 도넛 확대 (D48, 2026-08-12) --------------------------------
+
+test('D48 — labelledWide is bigger than labelled but capped, not the mobile legend box', () => {
+  const wide = donutGeometry('labelledWide');
+  assert.equal(wide.diameter, 320);
+  assert.ok(wide.diameter > donutGeometry('labelled').diameter, '넓은 데스크톱에서 커져야 한다');
+  assert.equal(DONUT_OUTER_DIAMETER.labelledWide, 320, '컨테이너 확대 비율(×1.235, design-system 4.4.1절)을 그대로 적용한 상한');
+});
+
+test('D48 — the label gutter formula (not the flat 176 constant) still fits the wide radius', () => {
+  const wide = donutGeometry('labelledWide');
+  // 176(LABEL_GUTTER)은 R=130 전용이다 — R=160에서는 라벨 여백이 부족할 수
+  // 있다는 것이 설계 기록의 경고였다(charts.js `labelGutterFor` 머리말).
+  // 실제로 쓰이는 gutter가 이 요구를 만족하는지 기하 결과에서 직접 잰다.
+  const gutter = (wide.width - wide.diameter) / 2;
+  assert.ok(
+    gutter >= wide.R * 0.2 + 10 + LABEL_TEXT_BUDGET,
+    `wide 모드 여백(${gutter}px)이 라벨 블록을 담기에 부족하다`,
+  );
+});
+
+test('an unknown label mode still falls back to the standard labelled box', () => {
+  assert.equal(donutGeometry('nonsense').mode, 'labelled');
+  assert.equal(donutGeometry('nonsense').diameter, 260);
+});
+
+test('preferredDonutSizeMode falls back to labelled where there is no matchMedia (tests, SSR)', () => {
+  assert.equal(preferredDonutSizeMode(), 'labelled');
+});
+
+test('WIDE_DONUT_MEDIA_QUERY matches the breakpoint where the container widening actually engages', () => {
+  // design-system 4.4.1절 실측 — 1280px는 컨테이너 상한(옛 1360px)에 애초에
+  // 걸리지 않아 세 레버 모두 무변화였고, 1440px부터 움직였다.
+  assert.equal(WIDE_DONUT_MEDIA_QUERY, '(min-width: 1440px)');
 });
 
 test('the legend layout spends almost none of its box on label margin — that margin is why the mobile donut shrank', () => {
@@ -396,7 +440,10 @@ test('B3 — 평면이다. 기울기 0°, 압출 0 — 결과 도넛의 15°/8%�
 });
 
 test('자리표시자의 상자가 결과 도넛과 완전히 같다 — 결과가 들어올 때 자리가 밀리지 않는다', () => {
-  for (const mode of ['labelled', 'legend']) {
+  // D48 — `labelledWide`도 포함한다. `donutChart`·`placeholderRing`이 같은
+  // 기본값 함수(`preferredDonutSizeMode`)를 쓰므로 넓은 데스크톱에서도 자리가
+  // 밀리면 안 된다.
+  for (const mode of ['labelled', 'legend', 'labelledWide']) {
     const donut = donutGeometry(mode);
     const ph = placeholderGeometry(mode);
     assert.equal(ph.width, donut.width, `${mode}: 폭이 다르다`);

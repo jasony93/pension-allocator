@@ -123,6 +123,15 @@
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
   --radius-s: 4px; --radius-m: 8px; --radius-l: 12px; --radius-xl: 16px; --radius-full: 999px;
+
+  /* [2026-08-12, D48 신설] 컨테이너를 넓히면(위 `.app-layout`) 산문 텍스트가
+     1절의 68자 규칙(한글 약 34~40자)을 넘길 수 있다 — 초판에서는 좁은
+     컨테이너(결과 패널 713px대)가 이 규칙을 별도 장치 없이도 지켜 줬는데,
+     넓히면(1920px에서 결과 패널 내용 폭 913px) 그 암묵적 보호가 사라진다.
+     640px는 시스템 폰트 스택 기준 한글 약 36~38자다. **산문 블록에만 건다**
+     — 차트·미터·표·헤드라인 금액·`AccountBenefitStrip`은 제약을 받지 않는다
+     (design-system 4.4.1절, D16·D33 같은 폭 규약이 전체 폭을 요구한다). */
+  --prose-max-width: 640px;
 }
 
 /* 2) 운영체제가 다크이고 사용자가 라이트를 명시하지 않았을 때. */
@@ -227,7 +236,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .type-num { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 /* ---- 레이아웃 ---- */
-.app-layout { max-width: 1360px; margin: 0 auto; }
+/* [2026-08-12, D48] 1360 → 1680px. 소유자가 "전체 페이지에서 차지하는 비중이
+   커져야 한다"고 했고, 실측(design-system 4.4.1절)이 컨테이너 최대폭만이
+   그 비중을 움직이는 레버임을 확인했다 — 글자 크기·여백은 세 뷰포트(1280·
+   1440·1920px)에서 전부 무변화였다. 1920px에서 70.8% → 87.5%. 타이포·간격은
+   손대지 않는다(3.5절 대비표 회귀 위험, 그리고 "크게 하라"가 매번 위계
+   문제였던 이번 세션의 전례). */
+.app-layout { max-width: 1680px; margin: 0 auto; }
 .app-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--space-4) var(--space-5);
@@ -290,19 +305,34 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   padding: var(--space-5); text-align: center; font-size: 12.5px; color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
 }
-/* 데스크톱 5:7 분할. **sticky는 결과 패널에 건다**(screens.md 1.1·3.11.4절 (a)).
-   입력이 길어져도 오른쪽 차트가 시야에서 사라지지 않아야 "값을 바꾸면 차트가
-   즉시 바뀌는 것을 본다"는 실시간 반영의 가치가 성립한다 — 입력 길이와 결과
-   가시성이 이 한 줄로 분리된다. 이번 개정으로 입력이 넷 늘어 왼쪽이 길어졌고,
-   sticky가 반대쪽(입력)에 걸려 있으면 그때부터 결과가 위로 밀려 사라진다. */
+/* 데스크톱 5:7 분할. [2026-08-12, D48로 폐기] 이 자리에 있던 sticky 결과
+   패널은 없앴다 — 소유자가 "스크롤 막대 둘"을 신고했고, `.result-slot`이
+   `position: sticky` + `max-height` + `overflow-y: auto`로 자기 안에서 따로
+   스크롤하던 것이 그 둘 중 하나였다. **"sticky는 남기고 overflow만 뺀다"는
+   안은 실제로 렌더해 기각했다** — 내용이 뷰포트보다 높은 sticky 요소는
+   자신의 아래쪽이 스크롤로 닿지 않는 영역을 만든다(문서를 끝까지 스크롤해도
+   그 요소의 하단이 뷰포트 밖에 남는다). 그래서 셋을 함께 지운다. 문서
+   전체가 하나의 스크롤바로 움직인다(`.app-layout`이 컨테이너, 스크롤은 항상
+   문서 기준). 잃는 것 — "값을 바꾸면 차트가 즉시 바뀌는 것을 본다"는 이제
+   결과 패널이 뷰포트 안에 있을 때만 성립한다(입력 폼이 결과 패널보다 길면
+   폼 아래쪽을 고치는 동안 결과가 화면 밖에 있다). 소유자가 명시로
+   「한 페이지에서 같이 스크롤」을 지시했으므로 이 대가를 감수한다 — 얇은
+   sticky 요약 띠(`LiveSummaryStrip`)로 되찾는 안은 설계만 하고 만들지
+   않는다(design-system 5.19.1절, screens.md 3.11.4(a)·13.5절 — 신고 없는
+   불편을 미리 고치지 않는다).
+   `[4-A]` `DisclosureBanner`만 예외로 문서 기준 sticky를 유지한다(5.12.1절
+   아래). 근거·실측은 `docs/org/gate-decisions.md` D48·screens.md 13절. */
 @media (min-width: 1024px) {
   .app-main { flex-direction: row; align-items: flex-start; gap: var(--space-7); padding: var(--space-6) var(--space-6); }
-  .input-slot { flex: 5 1 0; min-width: 400px; max-width: 520px; }
-  /* 높이를 뷰포트보다 넉넉히 낮춰 둔다. sticky 요소는 컨테이너(.app-main) 아래
-     끝에서 바닥에 붙으므로, 패널이 뷰포트만큼 높으면 페이지 맨 아래에서 위쪽이
-     잘린다 — 잘리는 첫 블록이 하필 **접기 불가인 고지 ①②**다(실측으로 -68.6px
-     잘려 있었다). 여유를 두면 맨 아래에서도 고지가 화면에 남는다. */
-  .result-slot { flex: 7 1 0; position: sticky; top: var(--space-4); max-height: calc(100vh - 96px); overflow-y: auto; }
+  /* [2026-08-12, D48] 400~520 → 440~640. 컨테이너 최대폭(아래 `.app-layout`)만
+     넓히고 입력 패널 상한을 그대로 두면 늘어난 폭이 전부 결과 패널로만 가서
+     "입력칸"은 그대로 작아 보인다 — 소유자가 "입력칸과 결과칸들이"라고 둘 다
+     지목했다(design-system 4.4.1절 실측: 이 값이 유일하게 뷰포트 대비 비중을
+     움직인 레버였다). */
+  .input-slot { flex: 5 1 0; min-width: 440px; max-width: 640px; }
+  /* sticky·max-height·overflow-y를 없앴으므로 평범한 flex 항목이다 — 폭
+     상한이 없어(`flex: 7 1 0`) 컨테이너가 넓어지면 자동으로 넓어진다. */
+  .result-slot { flex: 7 1 0; }
 }
 
 /* ---- 입력 패널 ---- */
@@ -439,20 +469,45 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .btn-danger:hover { background: var(--state-error-subtle); }
 
 /* ---- 결과 패널 ---- */
-/* 결과 패널은 데스크톱에서 `.result-slot`이 sticky로 붙잡는 카드다 —
-   `shadow-2`(design-system 4.3절: "스티키 패널·드롭다운"). */
-.result-panel-inner { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l); overflow: hidden; box-shadow: var(--shadow-2); }
+/* 결과 패널 카드 — `shadow-2`(design-system 4.3절: "스티키 패널·드롭다운";
+   이 카드 자체는 D48로 더 이상 sticky가 아니지만 그림자 등급은 카드 안의
+   `[4-A]` `DisclosureBanner`가 여전히 sticky라 그대로 둔다).
+
+   [2026-08-12, D48] `overflow: hidden`을 없앴다 — **기존 결함**이었다
+   (design-system 5.12.1절). 아래 `.disclosure-banner`의 `position: sticky`가
+   기준으로 삼아야 할 스크롤 조상이 문서인데, 이 `overflow: hidden`이 그
+   기준 컨테이너를 가로채 배너가 "고정되려 하는데 그 상자 자신은 스크롤하지
+   않아 결과적으로 전혀 고정되지 않는" 상태를 만들고 있었다 — **지금까지
+   배포된 코드에서도 이 배너는 실제로 스크롤에 고정된 적이 없었다**(내부
+   스크롤량만큼 그대로 밀려 올라갔다, 브라우저 실측으로 확인). 카드 모서리를
+   둥글게 자르는 역할은 그 아래 `.disclosure-banner`의 위쪽 두 모서리에
+   같은 반경을 직접 줘서 대신한다 — 배경색이 있는 배너가 부모 없이도 카드
+   윤곽과 이가 맞는다. */
+.result-panel-inner { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-2); }
 .result-loading-overlay .result-body { opacity: 0.92; }
 .result-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); }
 
+/* `[4-A]` — 헌장 D11·고지 ①②. **접히지 않고, 스크롤로 밀려나도 결과 영역을
+   벗어날 수 없다.** D48 이후 유일하게 sticky를 유지하는 결과 패널 요소다
+   (screens.md 13.2절). `top`은 `0`이 아니라 헤더 실측 높이다 — `.app-header`도
+   `position: sticky; top: 0; z-index: 10`이라, `top: 0`으로 두면 헤더 밑에
+   깔려 가려진다. **56px로 하드코딩하지 않는다** — 문서가 그렇게 적었지만
+   실측은 77px이었다(design-system 4.1.1절). 헤더 자신이 실제 렌더 높이를
+   `--layout-header-height`로 공개하고(`ui/app.js`, `ResizeObserver`로 계속
+   갱신) 여기서는 그 값을 읽기만 한다. 값이 아직 없는 극초기 프레임을 위한
+   방어값 `0px`을 `var()` 두 번째 인자로 둔다. */
 .disclosure-banner {
   display: flex; gap: var(--space-2); padding: var(--space-4);
   background: var(--state-info-subtle); border-left: 3px solid var(--state-info);
+  border-top-left-radius: var(--radius-l); border-top-right-radius: var(--radius-l);
   font-size: 12.5px; color: var(--text-secondary);
-  position: sticky; top: 0; z-index: 2;
+  position: sticky; top: var(--layout-header-height, 0px); z-index: 2;
 }
 .disclosure-banner p { margin: 0 0 var(--space-1); }
 .disclosure-icon { font-size: 16px; line-height: 1.4; flex-shrink: 0; }
+/* D48 — 산문 캡 대상(design-system 4.4.1절). 아이콘은 캡을 받지 않는다 —
+   전체 배너 폭이 아니라 **본문 텍스트**만 68자 규칙 대상이다. */
+.disclosure-banner-body { max-width: var(--prose-max-width); }
 
 .requirement-checklist { display: flex; flex-direction: column; gap: var(--space-3); }
 .req-progress-row { display: flex; justify-content: space-between; align-items: baseline; }
@@ -821,7 +876,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
     padding: 0 var(--space-5);
   }
 }
-.chart-note { text-align: center; }
+/* D48 — 시나리오 설명 캡션(`[4-F]` `proposedScenarioCaption`), 산문 캡 대상.
+   가운데 정렬로 이미 좁게 읽히던 문장이었으므로 캡을 걸고도 `margin: auto`로
+   중앙 정렬을 유지한다 — `.chart-area`(column flex)의 캡 없는 형제들과 달리
+   이 캡션만 원래도 시각적으로 "떠 있는 한 줄"이었다. */
+.chart-note { text-align: center; max-width: var(--prose-max-width); margin-left: auto; margin-right: auto; }
 
 .allocation-bars { display: flex; flex-direction: column; gap: var(--space-4); }
 .allocation-bar-row { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -911,7 +970,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .law-chip { display: inline-block; border: 1px solid var(--border-subtle); background: var(--surface-sunken); border-radius: var(--radius-s); padding: 1px 6px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
 .law-link { margin-left: var(--space-2); font-size: 12.5px; }
 
-.assumption-block, .basis-block { border: 1px solid var(--border-subtle); border-radius: var(--radius-m); padding: var(--space-4); }
+/* D48 — 산문 캡 대상(고지 ③④). 목록이지만 각 줄이 문장이라 68자 규칙이
+   적용된다(design-system 4.4.1절) — `[4-D]` 표(법령 조항 열)처럼 데이터
+   그리드가 아니므로 예외에 들지 않는다. 왼쪽 정렬을 유지한다 — 가운데
+   정렬 대상은 `.chart-note`뿐이다. */
+.assumption-block, .basis-block { border: 1px solid var(--border-subtle); border-radius: var(--radius-m); padding: var(--space-4); max-width: var(--prose-max-width); }
 .assumption-block ul, .basis-block ul { margin: var(--space-3) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
 .basis-block li { list-style: none; margin-left: -1.2em; }
 
@@ -945,7 +1008,8 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .more-items-trigger::-webkit-details-marker { display: none; }
 .more-items ul { margin: var(--space-2) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
 
-.limit-note { font-size: 12.5px; color: var(--text-secondary); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
+/* D48 — 산문 캡 대상(고지 ⑤). */
+.limit-note { font-size: 12.5px; color: var(--text-secondary); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); max-width: var(--prose-max-width); }
 .limit-note p { margin: 0 0 var(--space-1); }
 
 .save-share { display: flex; justify-content: flex-end; }
@@ -981,10 +1045,12 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      지운다), 초기화 버튼(입력 패널 안이라 이미 함께 사라진다), "PDF로 저장"
      버튼 자체(`.save-share`) — 인쇄된 종이 위의 "인쇄" 버튼은 뜻이 없다.
    - `.result-slot`의 `position: sticky` · `max-height` · `overflow-y: auto`를
-     푼다. 그대로 두면 인쇄 결과가 뷰포트 한 화면 높이로 잘린다 — 스크롤
-     가능한 상자를 인쇄하면 스크롤로만 닿던 아래쪽이 통째로 잘려 나가는 것이
-     브라우저의 공통 동작이다. `[4-D]` 표·`[4-E]`·`[4-F]`·`[4-G]`가 정확히
-     그 잘리는 자리에 있다.
+     푼다. **[2026-08-12, D48 이후로는 이 규칙이 기본 상태다** — 데스크톱
+     기본 CSS에서 이 셋을 이미 없앴으므로(위 `@media (min-width: 1024px)`),
+     아래 재선언은 더 이상 무언가를 "풀지" 않는다. 그래도 지운다면 다음에
+     누가 데스크톱 sticky를 되살릴 때(그러지 말라고 D48이 적어 뒀지만) 인쇄가
+     조용히 함께 깨지는 것을 막는 방어선으로 남겨 둔다. `.disclosure-banner`는
+     여전히 sticky이므로(D48 이후에도 유일한 예외) 아래에서 따로 푼다.
    - `<details>`(가정 사항·법령 조항·"더 보기")는 **CSS로** 펼친다. 두 번 틀렸던
      자리다. ① 처음엔 `ui/print.js`가 `beforeprint`에서 `open` 속성을 직접
      켜는 JS로 구현했는데, `Page.printToPDF`로 실제 PDF를 뽑아 확인하니 접힌

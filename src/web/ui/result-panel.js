@@ -128,7 +128,7 @@ import { exportToPdf } from './print.js';
 function disclosureBanner() {
   return el('div', { class: 'disclosure-banner', role: 'note' }, [
     el('span', { class: 'disclosure-icon', 'aria-hidden': 'true' }, ['ⓘ']),
-    el('div', {}, [el('p', {}, [DISCLOSURE.nature]), el('p', {}, [DISCLOSURE.qualification])]),
+    el('div', { class: 'disclosure-banner-body' }, [el('p', {}, [DISCLOSURE.nature]), el('p', {}, [DISCLOSURE.qualification])]),
   ]);
 }
 

@@ -42,7 +42,7 @@ import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { SERVICE_NAME } from '../copy.js';
 import { createStore } from '../state/store.js';
-import { COMPACT_MEDIA_QUERY, runDonutEntrance } from './charts.js';
+import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
 
 function captureFocus(container) {
@@ -163,12 +163,39 @@ export function mountApp(root, { engineClient, analytics }) {
   // 다르다**(charts.js `donutGeometry`). CSS는 `viewBox`를 바꿀 수 없으므로 그
   // 판단이 렌더 시점에 들어가고, 폭이 경계를 넘으면 다시 그려야 한다. 없으면
   // 창을 줄인 사용자가 라벨 자리만큼 작아진 도넛을 계속 보게 된다.
+  //
+  // **`WIDE_DONUT_MEDIA_QUERY`(D48)도 같은 이유로 같은 자리에 건다** — 넓은
+  // 데스크톱에서 도넛이 `labelledWide`(320px)로 커지는 경계(1440px)를 창
+  // 크기를 바꾸며 넘나드는 사용자가 다시 그리지 않으면 옛 상자를 계속 본다.
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    const compact = window.matchMedia(COMPACT_MEDIA_QUERY);
-    // Safari 13 이하는 addEventListener를 지원하지 않는다 — 있으면 그것만 쓴다.
-    if (typeof compact.addEventListener === 'function') compact.addEventListener('change', scheduleRender);
-    else if (typeof compact.addListener === 'function') compact.addListener(scheduleRender);
+    for (const query of [COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY]) {
+      const mq = window.matchMedia(query);
+      // Safari 13 이하는 addEventListener를 지원하지 않는다 — 있으면 그것만 쓴다.
+      if (typeof mq.addEventListener === 'function') mq.addEventListener('change', scheduleRender);
+      else if (typeof mq.addListener === 'function') mq.addListener(scheduleRender);
+    }
   }
+
+  // [2026-08-12, D48] `[4-A]` `DisclosureBanner`가 문서 기준 sticky로
+  // `top: var(--layout-header-height)`를 쓴다(styles.css). 헤더 높이를
+  // **하드코딩하지 않는다** — 설계 문서가 적은 56px과 실측 77px가 이미
+  // 어긋나 있었다(design-system 4.1.1절). 헤더 자신이 실제 렌더 높이를
+  // 재서 커스텀 프로퍼티로 공개하고, sticky 오프셋은 그 값을 읽기만 한다.
+  // `ResizeObserver`로 계속 갱신한다 — 모바일에서 가명칭이 두 줄로 접히는
+  // 등 헤더 높이가 폭에 따라 바뀌는 경우를 폭 경계 하나로 특정하지 않고
+  // 실제 크기 변화 자체를 본다.
+  function syncHeaderHeight() {
+    if (typeof document === 'undefined') return;
+    const height = header.getBoundingClientRect().height;
+    if (height > 0) document.documentElement.style.setProperty('--layout-header-height', `${height}px`);
+  }
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(syncHeaderHeight).observe(header);
+  } else if (typeof window !== 'undefined') {
+    // 아주 오래된 브라우저를 위한 대비책 — 창 리사이즈에만 반응한다.
+    window.addEventListener('resize', syncHeaderHeight);
+  }
+  syncHeaderHeight();
 
   renderNow();
 

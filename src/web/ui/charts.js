@@ -154,23 +154,45 @@ export function sliceAngles(segments, { minDeg = MIN_SLICE_DEG } = {}) {
  *
  * `labelled`는 라벨이 도넛 옆에 붙는 모드(데스크톱), `legend`는 라벨이 도넛 아래
  * 리스트로 내려가는 모드(모바일, 5.7절)다.
+ *
+ * **`labelledWide`는 2026-08-12 D48 신설이다.** 결과 패널이 넓어지면서
+ * (`styles.css` `.app-layout` 1360→1680px) 도넛만 고정폭이라 카드 안에서
+ * 작아 보인다는 것이 관리자 판정이다(`docs/org/gate-decisions.md` D48 후속
+ * "도넛도 키운다") — 소유자가 "전체적으로"·"전체 페이지에서 차지하는 비중"
+ * 이라고 했으므로 도넛도 함께 커지되 **상한을 둔다**. 320은 컨테이너 최대폭이
+ * 커진 비율(1360→1680px, ×1.235, design-system 4.4.1절 실측)을 그대로 적용한
+ * 값이다(260×1.235 ≈ 321 → 320). 임의의 "더 크게"가 아니라 컨테이너가 커진
+ * 비율과 같은 비율로 키운 값이고, 그 비율에서 멈추는 것이 상한이다 — 무한정
+ * 키우면 옆의 `AccountBenefitStrip`·`AllocationBar`(전체 폭 100%, D35·D16)와의
+ * 위계가 뒤집힌다(도넛은 "정체를 보여주는 아이콘"이지 "패널을 채우는
+ * 도형"이 아니다, design-system 5.20절). 어느 뷰포트에서 켜지는지는
+ * `preferredDonutSizeMode`가 정한다.
  */
-export const DONUT_OUTER_DIAMETER = { labelled: 260, legend: 200 };
+export const DONUT_OUTER_DIAMETER = { labelled: 260, labelledWide: 320, legend: 200 };
 
 /**
- * 라벨 블록이 들어갈 좌우 여백.
+ * 라벨 블록이 들어갈 좌우 여백을 반지름(R)으로부터 낸다.
  *
- * **실측에서 정한 값이다.** 세 프로필의 라벨 블록 폭을 브라우저에서
+ * **유도식은 실측에서 나왔다.** 세 프로필의 라벨 블록 폭을 브라우저에서
  * `getBoundingClientRect()`로 재니 최대 108.8px이었고(가장 긴 줄은 금액
  * `1,250,000원 / 월`), 자릿수가 더 늘어날 여지를 두어 `LABEL_TEXT_BUDGET`을
  * 132px로 잡았다. 라벨의 x는 `cx ± (R×1.2 + 10)`이고 텍스트는 거기서 바깥쪽으로
- * 뻗으므로, 여백은 `(R×1.2 + 10 + 텍스트폭) − R` 이상이어야 한다. R=130에서
- * 그 값은 168px이고, 좌우 8px씩 더 남기려고 176으로 둔다.
+ * 뻗으므로, 여백은 `(R×0.2 + 10 + 텍스트폭)` 이상이어야 한다(cx = R + gutter이므로
+ * `gutter ≥ R×0.2 + 10 + 텍스트폭`). R=130에서 그 값은 168px이고, 여유 8px을
+ * 더해 176으로 둔다 — `LABEL_GUTTER`가 그 값이다.
+ *
+ * **R=160(`labelledWide`, D48)에서는 상수 하나로 버티지 못한다.** 같은 식으로
+ * 필요한 값이 174px이라 176px 여유는 2px밖에 안 남는다 — 상수 하나를 두 R에
+ * 우연히 맞춰 쓰는 대신, 식 자체를 함수로 둔다. `labelGutterFor(130)`은
+ * `LABEL_GUTTER`와 정확히 같은 176을 낸다(테스트가 그 동치를 고정한다).
  *
  * 이 관계는 테스트가 고정한다 — 예전 구현은 라벨을 `R×1.22` 지점에 찍으면서
  * viewBox는 도넛 크기 그대로여서 라벨이 통째로 잘려 나갔고, 스크린샷으로는
  * "원래 그런 디자인"과 구분되지 않았다.
  */
+function labelGutterFor(R) {
+  return Math.ceil(R * 0.2 + 10 + LABEL_TEXT_BUDGET) + 8;
+}
 export const LABEL_GUTTER = 176;
 export const LABEL_TEXT_BUDGET = 132;
 const LABEL_VPAD = 26;
@@ -200,11 +222,15 @@ export const LABEL_BLOCK_BELOW = 42;
  * 상수를 따로 베껴 두고 있어서, 지름을 바꾸면 테스트는 옛 상자를 검사했다.
  */
 export function donutGeometry(labelMode = 'labelled') {
-  const mode = labelMode === 'legend' ? 'legend' : 'labelled';
+  // D48 — 세 모드. `legend`가 아니면 전부 "라벨을 옆에 그린다"는 뜻이고,
+  // `labelled`/`labelledWide`는 지름만 다르다. 알 수 없는 값은 `labelled`로
+  // 떨어진다(예전과 같은 안전한 기본값).
+  const mode = labelMode === 'legend' || labelMode === 'labelledWide' ? labelMode : 'labelled';
+  const isLegend = mode === 'legend';
   const diameter = DONUT_OUTER_DIAMETER[mode];
   const R = diameter / 2;
-  const pad = mode === 'labelled' ? LABEL_VPAD : LEGEND_PAD;
-  const gutter = mode === 'labelled' ? LABEL_GUTTER : LEGEND_PAD;
+  const pad = isLegend ? LEGEND_PAD : LABEL_VPAD;
+  const gutter = isLegend ? LEGEND_PAD : labelGutterFor(R);
   const depth = R * EXTRUDE_RATIO;
   const width = diameter + gutter * 2;
   const height = diameter + depth + pad * 2;
@@ -227,6 +253,23 @@ export function preferredLabelMode() {
 
 /** `styles.css`의 모바일 분기와 같은 폭이어야 한다. 어긋나면 라벨이 두 번 보이거나 아예 사라진다. */
 export const COMPACT_MEDIA_QUERY = '(max-width: 767px)';
+
+/**
+ * D48 신설 — `preferredLabelMode`가 가르는 축(모바일이냐 아니냐)과 별개로,
+ * 데스크톱 안에서 도넛이 확대 모드(`labelledWide`)를 쓸지를 가른다. 결과
+ * 패널이 실제로 넓어지는 지점(`styles.css` `.app-layout` 최대폭이 뷰포트
+ * 상한보다 좁아져 실제로 걸리기 시작하는 경계, design-system 4.4절
+ * `≥1440px` 행 · 4.4.1절 "1280px는 세 후보 모두 무변화" 실측)과 같은
+ * 값이다 — 컨테이너가 안 넓어졌는데 도넛만 넓어지면 둘이 따로 논다.
+ */
+export function preferredDonutSizeMode() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'labelled';
+  if (window.matchMedia(COMPACT_MEDIA_QUERY).matches) return 'legend';
+  return window.matchMedia(WIDE_DONUT_MEDIA_QUERY).matches ? 'labelledWide' : 'labelled';
+}
+
+/** `styles.css`의 `.app-layout` 폭 상한이 실제로 걸리기 시작하는 경계와 같다. */
+export const WIDE_DONUT_MEDIA_QUERY = '(min-width: 1440px)';
 
 /**
  * 도넛 라벨의 배치를 정하는 **순수 함수**.
@@ -302,7 +345,11 @@ export function donutChart({
   totalAllocatedMonthlyKrw = 0,
   isProposed = false,
   excludedAccounts = [],
-  labelMode = preferredLabelMode(),
+  // D48 — 모바일(legend)/데스크톱(labelled)뿐 아니라 넓은 데스크톱
+  // (labelledWide)까지 가른다. `placeholderRing`도 같은 함수를 기본값으로
+  // 써야 한다 — 자리표시자 상자가 결과 도넛과 어긋나면 결과가 들어올 때
+  // 자리가 밀린다(placeholderGeometry 머리말).
+  labelMode = preferredDonutSizeMode(),
   // 자리표시자가 사라진 **다음 프레임에** 조각을 0°에서 펼친다(design-system
   // 5.29절 전환 2번). 값이 바뀌어 다시 그리는 경우에는 걸지 않는다 — 그때
   // 움직이는 것은 각도이지 "결과가 처음 생겼다"는 사실이 아니다.
@@ -310,7 +357,9 @@ export function donutChart({
 }) {
   const geom = donutGeometry(labelMode);
   const { R, rInner, depth, width, height, cx, cy } = geom;
-  const drawLabels = geom.mode === 'labelled';
+  // `legend`만 라벨을 아래 리스트로 내린다 — `labelled`·`labelledWide`는
+  // 둘 다 라벨을 옆에 그린다(지름만 다르다).
+  const drawLabels = geom.mode !== 'legend';
 
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
   const total = segments.reduce((s, seg) => s + seg.amount, 0);
@@ -800,7 +849,7 @@ export function placeholderSliceAngles({ count = PLACEHOLDER_SLICE_COUNT, gapPx 
  * 결과**다) · 45° 해칭(`bill_stage` 전용) · 회전·맥동·shimmer(움직이면 "곧
  * 온다"로 읽힌다) · 숫자·눈금·범례·지시선.
  */
-export function placeholderRing({ labelMode = preferredLabelMode() } = {}) {
+export function placeholderRing({ labelMode = preferredDonutSizeMode() } = {}) {
   const geom = placeholderGeometry(labelMode);
   const { R, rInner, ry, width, height, cx, cy, rMid } = geom;
   const arcs = placeholderSliceAngles({ rMid });
