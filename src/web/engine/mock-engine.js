@@ -1996,24 +1996,20 @@ function computeScenario(scenario, request, rulesets) {
   const isaReasonCodes = [];
   if (isaEligibilityRule) {
     // 연령 경계는 코드에 적지 않고 룰셋의 any_of 조건에서 읽는다(제품 원칙 1).
+    // **`requires` 있는 목(`age15_employed`)이 요구하는 값은 이미 받고 있다**
+    // (`profile.prior_year_total_salary_krw` — ISA 유형 교차확인에도 쓰는 값).
+    // 예전 주석은 "이 입력을 받지 않는다"고 적었지만 사실이 아니었다 — 실제
+    // 엔진(`limits.mjs:576-577` `hasPriorEmploymentIncome`)과 같은 값으로
+    // 판정해야 한다. 확인할 수 없다고 보수적으로 배제하면, 직전 과세기간
+    // 근로소득이 있는 15~18세를 실제로는 자격이 있는데 없다고 잘못 배제한다
+    // (4단계 게이트4 재소집, qa-report.md 11.5절 — 넓힌 좌표에서 새로 찾음).
+    const hasPriorEmploymentIncome = profile.prior_year_total_salary_krw != null && profile.prior_year_total_salary_krw > 0;
     const anyOf = isaEligibilityRule.value.any_of || [];
-    const unconditionalMinAge = anyOf.find((c) => !c.requires)?.min_age;
-    const conditionalEntry = anyOf.find((c) => c.requires);
-    if (unconditionalMinAge != null && ageYears >= unconditionalMinAge) {
-      // age19 요건을 그대로 충족 — 자격 있음
-    } else if (
-      conditionalEntry &&
-      ageYears >= conditionalEntry.min_age &&
-      unconditionalMinAge != null &&
-      ageYears < unconditionalMinAge
-    ) {
-      // age15_employed 요건은 '직전 과세기간 근로소득 보유' 확인이 필요하나 이
-      // 입력을 받지 않는다(requirements.md 2절 — 1차 출시에서 묻지 않는 선택
-      // 입력). 확인할 수 없는 조건이므로 보수적으로 배제한다.
-      isaEligible = false;
-      isaReasonCodes.push('isa_excluded_age');
-      notices.push({ code: 'isa_excluded_age', severity: 'warning', field: 'profile.birth_date', params: {}, basis_rule_ids: [isaEligibilityRule.id] });
-    } else {
+    const qualifies = anyOf.some((option) => {
+      if (typeof option?.min_age !== 'number' || ageYears < option.min_age) return false;
+      return option.requires ? hasPriorEmploymentIncome : true;
+    });
+    if (!qualifies) {
       isaEligible = false;
       isaReasonCodes.push('isa_excluded_age');
       notices.push({ code: 'isa_excluded_age', severity: 'warning', field: 'profile.birth_date', params: {}, basis_rule_ids: [isaEligibilityRule.id] });
@@ -2236,39 +2232,87 @@ function computeScenario(scenario, request, rulesets) {
   const effectiveTotalLimit = Math.max(0, totalLimit - otherSavings);
 
   let isaAnnualRoom = 0;
-  if (accounts.isa.exists) {
-    if (scenario === 'proposed') {
-      const proposedAnnualRule = use('proposed.isa.annual_contribution_limit', 'scenarios[].limits.by_account[isa]');
-      const flatAnnual = proposedAnnualRule ? proposedAnnualRule.value.amount_krw : 0;
-      isaAnnualRoom = Math.max(0, Math.min(flatAnnual, effectiveTotalLimit - accounts.isa.cumulative_contribution_krw));
-    } else {
-      const annualRule = use('isa.contribution.annual_limit', 'scenarios[].limits.by_account[isa]');
-      const base = annualRule ? annualRule.value.base_amount_krw : 0;
-      const yearsSinceOpening = accounts.isa.years_since_opening;
-      if (yearsSinceOpening == null) {
-        notices.push({ code: 'isa_tenure_missing', severity: 'warning', field: 'accounts.isa.years_since_opening', params: {}, basis_rule_ids: annualRule ? [annualRule.id] : [] });
-      }
-      const years = Math.min(yearsSinceOpening ?? 0, 4);
-      const lifetimeAllowance = base * (1 + years);
-      isaAnnualRoom = Math.max(
-        0,
-        Math.min(lifetimeAllowance - accounts.isa.cumulative_contribution_krw, effectiveTotalLimit - accounts.isa.cumulative_contribution_krw),
-      );
+  // 절사(`Math.max(0, …)`) **전**의 값 — 실제 엔진(`limits.mjs:888` `clamped`)이
+  // "0으로 잘렸는가"를 `existing_contribution_over_limit`의 조건 하나로 쓴다.
+  // 절사된 값만 들고 있으면 이 사실이 사라진다.
+  let isaClamped = false;
+  // **`accounts.isa.exists`로 이 계산을 막지 않는다.** 실제 엔진
+  // (`limits.mjs:837-889` `resolveIsaLimits`)은 `exists`를 아예 읽지 않는다 —
+  // 신규 가입을 전제로 배분하므로(`isa_new_account_assumed`) 미보유 사용자도
+  // 누적 0원짜리 새 계좌처럼 한도를 계산한다. `tax_free_limit_krw`는 이미
+  // 2026-08-10에 같은 이유로 `exists` 게이트를 걷어냈는데(위 주석), 이 한도
+  // 계산은 그 수정을 놓쳤다 — 4단계 게이트4 재소집(qa-report.md 11.5절)의
+  // 차등 테스트가 넓힌 좌표(ISA 미보유)에서 새로 찾았다.
+  if (scenario === 'proposed') {
+    const proposedAnnualRule = use('proposed.isa.annual_contribution_limit', 'scenarios[].limits.by_account[isa]');
+    const flatAnnual = proposedAnnualRule ? proposedAnnualRule.value.amount_krw : 0;
+    // **개정안의 정액 한도는 그 해 납입액(`ytd_contribution_krw`) 기준이다** — 확정
+    // 룰셋의 이월식 계산(누적·`cumulative_contribution_krw`)과 다르다(실제 엔진
+    // `limits.mjs:850` `annualRemainingRaw = amount - isa.ytd_contribution_krw`).
+    // 이 목은 예전에 `flatAnnual`을 아무 것도 빼지 않은 채로 썼다 — 4단계
+    // 게이트4 재소집(qa-report.md 11.5절)의 차등 테스트가 잡았다.
+    const annualRemainingRaw = flatAnnual - accounts.isa.ytd_contribution_krw;
+    const totalRemainingRaw = effectiveTotalLimit - accounts.isa.cumulative_contribution_krw;
+    isaClamped = annualRemainingRaw < 0 || totalRemainingRaw < 0;
+    isaAnnualRoom = Math.max(0, Math.min(annualRemainingRaw, totalRemainingRaw));
+  } else {
+    const annualRule = use('isa.contribution.annual_limit', 'scenarios[].limits.by_account[isa]');
+    const base = annualRule ? annualRule.value.base_amount_krw : 0;
+    const yearsSinceOpening = accounts.isa.years_since_opening;
+    if (yearsSinceOpening == null) {
+      notices.push({ code: 'isa_tenure_missing', severity: 'warning', field: 'accounts.isa.years_since_opening', params: {}, basis_rule_ids: annualRule ? [annualRule.id] : [] });
     }
+    const years = Math.min(yearsSinceOpening ?? 0, 4);
+    const lifetimeAllowance = base * (1 + years);
+    const annualRemainingRaw = lifetimeAllowance - accounts.isa.cumulative_contribution_krw;
+    const totalRemainingRaw = effectiveTotalLimit - accounts.isa.cumulative_contribution_krw;
+    isaClamped = annualRemainingRaw < 0 || totalRemainingRaw < 0;
+    isaAnnualRoom = Math.max(0, Math.min(annualRemainingRaw, totalRemainingRaw));
   }
   if (!isaEligible) isaAnnualRoom = 0;
 
   // -- 배분 가능한 예산과 연금계좌 공유 풀 ---------------------------------
   const budget = profile.monthly_capacity_krw * months;
+  // 실제 엔진(`limits.mjs:744` `pensionContributionUsed`)은 퇴직급여 입금액·
+  // 계약이전액(`retirement_transfer_in_krw`)도 납입 한도를 쓰는 것으로 본다 —
+  // 세액공제 대상은 아니어도 한도는 함께 쓴다(`retirement_transfer_counted_
+  // in_contribution_limit` 가정). 이 목은 그 합계(`retirementTransferTotal`)를
+  // 빼지 않고 있었다.
   const sharedPensionPoolBase = Math.max(
     0,
-    pensionContributionCap - accounts.annuity_savings.ytd_contribution_krw - accounts.retirement_pension.ytd_contribution_krw,
+    pensionContributionCap -
+      accounts.annuity_savings.ytd_contribution_krw -
+      accounts.retirement_pension.ytd_contribution_krw -
+      retirementTransferTotal,
   );
+  // 실제 엔진(`limits.mjs:730-757`)과 같은 조건 — **납입 한도(18,000,000) 초과뿐
+  // 아니라 개별·합산 신용 한도 초과, ISA 한도 초과도 이 안내를 낸다.** 예전에는
+  // 납입 한도만 봐서, 연금저축 단독 신용 한도(6,000,000)를 넘겨 이미 납입한
+  // 사람에게 이 경고가 나가지 않았다(4단계 게이트4 재소집, qa-report.md 11.5절).
+  const annuityTotalForOverLimit =
+    accounts.annuity_savings.ytd_contribution_krw + (transferDestination === 'annuity_savings' ? isaTransfer.amount_krw : 0);
+  const pensionTotalForOverLimit =
+    accounts.retirement_pension.ytd_contribution_krw + (transferDestination === 'retirement_pension' ? isaTransfer.amount_krw : 0);
+  const combinedLimitForOverLimit = baseCombinedCreditCap + extraCreditLimit;
+  const combinedRemainingRawForOverLimit =
+    combinedLimitForOverLimit - (Math.min(annuityTotalForOverLimit, annuityCreditCap) + pensionTotalForOverLimit);
+  const pensionContributionUsedForOverLimit =
+    accounts.annuity_savings.ytd_contribution_krw + accounts.retirement_pension.ytd_contribution_krw + retirementTransferTotal;
+  const pensionContributionRemainingRawForOverLimit = pensionContributionCap - pensionContributionUsedForOverLimit;
   const existingOverLimit =
-    accounts.annuity_savings.ytd_contribution_krw + accounts.retirement_pension.ytd_contribution_krw > pensionContributionCap;
+    combinedRemainingRawForOverLimit < 0 ||
+    pensionContributionRemainingRawForOverLimit < 0 ||
+    annuityTotalForOverLimit > annuityCreditCap ||
+    isaClamped;
   if (existingOverLimit) {
     notices.push({ code: 'existing_contribution_over_limit', severity: 'warning', field: null, params: {}, basis_rule_ids: pensionContributionLimitRule ? [pensionContributionLimitRule.id] : [] });
   }
+  // `scenario.limits`에 실리는 표시값 — 위 판정과 같은 재료로 만든다(실제 엔진
+  // `limits.mjs:762-766` `combinedRemaining`/`annuityCounted`). 배분 단계가 쓰는
+  // 풀(`creditPoolRemainingBase` 등)과는 별도 계산이었다가 어긋난 자리였다
+  // (qa-report.md 11.5절 — 넓힌 좌표에서 새로 찾음).
+  const combinedRemainingForDisplay = Math.max(0, combinedRemainingRawForOverLimit);
+  const annuityCountedForDisplay = Math.min(annuityTotalForOverLimit, annuityCreditCap);
 
   // -- 배분안 4종 계산 ------------------------------------------------------ (6.0.0 D32)
   //
@@ -2278,16 +2322,27 @@ function computeScenario(scenario, request, rulesets) {
   // 세액이 순서를 정하지 못하므로 **언제나** 인출이 자유로운 계좌(확정 룰셋에서는
   // 연금저축)부터 채운다 — `pension.withdrawal.midterm_restriction`이 그 근거다.
   //
-  // `annuity_savings_first`·`pension_contribution_before_isa`는 한 계좌를 신용
-  // 한도에서 멈추지 않고 완전히 채운 뒤 다음 계좌로 넘어가는 것이 이름의 의도라
-  // 1차·3차가 사실상 한 단계로 합쳐진다(`fillPensionMerged`). `max_tax_credit`·
-  // `isa_first`만 두 단계가 실제로 갈린다 — 1차에서 두 계좌 모두 신용 한도로
-  // 멈추고 ISA를 채운 뒤, 3차가 남은 예산을 연금저축부터 납입 한도까지 채운다.
+  // **네 안 모두 1차(신용 한도)·3차(남은 납입 한도)가 실제로 갈린다** — 이름이
+  // "먼저·완전히 채운다"를 말해도 신용 한도 앞에서 멈추는 것은 같다. 갈리는
+  // 것은 **순서와 ISA와의 선후**뿐이다(`fillSequenceFor`/`PENSION_EXTRA_
+  // BEFORE_ISA`, 실제 엔진 `plans.mjs`). **예전에는 `annuity_savings_first`·
+  // `pension_contribution_before_isa`가 신용 한도를 아예 보지 않는 별도 함수
+  // (`fillPensionMerged`)를 썼다** — 두 계좌 모두 신용 한도가 이미 소진된
+  // 입력(예: 기납입이 단독 한도를 넘긴 경우)에서 배분액 자체가 실제 엔진과
+  // 달라졌다. 4단계 게이트4 재소집(qa-report.md 11.5절)의 차등 테스트가
+  // `plan_id` 집합·`comparison_note_codes`가 갈리는 것으로 이 자리를 잡았다.
   const PENSION_FLEXIBLE_FIRST = ['annuity_savings', 'retirement_pension'];
   function eligibleFor(account) {
     return account === 'isa' ? isaEligible : pensionEligibility[account].eligible;
   }
-  const annuityCreditCapEffective = annuityCreditCap + (transferDestination === 'annuity_savings' ? extraCreditLimit : 0);
+  // **연금저축 단독 신용 한도(`annuityCreditCap`)는 ISA 전환 추가한도로
+  // 올라가지 않는다** — 추가한도는 합산 한도에만 더해진다(실제 엔진
+  // `limits.mjs:679`의 `annuityLimit`은 어떤 덧셈도 거치지 않는다). 전에는
+  // 목적지가 연금저축이면 이 개별 한도 자체를 올려서, 전환분과 무관한
+  // 배분(다른 계좌·ISA)의 몫까지 연금저축 쪽으로 끌어왔다 — 계약 3.3절이
+  // 말하는 "단독 한도 판정에 먼저 걸린다"는 **분자(이미 채운 몫)가 올라간다는
+  // 뜻이지 분모(한도)가 올라간다는 뜻이 아니다.** 4단계 게이트4 재소집
+  // (qa-report.md 11.5절)의 차등 테스트가 이 자리의 금액 드리프트를 잡았다.
   const combinedCreditCapEffective = baseCombinedCreditCap + extraCreditLimit;
   // **ISA 만기 전환액은 목적지 계좌에 「이미 납입된 것으로」 신용 한도를 채운다**
   // (계약 5.4·5.6절 — `IsaTransferExtraLimit.counted_as_contribution_krw`). 이
@@ -2298,10 +2353,10 @@ function computeScenario(scenario, request, rulesets) {
   // 배분액 자체가 계좌 사이에서 뒤바뀌어 있었다.
   const annuityBaseForPool = accounts.annuity_savings.ytd_contribution_krw + (transferDestination === 'annuity_savings' ? isaTransfer.amount_krw : 0);
   const retirementBaseForPool = accounts.retirement_pension.ytd_contribution_krw + (transferDestination === 'retirement_pension' ? isaTransfer.amount_krw : 0);
-  const annuitySubRemainingBase = Math.max(0, annuityCreditCapEffective - annuityBaseForPool);
+  const annuitySubRemainingBase = Math.max(0, annuityCreditCap - annuityBaseForPool);
   const creditPoolRemainingBase = Math.max(
     0,
-    combinedCreditCapEffective - Math.min(annuityBaseForPool, annuityCreditCapEffective) - retirementBaseForPool,
+    combinedCreditCapEffective - Math.min(annuityBaseForPool, annuityCreditCap) - retirementBaseForPool,
   );
 
   const rawPlans = PLAN_ORDER.map((planId) => {
@@ -2347,18 +2402,6 @@ function computeScenario(scenario, request, rulesets) {
       isaPool -= allocated;
     }
 
-    // 신용 한도를 보지 않고 계좌 하나를 납입 한도까지 채운다 — 이름이 "이
-    // 계좌를 먼저·완전히 채운다"를 뜻하는 두 안(`annuity_savings_first`·
-    // `pension_contribution_before_isa`)에 쓴다.
-    function fillPensionMerged(seq) {
-      for (const account of seq) {
-        const allocated = step(account, pensionPool);
-        pensionPool -= allocated;
-        creditPool -= Math.min(allocated, creditPool);
-        if (account === 'annuity_savings') annuitySub -= Math.min(allocated, annuitySub);
-      }
-    }
-
     // 1차 — 세액공제 대상 한도까지. 확정 룰셋에서는 두 계좌의 한계 공제율이
     // 언제나 같아 인출이 자유로운 계좌가 항상 먼저다(0.4절). 개정안 청년 우대로
     // 공제율이 갈리는 재정렬은 이 목의 근사치가 다루지 않는다.
@@ -2387,14 +2430,18 @@ function computeScenario(scenario, request, rulesets) {
       fillIsa();
       fillPensionStageOne();
       fillPensionStageThree();
-    } else if (planId === 'annuity_savings_first') {
-      fillPensionMerged(['annuity_savings', 'retirement_pension']);
-      fillIsa();
     } else if (planId === 'pension_contribution_before_isa') {
-      fillPensionMerged(PENSION_FLEXIBLE_FIRST);
+      // D32 — 3차(남은 납입 한도, 공제 없음)를 ISA**보다 먼저** 채우는 것만
+      // 다른 세 안과 다르다(그 사실이 이름이다). 1차 순서는 신용 한도가 걸린
+      // 두 계좌 사이라 다른 안과 같다(확정 룰셋에서는 언제나 인출 자유 우선).
+      fillPensionStageOne();
+      fillPensionStageThree();
       fillIsa();
     } else {
-      // max_tax_credit
+      // max_tax_credit · annuity_savings_first — 확정 룰셋에서는 두 계좌의
+      // 한계 공제율이 언제나 같아(0.4절), 이름이 다른 두 안도 **1차 순서가
+      // 같다**(인출 자유 우선). 남는 차이는 없다 — 실제 엔진도 이 조건에서는
+      // 두 안이 같은 벡터로 수렴한다(`plans.mjs`의 `fillSequenceFor` 동점 대체).
       fillPensionStageOne();
       fillIsa();
       fillPensionStageThree();
@@ -2433,10 +2480,11 @@ function computeScenario(scenario, request, rulesets) {
     if (transferDestination === 'annuity_savings') annuityBase += isaTransfer.amount_krw;
     if (transferDestination === 'retirement_pension') retirementBase += isaTransfer.amount_krw;
 
-    const annuityCreditCapEffective = annuityCreditCap + (transferDestination === 'annuity_savings' ? extraCreditLimit : 0);
+    // 연금저축 단독 한도는 전환 추가한도로 오르지 않는다 — 위 `annuitySubRemainingBase`
+    // 자리의 같은 수정(qa-report.md 11.5절).
     const combinedCreditCapEffective = baseCombinedCreditCap + extraCreditLimit;
 
-    const annuityCreditEligible = Math.min(annuityBase, annuityCreditCapEffective);
+    const annuityCreditEligible = Math.min(annuityBase, annuityCreditCap);
     const combinedCreditEligible = Math.min(annuityCreditEligible + retirementBase, combinedCreditCapEffective);
     return Math.max(0, combinedCreditEligible);
   }
@@ -2792,9 +2840,10 @@ function computeScenario(scenario, request, rulesets) {
           // 이미 한도를 넘는 것은 `existing_contribution_over_limit`이 따로 말한다).
           const annuityBaseForFacts = accounts.annuity_savings.ytd_contribution_krw + p.allocByAccount.annuity_savings + (transferDestination === 'annuity_savings' ? isaTransfer.amount_krw : 0);
           const retirementBaseForFacts = accounts.retirement_pension.ytd_contribution_krw + p.allocByAccount.retirement_pension + (transferDestination === 'retirement_pension' ? isaTransfer.amount_krw : 0);
-          const annuityCreditCapEffectiveForFacts = annuityCreditCap + (transferDestination === 'annuity_savings' ? extraCreditLimit : 0);
+          // 연금저축 단독 한도는 전환 추가한도로 오르지 않는다(위 `annuitySubRemainingBase`
+          // 자리와 같은 수정, qa-report.md 11.5절).
           const combinedCreditCapEffectiveForFacts = baseCombinedCreditCap + extraCreditLimit;
-          const annuityCreditEligibleForFacts = Math.min(annuityBaseForFacts, annuityCreditCapEffectiveForFacts);
+          const annuityCreditEligibleForFacts = Math.min(annuityBaseForFacts, annuityCreditCap);
           const retirementCreditEligibleForFacts = Math.max(
             0,
             Math.min(annuityCreditEligibleForFacts + retirementBaseForFacts, combinedCreditCapEffectiveForFacts) - annuityCreditEligibleForFacts,
@@ -2967,26 +3016,30 @@ function computeScenario(scenario, request, rulesets) {
   }
 
   // -- 기본안 선정 (fund_use_horizon이 정한다) ------------------------------
-  function warningCount(plan) {
-    return plan.warnings.filter((w) => w.severity === 'warning').length;
-  }
   // `pension_contribution_before_isa`는 기본안 후보에서 뺀다(계약 5.5·10절 —
   // "언제나 `is_baseline: false`이고 화면도 그 판단을 대신하지 않는다"). 세법이
   // 유불리를 정하지 않는 안을 엔진이 기본으로 고르면 그것이 곧 자문이다(D26·D32).
   const baselineCandidates = collapsed
     .map((plan, index) => ({ plan, index }))
     .filter(({ plan }) => plan.plan_id !== 'pension_contribution_before_isa');
-  let baselineIndex = baselineCandidates[0]?.index ?? 0;
-  if (profile.fund_use_horizon === 'within_isa_lock_in' || profile.fund_use_horizon === 'before_pension_age') {
-    let best = baselineCandidates[0];
-    for (const candidate of baselineCandidates) {
-      if (warningCount(candidate.plan) < warningCount(best.plan)) best = candidate;
-    }
-    baselineIndex = best.index;
-  } else {
-    const mtc = baselineCandidates.find(({ plan }) => plan.plan_id === 'max_tax_credit');
-    baselineIndex = mtc ? mtc.index : baselineCandidates[0].index;
-  }
+  // 실제 엔진(`constants.mjs` `BASELINE_BY_HORIZON`)은 자금 사용 시점마다 **고정된
+  // 기본안 id**를 가리키는 표다 — "경고가 가장 적은 안을 고른다" 같은 동적 계산이
+  // 아니다. `within_isa_lock_in`은 특히 **의도적으로 재정렬하지 않는다** — "세
+  // 계좌 모두 불이익이 걸려 어느 안도 피하지 못한다. 순서로 푼 척하지 않는다"는
+  // 것이 그 뜻이라, 항상 `max_tax_credit`으로 고정한다. 예전에는 이 목이 두
+  // horizon(`within_isa_lock_in`·`before_pension_age`) 모두에서 "경고 최소" 안을
+  // 동적으로 골라, `within_isa_lock_in`에서 기본안이 실제 엔진과 달라지고
+  // `is_baseline`·`baseline_reordered_by_fund_use_horizon`·`delta_vs_baseline_krw`가
+  // 함께 갈렸다(4단계 게이트4 재소집, qa-report.md 11.5절 — 넓힌 좌표에서 새로 찾음).
+  const BASELINE_BY_HORIZON = {
+    at_or_after_pension_age: 'max_tax_credit',
+    unknown: 'max_tax_credit',
+    before_pension_age: 'isa_first',
+    within_isa_lock_in: 'max_tax_credit',
+  };
+  const baselinePlanId = BASELINE_BY_HORIZON[profile.fund_use_horizon] ?? 'max_tax_credit';
+  const baselineCandidate = baselineCandidates.find(({ plan }) => plan.plan_id === baselinePlanId);
+  const baselineIndex = baselineCandidate ? baselineCandidate.index : (baselineCandidates[0]?.index ?? 0);
 
   const baseline = collapsed[baselineIndex];
   // 반드시 forEach 루프 전에 값을 붙잡아 둔다 — baseline도 orderedPlans의 한
@@ -2999,7 +3052,15 @@ function computeScenario(scenario, request, rulesets) {
   const orderedPlans = [baseline, ...rest];
   orderedPlans.forEach((p, i) => {
     p.is_baseline = i === 0;
-    p.delta_vs_baseline_krw = i === 0 ? 0 : Math.min(0, p._totalCredit - baselineCreditKrw);
+    // **음수로 눌러 담지 않는다.** 기본안이 세액공제 최대안이 아닐 수 있다
+    // (자금 사용 시점이 기본안을 재정렬하는 경우, 계약 5.6·8.5절) — 그때는
+    // 대안의 절세액이 기본안보다 **클** 수 있고 그것이 사실이다. 실제 엔진
+    // (`plans.mjs:816` `delta_vs_baseline_krw = credit - baselineCredit`)은
+    // 절대 0으로 눌러 담지 않는다. 예전에는 `Math.min(0, …)`으로 양수를
+    // 지웠다 — 진짜로 더 유리한 대안을 "동률"로 잘못 말하는 자리였다
+    // (`alternatives_have_equal_tax_credit`가 잘못 뜬다, 4단계 게이트4
+    // 재소집, qa-report.md 11.5절 — 넓힌 좌표에서 새로 찾음).
+    p.delta_vs_baseline_krw = i === 0 ? 0 : p._totalCredit - baselineCreditKrw;
     delete p._allocationVector;
     delete p._totalCredit;
   });
@@ -3097,6 +3158,14 @@ function computeScenario(scenario, request, rulesets) {
   if (budget === 0) notices.push({ code: 'zero_capacity', severity: 'info', field: 'profile.monthly_capacity_krw', params: {}, basis_rule_ids: [] });
   const totalRemainingLimits = sharedPensionPoolBase + isaAnnualRoom;
   if (budget > totalRemainingLimits) notices.push({ code: 'budget_exceeds_all_limits', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
+  // 실제 엔진(`compute.mjs:332-334`)은 배분안이 벡터 중복으로 하나로 겹치면
+  // 이 안내를 **시나리오 최상위 notices에도** 낸다 — `comparison_note_codes`의
+  // 같은 이름 코드(3033행)와 별개의 자리다(계약이 둘 다 요구한다). 여력 0처럼
+  // 네 안이 전부 같은(모두 0인) 벡터로 겹칠 때 실제로 도달한다. 4단계 게이트4
+  // 재소집(qa-report.md 11.5절)의 차등 테스트가 이 누락을 잡았다.
+  if (collapsed.length === 1) {
+    notices.push({ code: 'plans_collapsed_single', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
+  }
   notices.push({ code: 'pension_holding_period_not_evaluated', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
   // 실제 엔진(`limits.mjs:142-158`)은 이 두 안내를 **개정안 시나리오에서만** 낸다 —
   // 청년 우대가 개정안에만 있는 조항이기 때문이다. 확정 시나리오에서 항상
@@ -3245,34 +3314,42 @@ function computeScenario(scenario, request, rulesets) {
             credit_eligible_limit_remaining_krw: null,
             credit_limit_shared_with: [],
             tax_free_limit_krw: taxFreeLimit,
-            clamped_to_zero: accounts.isa.cumulative_contribution_krw > effectiveTotalLimit,
+            // 실제 엔진(`limits.mjs:888`)과 같은 판정 — 절사 **전** 값이 음수였는가다.
+            // `cumulative > effectiveTotalLimit`만 보면 연 한도(`annualRemainingRaw`)
+            // 초과는 못 잡는다(qa-report.md 11.5절 — 넓힌 좌표에서 새로 찾음).
+            clamped_to_zero: isaClamped,
             basis_rule_ids: [isaRequirementsRule?.id].filter(Boolean),
           };
         }
-        const ytd = accounts[account].ytd_contribution_krw;
-        const cap = account === 'annuity_savings' ? annuityCreditCap : baseCombinedCreditCap + extraCreditLimit;
-        // **계좌별 한도를 더하면 안 된다** — 연금저축과 퇴직연금은 같은 풀을 본다.
-        // 합계가 필요하면 아래 `pension_*` 필드를 쓴다(계약 5.3절).
+        // 실제 엔진(`limits.mjs:762-793`)과 같은 값 — 계좌별로 각자의 ytd만 빼는
+        // 게 아니라 **두 계좌가 같은 신용 풀을 공유하는 상태**를 반영한다. 전에는
+        // 이 표시값이 배분 단계가 이미 고친 풀(`creditPoolRemainingBase` 등)과
+        // 따로 놀아, ISA 전환·기납입이 걸린 입력에서 실제 엔진과 어긋났다
+        // (qa-report.md 11.5절 — 넓힌 좌표에서 새로 찾음).
         const other = PENSION_ACCOUNTS.filter((a) => a !== account);
+        const creditEligibleRemaining =
+          account === 'retirement_pension'
+            ? combinedRemainingForDisplay
+            : Math.max(0, Math.min(annuityCreditCap - annuityCountedForDisplay, combinedRemainingForDisplay));
+        const clampedToZero =
+          pensionContributionRemainingRawForOverLimit < 0 ||
+          (account === 'retirement_pension' ? combinedRemainingRawForOverLimit < 0 : annuityTotalForOverLimit > annuityCreditCap);
         return {
           account,
           contribution_limit_remaining_krw: sharedPensionPoolBase,
           contribution_limit_shared_with: other,
-          credit_eligible_limit_remaining_krw: Math.max(0, cap - ytd),
+          credit_eligible_limit_remaining_krw: creditEligibleRemaining,
           credit_limit_shared_with: other,
           tax_free_limit_krw: null,
-          clamped_to_zero: ytd > pensionContributionCap,
-          basis_rule_ids: [pensionContributionLimitRule?.id].filter(Boolean),
+          clamped_to_zero: clampedToZero,
+          basis_rule_ids:
+            account === 'annuity_savings'
+              ? [annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, pensionContributionLimitRule?.id].filter(Boolean).sort()
+              : [combinedCreditLimitRule?.id, pensionContributionLimitRule?.id].filter(Boolean).sort(),
         };
       }),
-      pension_combined_credit_limit_krw: baseCombinedCreditCap + extraCreditLimit,
-      pension_combined_credit_remaining_krw: Math.max(
-        0,
-        baseCombinedCreditCap +
-          extraCreditLimit -
-          Math.min(accounts.annuity_savings.ytd_contribution_krw, annuityCreditCap) -
-          accounts.retirement_pension.ytd_contribution_krw,
-      ),
+      pension_combined_credit_limit_krw: combinedLimitForOverLimit,
+      pension_combined_credit_remaining_krw: combinedRemainingForDisplay,
       pension_contribution_limit_remaining_krw: sharedPensionPoolBase,
       // **세액공제 대상이 아니다.** 분리해 받은 값을 분리한 채로 되돌려 준다 —
       // 화면이 이 금액을 절세액과 같은 축에 놓지 않게 하기 위해서다(계약 5.3절).
