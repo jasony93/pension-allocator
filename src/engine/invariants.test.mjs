@@ -731,6 +731,44 @@ function checkScenario(scenario, response, request, at) {
     );
   }
 
+  // I30 — **과세표준은 조문이 지목한 단계에서 한 번만 버려진다** (D46 1번).
+  //
+  // 「국고금 관리법」 §47②가 끝수를 없애라고 지목한 것은 **과세표준액**이고, 그 앞의
+  // 근로소득공제액·근로소득금액은 지목하지 않았다. 지목되지 않은 자리에서 버리면 조문에
+  // 없는 절사 지점이 생기고, 그 끝수가 위로 밀려 **과세표준이 조문보다 1원 커진다** —
+  // 20차 검증이 항등식으로 보인 결함이 이것이다.
+  //
+  // 두 관계로 값에 세운다.
+  //   (가) 과세표준 = 그 앞 단계의 금액 − 종합소득공제. **버림이 여기 한 번뿐이면**
+  //        기본공제가 정수이므로 이 뺄셈이 정확히 맞아떨어진다.
+  //   (나) 「공제를 먼저 버리고 뺀」 값과의 차이는 **0 또는 1**이다. 그보다 크면 어딘가에서
+  //        한 번 더 버렸거나 더 굵은 단위로 버린 것이다.
+  //
+  // **(나)만으로는 20차의 결함을 잡지 못한다** — 옛 엔진은 언제나 0을 냈다. 차이가 실제로
+  // 1이 되는 좌표는 `rounding.test.mjs`가 값으로 못 박는다. 여기서 막는 것은 **그보다 나쁜
+  // 것**(절사가 둘 이상이거나 단위가 1원이 아닌 것)이다.
+  const taxBaseSource =
+    cap.branch_code === 'global_income_amount_supplied'
+      ? cap.measured_global_income_krw
+      : cap.wage_income_amount_krw;
+  assert.equal(Number.isInteger(cap.tax_base_krw), true, `${at} I30: 과세표준이 정수가 아니다`);
+  if (taxBaseSource > cap.basic_deduction_krw) {
+    assert.equal(
+      cap.tax_base_krw,
+      taxBaseSource - cap.basic_deduction_krw,
+      `${at} I30: 과세표준이 (앞 단계 금액 − 종합소득공제)와 다르다 — 절사가 한 번이 아니다`,
+    );
+    if (cap.branch_code !== 'global_income_amount_supplied') {
+      const flooredFirst =
+        cap.measured_total_salary_krw - cap.wage_income_deduction_krw - cap.basic_deduction_krw;
+      const gap = flooredFirst - cap.tax_base_krw;
+      assert.ok(
+        gap === 0 || gap === 1,
+        `${at} I30: 「공제를 먼저 버린」 과세표준과의 차이가 ${gap}원이다 — 0이나 1이어야 한다`,
+      );
+    }
+  }
+
   // I23 — 자르기 전 금액과 자른 뒤 금액, 그리고 그 차이가 서로 어긋나지 않는다.
   // 화면이 "계산된 공제액 중 얼마가 이번 과세연도에 들어 있지 않은지"를 이 셋으로 말한다.
   for (const plan of plans) {
@@ -756,11 +794,27 @@ function checkScenario(scenario, response, request, at) {
       b.pension_credit_income_tax_before_cap_krw,
       `${at} I23: 임계값이 자르기 전 소득세분과 다르다`,
     );
-    assert.equal(
-      c.applied,
-      c.reduced_income_tax_krw > 0,
-      `${at} I23: 잘림 표시가 실제 잘린 금액과 어긋난다`,
+    // **잘림 표시와 잘린 금액의 관계는 한쪽 방향이다** (D46 1번 이후).
+    //
+    // `applied`는 **정확값의 대소**가 정한다 — 룰셋 `tax.rounding.won_fraction`의
+    // `comparison` 단계가 「비교 전에 양쪽을 절사하지 않는다」고 정했고, 절사하고 비교하면
+    // 1원 미만의 차이가 사라져 판정이 뒤집힌다. 반면 **표시되는 잘린 금액은 표시 금액의
+    // 뺄셈**이다. 그래서 **잘린 양이 1원에 못 미치면 `applied`가 참인데 잘린 금액이 0**일
+    // 수 있다(총급여 24,795,208 · 예산 2,666,667원이 그런 좌표다 — `tax-liability-cap.test.mjs`).
+    //
+    // 그 한 방향은 여전히 무조건 참이고, 그것이 화면을 지킨다 — **한 원이라도 줄었으면
+    // 반드시 잘린 것이다.** 반대로 자르지 않았으면 줄어든 금액이 없다.
+    assert.ok(
+      c.reduced_income_tax_krw >= 0,
+      `${at} I23: 잘린 금액이 음수다 — 인정액이 자르기 전보다 크다`,
     );
+    if (c.reduced_income_tax_krw > 0) {
+      assert.equal(c.applied, true, `${at} I23: 금액이 줄었는데 잘림 표시가 없다`);
+    }
+    if (!c.applied) {
+      assert.equal(c.reduced_income_tax_krw, 0, `${at} I23: 자르지 않았는데 금액이 줄었다`);
+      assert.equal(c.reduced_total_krw, 0, `${at} I23: 자르지 않았는데 합계가 줄었다`);
+    }
     // **자름과 「걸림의 증명」은 대칭이 아니다**(D40). 상한인 분기에서 잘렸을 때만
     // 실제 한도의 자름이 증명된다. 이 등식이 무너지면 화면이 「걸리지 않았습니다」를
     // 적을 근거를 갖게 되고, 그 문장은 이 경로에서 참이 아니다.

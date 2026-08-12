@@ -271,7 +271,11 @@ export function resolveTaxLiabilityCap(access, { profile }) {
   const capKrw = display(capExact);
   const wageDeductionKrw = display(wageDeduction);
   const wageIncomeKrw = display(wageIncome);
-  const taxBaseKrw = exactToInteger(taxBase);
+  // **§47②가 이미 정수로 만든 값이지만 표시 단계를 한 번 더 지난다.** 응답에 실리는
+  // 정수는 전부 같은 문을 통과한다는 규약이고, 조문 단계가 정수를 내는 한 이 통과는
+  // 값을 바꾸지 않는다. 룰셋이 §47②의 연산을 거두면(가정) 그때는 표시 규약이 그 자리를
+  // 대신하고, **그 사실이 `tax_base_krw`와 `cap_krw`에 함께 나타난다.**
+  const taxBaseKrw = display(taxBase);
   const computedTaxKrw = display(computedTax);
   const wageCreditKrw = display(wageCredit);
   if (

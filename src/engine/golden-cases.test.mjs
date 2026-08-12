@@ -418,6 +418,15 @@ const UNASSERTED_UNCERTAINTY_RULES = [
   'pension.withdrawal.eligibility',
   'pension.withdrawal.non_deducted_principal',
   'proposed.pension.credit.youth_irp_rate',
+  // **이번 회차에 근거 목록에 처음 실렸다**(D46 1번). 원 미만 끝수를 어느 단계에서
+  // 없애는지를 정한 규칙이고, 남아 있는 표시는 셋이다 — 계산 중간값의 끝수를 정한
+  // 조문·예규를 찾지 못했다는 것, 개인지방소득세에 국고금 관리법 §47이 준용되는지를
+  // 확인하지 못했다는 것(§47③이 「준용할 수 있다」는 임의규정이다), 그리고 §47① 단서의
+  // 시행령 원문을 1차 출처로 열지 못했다는 것이다. **앞의 둘이 이 규칙에서
+  // `determined_by_law: false`인 단계들의 존재 이유 그 자체다.**
+  // **건수의 저자는 `tax-domain`이다** — 이 유닛이 골든 블록에 수를 적으면 정답지가
+  // 엔진에서 나온 값을 되받게 된다.
+  'tax.rounding.won_fraction',
 ];
 
 test('미확인 표시를 가진 규칙은 정답지가 그 축을 주장하거나 빚 목록에 있다', () => {

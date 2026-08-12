@@ -501,9 +501,15 @@ test('주입 / 한도를 상한이 아니라 하한으로 취급하면(min → m
     // 참조 오류로 끝나면 아무것도 재지 못하므로, 이미 있는 이름으로 같은 뜻을 적는다.
     to: 'const recognizedIncomeTaxExact = cmpExact(incomeTaxExact, capExact) >= 0 ? incomeTaxExact : capExact;',
   });
-  // (1) 자르던 좌표에서 자름이 사라진다. 한도가 낮은 사람에게 낼 수 없는 공제를 준다.
+  // (1) 자르던 좌표에서 **표시 금액이 자름을 잃는다.** 자름 표시(`applied`) 자체는
+  //     정확값의 대소가 정하므로 이 주입으로 뒤집히지 않고(D46 1번 이후), 그래서 결과는
+  //     **「잘렸다고 적으면서 한 원도 잘리지 않은」 상태**가 된다 — 불변식 I23이 무는 자리다.
   const bound = capOfPlan(flipped(CAP_BINDING_REQUEST, rulesets));
-  assert.equal(bound.applied, false, '주입이 자름을 없애지 못했다 — 이 좌표가 겨눈 자리가 아니다');
+  assert.notEqual(
+    bound.applied,
+    bound.reduced_income_tax_krw > 0,
+    '주입이 자름 표시와 잘린 금액을 어긋나게 하지 못했다 — I23이 물 자리가 없다',
+  );
 
   // (2) 한도가 넉넉한 좌표에서는 인정 공제액이 **자르기 전 금액을 넘는다.** 조문이
   //     "없는 것으로 한다"고 한 금액을 넘어서는 값이 결과에 남는 것이고, 불변식 I22가
@@ -557,6 +563,75 @@ test('주입 / 근로소득세액공제 차감을 빼면 한도가 검산 좌표
     scenario.pension_credit_tax_liability_cap.cap_krw > CAP_COORDINATES.BINDS.cap_krw,
     '공제를 덜 빼면 한도는 올라간다 — 방향이 반대로 나왔다면 산식이 뒤집힌 것이다',
   );
+});
+
+// ── 주입 4-B. 원 미만 끝수 — 단계의 순서와 자리 (D46 1번) ────────────────────
+//
+// **룰셋 변형으로는 이 둘을 잡지 못한다.** 룰셋이 정하는 것은 「어느 단계에서 얼마 단위로
+// 버리는가」까지이고, **엔진이 그 단계에 어느 값을 들고 서는가는 코드 한 줄**이다. 그 한 줄이
+// 되돌아가면 과세표준이 조문보다 1원 커지고 `applied`가 뒤집힌다 — 검증 20절이 찾은 결함이
+// 정확히 이 형태였고, 금액으로는 1원이라 눈으로는 지나친다.
+
+/** §47②가 물어 자름이 일어나는 좌표. 1원이 boolean을 가르는 자리다. */
+const ONE_WON_REQUEST = baseRequest({
+  profile: {
+    birth_date: '1986-06-15',
+    current_year_total_salary_krw: CAP_COORDINATES.BINDS_BY_ONE_WON.total_salary_krw,
+    monthly_capacity_krw: 750_000,
+    months_remaining_in_tax_year: 12,
+  },
+});
+
+test('주입 / 근로소득공제를 먼저 버리고 빼면 과세표준이 1원 커지고 자름이 사라진다', async () => {
+  const before = capOfPlan(compute(ONE_WON_REQUEST, rulesets));
+  assert.equal(before.applied, true, '이 좌표에서 자르지 않으면 주입이 아무것도 보지 못한다');
+  assert.equal(before.cap_krw, CAP_COORDINATES.BINDS_BY_ONE_WON.cap_krw);
+
+  // **조문이 지목하지 않은 자리에 절사를 하나 더 만든다.** 표시 규약을 중간값에 걸면
+  // 되고, 그것이 20차 이전 엔진이 하던 일이다.
+  const flooredFirst = await mutatedCompute({
+    file: 'liability-cap.mjs',
+    from: 'const wageIncome = subExact(exactOf(totalSalary), wageDeduction);',
+    to: 'const wageIncome = subExact(exactOf(totalSalary), rounding.convention(ROUNDING_STAGE.DISPLAYED, wageDeduction));',
+  });
+
+  const scenario = flooredFirst(ONE_WON_REQUEST, rulesets).scenarios[0];
+  const cap = scenario.pension_credit_tax_liability_cap;
+  // 과세표준이 정확히 1원 크다 — 20.3절의 항등식 그대로다.
+  assert.equal(cap.tax_base_krw, 22_272_325);
+  assert.equal(cap.cap_krw, 1_350_000);
+  // **그리고 boolean이 뒤집힌다.** 화면은 D37의 문장을 잃는다.
+  assert.equal(
+    capOfPlan(flooredFirst(ONE_WON_REQUEST, rulesets)).applied,
+    false,
+    '주입이 자름을 없애지 못했다 — 이 좌표가 그 단계를 재지 않고 있다',
+  );
+});
+
+test('주입 / 조문이 정한 자리에서 우리 규약의 손잡이를 쓰면 값을 내지 않고 멈춘다', async () => {
+  // `determined_by_law`가 `true`인 단계를 `convention()`으로 부르는 것 —
+  // **조문 자리와 우리 자리를 뒤섞는 주입**이다. 값을 지어내면 안 되는 자리다.
+  const mixed = await mutatedCompute({
+    file: 'liability-cap.mjs',
+    from: '  const taxBase = rounding.statutory(',
+    to: '  const taxBase = rounding.convention(',
+  });
+
+  const response = mixed(ONE_WON_REQUEST, rulesets);
+  assert.equal(response.ok, false, '두 자리를 섞었는데 계산이 끝났다 — 구분이 값에 매여 있지 않다');
+  assert.ok(response.errors.some((e) => e.code === 'rule_missing'));
+});
+
+test('주입 / 표시 자리에서 조문 단계를 부르면 멈춘다 — 반대 방향도 같다', async () => {
+  const mixed = await mutatedCompute({
+    file: 'liability-cap.mjs',
+    from: 'const display = (exact) => exactToInteger(rounding.convention(ROUNDING_STAGE.DISPLAYED, exact));',
+    to: 'const display = (exact) => exactToInteger(rounding.convention(ROUNDING_STAGE.TAX_BASE, exact));',
+  });
+
+  const response = mixed(ONE_WON_REQUEST, rulesets);
+  assert.equal(response.ok, false, '표시 금액을 조문 단계로 만들었는데 계산이 끝났다');
+  assert.ok(response.errors.some((e) => e.code === 'rule_missing'));
 });
 
 // ── 주입 5. 미정을 배제로 옮긴다 (D44) ───────────────────────────────────────

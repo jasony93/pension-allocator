@@ -366,6 +366,44 @@ test('임계값이 실제 경계다 — 한도가 그 아래로 내려가면 결
   assert.equal(cut.reduced_income_tax_krw, cut.threshold_income_tax_krw - cut.cap_krw);
 });
 
+test('1원에 못 미치게 잘리면 잘림 표시는 참이고 잘린 금액은 0이다 — 두 값이 다른 자를 쓴다', () => {
+  // **손으로 세운 좌표다.** 총급여 24,795,208원이면 과세표준이 14,325,926(§47② 적용)이고
+  // 한도의 정확값이 **400,000.005**다. 예산 2,666,667원의 공제액은 **400,000.05**이므로
+  // 한도가 0.045원만큼 자른다 — 두 값의 표시 금액은 둘 다 400,000이다.
+  //
+  // **어느 쪽도 결함이 아니다.** `applied`는 룰셋 `tax.rounding.won_fraction`의 `comparison`
+  // 단계가 정한 대로 **정확값**으로 판정하고(절사하고 비교하면 1원 미만의 차이가 사라져
+  // 판정이 뒤집힌다 — D46 1번이 고친 결함이 그 형태다), 표시되는 잘린 금액은 화면에
+  // 나란히 놓이는 세 수가 서로 맞도록 **표시 금액끼리** 뺀다.
+  //
+  // **그래서 화면은 「잘렸다」를 `applied`로 쓰면 안 되고 금액이 실제로 줄었는지를 함께
+  // 봐야 한다.** 이 좌표가 그 사실을 값으로 고정한다.
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: {
+          birth_date: '1986-06-15',
+          current_year_total_salary_krw: 24_795_208,
+          monthly_capacity_krw: 2_666_667,
+          months_remaining_in_tax_year: 1,
+        },
+      }),
+      rulesets,
+    ),
+  );
+  const benefit = planOf(scenario, 'max_tax_credit').deterministic_benefit;
+  const cap = benefit.tax_liability_cap;
+
+  assert.equal(scenario.pension_credit_tax_liability_cap.tax_base_krw, 14_325_926);
+  assert.equal(cap.cap_krw, 400_000);
+  assert.equal(benefit.pension_credit_income_tax_before_cap_krw, 400_000);
+  assert.equal(benefit.pension_credit_income_tax_krw, 400_000);
+  assert.equal(cap.applied, true);
+  assert.equal(cap.reduced_income_tax_krw, 0);
+  // 자름이 증명되는 분기이므로 표시가 있는 쪽 코드가 나간다.
+  assert.equal(cap.binding_code, 'binds_provably');
+});
+
 // ── 한도가 0일 때 ────────────────────────────────────────────────
 
 test('한도가 0이면 공제액은 0이지만 연금계좌 배분을 0으로 만들지 않는다', () => {
@@ -757,5 +795,12 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   // **응답의 금액이 실제로 움직이기** 때문이고, 그것이 `6.0.0`을 major로 만든 것과 같은
   // 근거다. `AccountEligibility`에 필드 둘이 늘고 `reason_codes`에 값이 하나 늘며
   // 시나리오에 `pension_credit_taxpayer_eligibility`가 붙는다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '10');
+  //
+  // **11로 올린 것은 1원이 boolean을 뒤집기 때문이다**(계약 0.19절, D46 1번). 엔진이
+  // 단계마다 원 미만을 버려 **과세표준이 조문(국고금 관리법 §47②)보다 항상 정확히 1원
+  // 컸다.** 금액 차이는 1원인데 세액공제 상한이 정확히 900만 × 15%라, 한도가 그 절단선의
+  // 1원 안에 놓인 사용자에게 `tax_liability_cap.applied`가 뒤집힌다 — **그 하나가 화면
+  // 문구를 통째로 바꾼다.** 같은 요청이 다른 금액을 내고 기존 필드의 뜻이 바뀌므로
+  // 규약의 두 범주에 동시에 걸린다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '11');
 });
