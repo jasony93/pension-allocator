@@ -91,7 +91,7 @@ import {
 } from '../copy.js';
 import { formatKrw, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
-import { taxCreditHeadlineView, anyPlanCapApplied, HEADLINE_MODE } from '../tax-credit-view.js';
+import { taxCreditHeadlineView, anyPlanCapApplied, showsCapBelowCeilingNote, HEADLINE_MODE } from '../tax-credit-view.js';
 import {
   donutChart,
   donutLegend,
@@ -810,12 +810,17 @@ function confirmedAxisSection(scenario, plan, p) {
   const isZeroCredit = isReduced && view.totalKrw === 0;
   const zeroNote = isZeroCredit ? ACCOUNT_BENEFIT_ZERO_DIFFERENCE_NOTE : null;
   const reducedNote = isReduced && !isZeroCredit ? ACCOUNT_BENEFIT_REDUCED_NOTE : null;
-  // D37 2번, D40으로 게이트 갱신 — 짧은 막대의 이유. 「덜 넣어서」가 아니라
-  // 「낼 세금이 적어서」다. **화면이 판단하지 않는다** — `binding_code`를
-  // 그대로 읽는다. `binds_provably`가 아니면(자르지 않았거나 방향이 미정이면)
-  // 이 문장을 쓰지 않는다 — 자르지 않았다는 사실은 아무것도 증명하지 못한다(D40).
-  const bindingCode = plan?.deterministic_benefit?.tax_liability_cap?.binding_code ?? null;
-  const capBelowNote = bindingCode === 'binds_provably' ? ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE : null;
+  // D37 2번, D40으로 게이트 갱신, D46 1번·D49로 다시 갱신 — 짧은 막대의 이유.
+  // 「덜 넣어서」가 아니라 「낼 세금이 적어서」다. **화면이 판단하지 않는다** —
+  // 게이트 판정은 `tax-credit-view.js`의 `showsCapBelowCeilingNote`가 진다
+  // (`binding_code === 'binds_provably'` 그리고 `reduced_total_krw > 0`, 계약
+  // 5.5절). `binds_provably`가 아니면(자르지 않았거나 방향이 미정이면) 이
+  // 문장을 쓰지 않는다(D40) — **11.0.0부터는 그것만으로도 부족하다**(D46 1번·
+  // D49): 잘린 양이 1원에 못 미치면 `applied: true`(그래서 `binds_provably`)
+  // 인데 표시 금액은 한 원도 줄지 않는 좌표가 실재하고, 이 문장은 눈에 보이는
+  // 짧음에 대한 진술이라 아무것도 짧아지지 않았는데 왜 짧은지 설명하면 사용자가
+  // 없는 것을 찾는다.
+  const capBelowNote = showsCapBelowCeilingNote(plan) ? ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE : null;
 
   // 확정(solid) 등급 — 트랙 = 축의 끝(`ceiling.ceiling_krw`), 채움 = 실제
   // 세액공제액(한도 적용 후). `is_axis_degenerate`(축의 끝이 0)면 나눗셈이

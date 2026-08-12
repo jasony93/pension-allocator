@@ -32,6 +32,24 @@ export const HEADLINE_MODE = {
 };
 
 /**
+ * D37 2번의 문장(「이 막대가 짧은 것은…」)을 이 안에서 보여줄 수 있는가.
+ *
+ * **계약 11.0.0부터 `binding_code`만으로는 부족하다**(D46 1번·D49). `applied`가
+ * 이제 원 미만을 버리기 전의 정확값끼리 판정하므로, 잘린 양이 1원에 못 미치면
+ * `applied: true`(그래서 `binding_code`도 `binds_provably`)인데 표시 금액은
+ * 한 원도 줄지 않는 좌표가 실재한다(총급여 24,795,208원·예산 2,666,667원). 이
+ * 문장은 **눈에 보이는 짧음에 대한 진술**이므로, `binding_code === 'binds_provably'`
+ * **그리고** `reduced_total_krw > 0`(실제로 줄어든 표시 금액이 있는가)일 때만
+ * 참이다(계약 5.5절). 아무것도 짧아지지 않았는데 왜 짧은지 설명하면 사용자가
+ * 없는 것을 찾는다. **화면이 판단하지 않는다** — 두 칸을 그대로 읽을 뿐이다.
+ */
+export function showsCapBelowCeilingNote(plan) {
+  const cap = plan?.deterministic_benefit?.tax_liability_cap ?? null;
+  if (!cap) return false;
+  return cap.binding_code === 'binds_provably' && (cap.reduced_total_krw ?? 0) > 0;
+}
+
+/**
  * @param {object} plan 계약 5.5절 `Plan`
  * @returns {{mode: string, totalKrw: number, beforeCapKrw: number|null,
  *            reducedTotalKrw: number|null, thresholdIncomeTaxKrw: number|null,

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { taxCreditHeadlineView, anyPlanCapApplied, HEADLINE_MODE } from './tax-credit-view.js';
+import { taxCreditHeadlineView, anyPlanCapApplied, showsCapBelowCeilingNote, HEADLINE_MODE } from './tax-credit-view.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -127,6 +127,70 @@ test('the scenario-level helper reads every plan, because the cut can differ per
   const scenario = { plans: [plan(), plan({ cap: { applied: true } })] };
   assert.equal(anyPlanCapApplied(scenario), true);
   assert.equal(anyPlanCapApplied({ plans: [plan(), plan()] }), false);
+});
+
+// ---------------------------------------------------------------------------
+// D46 1번·D49 — `applied: true`인데 표시 금액이 한 원도 줄지 않는 좌표를
+// 값으로 못 박는다. 관리자가 조문으로 검산한 실제 좌표다(총급여 24,795,208원·
+// 예산 2,666,667원, 과세표준 14,325,926, 한도의 정확값 400,000.005, 예산의
+// 공제액 400,000.05 — `tax-liability-cap.test.mjs`). 표시 금액은 둘 다
+// 400,000으로 같아 `reduced_total_krw`가 0인데 `applied`는 참이고
+// `binding_code`는 `binds_provably`다.
+// ---------------------------------------------------------------------------
+
+test('D49 좌표 — applied: true·binds_provably인데 잘린 표시 금액이 0이면 「짧다」 문장을 보이지 않는다', () => {
+  const underOneWon = plan({
+    total: 400000,
+    beforeCap: 400000,
+    cap: { cap_krw: 400000, applied: true, reduced_total_krw: 0, binding_code: 'binds_provably' },
+  });
+  // `applied`가 여전히 참이라는 사실 자체는 지워지지 않는다 — 다만 그 사실이
+  // 「짧다」는 문장의 근거는 아니다.
+  assert.equal(underOneWon.deterministic_benefit.tax_liability_cap.applied, true);
+  assert.equal(
+    showsCapBelowCeilingNote(underOneWon),
+    false,
+    'applied가 참이어도 reduced_total_krw가 0이면 눈에 보이는 짧음이 없다 — 문장을 보이면 사용자가 없는 것을 찾는다',
+  );
+});
+
+test('실제로 표시 금액이 줄었고 binds_provably면 「짧다」 문장을 보인다', () => {
+  const actuallyCut = plan({
+    total: 900000,
+    beforeCap: 1188000,
+    cap: { cap_krw: 900000, applied: true, reduced_total_krw: 288000, binding_code: 'binds_provably' },
+  });
+  assert.equal(showsCapBelowCeilingNote(actuallyCut), true);
+});
+
+test('binding_not_determined이면 표시 금액이 줄었어도 「짧다」 문장을 보이지 않는다(D40)', () => {
+  const notProvable = plan({
+    total: 500000,
+    beforeCap: 1188000,
+    cap: {
+      cap_krw: 500000,
+      applied: true,
+      reduced_total_krw: 688000,
+      error_direction_code: 'direction_indeterminate',
+      binding_code: 'binding_not_determined',
+    },
+  });
+  assert.equal(showsCapBelowCeilingNote(notProvable), false);
+});
+
+// **실제로 깨서 무는지 확인한다**(D42 — "통과만 하는 테스트는 아무것도
+// 증명하지 않는다"). `reduced_total_krw > 0` 조건을 빼면 첫 좌표에서
+// 게이트가 다시 참을 내야 한다 — 즉 이 세 테스트가 실제로 그 결함을 잡는다.
+test('D49 회귀 — reduced_total_krw 조건을 빼면 위 첫 좌표에서 게이트가 다시 참이 된다(결함 재현)', () => {
+  const underOneWon = plan({
+    total: 400000,
+    beforeCap: 400000,
+    cap: { cap_krw: 400000, applied: true, reduced_total_krw: 0, binding_code: 'binds_provably' },
+  });
+  const cap = underOneWon.deterministic_benefit.tax_liability_cap;
+  const oldGate = cap.binding_code === 'binds_provably'; // D49 이전 게이트 — reduced_total_krw를 보지 않는다
+  assert.equal(oldGate, true, '옛 게이트라면 여기서 참이 나와야 이 테스트가 실제로 결함을 재현한 것이다');
+  assert.equal(showsCapBelowCeilingNote(underOneWon), false, '새 게이트는 같은 좌표에서 거짓을 낸다 — 옛 게이트와 실제로 갈린다');
 });
 
 test('no tax figure is hardcoded in this module', () => {

@@ -481,6 +481,82 @@ test('the mock agrees with the real engine on the branches the screen renders di
   }
 });
 
+// ---------------------------------------------------------------------------
+// 11.0.0 (D46 1번·D49) — 원 미만을 단계마다 버리지 않고 §47②에서 한 번만
+// 버린다. 관리자가 조문으로 검산한 두 좌표를 값으로 못 박는다.
+// ---------------------------------------------------------------------------
+
+test('D49 좌표 1 — 총급여 34,143,911원에서 한도가 1,349,999원이고 applied가 뒤집힌다', () => {
+  const req = baseRequest({ scenarios: ['current'] });
+  req.profile.current_year_total_salary_krw = 34143911;
+  const m = compute(req, rulesets).scenarios[0].plans[0].deterministic_benefit.tax_liability_cap;
+  const r = realCompute(req, rulesets).scenarios[0].plans[0].deterministic_benefit.tax_liability_cap;
+  assert.equal(m.cap_krw, 1349999, '검산된 좌표 — 한도가 정확히 1,349,999원이어야 한다');
+  assert.equal(m.cap_krw, r.cap_krw);
+  assert.equal(m.binding_code, r.binding_code);
+  assert.equal(m.error_direction_code, r.error_direction_code);
+});
+
+test('D49 좌표 2 — 총급여 24,795,208원·예산 2,666,667원이면 applied는 참인데 표시 금액은 한 원도 안 준다', () => {
+  const req = baseRequest({ scenarios: ['current'] });
+  req.profile.current_year_total_salary_krw = 24795208;
+  req.profile.monthly_capacity_krw = 2666667;
+  req.profile.months_remaining_in_tax_year = 1;
+  const mRes = compute(req, rulesets);
+  const rRes = realCompute(req, rulesets);
+  assert.equal(mRes.ok, true, JSON.stringify(mRes.errors ?? []));
+  assert.equal(rRes.ok, true, JSON.stringify(rRes.errors ?? []));
+  const m = mRes.scenarios[0].plans.find((p) => p.plan_id === 'max_tax_credit').deterministic_benefit;
+  const r = rRes.scenarios[0].plans.find((p) => p.plan_id === 'max_tax_credit').deterministic_benefit;
+  assert.equal(m.tax_liability_cap.cap_krw, 400000, '검산된 좌표 — 한도의 표시값이 400,000원이어야 한다');
+  assert.equal(m.pension_credit_income_tax_before_cap_krw, 400000);
+  assert.equal(m.pension_credit_income_tax_krw, 400000);
+  assert.equal(m.tax_liability_cap.applied, true, '정확값끼리 비교하면 잘린다 — applied는 참이다');
+  assert.equal(m.tax_liability_cap.reduced_income_tax_krw, 0, '표시 금액은 두 값이 같은 정수로 버려져 한 원도 줄지 않는다');
+  assert.equal(m.tax_liability_cap.reduced_total_krw, 0);
+  assert.equal(m.tax_liability_cap.binding_code, 'binds_provably');
+  // 실제 엔진과 값이 정확히 같아야 한다 — 이 좌표가 이 목이 계약 11.0.0을
+  // 정확히 따라오는지를 가르는 자리다.
+  assert.deepEqual(m.tax_liability_cap, r.tax_liability_cap);
+});
+
+test('D49 — 조문이 정한 자리와 이 조직이 정한 자리를 뒤바꿔 부르면 값이 나오지 않고 멈춘다', () => {
+  // `tax_base`(§47②, determined_by_law: true)와 `intermediate_amount`
+  // (determined_by_law: false)를 맞바꾼다. `rounding.statutory()`는 그 칸이
+  // `true`가 아니면 값을 내지 않으므로, 스왑된 룰셋에서는 계산이 멈춰야 한다
+  // (missing rule을 남기고 ok:false) — 「한도 모름」으로 조용히 넘어가지 않는다.
+  const swapped = JSON.parse(JSON.stringify(rulesets));
+  const rule = swapped['2026.json'].rules.find((r) => r.id === 'tax.rounding.won_fraction');
+  const taxBaseStage = rule.value.stages.find((s) => s.stage_code === 'tax_base');
+  const intermediateStage = rule.value.stages.find((s) => s.stage_code === 'intermediate_amount');
+  [taxBaseStage.determined_by_law, intermediateStage.determined_by_law] = [
+    intermediateStage.determined_by_law,
+    taxBaseStage.determined_by_law,
+  ];
+
+  const req = baseRequest({ scenarios: ['current'] });
+  req.profile.current_year_total_salary_krw = 34143911;
+  const swappedRes = compute(req, swapped);
+  assert.equal(swappedRes.ok, false, '조문 자리와 규약 자리가 뒤바뀌면 계산이 멈춰야 한다');
+  assert.ok(
+    swappedRes.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === 'tax.rounding.won_fraction'),
+  );
+});
+
+test('D49 — §47①(10원, 국고금의 수입·지출)이 binds_engine_output: true로 뒤집히면 멈춘다', () => {
+  // 이 엔진의 출력은 국고금의 수입·지출이 아니다(세액공제로 줄어드는 세액과
+  // 그 한도다). 그 판정이 뒤집히면 어느 출력이 그 항목인지 룰셋이 말해 주지
+  // 않으므로, 10원 단위를 아무 데나 걸지 않고 멈춘다.
+  const flipped = JSON.parse(JSON.stringify(rulesets));
+  const rule = flipped['2026.json'].rules.find((r) => r.id === 'tax.rounding.won_fraction');
+  rule.value.stages.find((s) => s.stage_code === 'treasury_receipt_or_payment').binds_engine_output = true;
+
+  const req = baseRequest({ scenarios: ['current'] });
+  const res = compute(req, flipped);
+  assert.equal(res.ok, false);
+  assert.ok(res.errors.some((e) => e.code === 'rule_missing' && e.params.rule_id === 'tax.rounding.won_fraction'));
+});
+
 test('a started annuity takes that account out of the allocation, with a reason the screen can print', () => {
   const req = baseRequest();
   req.accounts.annuity_savings.annuity_start_status = 'started';

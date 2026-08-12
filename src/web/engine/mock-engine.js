@@ -1,11 +1,31 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 10.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 11.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `10.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `11.0.0`으로 맞췄다.
+ *
+ * **11.0.0에서 따라온 것(D46 1번·D49, major — 요청은 한 글자도 바뀌지 않았다).**
+ * 세액 한도·연금계좌 세액공제가 **단계마다** 원 미만을 버리고 있었다 — 근로소득공제를
+ * 먼저 버리고 총급여에서 빼서, 과세표준이 「국고금 관리법」 §47②(과세표준액 1원 미만
+ * 절사)보다 **항상 정확히 1원 컸다.** 이제 금액을 정수 분수(`exactOf`/`scaleExact`/
+ * `cmpExact` 등, `src/engine/exact.mjs`와 같은 방식을 이 목이 독립적으로 다시 구현한
+ * 것)로 들고 다니다가 조문이 지목한 §47② 한 자리(`ROUNDING_STAGE_MOCK.TAX_BASE`)에서만
+ * 버린다. 원 미만 처리 규약(`tax.rounding.won_fraction`)을 산문이 아니라 룰셋의
+ * `stage_code`·`operation_code`·`unit_krw`·`determined_by_law` 네 칸에서 읽고
+ * (`createRoundingPolicyMock`), 조문이 정한 자리와 이 조직이 정한 자리를 다른 손잡이
+ * (`rounding.statutory`/`rounding.convention`)로 갈라 뒤바꿔 부르면 값이 나오지 않고
+ * 멈춘다. §47①(10원, 국고금의 수입·지출)은 룰셋의 `binds_engine_output`이 `false`가
+ * 아니면 이 엔진의 출력에 10원 단위를 걸지 않고 멈춘다.
+ *
+ * **`PlanTaxLiabilityCap.applied`의 판정이 정확값끼리의 대소로 바뀐다.** 그 결과
+ * `applied === (reduced_total_krw > 0)`이 더 이상 성립하지 않는다 — 잘린 양이 1원에
+ * 못 미치면 `applied`가 `true`인데 표시 금액은 한 원도 줄지 않는다. D37이 정한 「이
+ * 막대가 짧은 것은…」 문장은 **눈에 보이는 짧음에 대한 진술**이므로 이제 `applied`가
+ * 아니라 `reduced_total_krw > 0`에 매단다(`ACCOUNT_BENEFIT_CAP_BELOW_CEILING_NOTE`,
+ * `result-panel.js`) — `applied`가 참이라는 사실 자체는 여전히 유효하고 지우지 않는다.
  *
  * **10.0.0에서 따라온 것(D44, major — 새 입력 때문이 아니다).** 사람 쪽 자격이
  * 둘로 갈렸다 — **계좌를 열 수 있는가**(`irp.eligibility`, 근퇴법 §24②+시행령
@@ -144,8 +164,8 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 // 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '10';
-export const MOCK_SCHEMA_VERSION = '10.0.0';
+const KNOWN_SCHEMA_MAJOR = '11';
+export const MOCK_SCHEMA_VERSION = '11.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 // 9.0.0(D39·D40) — 세액 한도를 총급여액에서 산출한다. `profile.prior_year_tax`가
 // 요청에서 사라졌으므로 그 값의 상태 열거형(`PRIOR_TAX_STATES`)도 함께 없앤다.
@@ -971,48 +991,287 @@ function selectCreditRateBracket(brackets, basis) {
 // 수치는 한 개도 여기에 없다 — 구간 경계·비율·기본공제액·근로소득세액공제 한도는
 // 전부 룰셋에서 읽는다. 제2항 한도는 룰셋이 산식을 **문자열**로 적어 두었으므로
 // 그 문자열을 기계적으로 읽는다.
+//
+// **11.0.0(D46 1번·D49) — 단계마다 버리지 않는다.** 전에는 이 절이 구간 산식마다
+// `Math.floor`로 원 미만을 버렸고, 그래서 근로소득공제의 끝수가 위로 밀려 과세표준이
+// 조문보다 항상 정확히 1원 컸다. 「국고금 관리법」 §47조가 끝수를 없애라고 지목한
+// 자리는 과세표준(제2항) 하나뿐이므로, 이 절은 이제 **정확값(정수 분수)으로 계산하고
+// 그 자리에서만 버린다.** 어디서 무엇을 얼마 단위로 버리는지는 산문이 아니라 룰셋의
+// `stage_code`·`operation_code`·`unit_krw`·`determined_by_law` 네 칸에서 읽는다
+// (아래 `createRoundingPolicyMock`) — `src/engine/exact.mjs`·`rounding.mjs`와 같은
+// 방식을 이 목이 (실제 엔진을 임포트하지 않고) 독립적으로 다시 구현한 것이다.
+// §47①(10원, 국고금의 수입·지출)은 이 엔진의 출력에 걸리지 않는다 — 룰셋의
+// `binds_engine_output`이 `false`가 아니면 10원 단위를 아무 데나 걸지 않고 멈춘다.
 // ---------------------------------------------------------------------------
 
-/** 세액 한도 산출에 쓰는 규칙 id 여섯 — 정렬해 `basis_rule_ids`에 싣는다. */
+/**
+ * 세액 한도 산출에 쓰는 규칙 id — 정렬해 `basis_rule_ids`에 싣는다.
+ * **11.0.0부터 일곱이다**(D46 1번·D49) — 이제 이 계산이 원 미만 처리 규약도
+ * 실제로 읽으므로(`tax.rounding.won_fraction`), 그 규칙도 근거에 실려야 한다.
+ * `src/engine/liability-cap.mjs`의 `CAP_ESTIMATE_RULE_IDS`와 같은 목록이다.
+ */
 const CAP_ESTIMATE_RULE_IDS = [
   'income.deduction.basic.self',
   'tax.rate.basic',
   'pension.credit.tax_liability_cap',
   'pension.credit.tax_liability_cap.current_year_estimate',
+  'tax.rounding.won_fraction',
   'credit.wage_income',
   'income.wage.deduction',
 ].sort();
 
+// -- 원 미만을 정확히 들고 다니는 정수 분수 (D46 1번·D49) --------------------
+//
+// `src/engine/exact.mjs`와 같은 방식이다 — 분모를 없애지 않고 그대로 BigInt로
+// 들고 다닌다. 부동소수점을 쓰지 않는 이유도 같다: 십진 소수를 이진 부동소수점으로
+// 곱하면 정확히 정수여야 할 곱이 미세하게 작게 나와 절사에서 1원이 사라진다.
+// **세법 수치는 여기 없다** — 「분수를 어떻게 더하고 비교하고 버리는가」만 안다.
+
+const EXACT_ZERO = { n: 0n, d: 1n };
+
+/** 정수 원을 정확값으로. 정수가 아니면 `null` — 값을 지어내지 않는다. */
+function exactOf(krw) {
+  if (typeof krw !== 'number' || !Number.isSafeInteger(krw)) return null;
+  return { n: BigInt(krw), d: 1n };
+}
+function isExactValue(v) {
+  return v !== null && typeof v === 'object' && typeof v.n === 'bigint' && typeof v.d === 'bigint';
+}
+function guardExact(...values) {
+  return values.every(isExactValue);
+}
+function addExact(a, b) {
+  if (!guardExact(a, b)) return null;
+  return { n: a.n * b.d + b.n * a.d, d: a.d * b.d };
+}
+function subExact(a, b) {
+  if (!guardExact(a, b)) return null;
+  return { n: a.n * b.d - b.n * a.d, d: a.d * b.d };
+}
+function mulExact(a, b) {
+  if (!guardExact(a, b)) return null;
+  return { n: a.n * b.n, d: a.d * b.d };
+}
+function divExact(a, b) {
+  if (!guardExact(a, b) || b.n === 0n) return null;
+  const n = a.n * b.d;
+  const d = a.d * b.n;
+  return d < 0n ? { n: -n, d: -d } : { n, d };
+}
+/** `{num, den}` 꼴의 비율(`toRatio`의 결과)을 곱한다. */
+function scaleExact(a, ratio) {
+  if (!guardExact(a) || ratio === null || typeof ratio !== 'object') return null;
+  const { num, den } = ratio;
+  if (!Number.isSafeInteger(num) || !Number.isSafeInteger(den) || den === 0) return null;
+  const scaled = { n: a.n * BigInt(num), d: a.d * BigInt(den) };
+  return scaled.d < 0n ? { n: -scaled.n, d: -scaled.d } : scaled;
+}
+/** −1 / 0 / +1. **비교는 언제나 정확값으로 한다** — 룰셋의 `comparison` 단계. */
+function cmpExact(a, b) {
+  if (!guardExact(a, b)) return null;
+  const left = a.n * b.d;
+  const right = b.n * a.d;
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+function minExact(a, b) {
+  const order = cmpExact(a, b);
+  if (order === null) return null;
+  return order <= 0 ? a : b;
+}
+function maxExact(a, b) {
+  const order = cmpExact(a, b);
+  if (order === null) return null;
+  return order >= 0 ? a : b;
+}
+/** 음수를 0으로. */
+function clampExactToZero(a) {
+  return maxExact(a, EXACT_ZERO);
+}
 /**
- * `base_krw + (x − threshold_krw) × rate_on_excess` 꼴의 구간표를 읽는다. 근로소득공제·
- * 기본세율·근로소득세액공제 제1항이 같은 모양을 쓴다. 경계값은 아래 구간에 속한다
- * (문언이 '이하').
+ * `unit` 배수로 **버린다**. 단위도 연산도 이 함수가 정하지 않는다 — 부르는 쪽이
+ * 룰셋의 `unit_krw`를 그대로 넘긴다. 음수에서도 「내림」이다(0 방향 절단이 아니다).
  */
-function capBracketAmount(brackets, maxKey, x) {
-  if (!Array.isArray(brackets)) return null;
-  const bracket = brackets.find((b) => (b?.[maxKey] ?? null) === null || x <= b[maxKey]);
+function floorExactToUnit(a, unitKrw) {
+  if (!guardExact(a)) return null;
+  if (!Number.isSafeInteger(unitKrw) || unitKrw <= 0) return null;
+  const unit = BigInt(unitKrw);
+  const n = a.n;
+  const d = a.d * unit;
+  const quotient = n >= 0n || n % d === 0n ? n / d : n / d - 1n;
+  return { n: quotient * unit, d: 1n };
+}
+function isExactInteger(a) {
+  if (!guardExact(a)) return false;
+  return a.n % a.d === 0n;
+}
+/**
+ * 정수 원으로 꺼낸다. **정수가 아니면 `null`** — 여기서 몰래 버리면 이 함수가 있는
+ * 이유가 사라진다. 버리는 것은 언제나 아래 `createRoundingPolicyMock`이 룰셋을 읽고
+ * 하는 일이다.
+ */
+function exactToInteger(a) {
+  if (!isExactInteger(a)) return null;
+  const value = Number(a.n / a.d);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
+// -- 원 미만 처리 규약을 룰셋에서 읽는다 (D46 1번·D49) ------------------------
+//
+// `src/engine/rounding.mjs`와 같은 방식이다. **산문을 읽지 않는다** — 룰셋 자신이
+// 그렇게 정했다(`tax.rounding.won_fraction`의 `engine_contract`). `stage_code`·
+// `operation_code`·`unit_krw`·`determined_by_law` 네 칸만 읽고, 조문이 정한 자리
+// (`statutory`)와 이 조직이 정한 자리(`convention`)를 뒤바꿔 부르면 값이 나오지
+// 않는다 — 룰셋에서 그 칸이 뒤집혀도 같은 일이 일어난다.
+
+const ROUNDING_STAGE_MOCK = {
+  /** §47② — 국세의 과세표준액. **조문이 지목한 자리다.** */
+  TAX_BASE: 'tax_base',
+  /** §47① — 국고금의 수입·지출. 조문이 지목했으나 **우리 출력은 여기가 아니다.** */
+  TREASURY: 'treasury_receipt_or_payment',
+  /** 조문이 지목하지 않은 계산 중간값. 규약으로 절사하지 않는다. */
+  INTERMEDIATE: 'intermediate_amount',
+  /** 참·거짓을 내는 자리. 규약으로 정확값끼리 비교한다. */
+  COMPARISON: 'comparison',
+  /** 응답에 정수 원으로 실리는 금액. 규약으로 마지막에 한 번 버린다. */
+  DISPLAYED: 'displayed_amount',
+};
+const ROUNDING_STAGES_MOCK = Object.values(ROUNDING_STAGE_MOCK);
+/** 엔진이 실제로 할 줄 아는 연산. 룰셋이 다른 이름을 적으면 지어내지 않고 멈춘다. */
+const ROUNDING_OP_MOCK = { FLOOR: 'floor', NONE: 'none' };
+
+/** 단계 노드가 이 목이 쓸 수 있는 형태인가. 아니면 `null` — 지어내지 않는다. */
+function readRoundingStageMock(node) {
+  if (node === null || typeof node !== 'object') return null;
+  if (typeof node.operation_code !== 'string') return null;
+  if (typeof node.determined_by_law !== 'boolean') return null;
+  const unit = node.unit_krw ?? null;
+  if (unit !== null && !Number.isSafeInteger(unit)) return null;
+  if (node.operation_code !== ROUNDING_OP_MOCK.FLOOR && node.operation_code !== ROUNDING_OP_MOCK.NONE) return null;
+  // 버리는 연산인데 단위가 없으면 얼마 단위로 버릴지 알 수 없다. 1원으로 가정하지 않는다.
+  if (node.operation_code === ROUNDING_OP_MOCK.FLOOR && unit === null) return null;
+  return { operationCode: node.operation_code, unitKrw: unit, determinedByLaw: node.determined_by_law };
+}
+
+/**
+ * 원 미만 처리 규약을 룰셋에서 읽어 손잡이로 만든다. 읽지 못하면(또는 룰셋의 칸이
+ * 뒤집혀 있으면) `null` — 부르는 쪽이 계산을 멈춘다. `missingRules`가 있으면 규칙이
+ * 발견됐는데도 쓸 수 없는 형태였다는 사실을 그 배열에 남긴다(`use()`는 규칙 자체가
+ * 없을 때만 기록하지, 있는데 못 쓰는 형태인 경우는 기록하지 않는다).
+ */
+function createRoundingPolicyMock(use, appliedTo, missingRules) {
+  const ruleId = 'tax.rounding.won_fraction';
+  const rule = use(ruleId, appliedTo);
+  if (!rule) return null;
+
+  const fail = () => {
+    if (Array.isArray(missingRules)) missingRules.push(ruleId);
+    return null;
+  };
+
+  const value = rule.value ?? {};
+  const declared = value.stages;
+  if (!Array.isArray(declared)) return fail();
+
+  const stages = new Map();
+  for (const node of declared) {
+    if (node === null || typeof node !== 'object' || typeof node.stage_code !== 'string') continue;
+    const stage = readRoundingStageMock(node);
+    if (stage === null) return fail();
+    stages.set(node.stage_code, stage);
+  }
+  // 이 목이 서는 다섯 단계가 전부 선언되어 있어야 한다.
+  for (const stageCode of ROUNDING_STAGES_MOCK) {
+    if (!stages.has(stageCode)) return fail();
+  }
+
+  // §47①이 우리에게 걸리는가. **룰셋이 값으로 답한다** — 산문이 아니라
+  // `binds_engine_output` 칸이다. 이 엔진이 내는 것은 세액공제로 줄어드는 세액과
+  // 그 한도이므로 오늘의 답은 `false`다. `false`가 아니면 어느 출력이 국고금의
+  // 수입·지출인지 룰셋이 말해 주지 않으므로 10원 단위를 아무 데나 걸지 않고 멈춘다.
+  const treasuryBinds = declared.find((node) => node?.stage_code === ROUNDING_STAGE_MOCK.TREASURY)?.binds_engine_output;
+  if (treasuryBinds !== false) return fail();
+
+  // 개인지방소득세분은 `stages` 밖에 따로 있다(§47③이 「준용할 수 있다」는 임의규정).
+  const localStage = readRoundingStageMock(value.local_income_tax_stage ?? null);
+  if (localStage === null) return fail();
+
+  /** 단계의 연산을 정확값에 적용한다. 연산도 단위도 룰셋의 칸에서 온다. */
+  function apply(stage, exact) {
+    if (stage === undefined || exact === null) return null;
+    if (stage.operationCode === ROUNDING_OP_MOCK.NONE) return exact;
+    return floorExactToUnit(exact, stage.unitKrw);
+  }
+  /** 조문이 정한 자리인지 우리가 정한 자리인지를 부르는 쪽이 **선언하고** 들어온다. */
+  function at(stageCode, exact, requiredDeterminedByLaw) {
+    const stage = stages.get(stageCode);
+    if (stage === undefined || stage.determinedByLaw !== requiredDeterminedByLaw) return null;
+    return apply(stage, exact);
+  }
+
+  return {
+    /** 조문이 정한 자리(§47②). `determined_by_law`가 `true`가 아니면 값을 내지 않는다. */
+    statutory: (stageCode, exact) => at(stageCode, exact, true),
+    /** 이 조직이 정한 자리. `determined_by_law`가 `false`가 아니면 값을 내지 않는다. */
+    convention: (stageCode, exact) => at(stageCode, exact, false),
+    /** 개인지방소득세분. 조문이 정하지 않았으므로 규약 쪽이다. */
+    localSurtax: (exact) => (localStage.determinedByLaw === false ? apply(localStage, exact) : null),
+    /** 응답에 정수 원으로 싣는다. 표시 단계는 **우리가 정한 자리**다. */
+    display: (exact) => exactToInteger(at(ROUNDING_STAGE_MOCK.DISPLAYED, exact, false)),
+    /** 개인지방소득세분을 정수 원으로. */
+    displayLocal: (exact) =>
+      exactToInteger(localStage.determinedByLaw === false ? apply(localStage, exact) : null),
+  };
+}
+
+/**
+ * `base_krw + (x − threshold_krw) × rate_on_excess` 꼴의 구간표를 **정확값**으로
+ * 읽는다. 근로소득공제·기본세율·근로소득세액공제 제1항이 같은 모양을 쓴다. 경계값은
+ * 아래 구간에 속한다(문언이 '이하'). **원 미만을 여기서 버리지 않는다** — 조문이 이
+ * 값들을 끝수 계산의 대상으로 지목하지 않았다(룰셋 `intermediate_amount`).
+ */
+function capBracketAmountExact(brackets, maxKey, xExact) {
+  if (!Array.isArray(brackets) || xExact === null) return null;
+  const bracket = brackets.find((b) => {
+    const max = b?.[maxKey] ?? null;
+    if (max === null) return true;
+    const order = cmpExact(xExact, exactOf(max));
+    return order !== null && order <= 0;
+  });
   if (bracket === undefined) return null;
   if (typeof bracket.base_krw !== 'number' || typeof bracket.threshold_krw !== 'number') return null;
-  const excess = applyRate(clampToZero(x - bracket.threshold_krw), bracket.rate_on_excess);
-  if (excess === null) return null;
-  return bracket.base_krw + excess;
+  const excess = clampExactToZero(subExact(xExact, exactOf(bracket.threshold_krw)));
+  const scaled = scaleExact(excess, toRatio(bracket.rate_on_excess));
+  if (scaled === null) return null;
+  return addExact(exactOf(bracket.base_krw), scaled);
 }
 
 /** 근로소득세액공제 제2항의 한도. 첫 구간만 금액이고 나머지 셋은 룰셋에 문자열로 있다. */
 const CAP_LIMIT_FORMULA = /^(\d+)\s*[−-]\s*\(\s*총급여액\s*[−-]\s*(\d+)\s*\)\s*[×x*]\s*(\d+)\s*\/\s*(\d+)$/;
 
-function capWageCreditLimit(brackets, totalSalary) {
+/** 위와 같은 이유로 정확값을 낸다 — 감액률이 8/1000이라 총급여가 1,000의 배수가
+ * 아니면 여기서 끝수가 나고, 버리면 한도가 커져 세액 한도가 작아진다(방향이 있는
+ * 자리이므로 정확값 그대로 넘긴다).
+ */
+function capWageCreditLimitExact(brackets, totalSalary) {
   if (!Array.isArray(brackets)) return null;
   const bracket = brackets.find((b) => (b?.total_salary_max_krw ?? null) === null || totalSalary <= b.total_salary_max_krw);
   if (bracket === undefined) return null;
-  if (typeof bracket.limit_krw === 'number') return bracket.limit_krw;
+  if (typeof bracket.limit_krw === 'number') return exactOf(bracket.limit_krw);
 
   const match = CAP_LIMIT_FORMULA.exec(String(bracket.formula ?? '').trim());
   if (match === null || typeof bracket.floor_krw !== 'number') return null;
   const [base, threshold, numerator, denominator] = match.slice(1).map(Number);
   if (denominator === 0) return null;
-  const limit = Math.floor((base * denominator - clampToZero(totalSalary - threshold) * numerator) / denominator);
-  return Math.max(limit, bracket.floor_krw);
+  const reduction = scaleExact(
+    clampExactToZero(subExact(exactOf(totalSalary), exactOf(threshold))),
+    { num: numerator, den: denominator },
+  );
+  const limit = subExact(exactOf(base), reduction);
+  const floorAmount = exactOf(bracket.floor_krw);
+  const order = cmpExact(limit, floorAmount);
+  if (order === null) return null;
+  return order >= 0 ? limit : floorAmount;
 }
 
 /**
@@ -1029,9 +1288,11 @@ function capBranchOf(profile) {
 /**
  * 세액 한도를 총급여액에서 산출한다(네 단계, 규칙의 `statutory_path`). `use`는
  * `computeScenario`의 규칙 조회 헬퍼다 — 규칙을 찾지 못하면 이미 `missingRules`에
- * 기록되고 여기서는 `null`을 돌려준다(대체값을 만들지 않는다).
+ * 기록되고 여기서는 `null`을 돌려준다(대체값을 만들지 않는다). `missingRules`는
+ * 원 미만 처리 규약이 룰셋에서 malformed로 읽힐 때(칸이 뒤집혔을 때 포함) 그 사실을
+ * 기록하는 용도로만 `createRoundingPolicyMock`에 전달한다.
  */
-function resolveTaxLiabilityCapMock(use, profile) {
+function resolveTaxLiabilityCapMock(use, profile, missingRules) {
   const appliedTo = 'pension_credit_tax_liability_cap.cap_krw';
   const deductionRule = use('income.wage.deduction', appliedTo);
   const basicDeductionRule = use('income.deduction.basic.self', appliedTo);
@@ -1041,43 +1302,90 @@ function resolveTaxLiabilityCapMock(use, profile) {
   const estimateRule = use('pension.credit.tax_liability_cap.current_year_estimate', appliedTo);
   // 사용자가 서식에서 값을 읽던 경로가 이 계산으로 대체됐다는 사실이 그 규칙에 적혀 있다.
   const sourceRule = use('pension.credit.tax_liability_cap.source_form', appliedTo);
-  if (!deductionRule || !basicDeductionRule || !rateRule || !creditRule || !capRule || !estimateRule || !sourceRule) {
+  // 원 미만을 어디서 어떻게 없애는지. 읽지 못하면 계산하지 않는다 — 규약 없이
+  // 계산을 이어 가면 어디선가 `Math.floor`를 다시 쓰게 되고, 그것이 조문에 없는
+  // 세 번째 절사 자리다(D46 1번·D49).
+  const rounding = createRoundingPolicyMock(use, appliedTo, missingRules);
+  if (!deductionRule || !basicDeductionRule || !rateRule || !creditRule || !capRule || !estimateRule || !sourceRule || !rounding) {
     return null;
   }
+
+  // 아래에서 `null`을 돌려주는 모든 자리는 **규칙이 발견됐는데도 쓸 수 없는
+  // 형태였다는 뜻**이다(`use()`는 규칙 자체가 없을 때만 자동으로 기록한다).
+  // 실제 엔진에서는 `capResult.cap === null`이 계산 전체를 세운다(compute.mjs
+  // 4.5절) — 대체값을 만들지 않고 조용히 "한도 모름"으로 넘어가지 않는다. 이
+  // 목도 같은 형태를 지키려면 이 지점들이 `missingRules`에 남아야 한다.
+  const fail = (ruleId) => {
+    if (Array.isArray(missingRules)) missingRules.push(ruleId);
+    return null;
+  };
 
   const branch = capBranchOf(profile);
   const branchNode = estimateRule.value?.branches?.[branch];
   const upperBoundCode = estimateRule.value?.error_direction?.code;
   if (branchNode === undefined || typeof branchNode.direction !== 'string' || typeof upperBoundCode !== 'string') {
-    return null;
+    return fail(estimateRule.id);
   }
   const isUpperBound = branchNode.direction.startsWith(upperBoundCode);
   const totalSalary = profile.current_year_total_salary_krw;
 
   // 1단계. 공제액이 총급여액을 넘지 못하고(§47③) 2천만원 상한이 걸린다(§47① 단서).
-  const bracketDeduction = capBracketAmount(deductionRule.value.brackets, 'total_salary_max_krw', totalSalary);
-  if (bracketDeduction === null || typeof deductionRule.value.overall_cap_krw !== 'number') return null;
-  const wageDeduction = Math.min(bracketDeduction, deductionRule.value.overall_cap_krw, totalSalary);
-  const wageIncome = totalSalary - wageDeduction;
+  const bracketDeduction = capBracketAmountExact(deductionRule.value.brackets, 'total_salary_max_krw', exactOf(totalSalary));
+  if (bracketDeduction === null || typeof deductionRule.value.overall_cap_krw !== 'number') return fail(deductionRule.id);
+  // **여기서 버리지 않는다**(D46 1번) — 전에는 이 값을 먼저 버리고 총급여에서 빼서
+  // 과세표준이 조문보다 1원 컸다.
+  const wageDeduction = minExact(minExact(bracketDeduction, exactOf(deductionRule.value.overall_cap_krw)), exactOf(totalSalary));
+  const wageIncome = subExact(exactOf(totalSalary), wageDeduction);
 
   // 2단계. 종합소득금액을 받았으면 그것이 조문상의 합산 기준 그 자체다.
   const basicDeduction = basicDeductionRule.value?.amount_krw;
-  if (typeof basicDeduction !== 'number') return null;
-  const globalIncome = branch === CAP_BRANCH.GLOBAL_INCOME_SUPPLIED ? profile.current_year_global_income_krw : wageIncome;
-  const taxBase = clampToZero(globalIncome - basicDeduction);
+  if (typeof basicDeduction !== 'number') return fail(basicDeductionRule.id);
+  const globalIncome =
+    branch === CAP_BRANCH.GLOBAL_INCOME_SUPPLIED ? exactOf(profile.current_year_global_income_krw) : wageIncome;
+  // **조문이 지목한 유일한 자리다**(국고금 관리법 §47②). 1원 미만을 여기서 한 번
+  // 버린다. `statutory()`가 `null`을 돌려주는 것은 `determined_by_law`가 뒤집혀
+  // 있을 때도 포함한다 — 그것이 바로 이 자리에서 「값이 나오지 않고 멈춘다」의 뜻이다.
+  const taxBaseExact = rounding.statutory(
+    ROUNDING_STAGE_MOCK.TAX_BASE,
+    clampExactToZero(subExact(globalIncome, exactOf(basicDeduction))),
+  );
+  if (taxBaseExact === null) return fail('tax.rounding.won_fraction');
 
   // 3단계.
-  const computedTax = capBracketAmount(rateRule.value.brackets, 'tax_base_max_krw', taxBase);
-  if (computedTax === null) return null;
+  const computedTaxExact = capBracketAmountExact(rateRule.value.brackets, 'tax_base_max_krw', taxBaseExact);
+  if (computedTaxExact === null) return fail(rateRule.id);
 
   // 4단계. 근로소득 외 소득이 있으면 근로소득금액 비율로 안분한 산출세액을 제1항에 넣는다.
-  const wagePortionTax = globalIncome > 0 ? Math.floor((computedTax * Math.min(wageIncome, globalIncome)) / globalIncome) : 0;
-  const creditByAmount = capBracketAmount(creditRule.value.amount_brackets, 'wage_income_tax_max_krw', wagePortionTax);
-  const creditLimit = capWageCreditLimit(creditRule.value.limit_brackets, totalSalary);
-  if (creditByAmount === null || creditLimit === null) return null;
-  const wageCredit = Math.min(creditByAmount, creditLimit);
+  const globalIncomePositive = cmpExact(globalIncome, EXACT_ZERO) > 0;
+  const wagePortionTaxExact = globalIncomePositive
+    ? divExact(mulExact(computedTaxExact, minExact(wageIncome, globalIncome)), globalIncome)
+    : EXACT_ZERO;
+  const creditByAmountExact = capBracketAmountExact(
+    creditRule.value.amount_brackets,
+    'wage_income_tax_max_krw',
+    wagePortionTaxExact,
+  );
+  const creditLimitExact = capWageCreditLimitExact(creditRule.value.limit_brackets, totalSalary);
+  if (creditByAmountExact === null || creditLimitExact === null) return fail(creditRule.id);
+  const wageCreditExact = minExact(creditByAmountExact, creditLimitExact);
 
-  const capKrw = clampToZero(computedTax - wageCredit);
+  // **한도의 정확값.** 응답에는 정수 원으로 실리지만(표시 단계에서 한 번 버린다),
+  // 공제액과의 대소 판정은 이 값으로 한다 — 절사한 값으로 비교하면 1원 미만의 차이가
+  // 사라져 `applied`가 뒤집힌다(룰셋 `comparison` 단계).
+  const capExact = clampExactToZero(subExact(computedTaxExact, wageCreditExact));
+  const capKrw = rounding.display(capExact);
+  const wageDeductionKrw = rounding.display(wageDeduction);
+  const wageIncomeKrw = rounding.display(wageIncome);
+  // §47②가 이미 정수로 만든 값이지만 표시 단계를 한 번 더 지난다 — 응답에 실리는
+  // 정수는 전부 같은 문을 통과한다는 규약이고, 조문 단계가 정수를 내는 한 이 통과는
+  // 값을 바꾸지 않는다.
+  const taxBaseKrw = rounding.display(taxBaseExact);
+  const computedTaxKrw = rounding.display(computedTaxExact);
+  const wageCreditKrw = rounding.display(wageCreditExact);
+  if ([capKrw, wageDeductionKrw, wageIncomeKrw, taxBaseKrw, computedTaxKrw, wageCreditKrw].some((v) => v === null)) {
+    return fail('tax.rounding.won_fraction');
+  }
+
   const errorDirection = isUpperBound ? upperBoundCode : CAP_DIRECTION_INDETERMINATE;
   const basisRuleIds = [...CAP_ESTIMATE_RULE_IDS, sourceRule.id].sort();
   const carryforward = capRule.value?.excess_treatment?.credit_carryforward ?? false;
@@ -1087,6 +1395,11 @@ function resolveTaxLiabilityCapMock(use, profile) {
     isUpperBound,
     errorDirection,
     basisRuleIds,
+    // 같은 규약을 배분안과 축도 쓴다 — 한 번 읽어 넘긴다. 두 번 읽으면 두 규약이 된다.
+    rounding,
+    // **응답에 실리지 않는 정확값.** 대소 판정을 하는 자리(배분안의 자르기, 축과의
+    // 비교)가 이 값을 쓴다.
+    capExact,
     cap: {
       // **`null`이 아니다.** 총급여액이 있으면 값이 하나로 정해진다.
       cap_krw: capKrw,
@@ -1098,12 +1411,12 @@ function resolveTaxLiabilityCapMock(use, profile) {
       is_exact: isUpperBound && capKrw === 0,
       measured_total_salary_krw: totalSalary,
       measured_global_income_krw: branch === CAP_BRANCH.GLOBAL_INCOME_SUPPLIED ? profile.current_year_global_income_krw : null,
-      wage_income_deduction_krw: wageDeduction,
-      wage_income_amount_krw: wageIncome,
+      wage_income_deduction_krw: wageDeductionKrw,
+      wage_income_amount_krw: wageIncomeKrw,
       basic_deduction_krw: basicDeduction,
-      tax_base_krw: taxBase,
-      computed_tax_krw: computedTax,
-      wage_income_credit_krw: wageCredit,
+      tax_base_krw: taxBaseKrw,
+      computed_tax_krw: computedTaxKrw,
+      wage_income_credit_krw: wageCreditKrw,
       credit_carryforward: carryforward,
       basis_rule_ids: basisRuleIds,
     },
@@ -2122,12 +2435,16 @@ function computeScenario(scenario, request, rulesets) {
   // **나온 값은 상한이다(D40).** `cap_krw`는 결코 `null`이 아니다 — 「모름」이라는
   // 상태가 없다. 종합소득이 있는데 금액을 모르는 분기에서는 오차 방향조차 정해지지
   // 않는다(`error_direction_code === 'direction_indeterminate'`, D41).
-  const capResolved = resolveTaxLiabilityCapMock(use, profile);
+  const capResolved = resolveTaxLiabilityCapMock(use, profile, missingRules);
   const capKnown = capResolved !== null;
   const capKrw = capResolved?.cap.cap_krw ?? null;
   const capIsUpperBound = capResolved?.isUpperBound ?? false;
   const capErrorDirection = capResolved?.errorDirection ?? null;
   const capBasisRuleIds = capResolved?.basisRuleIds ?? [];
+  // 배분안의 자르기와 확정 축의 눈금이 같은 규약·같은 정확값을 써야 한도를 채운
+  // 사람에게서 1원이 어긋나지 않는다(D46 1번·D49) — 한 번 읽어 아래로 넘긴다.
+  const rounding = capResolved?.rounding ?? null;
+  const capExactValue = capResolved?.capExact ?? null;
 
   if (capResolved) {
     // **언제나 나간다.** 이 한도가 총급여액에서 계산한 값이고 다른 소득공제·
@@ -2177,10 +2494,14 @@ function computeScenario(scenario, request, rulesets) {
   // 않는다** — 막대에 실리는 금액(`pension_credit_total_krw`)은 소득세분 +
   // 개인지방소득세분이므로 축의 끝도 같은 자로 재야 한다.
   const combinedCreditLimitForCeiling = baseCombinedCreditCap + extraCreditLimit;
-  // 배분안이 쓰는 것과 같은 두 단계 산식(`Math.floor(대상 × 율)`)이다 — 다른
-  // 산술을 쓰면 한도를 채운 사람에게서 축과 막대가 1원 어긋난다.
-  const ceilingIncomeTaxKrw = Math.floor(combinedCreditLimitForCeiling * incomeTaxRate);
-  const ceilingLocalTaxKrw = Math.floor(combinedCreditLimitForCeiling * localTaxRate);
+  // 배분안이 쓰는 것과 **같은 규약**이다(D46 1번·D49) — 정확값으로 계산하고 표시
+  // 직전에 한 번 버린다. 다른 산술을 쓰면 한도를 채운 사람에게서 축과 막대가
+  // 1원 어긋난다. 지방소득세분은 소득세분에 부가율(`localRateOfIncomeTax`)을
+  // 다시 적용해 낸다 — 배분안의 `applyCap`과 같은 자리를 같은 방식으로 잰다.
+  const ceilingIncomeTaxExact = rounding ? scaleExact(exactOf(combinedCreditLimitForCeiling), toRatio(incomeTaxRate)) : null;
+  const ceilingLocalTaxExact = ceilingIncomeTaxExact ? scaleExact(ceilingIncomeTaxExact, toRatio(localRateOfIncomeTax)) : null;
+  const ceilingIncomeTaxKrw = rounding && ceilingIncomeTaxExact ? rounding.display(ceilingIncomeTaxExact) ?? 0 : 0;
+  const ceilingLocalTaxKrw = rounding && ceilingLocalTaxExact ? rounding.displayLocal(ceilingLocalTaxExact) ?? 0 : 0;
   // 이 목은 청년 우대(개정안 `proposed.pension.credit.youth_irp_rate`)를 입력
   //으로 받지 않는다 — `unapplied_proposed_rules`에 `requires_input_not_collected`
   // 로 실린다. 언제나 본문 구간(`credit_rate_bracket`)에서 온다.
@@ -2188,10 +2509,20 @@ function computeScenario(scenario, request, rulesets) {
   // 값을 갖는다. **`cap_at_or_above_ceiling`은 「걸리지 않는다」가 아니다** — 한도가
   // 상한이므로 실제 한도는 이보다 작을 수 있다. 그 구분은 `binding_code`가 낸다(D40).
   //
-  // **소득세분끼리 비교한다** — 한도는 산출세액에서 나온 소득세의 값이고
-  // 상한의 합계는 지방소득세를 포함하므로, 그대로 비교하면 단위가 다른
-  // 두 수를 재는 것이 된다.
-  const ceilingCapRelation = capKrw < ceilingIncomeTaxKrw ? 'cap_below_ceiling' : 'cap_at_or_above_ceiling';
+  // **소득세분끼리, 정확값으로 비교한다**(D46 1번·D49) — 한도는 산출세액에서 나온
+  // 소득세의 값이고 상한의 합계는 지방소득세를 포함하므로, 그대로 비교하면 단위가
+  // 다른 두 수를 재는 것이 된다. 절사한 값으로 비교하면 1원 미만의 차이가 사라져
+  // 이 관계 코드가 뒤집힌다(룰셋 `comparison` 단계).
+  const ceilingCmp =
+    capExactValue && ceilingIncomeTaxExact ? cmpExact(capExactValue, ceilingIncomeTaxExact) : null;
+  const ceilingCapRelation =
+    ceilingCmp !== null
+      ? ceilingCmp < 0
+        ? 'cap_below_ceiling'
+        : 'cap_at_or_above_ceiling'
+      : capKrw < ceilingIncomeTaxKrw
+        ? 'cap_below_ceiling'
+        : 'cap_at_or_above_ceiling';
   const pensionCreditCeiling = {
     ceiling_krw: ceilingIncomeTaxKrw + ceilingLocalTaxKrw,
     income_tax_krw: ceilingIncomeTaxKrw,
@@ -2232,17 +2563,34 @@ function computeScenario(scenario, request, rulesets) {
     const creditEligible = creditRequirementMet
       ? creditFor(p.allocByAccount.annuity_savings, p.allocByAccount.retirement_pension)
       : 0;
-    const incomeTaxBeforeCapKrw = Math.floor(creditEligible * incomeTaxRate);
-    const localTaxBeforeCapKrw = Math.floor(creditEligible * localTaxRate);
+    // **정확값으로 계산하고 표시 직전에 한 번 버린다**(D46 1번·D49) — 배분안마다
+    // 원 미만을 각각 버리면 조문에 없는 절사 자리가 늘어난다. `src/engine/plans.mjs`의
+    // `benefitOf`/`applyCap`과 같은 방식이다.
+    const incomeTaxExact = rounding ? scaleExact(exactOf(creditEligible), toRatio(incomeTaxRate)) : null;
+    const localTaxExact = incomeTaxExact ? scaleExact(incomeTaxExact, toRatio(localRateOfIncomeTax)) : null;
+    const incomeTaxBeforeCapKrw = rounding && incomeTaxExact ? rounding.display(incomeTaxExact) ?? 0 : 0;
+    const localTaxBeforeCapKrw = rounding && localTaxExact ? rounding.displayLocal(localTaxExact) ?? 0 : 0;
     // 한도는 **소득세분에** 걸린다. 지방소득세분은 **인정된 소득세분에** 부가율을
     // 다시 적용해 낸다 — 인정되지 않은 공제에 붙는 지방세를 남기지 않기 위해서다
-    // (`local_tax_follows_income_tax_cap` 가정).
-    const incomeTaxKrw = capKnown ? Math.min(incomeTaxBeforeCapKrw, capKrw) : incomeTaxBeforeCapKrw;
+    // (`local_tax_follows_income_tax_cap` 가정). **비교와 자르기는 정확값으로
+    // 한다**(룰셋 `comparison` 단계) — 표시 금액끼리 비교하면 1원 미만의 차이가
+    // 사라져 `applied`가 뒤집힌다(D46 1번).
+    const recognizedIncomeTaxExact =
+      capKnown && incomeTaxExact ? minExact(incomeTaxExact, capExactValue) : incomeTaxExact;
+    const recognizedLocalTaxExact = recognizedIncomeTaxExact
+      ? scaleExact(recognizedIncomeTaxExact, toRatio(localRateOfIncomeTax))
+      : null;
+    const incomeTaxKrw =
+      rounding && recognizedIncomeTaxExact ? rounding.display(recognizedIncomeTaxExact) ?? incomeTaxBeforeCapKrw : incomeTaxBeforeCapKrw;
     const localTaxKrw =
-      incomeTaxBeforeCapKrw > 0 ? Math.floor((localTaxBeforeCapKrw * incomeTaxKrw) / incomeTaxBeforeCapKrw) : 0;
+      rounding && recognizedLocalTaxExact ? rounding.displayLocal(recognizedLocalTaxExact) ?? localTaxBeforeCapKrw : localTaxBeforeCapKrw;
     const totalCreditKrw = incomeTaxKrw + localTaxKrw;
     const totalBeforeCapKrw = incomeTaxBeforeCapKrw + localTaxBeforeCapKrw;
-    const capApplied = capKnown && incomeTaxKrw < incomeTaxBeforeCapKrw;
+    // **잘렸는가는 정확값의 대소가 정한다** — 표시 금액의 차이가 아니다(D46 1번·
+    // D49). 그 둘이 갈리는 좌표가 실재한다(끝수만 잘린 경우) — `applied: true`인데
+    // 표시 금액이 한 원도 줄지 않을 수 있다. 화면이 「잘렸다」는 문장을 쓸 때는
+    // `reduced_total_krw > 0`을 함께 봐야 하는 이유가 이것이다(계약 5.5절).
+    const capApplied = capKnown && incomeTaxExact ? cmpExact(capExactValue, incomeTaxExact) < 0 : false;
     const planCap = {
       cap_krw: capKrw,
       applied: capApplied,
@@ -2267,7 +2615,7 @@ function computeScenario(scenario, request, rulesets) {
       carryover_requires_application:
         capApplied && carryoverRule ? carryoverRule.value.automatic !== true : null,
       error_direction_code: capErrorDirection,
-      basis_rule_ids: capApplied && carryoverRule ? [...capBasisRuleIds, carryoverRule.id] : capBasisRuleIds,
+      basis_rule_ids: capApplied && carryoverRule ? [...capBasisRuleIds, carryoverRule.id].sort() : capBasisRuleIds,
     };
 
     // -- 7.0.0(0.12절) — 월 환산 잔차를 네 갈래(세 계좌 + 미배분)에 나눈다 ------
