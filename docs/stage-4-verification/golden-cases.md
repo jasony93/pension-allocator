@@ -9,6 +9,8 @@ inputs:
   - docs/org/gate-decisions.md
   - docs/org/charter.md
 open_questions:
+  - "**[21차·GC-21·29·30을 어긋난 채로 남긴다]** D52로 낡은 9건을 다시 산출해 **622 / 625**가 됐고, **셋은 엔진(정확히는 계약) 쪽이 틀렸다고 판정해 정답지를 고치지 않았다.** D52 후속이 **「ISA 의무가입기간이 이미 지난 사용자에게는 ISA 배분을 유지한다」**고 정했는데 `engine-interface.md`가 0.B·3.1·5.13절에서 `within_isa_lock_in`을 **조건 없이** 「전액 미배분」으로 적고 예외를 어디에도 적지 않았다. 근거는 조특법 §91조의18⑦의 「3년이 되는 날 전에 해지하는 경우」 요건이 그 사용자에게 **성립할 수 없다**는 것이고, **같은 조문으로 같은 판정을 계약 8.5절이 이미 한 번 했다**(`all_accounts_have_early_exit_penalty`를 끄는 조건). 대조와 도출 과정은 `verification-report.md` 21.2절."
+  - "**[21차·경계 위의 1원 — 세법은 최소 단위를 정하지 않지만 그 1원은 아무것도 낳지 않는다]** 룰셋에 `contribution.minimum_unit`(`minimum_unit_krw: null` · `determined_by_law: false`)을 넣어 「세법이 정하지 않는다」를 값으로 못 박았다. **그러나 D52가 「그 1원이 실제로 공제를 낳는다」고 적은 것은 참이 아니다** — 총급여 30,686,276원의 한도 900,000.1에서 IRP 0이든 1원이든 **표시 세액공제가 900,000으로 같다.** 트림 기준을 「표시 공제」로 바꾸면 이 잔여(15% 구간 1~6원)가 사라지지만 **지금 통과 중인 GC-32a의 IRP가 6원 움직인다.** 관리자 판정 사안이고 `verification-report.md` 21.3절에 좌표 표를 두었다."
   - "~~**[17차·원 미만 처리 규약의 정의 자리가 없다]** 세액 한도 산식은 조문 자체가 소수를 낳는다(§47의 15%·§55①의 15%·§59②의 8/1000). **버림인지 반올림인지를 정한 조문을 찾지 못했고**, 국고금관리법 제47조의 국고금 단수계산(1원 미만 버림)이 세액 산정 단계에 그대로 걸리는지도 확인하지 못했다. 이 문서는 **결과가 그 규약에 걸리는 좌표를 피하는 방식**으로 우회했다(총급여 34,143,911원 대신 34,142,000원 — S15). **우회는 답이 아니다** — 사용자의 총급여액은 2,000의 배수가 아니고, 실제 서비스에서는 한도가 소수로 나오는 사람이 대부분이다.~~ **[20차에 답이 나왔다]** **국고금 관리법 제47조 제2항이 「국세의 과세표준액을 산정할 때 1원 미만의 끝수가 있으면 이를 계산하지 아니한다」로 정한다** — 버림이고, **걸리는 단계는 과세표준 하나**다(제1항의 10원 절사는 국고금의 수입·지출, 즉 실제 납부·환급 단계라 이 엔진의 출력에 걸리지 않는다). **중간값·비교·표시 세 단계는 조문이 없어 우리가 규약을 세웠고**(룰셋 `tax.rounding.won_fraction`, `determined_by_law: false`로 표시), **엔진은 그 규약과도 조문과도 다른 것을 하고 있다** — 근로소득공제 단계에서 먼저 버려 과세표준이 조문보다 항상 1원 크다. **그 좌표(34,143,911원)에서 조문은 한도 1,349,999·`applied: true`, 엔진은 1,350,000·`applied: false`다.** 도출 과정과 여섯 단계 기대값은 `verification-report.md` 20.3절, S15 아래 문단. **[20차 후속 · D46 1번 판정 뒤]** 관리자가 **엔진을 조문에 맞춘다**고 판정했고 우회를 풀었다 — **GC-32a가 34,143,911원으로 돌아왔고**(옛 좌표는 GC-32d로 남겼다) `applied: true`·한도 1,349,999를 값으로 못 박는다. **그리고 §47② 전후로 갈리는 두 번째 좌표가 이 문서 안에 이미 있었다** — GC-34(30,686,275)의 한도가 900,000 → **899,999**다. 그 값은 17차 산출이 과세표준을 소수 그대로 끌고 간 결과였고, **정답지 쪽을 조문에 맞춰 고쳤다.** `tax-domain`의 재확인 대상이다."
   - "**[17차·`direction_code`를 룰셋에 넣으면서 계약 8.7절과 어긋난다]** D41 1번에 따라 `pension.credit.tax_liability_cap.current_year_estimate.branches`의 세 분기에 `direction_code` 칸을 넣었다. 그런데 계약 8.7절은 `direction_indeterminate`의 **정의 자리를 계약**으로 정하고 있다(「룰셋이 산문으로만 적은 것은 계약이 정한다」). **이제 그 문자열이 룰셋에도 값으로 있다.** 두 자리에 같은 문자열이 있으면 언젠가 갈린다. 이 유닛의 읽기는 **룰셋이 정의 자리이고 계약이 전사한다**는 것이며(`overstated_or_equal`과 같은 취급), 룰셋의 `branches_reading_rule.code_definition_sites`에 그렇게 적었다. **계약 8.7절의 해당 문장을 고칠 사람은 `calc-engine-dev`다.**"
   - "**[17차·`applied: false`가 증명하지 못하는 것을 검사할 방법이 없다]** 새 경로의 한도는 상한이므로 **실제로는 잘리는데 추정 한도로는 안 잘리는 사람**이 존재한다(부양가족이 셋이면 실제 한도가 675,000원 내려간다). 그 사람에게 화면은 자르지 않은 금액을 보여 준다. **이 문서는 그 상태를 케이스로 만들 수 없다** — 엔진에 부양가족 입력이 없으므로 그 사람의 요청을 만들 수가 없다. 그래서 `binding_code: \"binding_not_determined\"`를 주장하는 것이 이 문서가 할 수 있는 전부이고, **누락의 크기는 이 문서가 재지 못한다.** D40이 「못 잡는 경우만 있다」고 적은 그 누락이 얼마나 큰지는 아무도 모르는 채로 남는다."
@@ -2071,18 +2073,22 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
 
 **프로필(4건 공통)** 40세 · 총급여 45,000,000 · 월 1,000,000(예산 12,000,000) · ISA 서민형/누적 0/경과 0년 · horizon만 다름
 
-**기대 결과 — 네 값 전부에서 동일해야 하는 것**
+> **[21차 · D52 2번] 이 4건의 전제였던 「금액 불변」이 (a)에서 깨졌다.** D10이 「자금 사용 시점은 금액을 바꾸지 않는다」고 정했고 계약 4.2절이 그것을 `allocation_amounts: false`로 선언했으나, **D52 2번이 D10을 뒤집었다.** `within_isa_lock_in`이면 **전액 미배분**이다. 그러므로 **(a)는 이제 (b)~(d)와 금액이 다르고**, 이 4건이 함께 재던 「불변」은 **(b)·(c)·(d) 세 값 사이에서만** 재진다. **(a)가 이 묶음에서 하는 일이 바뀌었다** — 불변의 증인에서 **불변이 깨지는 지점의 증인**이 됐다.
 
-배분(**연금저축 6,000,000 + IRP 3,000,000** + ISA 3,000,000), 세액공제 **1,350,000 / 135,000 / 1,485,000**, 모든 한도, 잔차 0, 배분안 수 2. 계약 4.2절 `fund_use_horizon_affects`가 `allocation_amounts: false`, `tax_credit_amounts: false`, `limits: false`로 **스스로 선언한 보장**이다. **4차의 S13이 이 선언을 깨지 않았는지가 이 4건의 새 관전 포인트다** — 동점 판정을 horizon에 걸었다면 배분 금액이 네 값에 걸쳐 갈라졌을 것이다(계약 0.4절이 그렇게 하지 않은 이유를 적고 있다).
+**기대 결과 — (b)·(c)·(d) 세 값에서 동일해야 하는 것**
 
-**기대 결과 — 값에 따라 달라져야 하는 것** (경고 건수는 4차에 전부 한 건씩 늘었다)
+배분(**연금저축 6,000,000 + IRP 3,000,000** + ISA 3,000,000), 세액공제 **1,350,000 / 135,000 / 1,485,000**, 모든 한도, 잔차 0, 배분안 수 2. 계약 4.2절 `fund_use_horizon_affects`가 `allocation_amounts`를 **`12.0.0`에서 `true`로 바꿨고**, 바뀌는 자리는 `within_isa_lock_in` 하나다. **4차의 S13이 이 선언을 깨지 않았는지가 이 3건의 관전 포인트로 남는다** — 동점 판정을 horizon에 걸었다면 배분 금액이 세 값에 걸쳐서도 갈라졌을 것이다.
 
-| horizon | 기본안 | 최대공제안의 경고 (건수·계좌·등급) | `isa_first`의 경고 | 비교 안내 |
-|---|---|---|---|---|
-| `within_isa_lock_in` (a) | `max_tax_credit` | **3건** — 연금저축·IRP·ISA, `warning` | 1건(ISA) | `all_accounts_have_early_exit_penalty` |
-| `before_pension_age` (b) | **`isa_first`** | **2건** — 연금저축·IRP, `warning` | 0건 | `baseline_reordered_by_fund_use_horizon` |
-| `at_or_after_pension_age` (c) | `max_tax_credit` | 0건 | 0건 | — |
-| `unknown` (d) | `max_tax_credit` | **3건** — 연금저축·IRP·ISA, **`info`**, trigger `horizon_unknown` | 1건(ISA, `info`) | 안내 `fund_use_horizon_not_declared` |
+**기대 결과 — 값에 따라 달라져야 하는 것**
+
+| horizon | 배분 | 기본안 | 최대공제안의 경고 (건수·계좌·등급) | `isa_first`의 경고 | 비교 안내 |
+|---|---|---|---|---|---|
+| `within_isa_lock_in` (a) | **전액 미배분 12,000,000** (21차 · D52 2번) | `max_tax_credit` (**안 1개로 합쳐진다**) | **0건** — 배분액>0인 계좌가 없다 | (안이 없다) | `all_accounts_have_early_exit_penalty` · `plans_collapsed_single` |
+| `before_pension_age` (b) | 연금저축 6,000,000 + IRP 3,000,000 + ISA 3,000,000 | **`isa_first`** | **2건** — 연금저축·IRP, `warning` | 0건 | `baseline_reordered_by_fund_use_horizon` |
+| `at_or_after_pension_age` (c) | 같음 | `max_tax_credit` | 0건 | 0건 | — |
+| `unknown` (d) | 같음 | `max_tax_credit` | **3건** — 연금저축·IRP·ISA, **`info`**, trigger `horizon_unknown` | 1건(ISA, `info`) | 안내 `fund_use_horizon_not_declared` |
+
+**(a)의 도출 과정 (21차)** ISA 경과연수 **0년** → `isa.account.requirements`의 의무가입기간 3년에서 **잔여 3년** → 3년 안에 쓰면 `isa.early_termination.clawback`의 요건("계약기간이 3년이 되는 날 전에 해지")이 성립해 **감면세액이 추징된다.** 연금 두 계좌는 만 40세로 `pension.withdrawal.eligibility`의 55세 요건을 못 갖춰 **연금외수령**이 되고 `pension.early_withdrawal.other_income_rate`의 기타소득 15% + 지방세 1.5% = **16.5%**가 걸린다. 공제율은 15% + 1.5% = **16.5%**다. **받는 것과 도로 내는 것이 같거나 후자가 크다.** 세 계좌 어느 쪽도 이 돈에 이롭지 않으므로 전액 미배분이고, 그 결과 네 배분안의 벡터가 전부 `0/0/0`으로 같아져 **하나로 합쳐진다.** 경고는 `배분액 > 0`인 계좌에만 붙으므로(계약 5.6절) **0건**이다 — 4차에 3건이던 자리다.
 
 **도출 과정** 경고 근거는 `pension.withdrawal.eligibility`·`pension.early_withdrawal.other_income_rate`(연금)와 `isa.early_termination.clawback`·`isa.account.requirements`(ISA)다. (b)에서 기본안이 바뀌므로 `delta_vs_baseline_krw`가 **양수 1,485,000**이 된다 — 계약 0.1절이 부호 제약을 없앤 바로 그 경우다. 부호를 "포기한 금액"으로 읽으면 이득을 손실로 표시한다.
 
@@ -2129,45 +2135,35 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
   },
   "expect": {
     "current": {
-      "plan_count": 2,
+      "plan_count": 1,
+      "boundaries": {
+        "isa_lock_in_years_remaining": 3
+      },
       "comparison_note_codes": [
-        "all_accounts_have_early_exit_penalty"
+        "all_accounts_have_early_exit_penalty",
+        "plans_collapsed_single"
       ],
       "plans": {
         "max_tax_credit": {
           "is_baseline": true,
           "allocation": {
-            "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 3000000
-          },
-          "tax_credit": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
-          },
-          "warning_count": 3,
-          "warning_codes": [
-            "early_withdrawal_penalty_pension",
-            "early_termination_clawback_isa"
-          ],
-          "monthly_rounding_residual_krw": 0
-        },
-        "isa_first": {
-          "allocation": {
             "annuity_savings": 0,
             "retirement_pension": 0,
-            "isa": 12000000
+            "isa": 0
           },
           "tax_credit": {
             "income_tax": 0,
             "local_tax": 0,
             "total": 0
           },
-          "warning_count": 1,
-          "warning_codes": [
-            "early_termination_clawback_isa"
-          ]
+          "warning_count": 0,
+          "limited_by": {
+            "annuity_savings": "fund_use_horizon",
+            "retirement_pension": "fund_use_horizon",
+            "isa": "fund_use_horizon"
+          },
+          "unallocated_krw": 12000000,
+          "monthly_rounding_residual_krw": 0
         }
       },
       "notice_codes_absent": [
@@ -2178,7 +2174,7 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
 }
 ```
 
-**세액 한도 (17차 재산출)** **해당연도** 총급여 45,000,000의 추정 한도는 S15 표로 **2,805,000**이다(§47 → §50①1 → §55① → §59). 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다. **다만 그 주장은 「우리가 아는 상한으로는 잘리지 않았다」까지다** — 이 경로는 부양가족·보험료공제·자녀세액공제를 하나도 세지 않으므로 실제 한도는 이보다 낮을 수 있고, 그래서 `binding_code`가 `binding_not_determined`다.
+**세액 한도 (17차 재산출)** **해당연도** 총급여 45,000,000의 추정 한도는 S15 표로 **2,805,000**이다(§47 → §50①1 → §55① → §59). 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다. **다만 그 주장은 「우리가 아는 상한으로는 잘리지 않았다」까지다** — 이 경로는 부양가족·보험료공제·자녀세액공제를 하나도 세지 않으므로 실제 한도는 이보다 낮을 수 있고, 그래서 `binding_code`가 `binding_not_determined`다. **21차에 (a)의 배분이 0이 되면서 이 문단은 (a)에 대해서는 공허해졌다** — 자를 금액 자체가 없다. 문단은 (b)~(d)에 대해 그대로 유효하므로 남긴다.
 
 ```golden
 {
@@ -2453,11 +2449,12 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
 | ISA 의무가입기간 잔여 | **0년** |
 | 연금 개시연령 잔여 | **0년** |
 | ISA 납입 잔여 | 60,000,000 |
-| 배분 (최대공제안) | **연금저축 6,000,000 + IRP 3,000,000 + ISA 3,000,000** |
-| 세액공제 | 1,350,000 / 135,000 / 1,485,000 |
+| 배분 (최대공제안) | **연금저축 0 + IRP 0 + ISA 12,000,000** (21차 · D52 2번과 그 후속) |
+| 세액공제 | **0 / 0 / 0** (21차 · 연금 배분이 없으므로) |
+| 미배분 | **0** |
 | ISA 중도해지 추징 경고 | **나가지 않아야 한다** (아래) |
-| 연금 중도인출 경고 (4차) | **2건** — 연금저축·IRP 둘 다, `warning` |
-| 배분안 수 (4차) | **2** |
+| 연금 중도인출 경고 | **0건** — 21차에 2건에서 줄었다. 배분액 > 0인 연금계좌가 없다 |
+| 배분안 수 | **1** — 네 안의 벡터가 같아진다 |
 
 **도출 과정** S12 `isa.account.requirements`의 `min_contract_years` 3 − 경과 3 = 0. `pension.withdrawal.eligibility`의 `min_age` 55 − 56 < 0 → 0. S8 20,000,000×(1+3) − 20,000,000 = 60,000,000.
 
@@ -2476,7 +2473,29 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
 
 **16차 개정 — `pension.withdrawal.non_deducted_principal`의 표시가 1건에서 2건으로 늘었다.** 값이 아니라 **룰셋이 늘었다.** 16차에 이 규칙의 `order_within_non_taxable`에 표시를 하나 더 달았고(시행령 §40조의3②3호의 「해당 연금계좌만 있다고 가정할 때의 한도액」이 연금저축계좌에 대해 600만원인지 900만원인지 — 15.3절), 그 결과 건수가 2가 됐다. **이 케이스가 그 증가를 실제로 잡았다** — 룰셋을 고친 뒤 돌리자 GC-21 하나만 빨간색이 됐고 남은 자리 둘을 이름으로 댔다. 계약 5.7.1절이 이 축을 첫 번째 방어선으로 지목한 이유가 이것이고, **그 방어선이 살아 있음이 이번에 값으로 확인됐다.** 자리가 사전순으로 고정되는 것도 함께 확인했다(`c` < `o`).
 
-**세액 한도 (17차 재산출)** **해당연도** 총급여 45,000,000의 추정 한도는 S15 표로 **2,805,000**이다(§47 → §50①1 → §55① → §59). 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다. **다만 그 주장은 「우리가 아는 상한으로는 잘리지 않았다」까지다** — 이 경로는 부양가족·보험료공제·자녀세액공제를 하나도 세지 않으므로 실제 한도는 이보다 낮을 수 있고, 그래서 `binding_code`가 `binding_not_determined`다.
+> **[21차] `legal_basis` 주장을 뺐다.** 연금 배분이 0이 되면서 이 블록은 `pension.withdrawal.non_deducted_principal`에서 나온 숫자를 더 이상 주장하지 않는다. 1-A절의 규약이 「같은 블록이 이미 그 규칙에서 나온 숫자를 주장하고 있을 때에만 `present: true`를 적는다」이므로 근거가 사라졌다. **그 축이 죽은 것은 아니다** — GC-09·23·31·36·40 등 다섯 블록이 같은 어휘를 계속 쓴다.
+
+**세액 한도 (17차 재산출)** **해당연도** 총급여 45,000,000의 추정 한도는 S15 표로 **2,805,000**이다(§47 → §50①1 → §55① → §59). 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다. **다만 그 주장은 「우리가 아는 상한으로는 잘리지 않았다」까지다** — 이 경로는 부양가족·보험료공제·자녀세액공제를 하나도 세지 않으므로 실제 한도는 이보다 낮을 수 있고, 그래서 `binding_code`가 `binding_not_determined`다. **21차 이후 이 문단은 공허하다** — 연금 배분이 0이라 자를 금액이 없다.
+
+### GC-21의 21차 개정 — D52 2번과 **그 후속**이 이 좌표에서 서로 다른 답을 낸다. 후속이 이긴다
+
+**D52 2번**은 `within_isa_lock_in`이면 **전액 미배분**이라고 정했다. **D52 후속**은 거기서 하나를 덜어냈다 — **ISA 의무가입기간이 이미 지난 사용자에게는 ISA 배분을 유지한다.** 이 케이스가 정확히 그 사용자다(경과 3년 → 잔여 0년).
+
+**후속을 따르는 근거는 조문이다.** `isa.early_termination.clawback`(조특법 §91조의18⑦)은 **「계약기간이 3년이 되는 날 전에 계약을 해지하는 경우」**에만 추징을 건다. 경과 3년이면 그 요건이 **성립할 수 없다.** 즉 이 사람이 3년 안에 그 돈을 써도 ISA에서 잃는 것이 없다. **「세 계좌 중 어느 것도 이롭지 않다」는 D52 2번의 이유가 이 사람에게는 참이 아니고, 이유가 참이 아닌 곳에 결론만 옮기면 화면이 근거 없이 「넣지 마세요」라고 말한다.**
+
+**연금 두 계좌는 그대로 0이다.** 이 사람은 만 56세라 `pension.withdrawal.eligibility`의 55세 요건은 충족하지만, **같은 규칙의 5년 보유요건은 판정되지 않았다**(가입일을 받지 않으므로 `pension_holding_period_evaluated: false`). 요건 미충족이면 연금외수령이 되어 `pension.early_withdrawal.other_income_rate`의 16.5%가 걸린다. **성립할 수 있는 불이익이 남아 있으므로 연금 쪽 미배분의 이유는 이 사람에게도 참이다.**
+
+| 계좌 | 3년 안에 쓸 때 잃는 것 | 근거 규칙 | 판정 |
+|---|---|---|---|
+| ISA | **없다** — 의무가입기간 경과로 추징 요건 불성립 | `isa.early_termination.clawback` · `isa.account.requirements` | **배분 유지** |
+| 연금저축 | 연금외수령 16.5% (5년 보유요건 미판정) | `pension.withdrawal.eligibility` · `pension.early_withdrawal.other_income_rate` | 미배분 |
+| IRP | 같음 + 중도인출이 법정 사유로 제한 | 위 + `pension.withdrawal.midterm_restriction` | 미배분 |
+
+**배분액** 예산 12,000,000, ISA 납입 잔여 60,000,000(S8: 20,000,000 × (1+3) − 20,000,000) → **ISA 12,000,000, 미배분 0.** 월 환산은 12,000,000 ÷ 12 = 1,000,000으로 나누어떨어지므로 잔차 0.
+
+**배분안 수 1.** 연금 두 계좌가 어느 안에서도 0이고 ISA가 예산 전액을 받으므로 네 안의 벡터가 전부 같다 → `plans_collapsed_single`.
+
+> ⚠ **이 블록은 21차 현재 엔진과 어긋난다. 정답지 쪽을 바꾸지 않았다.** 엔진은 이 좌표에서 **ISA도 0으로 만들고**(`limited_by: "fund_use_horizon"`, `unallocated_breakdown.reason_code: "no_account_beneficial_within_fund_use_horizon"`) 12,000,000 전액을 미배분으로 낸다. **근거를 대는 쪽은 엔진이 아니라 이 문서다** — 조특법 §91조의18⑦의 요건이 성립하지 않는데 그 조문을 이유로 배분을 비웠기 때문이다. **원인은 엔진 코드가 아니라 계약이다**: `engine-interface.md` 3.1절·5.13절·8.10절이 `within_isa_lock_in`을 **조건 없이** 「전액 미배분」으로 적고 있고 D52 후속의 예외가 어디에도 없다. 엔진은 계약을 정확히 구현했다. 자세한 대조는 `verification-report.md` 21.2절.
 
 ```golden
 {
@@ -2517,10 +2536,7 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
   },
   "expect": {
     "current": {
-      "legal_basis": {
-        "pension.withdrawal.non_deducted_principal": {"present":true,"has_uncertainty_note":true,"uncertainty_note_count":2,"uncertainty_kinds":["unverified"],"uncertainty_paths":["confirmation_procedure.unverified","order_within_non_taxable.unverified"]}
-      },
-      "plan_count": 2,
+      "plan_count": 1,
       "boundaries": {
         "isa_lock_in_years_remaining": 0,
         "pension_years_remaining": 0,
@@ -2533,25 +2549,33 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
         "isa_lock_in_already_elapsed",
         "pension_holding_period_not_evaluated"
       ],
+      "comparison_note_codes": [
+        "plans_collapsed_single"
+      ],
       "comparison_note_codes_absent": [
         "all_accounts_have_early_exit_penalty"
       ],
       "plans": {
         "max_tax_credit": {
+          "is_baseline": true,
           "allocation": {
-            "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 3000000
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 12000000
           },
           "tax_credit": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
           },
-          "warning_count": 2,
-          "warning_codes": [
-            "early_withdrawal_penalty_pension"
-          ]
+          "warning_count": 0,
+          "limited_by": {
+            "annuity_savings": "fund_use_horizon",
+            "retirement_pension": "fund_use_horizon",
+            "isa": "budget"
+          },
+          "unallocated_krw": 0,
+          "monthly_rounding_residual_krw": 0
         }
       },
       "notice_codes_absent": [
@@ -3546,7 +3570,9 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
 
 **프로필** 40세 · 총급여 45,000,000 · 예산 12,000,000 · ISA 서민형/누적 20,000,000/**경과 2년** · horizon `within_isa_lock_in`
 
-**기대 결과** ISA 의무가입기간 잔여 **1년**. ISA 납입 잔여 **40,000,000**. 배분 **연금저축 6,000,000 + IRP 3,000,000 + ISA 3,000,000**. 세액공제 1,350,000 / 135,000 / 1,485,000. **`early_termination_clawback_isa` 경고가 배분액>0인 ISA에 `warning`으로 나가야 한다.** 비교 안내 `all_accounts_have_early_exit_penalty`도 나간다. **최대공제안의 경고는 4차에 2건 → 3건**(연금저축·IRP·ISA), 배분안 수 2.
+**기대 결과 (21차 · D52 2번)** ISA 의무가입기간 잔여 **1년**. ISA 납입 잔여 **40,000,000**. **배분 전액 미배분(12,000,000).** 세액공제 **0 / 0 / 0**. 비교 안내 `all_accounts_have_early_exit_penalty`가 나가고, 네 안의 벡터가 같아져 **배분안 수 1**(`plans_collapsed_single`). **경고는 0건** — 배분액 > 0인 계좌가 없다.
+
+> **[21차] 이 케이스의 목적이 옮겨갔다.** 4차까지 이 케이스가 재던 것은 「잔여 기간이 남았을 때 `early_termination_clawback_isa` 경고를 빠뜨리지 않는가」였다. **D52 2번이 그 자리를 없앴다** — 잔여가 남아 있으면 배분이 0이 되고, 경고는 배분액 > 0인 계좌에만 붙으므로(계약 5.6절) 경고 자체가 나올 수 없다. **그러나 이 케이스가 재던 사실은 사라지지 않고 다른 출력으로 옮겨갔다**: 잔여 1년이라는 사실이 이제 **배분을 0으로 만드는 근거**이고, 그 주장은 `all_accounts_have_early_exit_penalty`와 `unallocated_breakdown.reason_code`가 진다. **GC-21과의 대조가 이 케이스의 새 감별점이다** — 잔여 1년(GC-27)은 ISA도 비우고, 잔여 0년(GC-21)은 ISA를 채운다. **두 케이스를 함께 봐야 「잔여 기간이 배분을 가른다」가 검사된다.**
 
 **4차 개정 사유** 분할이 바뀌어 연금 경고가 하나 늘었다. **이 케이스의 목적(수정의 과잉 잡기)은 그대로 유효하고, 이번에는 잡을 것이 하나 더 늘었다** — 경고를 계좌 단위로 붙이는 로직이 새로 생긴 두 번째 연금계좌를 빠뜨리지 않는지까지 본다.
 
@@ -3595,7 +3621,7 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
   },
   "expect": {
     "current": {
-      "plan_count": 2,
+      "plan_count": 1,
       "boundaries": {
         "isa_lock_in_years_remaining": 1
       },
@@ -3603,25 +3629,29 @@ M1 수정은 "추가 IRP 납입이 기납입 연금저축분을 공제 대상 �
         "isa_contribution_remaining_krw": 40000000
       },
       "comparison_note_codes": [
-        "all_accounts_have_early_exit_penalty"
+        "all_accounts_have_early_exit_penalty",
+        "plans_collapsed_single"
       ],
       "plans": {
         "max_tax_credit": {
+          "is_baseline": true,
           "allocation": {
-            "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 3000000
+            "annuity_savings": 0,
+            "retirement_pension": 0,
+            "isa": 0
           },
           "tax_credit": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
           },
-          "warning_count": 3,
-          "warning_codes": [
-            "early_withdrawal_penalty_pension",
-            "early_termination_clawback_isa"
-          ]
+          "warning_count": 0,
+          "limited_by": {
+            "annuity_savings": "fund_use_horizon",
+            "retirement_pension": "fund_use_horizon",
+            "isa": "fund_use_horizon"
+          },
+          "unallocated_krw": 12000000
         }
       },
       "notice_codes_absent": [
@@ -3731,14 +3761,18 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 |---|---|
 | ISA 의무가입기간 잔여 | **0년** |
 | ISA 납입 잔여 한도 | **0** (총한도 소진) |
-| 배분 (기본안) | **연금저축 9,000,000 + IRP 3,000,000** + ISA **0** (`limited_by: contribution_limit`) — 14차 |
-| 미배분 | **0** (14차 · 종전 3,000,000) |
-| 세액공제 | 1,350,000 / 135,000 / 1,485,000 |
+| 배분 (기본안) | **연금저축 0 + IRP 0 + ISA 0** — 21차 (D52 2번). 세 계좌가 서로 다른 이유로 0이다(아래) |
+| 미배분 | **12,000,000** (21차 · 14차의 0에서 되돌아왔다. 이유는 다르다) |
+| 세액공제 | **0 / 0 / 0** (21차) |
 | ISA 추징 경고 | **나가지 않는다** (잔여 0년) |
-| 연금 중도인출 경고 | **모든 배분안에 나간다** — 4차에 1건 → **2건**(연금저축·IRP) |
-| `all_accounts_have_early_exit_penalty` | **나가야 한다** |
+| 연금 중도인출 경고 | **0건** — 21차. 배분액 > 0인 연금계좌가 없다 |
+| `all_accounts_have_early_exit_penalty` | **나가지 않는다** — 21차에 뒤집혔다(아래) |
 | `isa_lock_in_already_elapsed` | 나간다(info) |
-| **배분안 수 (4차)** | **1** — `plans_collapsed_single` (2개에서 줄었다. 아래 경고 참조) |
+| **배분안 수** | **1** — `plans_collapsed_single` |
+
+> **[21차] 이 케이스가 D52 후속의 예외를 통과하는 이유는 ISA 배분이 원래 0이기 때문이다.** D52 후속은 「의무가입기간이 지난 ISA는 배분을 유지한다」이고 이 사용자는 잔여 0년이므로 그 예외에 해당한다. **그런데 유지할 배분이 없다** — ISA 총 납입한도 1억이 이미 소진되어 잔여가 0이다. **그러므로 ISA 0은 예외를 적용해도 같은 값이고, 이 케이스는 예외가 구현됐는지를 가르지 못한다.** 그 감별은 GC-30과 GC-21이 진다. **값이 같다는 이유로 두 상태를 같다고 적으면 안 되므로** `limited_by`를 함께 못 박는다 — 예외가 구현되면 ISA의 `limited_by`는 `contribution_limit`이고, 구현되지 않으면 `fund_use_horizon`이다.
+>
+> **`all_accounts_have_early_exit_penalty`가 뒤집힌 것은 4차 이후 계약이 바뀌었기 때문이다.** 계약 8.5절이 `11.0.0`까지 이 코드를 「반환된 배분안이 하나도 빠짐없이 `warnings`를 가질 때」로 재었고, `12.0.0`에서 **「불이익이 성립하지 않는 계좌가 하나라도 있으면 나가지 않는다」**로 바뀌었다. 이 사용자의 ISA는 의무가입기간이 지나 추징이 성립하지 않으므로 조건에 걸린다. **3차에 이 케이스가 세운 「GC-21과 GC-29는 같은 입력을 공유하면서 안내의 정답이 반대」라는 대조는 21차에 무너졌다** — 이제 둘 다 나가지 않는다. 그 대조가 재던 사실(안내 조건이 입력값 기반인가 결과 기반인가)은 GC-18a·27과 GC-21·29·30의 대비가 대신 진다.
 
 **도출 과정** S8 `isa.contribution.annual_limit` 20,000,000 × (1+4) − 100,000,000 = 0. 총한도 쪽도 0 → ISA에 넣을 수 있는 돈이 없다. 따라서 **어느 배분안이든 자금이 연금계좌로만 간다.** S12 3 − 4 < 0 → 잔여 0 → `isa.early_termination.clawback`의 요건이 성립하지 않아 ISA 경고는 없다. 그러나 `pension.withdrawal.eligibility`(55세 미달)와 `pension.early_withdrawal.other_income_rate`는 그대로 걸리고, 배분액>0인 연금계좌가 모든 안에 있으므로 **모든 안이 경고를 진다.**
 
@@ -3804,45 +3838,36 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
         "isa_lock_in_already_elapsed"
       ],
       "comparison_note_codes": [
-        "all_accounts_have_early_exit_penalty",
         "plans_collapsed_single"
+      ],
+      "comparison_note_codes_absent": [
+        "all_accounts_have_early_exit_penalty"
       ],
       "plans": {
         "max_tax_credit": {
+          "is_baseline": true,
           "allocation": {
-            "annuity_savings": 9000000,
-            "retirement_pension": 3000000,
+            "annuity_savings": 0,
+            "retirement_pension": 0,
             "isa": 0
           },
           "tax_credit": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
           },
-          "credit_eligible_krw": 9000000,
-          "warning_count": 2,
-          "warning_codes": [
-            "early_withdrawal_penalty_pension"
-          ],
+          "credit_eligible_krw": 0,
+          "warning_count": 0,
           "limited_by": {
-            "annuity_savings": "budget",
+            "annuity_savings": "fund_use_horizon",
+            "retirement_pension": "fund_use_horizon",
             "isa": "contribution_limit"
           },
-          "unallocated_krw": 0,
+          "unallocated_krw": 12000000,
           "monthly_rounding_residual_krw": 0,
           "non_quantified_effects": {
             "pension_contribution_without_credit": {
-              "annuity_savings": {
-                "present": true,
-                "facts": {
-                  "credit_this_year_krw": 0,
-                  "contribution_without_credit_krw": 3000000,
-                  "principal_taxed_on_withdrawal": false,
-                  "principal_tax_free_requires_confirmation": true,
-                  "principal_tax_free_confirmation_prospective_only": true,
-                  "returns_taxed_on_withdrawal": true
-                }
-              },
+              "annuity_savings": { "present": false },
               "retirement_pension": { "present": false }
             }
           }
@@ -3870,26 +3895,32 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 |---|---|
 | ISA 의무가입기간 잔여 | **0년** |
 | ISA 납입 잔여 한도 | **5,000,000** |
-| 배분안 수 | **2** (합쳐지지 않는다) |
-| 최대공제안 배분 | 연금저축 6,000,000(#1) + IRP 3,000,000(#2) + ISA 3,000,000(#3) |
-| 최대공제안 세액공제 | **1,350,000 / 135,000 / 1,485,000** · 잔차 **0** |
-| `isa_first` 배분 | ISA 5,000,000(#1, `contribution_limit`) + 연금저축 6,000,000(#2) + IRP 1,000,000(#3) |
-| `isa_first` 세액공제 | **1,050,000 / 105,000 / 1,155,000** · `delta_vs_baseline_krw` **−330,000** · 잔차 **12** |
+| 배분안 수 | **1** — 21차. 네 안의 벡터가 같아진다 |
+| 최대공제안 배분 | **연금저축 0 + IRP 0 + ISA 5,000,000** (21차 · D52 2번과 그 후속) |
+| 미배분 | **7,000,000** — ISA 납입 잔여 한도에서 멈춘다 |
+| 최대공제안 세액공제 | **0 / 0 / 0** (21차) |
 | ISA 추징 경고 | **나가지 않는다** (잔여 0년) |
-| 연금 중도인출 경고 | **두 안 모두 2건**(연금저축·IRP, `warning`) |
-| `all_accounts_have_early_exit_penalty` | **나가야 한다** |
+| 연금 중도인출 경고 | **0건** — 21차. 배분액 > 0인 연금계좌가 없다 |
+| `all_accounts_have_early_exit_penalty` | **나가지 않는다** — 21차에 뒤집혔다(GC-29의 같은 문단 참조) |
 | `isa_lock_in_already_elapsed` | 나간다(info) |
 
 **도출 과정** S8 `isa.contribution.annual_limit` 산식 쪽 = 20,000,000 × (1 + min(4,4)) − 95,000,000 = **5,000,000**, 총한도 쪽 = 100,000,000 − 95,000,000 = **5,000,000** → 둘 중 작은 값 5,000,000 → S12 3 − 4 < 0 → 잔여 **0년** → `isa.early_termination.clawback`의 요건("3년이 되는 날 전 해지")이 성립하지 않아 ISA 경고 없음.
 
-- **최대공제안** S13 동점 → 연금저축 6,000,000 → IRP 3,000,000(합산 9,000,000 소진) → 남은 3,000,000을 ISA로. 인정액 9,000,000 × 0.15 = 1,350,000. 잔차: 세 금액 모두 12로 나누어떨어지므로 **0**.
-- **`isa_first`** ISA를 먼저 5,000,000까지 채우고(잔여 한도에서 멈춘다) 남은 7,000,000을 S13 순서로 연금저축 6,000,000 → IRP 1,000,000. 인정액 = 6,000,000 + 1,000,000 = **7,000,000**(합산 9,000,000 안) → 7,000,000 × 0.15 = **1,050,000**, 지방세 105,000. `delta` = 1,155,000 − 1,485,000 = **−330,000**.
-- **`isa_first`의 잔차 12** — ISA 5,000,000 ÷ 12 = 416,666(버림) ×12 = 4,999,992 → 8. 연금저축 6,000,000 → 0. IRP 1,000,000 ÷ 12 = 83,333 ×12 = 999,996 → 4. 합 **12**.
-- **비교 안내** 두 안 모두 연금계좌 배분이 양수라 경고를 지므로 "어느 배분안도 중도 불이익을 피하지 못한다"가 참이다 → 안내가 나간다.
+**21차 개정 사유 — 이 케이스가 D52 후속의 유일한 순수 감별점이다.**
 
-**이 케이스가 무엇을 막는가.** (1) 안내 조건을 `isa_lock_in_years_remaining`(입력 파생값)으로 되돌리면 여기서 잘못 꺼진다 — GC-29가 단일 안으로 접힌 뒤 비어 버린 자리를 메운다. (2) `isa_first`가 ISA 잔여 한도를 넘겨 채우면 배분이 틀린다. (3) 두 번째 순위 이후에도 S13이 적용되는지를 본다 — `isa_first`의 연금 몫 7,000,000이 연금저축 6,000,000 + IRP 1,000,000으로 나뉘어야 하고, 순서가 안 걸리면 IRP 6,000,000 + 연금저축 1,000,000이 되는데 **인정액과 세액이 같아 금액으로는 구별되지 않는다.** 배분을 함께 봐야 잡힌다.
+D52 2번은 `within_isa_lock_in`이면 전액 미배분이라 정했고, **D52 후속은 의무가입기간이 이미 지난 ISA를 그 대상에서 뺐다.** 이 케이스는 그 예외가 **금액으로 드러나는 유일한 좌표**다 — GC-21은 예외가 적용되면 ISA가 예산 전액을 받아 미배분이 0이 되고, GC-29는 ISA 잔여 한도가 0이라 예외를 적용해도 값이 같다. **GC-30만이 「예외가 적용되면 ISA 5,000,000 + 미배분 7,000,000, 적용되지 않으면 ISA 0 + 미배분 12,000,000」으로 두 상태가 서로 다른 두 숫자를 낸다.**
 
-**세액 한도 (17차 재산출)** **해당연도** 총급여 45,000,000의 추정 한도는 S15 표로 **2,805,000**이다(§47 → §50①1 → §55① → §59). 자르기 전 소득세분 1,350,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다. **다만 그 주장은 「우리가 아는 상한으로는 잘리지 않았다」까지다** — 이 경로는 부양가족·보험료공제·자녀세액공제를 하나도 세지 않으므로 실제 한도는 이보다 낮을 수 있고, 그래서 `binding_code`가 `binding_not_determined`다. 유동성 우선안의 자르기 전 소득세분은 1,050,000이므로 그쪽도 자르지 않는다.
+- **ISA** 잔여 0년 → 3년 안에 해지해도 조특법 §91조의18⑦의 추징 요건이 성립하지 않는다 → **이 돈에 대해 ISA는 불리하지 않다** → 배분을 유지하고 잔여 한도 5,000,000까지 채운다(`limited_by: contribution_limit`).
+- **연금 두 계좌** 만 40세로 `pension.withdrawal.eligibility`의 55세 요건 미달 → 연금외수령 → `pension.early_withdrawal.other_income_rate` 15% + 지방세 1.5% = **16.5%**. 공제율 16.5%와 같거나 크다 → **0**(`limited_by: fund_use_horizon`).
+- **미배분 7,000,000** 예산 12,000,000 − ISA 5,000,000. `unallocated_breakdown.reason_code`가 `no_account_beneficial_within_fund_use_horizon`이라고 말하면 **거짓이다** — ISA가 이롭고 실제로 받았다. 남은 7,000,000이 미배분인 이유는 **ISA 납입 잔여 한도가 5,000,000뿐**이기 때문이므로 `contribution_room_exhausted`가 맞다.
+- **배분안 수 1** 연금이 어느 안에서도 0이고 ISA가 잔여 한도까지 차므로 네 안의 벡터가 같다.
+- **잔차** ISA 5,000,000 ÷ 12 = 416,666(버림) × 12 = 4,999,992 → **8**. 미배분은 세지 않는다(계약 5.5절).
+
+**이 케이스가 무엇을 막는가 (21차 개정).** (1) **D52 2번을 조건 없이 구현하는 것** — 그러면 여기서 ISA가 0이 되고, 화면은 추징이 성립하지 않는 사용자에게 추징을 이유로 「넣지 마세요」라고 말한다. (2) `unallocated_breakdown.reason_code`를 `within_isa_lock_in`이라는 입력만 보고 정하는 것 — 여기서는 이유가 한도이지 시점이 아니다. (3) ISA를 잔여 한도 위로 채우는 것. **종전에 이 케이스가 막던 것 중 하나(두 번째 순위 이후의 S13 적용)는 배분안이 하나로 접히면서 여기서 사라졌다** — 그 축은 GC-32d가 IRP 2,998,274 / ISA 1,726으로 진다.
+
+> ⚠ **이 블록은 21차 현재 엔진과 어긋난다. 정답지 쪽을 바꾸지 않았다.** 엔진은 ISA도 0으로 만들고 12,000,000 전액을 `no_account_beneficial_within_fund_use_horizon`으로 미배분한다. **원인은 계약이다** — `engine-interface.md` 3.1절·5.13절이 `within_isa_lock_in`을 조건 없이 「전액 미배분」으로 적고 D52 후속의 예외가 없다. 대조는 `verification-report.md` 21.2절.
+
+**세액 한도 (17차 재산출)** **해당연도** 총급여 45,000,000의 추정 한도는 S15 표로 **2,805,000**이다(§47 → §50①1 → §55① → §59). **21차 이후 이 문단은 공허하다** — 연금 배분이 0이라 자를 금액이 없다. 한도 자체는 배분과 무관하게 같은 값으로 남는다(계약 3.1절: 전액 미배분은 배분 판정이지 한도 판정이 아니다).
 
 ```golden
 {
@@ -3930,7 +3961,7 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
   },
   "expect": {
     "current": {
-      "plan_count": 2,
+      "plan_count": 1,
       "boundaries": {
         "isa_lock_in_years_remaining": 0
       },
@@ -3941,56 +3972,32 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
         "isa_lock_in_already_elapsed"
       ],
       "comparison_note_codes": [
+        "plans_collapsed_single"
+      ],
+      "comparison_note_codes_absent": [
         "all_accounts_have_early_exit_penalty"
       ],
       "plans": {
         "max_tax_credit": {
+          "is_baseline": true,
           "allocation": {
-            "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 3000000
-          },
-          "tax_credit": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
-          },
-          "warning_count": 2,
-          "warning_codes": [
-            "early_withdrawal_penalty_pension"
-          ],
-          "fill_order": {
-            "annuity_savings": 1,
-            "retirement_pension": 2,
-            "isa": 3
-          },
-          "monthly_rounding_residual_krw": 0
-        },
-        "isa_first": {
-          "allocation": {
-            "annuity_savings": 6000000,
-            "retirement_pension": 1000000,
+            "annuity_savings": 0,
+            "retirement_pension": 0,
             "isa": 5000000
           },
           "tax_credit": {
-            "income_tax": 1050000,
-            "local_tax": 105000,
-            "total": 1155000
+            "income_tax": 0,
+            "local_tax": 0,
+            "total": 0
           },
-          "warning_count": 2,
-          "warning_codes": [
-            "early_withdrawal_penalty_pension"
-          ],
-          "fill_order": {
-            "isa": 1,
-            "annuity_savings": 2,
-            "retirement_pension": 3
-          },
+          "warning_count": 0,
           "limited_by": {
+            "annuity_savings": "fund_use_horizon",
+            "retirement_pension": "fund_use_horizon",
             "isa": "contribution_limit"
           },
-          "delta_vs_baseline_krw": -330000,
-          "monthly_rounding_residual_krw": 12
+          "unallocated_krw": 7000000,
+          "monthly_rounding_residual_krw": 8
         }
       },
       "notice_codes_absent": [
@@ -4025,15 +4032,19 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 
 | 항목 | 값 |
 |---|---|
-| 자르기 전 소득세분 (= 임계값) | 1,350,000 |
+| 자르기 전 소득세분 (= 임계값) | **900,000** — 21차. IRP가 트림되면서 인정액이 6,000,000으로 줄었다 |
 | 세액 한도 | **0** — 그리고 이 0은 추정이 아니라 **등식**이다(`is_exact`) |
 | 인정 세액공제 소득세 / 지방세 / 합계 | **0 / 0 / 0** |
-| 배분 (최대공제안) | 연금저축 6,000,000 + IRP 3,000,000 · ISA 0 — **한도가 넉넉한 경우와 완전히 같다** |
-| 배분안 수 | 2 |
+| 배분 (최대공제안) | **연금저축 6,000,000 + IRP 0 + ISA 3,000,000** — 21차 (D52 1번) |
+| 배분안 수 | **3** — 21차. 최대공제안이 `annuity_savings_first`와 갈라졌다 |
 | 안내 | `tax_liability_cap_zero` · `tax_liability_cap_applied` · `tax_liability_cap_estimated_from_total_salary` |
 | 비교 안내 | `tax_credit_axis_not_discriminating` · `alternatives_have_equal_tax_credit` |
 
-**도출 과정** S1 750,000 × 12 = 9,000,000 → S2 5,000,000 ≤ 55,000,000 이므로 15% → S5 합산 공제한도 9,000,000 → S13 동점이므로 연금저축을 자기 한도 6,000,000까지 먼저 채우고 잔여 3,000,000이 IRP로 → S7 자르기 전 소득세분 9,000,000 × 0.15 = 1,350,000 → **S14 근로소득공제 3,500,000 → 근로소득금액 1,500,000 → 과세표준 0 → 산출세액 0 → 근로소득세액공제 0 → 한도 0이므로 인정액 min(1,350,000, 0) = 0**, 지방세분은 인정된 소득세분에 부가율을 곱하므로 0 × 0.1 = 0.
+**도출 과정** S1 750,000 × 12 = 9,000,000 → S2 5,000,000 ≤ 55,000,000 이므로 15% → S5 합산 공제한도 9,000,000 → **S14 근로소득공제 3,500,000 → 근로소득금액 1,500,000 → 과세표준 0 → 산출세액 0 → 근로소득세액공제 0 → 세액 한도 0** → **S16(21차 신설) IRP를 한 원이라도 넣었을 때 세액공제가 늘어나는가: `min(인정액 × 0.15, 0) = 0`이 인정액과 무관하게 0이므로 늘지 않는다 → IRP 0** → 연금저축은 자기 한도 6,000,000까지 채우고(D52 1번의 단서: 연금저축은 공제를 안 낳아도 과세이연·인출 자유·이월 신청이 남는다) 남은 3,000,000이 ISA로 → 자르기 전 소득세분 6,000,000 × 0.15 = **900,000** → 인정액 min(900,000, 0) = **0**, 지방세분 0.
+
+**21차 개정 사유 (D52 1번) — 이 케이스가 그 판정의 극단이다.** 세액 한도가 **0**이면 IRP를 얼마를 넣든 세액공제가 한 원도 늘지 않는다. 그런데 IRP는 `pension.withdrawal.midterm_restriction`이 정하는 대로 **중도인출이 근퇴법 시행령 §18②의 열거 사유로 제한**되고 연금저축은 그 제한을 받지 않는다. **얻는 것 없이 자물쇠만 지므로 엄격하게 나쁘다.** 그 3,000,000은 ISA로 간다.
+
+**「배분이 움직이지 않는다」던 종전 서술이 이 케이스에서 부분적으로 폐기됐다.** 아래 문단이 「한도가 0이면 넣지 마라는 세법의 결론이 아니다」라고 적고 있고 **그 문장은 연금저축에 대해 여전히 참이다** — 연금저축 6,000,000은 그대로 있다. **IRP에 대해서만 결론이 바뀌었고, 바꾼 것은 세액 한도가 아니라 두 계좌의 인출 제약 차이다.** §61③의 이월 특례는 두 계좌에 똑같이 걸리므로 이월만으로는 IRP를 고를 이유가 되지 못한다.
 
 **공제율은 움직이지 않는다.** `pension.credit.rate`의 구간 판정도 해당 과세기간 총급여액을 쓰지만 45,000,000과 5,000,000이 **같은 구간**(55,000,000 이하)에 있으므로 15%가 그대로다. **좌표를 옮기면서 공제율까지 갈리면 이 케이스가 두 가지를 한꺼번에 재게 된다** — 그것을 피하려고 같은 구간 안에서 옮겼다.
 
@@ -4083,7 +4094,7 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
       "legal_basis": {
         "pension.credit.unused.contribution_carryover": {"present":true,"has_uncertainty_note":true,"uncertainty_note_count":2,"uncertainty_kinds":["confidence_not_verified","unverified"],"uncertainty_paths":["confidence","net_contribution_limit_interaction.unverified"]}
       },
-      "plan_count": 2,
+      "plan_count": 3,
       "baseline_plan": "max_tax_credit",
       "limits": {
         "pension_combined_credit_limit_krw": 9000000,
@@ -4110,8 +4121,8 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
         "max_tax_credit": {
           "allocation": {
             "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 0
+            "retirement_pension": 0,
+            "isa": 3000000
           },
           "tax_credit": {
             "income_tax": 0,
@@ -4119,20 +4130,24 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
             "total": 0
           },
           "tax_credit_before_cap": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 900000,
+            "local_tax": 90000,
+            "total": 990000
           },
           "tax_liability_cap": {
             "cap_krw": 0,
             "applied": true,
             "binding_code": "binds_provably",
-            "threshold_income_tax_krw": 1350000
+            "threshold_income_tax_krw": 900000
           },
+          "credit_eligible_krw": 6000000,
           "warning_count": 0,
           "fill_order": {
             "annuity_savings": 1,
-            "retirement_pension": 2
+            "isa": 2
+          },
+          "limited_by": {
+            "retirement_pension": "no_additional_tax_credit"
           },
           "unallocated_krw": 0
         },
@@ -4185,6 +4200,25 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 - **32b** — 한도와 공제액이 **같으면 초과분이 없다.** §61 ③은 "합계액이 산출세액을 **초과**하는 경우 그 초과하는 금액"만 없는 것으로 보므로 같은 값에서는 아무것도 밀려나지 않는다. 따라서 `tax_liability_cap_applied`가 **나가면 안 된다** — 이 한 줄이 32a와 32b를 가른다. **두 좌표의 총급여 차이는 1원이다.**
 - **32c** — 한도가 283원 남는다. 인정액은 공제액 그대로이고 남은 283원은 어디에도 쓰이지 않는다.
 - **32d** — `min(1,350,000, 1,349,741) = 1,349,741`. 1,349,741 × 0.1 = 134,974.1 → **134,974**. 이 좌표는 어느 단계에서도 끝수가 나지 않아 **원 미만 규약과 무관하게 같은 답을 낸다** — 그래서 규약이 바뀌어도 움직이지 않는 기준점이 된다.
+
+**21차 개정 (D52 1번) — 32d의 배분이 움직인다. 32a·32b·32c는 움직이지 않는다.**
+
+D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 않는다**고 정했다. 그러므로 IRP는 **한도에 닿는 데 필요한 만큼만** 받고, 남는 예산은 ISA로 간다.
+
+| | 한도 | 한도에 닿는 최소 인정액 = ⌈한도 ÷ 0.15⌉ | 연금저축 | **IRP** | ISA | 21차에 움직였는가 |
+|---|---|---|---|---|---|---|
+| **GC-32a** | 1,349,999.888 | 8,999,999.25 → **9,000,000** | 6,000,000 | **3,000,000** | 0 | **아니오** — 합산 한도 9,000,000을 꽉 채워야 닿는다 |
+| **GC-32b** | 1,350,000.076 | 9,000,000.5 → 한도를 다 못 쓴다 | 6,000,000 | **3,000,000** | 0 | **아니오** — 인정액 상한이 먼저 걸린다 |
+| **GC-32c** | 1,350,283 | 같음 | 6,000,000 | **3,000,000** | 0 | **아니오** |
+| **GC-32d** | 1,349,741 | **8,998,273.33 → 8,998,274** | 6,000,000 | **2,998,274** | **1,726** | **예** |
+
+**32d에서만 움직이는 이유는 그 좌표에서만 한도가 인정액 상한보다 눈에 띄게 낮기 때문이다.** 32a는 한도가 절단선 **1원 아래**라 최소 인정액이 8,999,999.25로 나오고 올림하면 9,000,000 — 합산 한도와 같아 IRP가 한 원도 줄지 않는다. **32d는 259원 아래**라 최소 인정액이 8,998,274로 1,726원 줄고, 그만큼이 ISA로 넘어간다. **잘림 폭이 1원이면 배분이 안 움직이고 259원이면 움직인다는 것이 이 표의 내용이고, 두 좌표를 나란히 두는 원래 목적(같은 경로를 밟는가)이 여기서도 유지된다.**
+
+**32d의 `tax_credit_before_cap`이 `tax_credit`과 같아졌다.** 21차 전에는 1,350,000 / 135,000 / 1,485,000이었다 — IRP를 3,000,000 채워 인정액이 9,000,000이었기 때문이다. 이제 인정액이 8,998,274이므로 자르기 전 소득세분이 8,998,274 × 0.15 = 1,349,741.1 → 표시 **1,349,741**이고, 한도 1,349,741과 **같다.** **`applied`는 여전히 `true`다** — `binds_provably`는 「한도가 실제로 무는가」를 재는 값이고, IRP를 트림한 것 자체가 한도가 물었기 때문이다. 트림 후 값이 한도와 같아졌다고 해서 한도가 안 물었다고 적으면 **원인과 결과를 뒤집는다.** `threshold_income_tax_krw`도 1,350,000 → **1,349,741**로 따라 내려간다.
+
+**32d의 잔차 12.** 연금저축 6,000,000 ÷ 12 = 500,000 → **0**. IRP 2,998,274 ÷ 12 = 249,856(버림) × 12 = 2,998,272 → **2**. ISA 1,726 ÷ 12 = 143(버림) × 12 = 1,716 → **10**. 합 **12**. 21차 전에는 세 금액이 모두 12로 나누어떨어져 0이었다 — **트림이 잔차를 만든다**는 것을 이 케이스가 처음으로 값에 담는다.
+
+**배분안 수가 2 → 3이 된다.** 21차 전에는 `max_tax_credit`과 `annuity_savings_first`가 둘 다 `연금저축 6,000,000 + IRP 3,000,000 + ISA 0`이라 합쳐졌다. 이제 `max_tax_credit`이 IRP를 트림해 벡터가 갈라진다. **두 안의 세액공제는 1,484,715로 같고 IRP만 1,726원 차이다** — D52가 「같은 세액공제액을 내면서 IRP 묶인 금액만 더 많은 안은 내지 않는다」고 한 형태에 걸리는지가 이 자리에서 갈린다. **`annuity_savings_first`는 「연금 납입한도를 일부러 채우는 안」이라는 목적이 있으므로 D52가 남기라고 한 쪽이고, 그래서 남는다.** 이 판단이 옳은지는 관리자 확인 대상으로 `verification-report.md` 21.4절에 올렸다.
 
 **왜 네 건을 다 두는가.** `<`와 `≤`를 뒤집는 오류는 32b에서만 드러난다. 32a만 있으면 "자른다"는 것만, 32c만 있으면 "안 자른다"만 확인된다. 경계는 양쪽과 그 위를 동시에 봐야 닫힌다 — GC-01·02·03이 공제율 경계에서 쓴 것과 같은 형태다. **32a와 32b는 총급여 1원 차이로 그 경계를 양쪽에서 물고, 32d는 끝수가 없는 자리에서 같은 경로를 확인한다.**
 
@@ -4331,7 +4365,7 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
   },
   "expect": {
     "current": {
-      "plan_count": 2,
+      "plan_count": 3,
       "baseline_plan": "max_tax_credit",
       "notice_codes": [
         "tax_liability_cap_applied",
@@ -4348,8 +4382,8 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
         "max_tax_credit": {
           "allocation": {
             "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 0
+            "retirement_pension": 2998274,
+            "isa": 1726
           },
           "tax_credit": {
             "income_tax": 1349741,
@@ -4357,22 +4391,28 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
             "total": 1484715
           },
           "tax_credit_before_cap": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 1349741,
+            "local_tax": 134974,
+            "total": 1484715
           },
           "tax_liability_cap": {
             "cap_krw": 1349741,
             "applied": true,
             "binding_code": "binds_provably",
-            "threshold_income_tax_krw": 1350000
+            "threshold_income_tax_krw": 1349741
           },
+          "credit_eligible_krw": 8998274,
           "warning_count": 0,
           "fill_order": {
             "annuity_savings": 1,
-            "retirement_pension": 2
+            "retirement_pension": 2,
+            "isa": 3
           },
-          "unallocated_krw": 0
+          "limited_by": {
+            "retirement_pension": "no_additional_tax_credit"
+          },
+          "unallocated_krw": 0,
+          "monthly_rounding_residual_krw": 12
         },
         "isa_first": {
           "allocation": {
@@ -4729,7 +4769,24 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
 
 **17차가 「반올림해도 같은 값이라 규약에 걸리지 않는다」고 적은 자리가 실은 걸리는 자리였다.** 걸린 것은 반올림이 아니라 **§47②라는 새로운 절사 지점**이고, 과세표준의 소수부 0.75가 세율 15%를 지나며 산출세액의 정수 자리를 넘긴다 — `verification-report.md` 20.5절이 「갈릴 수 있다」고만 적고 20.7절이 「찾지 않았다」고 남긴 **두 번째 좌표가 이것이다.** 이 좌표는 정답지 안에 이미 있었다.
 
-**기대 결과** 자르기 전 소득세분 1,350,000이 한도 899,999에 걸려 **899,999 / 89,999 / 989,998**으로 잘린다(지방세분은 인정된 소득세분 899,999.95 × 0.1 = 89,999.995 → 버림). 안내 `tax_liability_cap_applied` · `tax_liability_cap_estimated_from_total_salary`.
+**기대 결과 (21차 개정)** 자르기 전 소득세분 **900,000**이 한도 899,999에 걸려 **899,999 / 89,999 / 989,998**으로 잘린다(지방세분은 인정된 소득세분 899,999.95 × 0.1 = 89,999.995 → 버림). 안내 `tax_liability_cap_applied` · `tax_liability_cap_estimated_from_total_salary`.
+
+**21차 개정 (D52 1번) — IRP가 0이 되고 그 3,000,000이 ISA로 간다.**
+
+한도가 **899,999.95**인데 **연금저축 6,000,000만으로 이미 900,000**을 낸다. `min(900,000, 899,999.95) = 899,999.95`이므로 **IRP를 한 원이라도 넣어도 인정 세액공제가 늘지 않는다** — 인정액이 늘어도 `min`의 오른쪽이 이미 이기고 있기 때문이다. **이 케이스가 D52 1번이 말하는 「세액공제를 한 원도 더 낳지 않는 IRP 배분」의 교과서적인 자리다.** 그런 배분은 `pension.withdrawal.midterm_restriction`의 중도인출 제한만 지우므로 내지 않는다.
+
+| 단계 | 값 |
+|---|---|
+| 세액 한도 | **899,999.95** |
+| 연금저축 6,000,000만으로 얻는 인정 공제 | `min(6,000,000 × 0.15, 899,999.95)` = **899,999.95** |
+| 연금저축 + IRP 3,000,000으로 얻는 인정 공제 | `min(9,000,000 × 0.15, 899,999.95)` = **899,999.95** — **같다** |
+| 한도에 닿는 최소 인정액 | ⌈899,999.95 ÷ 0.15⌉ = ⌈5,999,999.67⌉ = **6,000,000** → **IRP 0** |
+| 배분 | 연금저축 6,000,000 · **IRP 0** · **ISA 3,000,000** |
+| 자르기 전 소득세분 (= `threshold_income_tax_krw`) | 6,000,000 × 0.15 = **900,000** (종전 1,350,000) |
+
+**소유자가 D52에서 지적한 것이 바로 이 형태다.** 총급여 3,069만원 아래에서는 연금저축 600만원만으로 세액 한도를 이미 넘으므로 IRP가 아무것도 낳지 않는다. **이 케이스의 총급여 30,686,275원이 그 경계 바로 아래**이고, **한 원 위(30,686,276)에서 IRP가 0이 아니게 되는지는 21차 조사 대상이었다** — `verification-report.md` 21.3절에 결과를 적었다. **결론만 여기 적으면: 그 좌표에서 엔진은 IRP 1원을 내지만 그 1원은 표시 세액공제를 한 원도 올리지 않는다.**
+
+**`threshold_income_tax_krw`가 1,350,000 → 900,000으로 내려간다.** 이 값은 「자르기 전 소득세분」이고, IRP가 빠지면서 인정액이 9,000,000 → 6,000,000이 됐기 때문이다. **`applied: true`와 `binds_provably`는 그대로다** — 900,000이 899,999.95에 걸려 실제로 잘린다.
 
 **이 케이스가 새로 주장하는 것 — `binds_provably`.** 추정 한도는 상한이므로 **그것이 잘랐다면 실제 한도는 더 작거나 같아 반드시 자른다.** 이 방향은 조문에서 증명되고, 그래서 화면이 D37의 문장(「이 막대가 짧은 것은 덜 넣어서가 아니라 낼 세금이 이 한도보다 적기 때문입니다」)을 **거짓이 될 위험 없이** 적을 수 있는 유일한 상태다.
 
@@ -4774,7 +4831,7 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
   },
   "expect": {
     "current": {
-      "plan_count": 2,
+      "plan_count": 3,
       "notice_codes": [
         "tax_liability_cap_applied",
         "tax_liability_cap_estimated_from_total_salary"
@@ -4800,8 +4857,8 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
         "max_tax_credit": {
           "allocation": {
             "annuity_savings": 6000000,
-            "retirement_pension": 3000000,
-            "isa": 0
+            "retirement_pension": 0,
+            "isa": 3000000
           },
           "tax_credit": {
             "income_tax": 899999,
@@ -4809,16 +4866,22 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
             "total": 989998
           },
           "tax_credit_before_cap": {
-            "income_tax": 1350000,
-            "local_tax": 135000,
-            "total": 1485000
+            "income_tax": 900000,
+            "local_tax": 90000,
+            "total": 990000
           },
           "tax_liability_cap": {
             "cap_krw": 899999,
             "applied": true,
             "binding_code": "binds_provably",
-            "threshold_income_tax_krw": 1350000
+            "threshold_income_tax_krw": 900000
           },
+          "credit_eligible_krw": 6000000,
+          "limited_by": {
+            "retirement_pension": "no_additional_tax_credit"
+          },
+          "unallocated_krw": 0,
+          "monthly_rounding_residual_krw": 0,
           "warning_count": 0
         },
         "isa_first": {
@@ -4832,7 +4895,8 @@ M3 수정은 비교 안내 `all_accounts_have_early_exit_penalty`의 조건을 *
             "local_tax": 0,
             "total": 0
           },
-          "warning_count": 0
+          "warning_count": 0,
+          "delta_vs_baseline_krw": -989998
         }
       }
     }
@@ -7674,9 +7738,28 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
 
 **프로필** 40세 · 월 1,000,000 × 12 = 예산 12,000,000 · 연금 두 계좌 **연금수령 개시함** · ISA 일반형 누적 20,000,000 / 경과 **1년** · horizon **`within_isa_lock_in`** · 수익률 0.1 · `interest_dividend` · 정산 1년
 
-**기대 결과** ISA 배분 **12,000,000** · 원금 **32,000,000** · 혜택 **374,000** · 축 `0 / 308,000 / 66,000` · 경고 **정확히 `["early_termination_clawback_isa"]`** · 잔여 의무가입기간 **2년**
+**기대 결과 (21차 · D52 2번)** ISA 배분 **0** (전액 미배분 12,000,000) · 원금 **20,000,000** · 혜택 **308,000** · 축 `0 / 308,000 / 0` · **경고 0건** · 잔여 의무가입기간 **2년**
 
-**도출 과정** 12.3절.
+**21차 개정 사유 — 이 케이스의 두 축 중 하나가 사라지고 다른 하나가 남았다.**
+
+이 케이스는 「계약을 유지한다는 전제 위의 금액」과 「그 전제를 깨는 사실의 경고」를 **한 화면에 나란히** 두려고 만들었다. **D52 2번이 그 대립을 없앴다** — 3년 안에 쓸 돈이면 배분이 0이 되고, 경고는 배분액 > 0인 계좌에만 붙으므로(계약 5.6절) `early_termination_clawback_isa`가 나올 수 없다. **경고 축은 GC-27이 「잔여가 남으면 배분을 0으로 만든다」로 이어받는다.**
+
+**남은 축이 더 중요해졌다 — 배분이 0인데도 ISA 혜택 추정치가 나온다.** 이 사용자는 **이미 20,000,000을 넣어 둔 계좌**를 갖고 있고, 그 원금이 낳는 이자·배당은 이 서비스가 무엇을 권하든 발생한다. `isa.benefit.formula`의 원금은 `cumulative_contribution_plus_plan_allocation`이므로 **배분이 0이면 기납입액만 남는다.**
+
+| 단계 | 근거 규칙 | 값 |
+|---|---|---|
+| 원금 | `isa.benefit.formula` (기납입 20,000,000 + 배분 0) | **20,000,000** |
+| 총수익 (수익률 0.1 · 정산 1년 · 단리) | 입력 | **2,000,000** |
+| 과세대상 비중 | `isa.benefit.income_character` — `interest_dividend`이므로 1 | 2,000,000 |
+| 비과세 한도 | `isa.tax_free_limit` — 일반형 | **2,000,000** |
+| 순소득 vs 한도 | 2,000,000 ≤ 2,000,000 → **전액 비과세** | ISA 쪽 세금 **0** |
+| 비교 대상 세금 | 계좌 밖 이자·배당 원천징수 14% + 지방세 1.4% = **15.4%** (`tax.local.personal_income_surtax`) | 2,000,000 × 0.154 = **308,000** |
+| 혜택 | 308,000 − 0 | **308,000** |
+| 저율분리과세 축 | 순소득이 비과세 한도를 넘지 않아 **0** — `isa_rate_gap_axis_zero_because_within_tax_free_limit` | **0** |
+
+**21차 전에는 배분 12,000,000이 원금에 더해져 32,000,000 → 수익 3,200,000이었고, 그중 1,200,000이 비과세 한도를 넘어 저율분리과세 축이 66,000이었다.** 배분이 사라지면서 **한도를 넘는 몫 자체가 사라졌고, 그래서 축이 셋에서 둘(실질 하나)로 줄었다.** 이 변화가 D52 2번이 화면 금액에 미치는 영향의 크기를 보여주는 자리이고, **「배분이 0이어도 ISA 혜택 칸이 비지 않는다」는 것을 이 케이스가 유일하게 값으로 잡는다.**
+
+**도출 과정** 12.3절과 위 표.
 
 ```golden
 {
@@ -7730,22 +7813,31 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
       "boundaries": {
         "isa_lock_in_years_remaining": 2
       },
+      "plan_count": 1,
+      "comparison_note_codes": [
+        "all_accounts_have_early_exit_penalty",
+        "plans_collapsed_single"
+      ],
       "plans": {
         "max_tax_credit": {
+          "is_baseline": true,
           "allocation": {
             "annuity_savings": 0,
             "retirement_pension": 0,
-            "isa": 12000000
+            "isa": 0
           },
           "tax_credit": {
             "income_tax": 0,
             "local_tax": 0,
             "total": 0
           },
-          "warning_count": 1,
-          "warning_codes": [
-            "early_termination_clawback_isa"
-          ],
+          "warning_count": 0,
+          "limited_by": {
+            "annuity_savings": "not_eligible",
+            "retirement_pension": "not_eligible",
+            "isa": "fund_use_horizon"
+          },
+          "unallocated_krw": 12000000,
           "assumption_based_isa_estimate": {
             "state": "computed",
             "is_annual": false,
@@ -7753,27 +7845,30 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
             "settlement_years_source": "user",
             "taxable_share_min": 1,
             "taxable_share_max": 1,
-            "principal_krw": 32000000,
-            "total_return_krw": 3200000,
-            "taxable_income_krw": 3200000,
+            "principal_krw": 20000000,
+            "total_return_krw": 2000000,
+            "taxable_income_krw": 2000000,
             "loss_offset_applied_krw": 0,
-            "net_income_krw": 3200000,
+            "net_income_krw": 2000000,
             "tax_free_limit_krw": 2000000,
-            "comparison_side_tax_krw": 492800,
-            "isa_side_tax_krw": 118800,
-            "point_estimate_krw": 374000,
-            "lower_bound_krw": 374000,
-            "upper_bound_krw": 374000,
+            "comparison_side_tax_krw": 308000,
+            "isa_side_tax_krw": 0,
+            "point_estimate_krw": 308000,
+            "lower_bound_krw": 308000,
+            "upper_bound_krw": 308000,
             "axis_breakdown": {
               "loss_offset_krw": 0,
               "tax_free_krw": 308000,
-              "rate_gap_krw": 66000,
+              "rate_gap_krw": 0,
               "rounding_residual_krw": 0
             },
             "comparison_baseline_code": "withholding_at_general_rate"
           }
         }
       },
+      "notice_codes": [
+        "isa_rate_gap_axis_zero_because_within_tax_free_limit"
+      ],
       "notice_codes_absent": [
         "isa_return_assumption_not_supplied",
         "isa_lock_in_already_elapsed"
