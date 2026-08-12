@@ -28,7 +28,8 @@ import {
   maxDate,
   yearsUntil,
 } from './dates.mjs';
-import { applyRate, clampToZero, effectiveRate } from './ratio.mjs';
+import { applyRate, clampToZero, effectiveRate, toRatio } from './ratio.mjs';
+import { cmpExact, exactOf, scaleExact } from './exact.mjs';
 
 /** 룰셋 산식에서 경과연수 상한을 읽는다. 숫자를 코드에 박지 않기 위한 것이다. */
 function readTenureCap(formula) {
@@ -268,8 +269,14 @@ export function resolveAgeReckoning(access) {
  * 근거는 engine-design.md 9.2절이고, 걸리는지 여부는 `tax_liability_cap_relation_code`로
  * 따로 낸다.
  */
-export function resolvePensionCreditCeiling(access, { rates, combinedLimit, extraCreditLimitKrw, cap }) {
+export function resolvePensionCreditCeiling(
+  access,
+  { rates, combinedLimit, extraCreditLimitKrw, cap, capExact, rounding },
+) {
   const appliedTo = 'pension_credit_ceiling.ceiling_krw';
+  if (rounding === null || rounding === undefined || capExact === null) return null;
+  // 이 축의 금액도 원 미만 규약을 탄다. 어느 규칙이 그것을 정했는지가 근거에 남아야 한다.
+  access.markUsed(RULE.ROUNDING_WON_FRACTION, appliedTo);
   // 한도와 율은 이미 읽은 규칙에서 나오지만, **이 값이 무엇에 매여 있는지**가 근거로
   // 함께 나가야 한다. 읽은 자리를 다시 등록해 legal_basis의 applied_to에 이 축을 남긴다.
   access.markUsed(RULE.CREDIT_LIMIT_COMBINED, appliedTo);
@@ -285,9 +292,11 @@ export function resolvePensionCreditCeiling(access, { rates, combinedLimit, extr
   }
 
   // 배분안이 쓰는 것과 **같은 두 단계**다. 다른 산술을 쓰면 한도를 채운 사람에게서
-  // 축과 막대가 1원 어긋난다.
-  const incomeTaxKrw = applyRate(combinedLimit, incomeTaxRate);
-  const localTaxKrw = incomeTaxKrw === null ? null : applyRate(incomeTaxKrw, rates.surtaxRate);
+  // 축과 막대가 1원 어긋난다 — 그래서 여기도 정확값으로 계산하고 표시 직전에 버린다.
+  const incomeTaxExact = scaleExact(exactOf(combinedLimit), toRatio(incomeTaxRate));
+  const localTaxExact = scaleExact(incomeTaxExact, toRatio(rates.surtaxRate));
+  const incomeTaxKrw = rounding.display(incomeTaxExact);
+  const localTaxKrw = rounding.displayLocal(localTaxExact);
   if (incomeTaxKrw === null || localTaxKrw === null) return null;
 
   // **소득세분끼리 비교한다.** 한도는 산출세액에서 나온 소득세의 값이고 상한의 합계는
@@ -297,7 +306,7 @@ export function resolvePensionCreditCeiling(access, { rates, combinedLimit, extr
   // 한도는 이보다 작을 수 있다. 이 코드로 화면이 「여유가 있습니다」를 적으면 거짓이 될
   // 수 있고, 그 구분은 배분안의 `binding_code`가 낸다(D40).
   const capRelation =
-    cap.cap_krw < incomeTaxKrw ? CEILING_CAP_RELATION.BELOW : CEILING_CAP_RELATION.AT_OR_ABOVE;
+    cmpExact(capExact, incomeTaxExact) < 0 ? CEILING_CAP_RELATION.BELOW : CEILING_CAP_RELATION.AT_OR_ABOVE;
 
   return {
     ceiling_krw: incomeTaxKrw + localTaxKrw,

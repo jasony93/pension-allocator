@@ -185,6 +185,42 @@ export const CAP_BINDING = {
 };
 
 /**
+ * 원 미만 끝수를 없애는 **단계의 이름**과 그 자리에서 하는 **연산의 이름** (D46 1번).
+ *
+ * 정의 자리는 룰셋이다 — `tax.rounding.won_fraction`의 `engine_contract`가
+ * `stage_codes`·`operation_codes`를 값으로 선언한다. 여기 있는 것은 **전사**이고 두 목록이
+ * 갈라지면 `ruleset-driven.test.mjs`가 실패한다.
+ *
+ * **왜 이름만은 코드에 있어야 하는가.** 엔진은 「지금 어느 단계에 서 있는가」를 스스로
+ * 알아야 한다 — 과세표준을 구하는 자리인지, 화면에 실을 금액을 만드는 자리인지는 코드의
+ * 구조이지 데이터가 정해 줄 수 있는 것이 아니다. **대신 연산과 단위는 한 개도 여기 없다.**
+ * 무엇을 버리는지(`floor`/`none`)와 얼마 단위로 버리는지(`unit_krw`)는 전부 룰셋에서
+ * 읽는다. 「1원」도 「10원」도 이 파일에 없다 — 그 둘은 조문이 정한 세법 수치다.
+ */
+export const ROUNDING_STAGE = {
+  /** §47② — 국세의 과세표준액. **조문이 지목한 자리다.** */
+  TAX_BASE: 'tax_base',
+  /** §47① — 국고금의 수입·지출. 조문이 지목했으나 **우리 출력은 여기가 아니다.** */
+  TREASURY: 'treasury_receipt_or_payment',
+  /** 조문이 지목하지 않은 계산 중간값. 규약으로 절사하지 않는다. */
+  INTERMEDIATE: 'intermediate_amount',
+  /** 참·거짓을 내는 자리. 규약으로 정확값끼리 비교한다. */
+  COMPARISON: 'comparison',
+  /** 응답에 정수 원으로 실리는 금액. 규약으로 마지막에 한 번 버린다. */
+  DISPLAYED: 'displayed_amount',
+};
+
+export const ROUNDING_STAGES = Object.values(ROUNDING_STAGE);
+
+/** 엔진이 실제로 할 줄 아는 연산. 룰셋이 다른 이름을 적으면 지어내지 않고 멈춘다. */
+export const ROUNDING_OP = {
+  FLOOR: 'floor',
+  NONE: 'none',
+};
+
+export const ROUNDING_OPS = Object.values(ROUNDING_OP);
+
+/**
  * 공제율 구간을 **무엇으로** 판정했는가.
  *
  * `pension.credit.rate.basis_determination`이 정한다 — 본문 기준은 종합소득금액이고
@@ -467,6 +503,11 @@ export const RULE = {
   BASIC_DEDUCTION_SELF: 'income.deduction.basic.self',
   BASIC_TAX_RATE: 'tax.rate.basic',
   WAGE_INCOME_CREDIT: 'credit.wage_income',
+
+  // 20차 조사(D46 1번). **원 미만 끝수를 어느 단계에서 어떻게 없애는가.**
+  // 조문(국고금 관리법 §47)이 지목한 단계와 이 조직이 규약으로 정한 단계가
+  // 한 규칙 안에서 `determined_by_law`로 갈려 있다.
+  ROUNDING_WON_FRACTION: 'tax.rounding.won_fraction',
 
   // 9차 조사(D26). 세액공제 한도를 넘는 연금계좌 납입의 세법상 취급과
   // 그 원금이 인출될 때의 과세. 배분 금액을 바꾸지 않고 **사실**만 준다.

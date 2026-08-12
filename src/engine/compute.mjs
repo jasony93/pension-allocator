@@ -252,6 +252,10 @@ function computeScenario(scenarioId, request, rulesets) {
             ? transferResult.transfer.extra_credit_limit_krw
             : 0,
           cap: capResult.cap,
+          // 축과 한도의 대소는 **정확값끼리** 잰다. 절사한 값으로 비교하면 1원 미만의
+          // 차이가 사라져 관계 코드가 뒤집힌다(룰셋 `comparison` 단계).
+          capExact: capResult.capExact,
+          rounding: capResult.rounding,
         });
 
   // 필요한 규칙이나 값을 하나라도 읽지 못했으면 중단한다. 대체값을 만들지 않는다.
@@ -306,6 +310,9 @@ function computeScenario(scenarioId, request, rulesets) {
     creditEligibility: creditEligibilityResult.eligibility,
     boundaries,
     cap: capResult.cap,
+    // 자르기 판정은 정확값으로 한다. 표시 금액은 그 뒤에 한 번 버려서 만든다.
+    capExact: capResult.capExact,
+    rounding: capResult.rounding,
     startDates: startDateResult.entries,
   });
 

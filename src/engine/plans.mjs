@@ -29,7 +29,8 @@ import { bindingCodeFor } from './liability-cap.mjs';
 import { headlineCompositeTotalFor } from './headline.mjs';
 import { isaEstimateFor } from './isa-return.mjs';
 import { apportionMonthly } from './monthly.mjs';
-import { applyRate, clampToZero } from './ratio.mjs';
+import { applyRate, clampToZero, toRatio } from './ratio.mjs';
+import { EXACT_ZERO, addExact, cmpExact, exactOf, minExact, scaleExact } from './exact.mjs';
 
 const PENSION_ACCOUNTS = new Set([ACCOUNT.PENSION, ACCOUNT.ANNUITY]);
 
@@ -282,13 +283,25 @@ function allocate(planId, ctx) {
  * 다시 적용한다.** 지방세 쪽에 같은 한도 구조가 있는지는 룰셋이 미확인으로 남겨 두었고,
  * 그 사실은 assumptions로 나간다.
  */
-function applyCap(incomeTax, localTax, { cap, rates, access }) {
-  const recognizedIncomeTax = Math.min(incomeTax, cap.cap_krw);
-  const recognizedLocalTax =
-    recognizedIncomeTax === incomeTax ? localTax : applyRate(recognizedIncomeTax, rates.surtaxRate) ?? 0;
+function applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, rounding, access }) {
+  // **비교는 정확값으로 한다**(룰셋 `tax.rounding.won_fraction`의 `comparison` 단계).
+  // 한도 1,349,999.888과 공제액 1,350,000은 조문상 한도가 더 작아 절단이 일어나는
+  // 자리인데, 한도를 먼저 1,350,000으로 만들어 비교하면 그 절단이 사라진다.
+  const recognizedIncomeTaxExact = minExact(incomeTaxExact, capExact);
+  const recognizedLocalTaxExact = scaleExact(recognizedIncomeTaxExact, toRatio(rates.surtaxRate));
 
+  const incomeTax = rounding.display(incomeTaxExact);
+  const localTax = rounding.displayLocal(localTaxExact);
+  const recognizedIncomeTax = rounding.display(recognizedIncomeTaxExact);
+  const recognizedLocalTax = rounding.displayLocal(recognizedLocalTaxExact);
+
+  // **잘렸는가는 정확값의 대소가 정한다.** 표시 금액의 차이가 아니다 — 그 둘이 갈리는
+  // 좌표가 실재하고(끝수만 잘린 경우), 표시 쪽으로 판정하면 D46 1번이 고친 결함이 다른
+  // 자리에서 그대로 되살아난다.
+  const applied = cmpExact(capExact, incomeTaxExact) < 0;
+  // 표시되는 잘린 금액은 **표시 금액끼리의 뺄셈**이다. 화면이 세 수를 나란히 놓으므로
+  // 그 셋이 서로 맞아야 한다(불변식 I23).
   const reducedIncomeTax = incomeTax - recognizedIncomeTax;
-  const applied = reducedIncomeTax > 0;
 
   // 잘린 것은 공제액이고 납입액이 아니다. 그 납입액은 전환 신청의 대상이 된다 —
   // "넣은 돈이 사라진다"가 아니라 "올해의 공제는 0이고 납입액은 넘길 수 있다"가 정확한 서술이다.
@@ -299,6 +312,8 @@ function applyCap(incomeTax, localTax, { cap, rates, access }) {
   const carryover = applied ? resolveCarryoverConditions(access) : null;
 
   return {
+    incomeTax,
+    localTax,
     recognizedIncomeTax,
     recognizedLocalTax,
     cap: {
@@ -333,7 +348,7 @@ function applyCap(incomeTax, localTax, { cap, rates, access }) {
 }
 
 /** 세액공제액. 대상액을 계좌별 공제율로 나눠 적용한다. */
-function benefitOf({ annuityCounted, pensionCounted }, { state, rates, cap, access }) {
+function benefitOf({ annuityCounted, pensionCounted }, { state, rates, cap, capExact, rounding, access }) {
   const eligibleTotal = Math.min(annuityCounted + pensionCounted, state.combinedLimit);
 
   // ⚠ 조문이 정하지 않아 엔진이 정한 지점. engine-design.md 6.4절에 전말이 있고
@@ -352,11 +367,16 @@ function benefitOf({ annuityCounted, pensionCounted }, { state, rates, cap, acce
   add(pensionRate, pensionEligible);
   add(rates.incomeTaxRate, annuityEligible);
 
-  let incomeTax = 0;
-  for (const [rate, amount] of groups) incomeTax += applyRate(amount, rate) ?? 0;
-  const localTax = applyRate(incomeTax, rates.surtaxRate) ?? 0;
+  // **율마다 따로 버리지 않는다.** 공제율이 둘인 경우(개정안의 청년 우대) 갈래마다
+  // 버리면 조문에 없는 절사 자리가 갈래 수만큼 생긴다. 정확값으로 더하고 표시 직전에
+  // 한 번 버린다 — 룰셋 `intermediate_amount`/`displayed_amount`의 규약이다.
+  let incomeTaxExact = EXACT_ZERO;
+  for (const [rate, amount] of groups) {
+    incomeTaxExact = addExact(incomeTaxExact, scaleExact(exactOf(amount), toRatio(rate)));
+  }
+  const localTaxExact = scaleExact(incomeTaxExact, toRatio(rates.surtaxRate));
 
-  const capped = applyCap(incomeTax, localTax, { cap, rates, access });
+  const capped = applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, rounding, access });
 
   return {
     pension_credit_income_tax_krw: capped.recognizedIncomeTax,
@@ -364,9 +384,9 @@ function benefitOf({ annuityCounted, pensionCounted }, { state, rates, cap, acce
     pension_credit_total_krw: capped.recognizedIncomeTax + capped.recognizedLocalTax,
     // 자르기 전 금액. 화면이 "계산된 공제액 중 얼마가 이번 과세연도에 쓰이지 않는지"를
     // 말하려면 이 값이 함께 있어야 한다.
-    pension_credit_income_tax_before_cap_krw: incomeTax,
-    pension_credit_local_tax_before_cap_krw: localTax,
-    pension_credit_total_before_cap_krw: incomeTax + localTax,
+    pension_credit_income_tax_before_cap_krw: capped.incomeTax,
+    pension_credit_local_tax_before_cap_krw: capped.localTax,
+    pension_credit_total_before_cap_krw: capped.incomeTax + capped.localTax,
     // 세액공제 대상으로 **인정된 납입액**은 한도로 잘리지 않는다. 잘리는 것은 공제액이고
     // 납입액은 살아남아 전환 신청의 대상이 된다(시행령 §118의3).
     credit_eligible_contribution_krw: eligibleTotal,

@@ -101,7 +101,7 @@ test('총급여 5,000,000원 이하의 한도는 정확히 0이다 — 추정이
   );
 });
 
-test('총급여 30,686,275원의 한도는 정확히 900,000원이고 그 한도가 공제를 자른다', () => {
+test('총급여 30,686,275원의 한도는 899,999원이고 그 한도가 공제를 자른다', () => {
   const { total_salary_krw: salary, cap_krw: expected } = CAP_COORDINATES.BINDS;
   const scenario = scenarioOf(compute(withSalary(salary, FULL_PENSION), rulesets));
 

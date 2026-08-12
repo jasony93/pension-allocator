@@ -496,8 +496,10 @@ test('주입 / 한도를 상한이 아니라 하한으로 취급하면(min → m
 
   const flipped = await mutatedCompute({
     file: 'plans.mjs',
-    from: 'const recognizedIncomeTax = Math.min(incomeTax, cap.cap_krw);',
-    to: 'const recognizedIncomeTax = Math.max(incomeTax, cap.cap_krw);',
+    from: 'const recognizedIncomeTaxExact = minExact(incomeTaxExact, capExact);',
+    // `maxExact`로 바꾸면 되지만 그 이름은 `plans.mjs`가 들여오지 않는다 — 주입이
+    // 참조 오류로 끝나면 아무것도 재지 못하므로, 이미 있는 이름으로 같은 뜻을 적는다.
+    to: 'const recognizedIncomeTaxExact = cmpExact(incomeTaxExact, capExact) >= 0 ? incomeTaxExact : capExact;',
   });
   // (1) 자르던 좌표에서 자름이 사라진다. 한도가 낮은 사람에게 낼 수 없는 공제를 준다.
   const bound = capOfPlan(flipped(CAP_BINDING_REQUEST, rulesets));
@@ -541,8 +543,8 @@ test('주입 / 근로소득세액공제 차감을 빼면 한도가 검산 좌표
   // 한도가 「산출세액 그 자체」가 되어 더 커지고, 상한이 더 헐거워진다 — 과대 방향이다.
   const withoutStep = await mutatedCompute({
     file: 'liability-cap.mjs',
-    from: 'const capKrw = clampToZero(computedTax - wageCredit);',
-    to: 'const capKrw = clampToZero(computedTax);',
+    from: 'const capExact = clampExactToZero(subExact(computedTax, wageCredit));',
+    to: 'const capExact = clampExactToZero(computedTax);',
   });
 
   const scenario = withoutStep(CAP_BINDING_REQUEST, rulesets).scenarios[0];
