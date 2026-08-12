@@ -22,6 +22,7 @@ import {
   PENSION_ACCOUNT_KEYS,
   PLAN,
   PLAN_ORDER,
+  RULE,
   SCENARIO_ORDER,
   SCHEMA_VERSION,
   UNCERTAINTY_KIND,
@@ -317,7 +318,10 @@ export const BOUNDARY_KEYS = [
   'pension_years_remaining',
   'pension_holding_period_evaluated',
 ];
-/** 배분안 단위 세액 한도. D22가 이름으로 지목한 넷 + D26이 드러내라고 한 조건 둘이다. */
+/**
+ * 배분안 단위 세액 한도. D22가 이름으로 지목한 넷 + D26이 드러내라고 한 조건 둘 +
+ * D54가 갈라 놓은 이월 판정 + **D55 후속이 연 근거 목록의 유무 둘**이다.
+ */
 export const PLAN_TAX_CAP_KEYS = [
   // **`known`이 여기 있었다**(D39·D40에 폐기). 한도를 「모르는」 상태가 사라졌다 —
   // 총급여액이 있으면 값이 하나로 정해진다. 그 자리를 대신하는 것이 `binding_code`이고,
@@ -334,7 +338,21 @@ export const PLAN_TAX_CAP_KEYS = [
   'contribution_carryover_available',
   'carryover_shares_future_year_credit_limit',
   'carryover_requires_application',
+  /**
+   * **딸린 셋 중 마지막 하나**(D55 후속). 위 칸이 `false`이면 조건 둘이 `null`이 되고
+   * **전환 특례 규칙이 근거 목록에서 빠진다** — 읽지 않은 규칙을 근거로 싣지 않는다는
+   * 규약 때문이다(계약 5.5절). 그 빠짐이 여태 어느 층에서도 주장되지 않았다.
+   *
+   * **왜 목록 전체가 아니라 포함/불포함인가.** 이 칸의 근거 목록은 한도 산출이 읽은
+   * 규칙 일곱에 전환 특례 하나가 붙었다 뗐다 하는 형태다. 전부 열거하게 하면 정답지가
+   * 여덟 줄을 옮겨 적으면서 정작 재려는 **한 줄의 유무**는 나머지에 묻힌다.
+   * `notice_codes` / `notice_codes_absent`와 같은 규약을 쓴다.
+   */
+  'basis_rule_ids',
+  'basis_rule_ids_absent',
 ];
+/** 전환 특례 규칙 하나. 이 배열의 유일한 세법 값이 아니라 **규칙 이름**이다. */
+const CARRYOVER_RULE_ID = RULE.CREDIT_UNUSED_CARRYOVER;
 /** 미배분 갈래(D26). `headrooms_overlap`이 true면 두 여력을 더하면 안 된다. */
 export const UNALLOCATED_KEYS = [
   'total_annual_krw',
@@ -556,6 +574,68 @@ function validatePlanTaxCap(value, where, errors) {
           '자르지 않았으면 밀려난 납입액이 없다',
       );
     }
+  }
+
+  validateCarryoverChain(value, where, errors);
+}
+
+/**
+ * **이월 판정에 딸린 셋이 그 판정을 따라갔는가**(D55 후속). 계약 5.5절이 적는 연쇄다 —
+ * `contribution_carryover_available`이 거짓이면 조건 둘이 `null`이고 전환 특례 규칙이
+ * 근거 목록에서 빠진다.
+ *
+ * **형식 단계에서 무는 이유는 옮겨 적다 한쪽만 고치는 자리이기 때문이다.** 이월을
+ * `false`로 고치면서 조건 둘을 참으로 남겨 두면, 대조는 그 둘에서 실패하겠지만 실패
+ * 메시지가 「값이 다르다」라서 **연쇄가 깨졌다는 사실**은 읽는 사람이 다시 유도해야 한다.
+ * 여기서 걸면 어긋난 짝의 이름이 그대로 나온다.
+ */
+function validateCarryoverChain(value, where, errors) {
+  const CONDITIONS = ['carryover_shares_future_year_credit_limit', 'carryover_requires_application'];
+  for (const key of CONDITIONS) {
+    if (!(key in value)) continue;
+    if (value[key] !== null && typeof value[key] !== 'boolean') {
+      errors.push(`${where}.${key}: 참/거짓 또는 null이어야 한다`);
+      continue;
+    }
+    if (value.contribution_carryover_available === false && value[key] !== null) {
+      errors.push(
+        `${where}.${key}: contribution_carryover_available:false인데 값이 있다 — ` +
+          '전환이 걸리지 않는 안에서는 조건을 읽지 않으므로 null이다',
+      );
+    }
+    if (value.contribution_carryover_available === true && value[key] === null) {
+      errors.push(
+        `${where}.${key}: contribution_carryover_available:true인데 null이다 — ` +
+          '전환이 걸리면 조건 둘을 읽는다',
+      );
+    }
+  }
+
+  for (const key of ['basis_rule_ids', 'basis_rule_ids_absent']) {
+    if (key in value) requireStringArray(value[key], `${where}.${key}`, errors);
+  }
+  const present = Array.isArray(value.basis_rule_ids) ? value.basis_rule_ids : [];
+  const absent = Array.isArray(value.basis_rule_ids_absent) ? value.basis_rule_ids_absent : [];
+
+  const both = present.filter((id) => absent.includes(id)).sort();
+  if (both.length > 0) {
+    errors.push(
+      `${where}: 같은 규칙을 실렸다고도 빠졌다고도 적었다 — ${both.join(', ')}`,
+    );
+  }
+  // 이월 판정과 전환 특례 규칙의 유무는 **같은 사실의 두 얼굴이다.** 한쪽만 뒤집으면
+  // 그 블록은 스스로 모순이므로 대조 전에 거절한다.
+  if (value.contribution_carryover_available === false && present.includes(CARRYOVER_RULE_ID)) {
+    errors.push(
+      `${where}: contribution_carryover_available:false인데 basis_rule_ids에 ` +
+        `${CARRYOVER_RULE_ID}가 있다 — 읽지 않은 규칙은 근거로 실리지 않는다`,
+    );
+  }
+  if (value.contribution_carryover_available === true && absent.includes(CARRYOVER_RULE_ID)) {
+    errors.push(
+      `${where}: contribution_carryover_available:true인데 basis_rule_ids_absent에 ` +
+        `${CARRYOVER_RULE_ID}가 있다 — 전환이 걸리면 그 규칙을 읽는다`,
+    );
   }
 }
 
@@ -1404,10 +1484,34 @@ function limitValue(scenario, key) {
   }
 }
 
-/** 배분안 단위 세액 한도. **적힌 키는 하나도 건너뛰지 않는다.** */
+/**
+ * 배분안 단위 세액 한도. **적힌 키는 하나도 건너뛰지 않는다.**
+ *
+ * 근거 목록 둘만 자가 다르다 — **포함 / 불포함**이다(D55 후속). 나머지는 값 비교다.
+ */
 function checkPlanTaxCap(plan, expected, label) {
   const actual = plan.deterministic_benefit.tax_liability_cap;
+  const basis = Array.isArray(actual.basis_rule_ids) ? actual.basis_rule_ids : [];
+
   for (const [key, value] of Object.entries(expected)) {
+    if (key === 'basis_rule_ids') {
+      const missing = value.filter((id) => !basis.includes(id)).sort();
+      assert.deepStrictEqual(
+        missing,
+        [],
+        `${label} 세액 한도 근거에 실려야 할 규칙이 없다 (있는 것: ${basis.join(', ')})`,
+      );
+      continue;
+    }
+    if (key === 'basis_rule_ids_absent') {
+      const found = value.filter((id) => basis.includes(id)).sort();
+      assert.deepStrictEqual(
+        found,
+        [],
+        `${label} 세액 한도 근거에서 빠져야 할 규칙이 실렸다 (있는 것: ${basis.join(', ')})`,
+      );
+      continue;
+    }
     assert.equal(actual[key], value, `${label} 세액 한도(${key})`);
   }
 }

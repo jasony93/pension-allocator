@@ -19,6 +19,7 @@ import {
   ASSUMPTION,
   COMPARISON_NOTE,
   IRP_CREDIT_PRODUCTIVE_ONLY_PLANS,
+  IRP_OUTCOME,
   LIMITED_BY,
   HORIZONS,
   ISA_ESTIMATE_DISPLAY,
@@ -177,6 +178,32 @@ const PROFILES = [
     label: '세액 한도 0 (과세표준이 정확히 0인 총급여)',
     patch: {
       profile: { current_year_total_salary_krw: CAP_COORDINATES.ZERO_EXACT.total_salary_krw },
+    },
+  },
+  {
+    /**
+     * **공제 요건 자체가 서지 않는 사용자**(D44 · 계약 5.18절). 소득세법 §59조의3① 첫
+     * 문장이 「**종합소득이 있는 거주자가**」이므로, 합산되는 소득이 하나도 없으면
+     * 1단계에서 멈춘다 — 2단계(산출세액 한도)는 돌지도 않는다.
+     *
+     * **이 줄이 없으면 행렬 전체에서 `requirement_met`이 언제나 참이었다**(D55 후속에
+     * 실측했다 — 300건 어느 응답에서도 거짓이 안 나왔다). 그러면 계약 5.18절이 적는
+     * 연쇄(자르기 전 금액도 0 · `applied` 거짓 · 인정 납입액 0)를 **불변식 층이 한 번도
+     * 밟지 않는다.** 그 연쇄를 재는 단위 시험은 `owner-case-table.test.mjs`에 있지만
+     * 그것은 **한 좌표**이고, 불변식은 300좌표 × 배분안마다 도는 층이다 — 「어떤 축을
+     * 움직여도 이 관계는 유지된다」를 주장하는 층에서 그 부류가 통째로 빠져 있었다.
+     *
+     * **I23이 침묵했던 것과 같은 형태다**(D54 후속) — 검사는 옳은데 재는 자리가 없다.
+     */
+    label: '연금계좌 세액공제 요건이 서지 않는다 (합산되는 소득이 없다)',
+    patch: {
+      profile: {
+        current_year_total_salary_krw: 0,
+        prior_year_total_salary_krw: null,
+        has_non_wage_global_income_current_year: false,
+        current_year_global_income_krw: null,
+        monthly_capacity_krw: 1_000_000,
+      },
     },
   },
   {
@@ -919,15 +946,56 @@ function checkScenario(scenario, response, request, at) {
   }
 
   // I25 — 연금수령을 개시했거나 개시 여부를 모르는 계좌에는 배분하지 않는다.
-  // **두 계좌를 구분하지 않는다** — 조문이 '연금계좌'를 대상으로 쓰기 때문이다.
+  // **개시 상태 축은 두 계좌를 구분하지 않는다** — 조문이 '연금계좌'를 대상으로 쓴다.
+  //
+  // ── **이 검사가 `10.0.0` 이래 거짓을 주장하고 있었다** (D55 후속) ──────────────
+  //
+  // 전에는 `eligible === (status === 'not_started')`라는 **등가**를 걸었다. 그런데
+  // D44(`10.0.0`)가 **IRP 가입 자격**이라는 두 번째 축을 넣었고, 그때부터 개시 전인데도
+  // 자격이 서지 않아 `eligible: false`가 나가는 사용자가 실재한다(무소득자 — D44가
+  // 「IRP를 권하던 배분이 사라진다」고 적은 바로 그 사람들이다).
+  //
+  // **그런데 행렬에 그 사람이 없어서 등가가 통과했다.** D55 후속에 300좌표를 훑어
+  // `pension_credit_taxpayer_eligibility.requirement_met`이 **한 번도 거짓이 안 된다**는
+  // 것을 실측했고, 그 좌표를 넣자 이 줄이 즉시 실패했다. **검사는 옳아 보이는데 재는
+  // 자리가 없어 틀린 채로 통과하고 있었다** — I23이 침묵했던 것과 같은 형태다.
+  //
+  // **고친 방향: 등가를 참인 두 함의로 나누고, 갈라진 축을 이름으로 마저 묻는다.**
+  // 약하게 만든 것이 아니라 **주장을 하나 더 늘렸다** — 개시 전 계좌의 자격이 이제
+  // IRP 가입 자격 판정 코드와 맞물려 있어야 한다.
   for (const account of ['retirement_pension', 'annuity_savings']) {
     const status = request.accounts[account].annuity_start_status;
     const entry = scenario.account_eligibility.find((e) => e.account === account);
-    assert.equal(
-      entry.eligible,
-      status === 'not_started',
-      `${at} I25: ${account}의 자격이 연금수령 개시 상태와 어긋난다 (${status})`,
-    );
+
+    // (1) 개시했거나 개시 여부를 모르면 **반드시** 자격이 없다. 조문이 정하는 방향이다.
+    if (status !== 'not_started') {
+      assert.equal(entry.eligible, false, `${at} I25: ${account}이 개시(${status})인데 자격이 있다`);
+    }
+    // (2) 자격이 있으면 **반드시** 개시 전이다. (1)의 대우이지만 값으로도 문다.
+    if (entry.eligible) {
+      assert.equal(
+        status,
+        'not_started',
+        `${at} I25: ${account}의 자격이 있는데 개시 상태가 ${status}다`,
+      );
+    }
+    // (3) 개시 전인데 자격이 없다면 그 이유는 **가입 자격 축뿐이다**(D44). 연금저축에는
+    //     그 축이 없으므로(`determination_code`가 `null`) 개시 전이면 언제나 자격이 있다.
+    if (status === 'not_started') {
+      const excludedByStatus = entry.determination_code === IRP_OUTCOME.NOT_ELIGIBLE;
+      assert.equal(
+        entry.eligible,
+        !excludedByStatus,
+        `${at} I25: ${account}이 개시 전인데 자격 여부가 가입 자격 판정(${entry.determination_code})과 어긋난다`,
+      );
+      if (account === 'annuity_savings') {
+        assert.equal(
+          entry.determination_code,
+          null,
+          `${at} I25: 연금저축에 IRP 가입 자격 판정이 붙었다`,
+        );
+      }
+    }
   }
 
   // I28 — **근로소득만 있는 사용자의 공제율은 총급여액이 정한다.**

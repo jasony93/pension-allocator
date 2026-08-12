@@ -33,6 +33,17 @@ import {
 const rulesets = loadRulesets();
 const confirmedRule = (id) => findRule(rulesets, CONFIRMED_FILE, id);
 
+/**
+ * 전환 특례 규칙의 **이름**과 그 규칙이 값으로 적어 둔 조건 둘(D55 후속).
+ * **여기서도 룰셋에서 읽는다** — 참·거짓을 이 파일에 적으면 두 번째 진실 원천이 된다.
+ */
+const CARRYOVER_RULE = 'pension.credit.unused.contribution_carryover';
+const CARRYOVER = confirmedRule(CARRYOVER_RULE).value;
+const CARRYOVER_SHARES_LIMIT = CARRYOVER.subject_to_conversion_year_credit_limits.value;
+const CARRYOVER_REQUIRES_APPLICATION = !CARRYOVER.automatic;
+/** 한도 산출이 읽는 규칙 하나. 근거 목록에 **반드시 실려 있는** 이름이 필요해서 쓴다. */
+const ROUNDING_RULE = 'tax.rounding.won_fraction';
+
 // 룰셋에서 읽는다. 세법 수치를 이 파일에 적으면 두 번째 진실 원천이 된다.
 const CREDIT_RATE = confirmedRule('pension.credit.rate').value.brackets.find(
   (b) => b.total_salary_only_max_krw !== null,
@@ -137,6 +148,13 @@ const CAP_APPLIED = (() => {
               // 추정 한도가 상한이므로 이 자름은 실제 한도의 자름을 **증명한다**(D40).
               binding_code: 'binds_provably',
               threshold_income_tax_krw: BEFORE_CAP,
+              // ── 이월 판정에 딸린 연쇄 (D55 후속) ──
+              // 이 좌표는 표시 금액이 실제로 줄어드는 자리라 **이월 판정이 참**이고,
+              // 그러면 조건 둘이 값을 갖고 전환 특례 규칙이 근거 목록에 실린다.
+              // **넷을 함께 적어야 「`applied`를 따라갔는가」가 값으로 갈린다.**
+              carryover_shares_future_year_credit_limit: CARRYOVER_SHARES_LIMIT,
+              carryover_requires_application: CARRYOVER_REQUIRES_APPLICATION,
+              basis_rule_ids: [CARRYOVER_RULE],
             },
             warning_count: 0,
           },
@@ -643,11 +661,26 @@ const INJECTIONS = [
   // ── 이월 판정의 자 (`14.0.0` · D54) ──
   // **`applied`와 다른 자를 쓰는 칸이라 따로 물어야 한다.** GC-90은 표시로 1원이 잘리는
   // 좌표이므로 `true`가 옳고, 정답지가 `false`로 적으면 대조가 물어야 한다.
-  { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.contribution_carryover_available', path: P('max_tax_credit', 'tax_liability_cap', 'contribution_carryover_available'), value: false, mentions: ['GC-90', 'max_tax_credit', 'contribution_carryover_available'] },
+  //
+  // **연쇄를 통째로 뒤집는다**(D55 후속). 칸 하나만 뒤집으면 형식이 먼저 물어 대조 층을
+  // 시험하지 못한다 — 그 형식 검사는 바로 아래에서 따로 시험한다. **여기서 재는 것은
+  // 「`applied`를 따라간 구현으로 되돌리면 대조가 무는가」이고**, `13.0.0`의 직결 구현은
+  // 이 좌표에서 넷을 전부 이 값으로 낸다.
+  { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap 이월 연쇄(참→거짓)', path: P('max_tax_credit', 'tax_liability_cap'), value: { contribution_carryover_available: false, carryover_shares_future_year_credit_limit: null, carryover_requires_application: null, basis_rule_ids_absent: [CARRYOVER_RULE] }, mentions: ['GC-90', 'max_tax_credit', 'contribution_carryover_available'] },
+  // 근거 목록의 두 자를 따로 문다 — **포함**과 **불포함**이 서로 다른 실패 메시지를 낸다.
+  { via: 'compare', block: CAP_APPLIED, name: 'basis_rule_ids (실려야 하는데 없음)', path: P('max_tax_credit', 'tax_liability_cap', 'basis_rule_ids'), value: ['pension.credit.rate.made_up'], mentions: ['GC-90', '근거에 실려야 할 규칙이 없다'] },
+  { via: 'compare', block: CAP_APPLIED, name: 'basis_rule_ids_absent (빠져야 하는데 실림)', path: P('max_tax_credit', 'tax_liability_cap', 'basis_rule_ids_absent'), value: [ROUNDING_RULE], mentions: ['GC-90', '근거에서 빠져야 할 규칙이 실렸다'] },
   // **한 방향만 형식이 문다.** 자르지 않았는데 이월할 납입액이 있다고 적는 것은 불가능하다.
   // 반대 방향(`applied:true` + `false`)은 **실재하는 좌표이므로 막지 않는다** — 막으면
   // 정답지가 두 자가 갈리는 자리를 적을 수 없게 되고, 그것이 이 회차가 연 자리다.
   { via: 'format', block: CAP_APPLIED, name: 'applied:false + 이월 가능', path: P('max_tax_credit', 'tax_liability_cap'), value: { applied: false, binding_code: 'binding_not_determined', contribution_carryover_available: true }, token: '자르지 않았으면 밀려난 납입액이 없다' },
+  // ── 딸린 셋이 그 판정을 따라갔는가 (D55 후속) ──
+  // **옮겨 적다 한쪽만 고치는 자리다.** 형식에서 걸면 어긋난 짝의 이름이 그대로 나온다.
+  { via: 'format', block: CAP_APPLIED, name: '이월 거짓인데 조건이 남음', path: P('max_tax_credit', 'tax_liability_cap'), value: { contribution_carryover_available: false, carryover_requires_application: true }, token: '전환이 걸리지 않는 안에서는 조건을 읽지 않으므로 null이다' },
+  { via: 'format', block: CAP_APPLIED, name: '이월 참인데 조건이 null', path: P('max_tax_credit', 'tax_liability_cap'), value: { contribution_carryover_available: true, carryover_shares_future_year_credit_limit: null }, token: '전환이 걸리면 조건 둘을 읽는다' },
+  { via: 'format', block: CAP_APPLIED, name: '이월 거짓인데 근거에 전환 특례', path: P('max_tax_credit', 'tax_liability_cap'), value: { contribution_carryover_available: false, basis_rule_ids: [CARRYOVER_RULE] }, token: '읽지 않은 규칙은 근거로 실리지 않는다' },
+  { via: 'format', block: CAP_APPLIED, name: '이월 참인데 근거에서 뺐다고 적음', path: P('max_tax_credit', 'tax_liability_cap'), value: { contribution_carryover_available: true, carryover_shares_future_year_credit_limit: true, carryover_requires_application: true, basis_rule_ids_absent: [CARRYOVER_RULE] }, token: '전환이 걸리면 그 규칙을 읽는다' },
+  { via: 'format', block: CAP_APPLIED, name: '같은 규칙을 실렸다고도 빠졌다고도 적음', path: P('max_tax_credit', 'tax_liability_cap'), value: { basis_rule_ids: [ROUNDING_RULE], basis_rule_ids_absent: [ROUNDING_RULE] }, token: '실렸다고도 빠졌다고도 적었다' },
 
   // ── 목적함수 무력화 — 양쪽 방향 다 ──
   { via: 'compare', block: CAP_ZERO, name: 'objective_degenerate (참→거짓)', path: P('max_tax_credit', 'objective_degenerate'), value: false, mentions: ['GC-91', 'max_tax_credit', '목적함수'] },

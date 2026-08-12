@@ -187,30 +187,29 @@ for (const [caseId, { parsed, line }] of cases) {
 // 어휘 37개를 채웠고, 등식이었다면 그 37건이 전부 그 유닛이 고칠 수 없는 빌드 실패였다.
 // 갚힌 것은 이 회차에 목록에서 지웠다 — 지우는 것이 위 구멍에 대한 값이다.
 
+// ── 갚힌 것을 이 회차에 **스물넷** 지웠다 (D55 후속) ─────────────────────────
+//
+// **관리자가 지목한 것은 하나였다** — `tax_liability_cap.contribution_carryover_available`.
+// 지우려고 실행기를 돌렸더니 **같은 줄에 스물넷이 찍혀 있었다.**
+//
+// **왜 스물셋이 남아 있었나.** 갚힌 빚은 `t.diagnostic`으로 나간다 — **실패가 아니다.**
+// 그래서 회차마다 인쇄되면서 아무도 멈추지 않았고, 지운 것은 누군가 그 이름을 따로
+// 전해 들은 회차뿐이었다. **이 목록의 유일한 방어선이 「회차마다 실제로 줄이는 것」인데
+// 그 줄이기가 사람의 기억에 매여 있었다.**
+//
+// **그래도 실패로 만들지 않는다** — D30이 등식을 상한으로 바꾼 이유가 그대로 유효하다.
+// 값을 채우는 주체는 `tax-domain`이고 그 유닛은 `src/engine/`을 읽지 않으므로, 갚는
+// 순간 빌드가 깨지면 갚는 것이 막힌다. **대신 이번 회차가 밀린 것을 전부 갚는다.**
+
 const VOCABULARY_DEBT = [
-  // ── D22가 넓힌 축 (7차). `tax-domain`이 아직 채우지 않았다. ──
-  'plan.tax_credit_before_cap',
-  'plan.tax_liability_cap',
+  // ── D22가 넓힌 축 (7차) 중 **아직** 안 채워진 둘 ──
+  // 나머지 둘(`plan.tax_credit_before_cap` · `plan.tax_liability_cap`)은 갚혀서 지웠다.
   'plan.objective_degenerate',
   'scenario.pension_withdrawal_start',
-  // **`tax_liability_cap.known`이 여기 있었다**(D39·D40). 그 축이 사라지고 뜻이 다른
-  // 축 하나가 들어왔다 — `binding_code`는 「값을 아는가」가 아니라 **「한도가 걸린다는
-  // 것이 증명되는가」**를 주장한다. 자르지 않은 결과가 「걸리지 않는다」를 뜻하지 않는다는
-  // 것이 이 회차의 핵심이고, 정답지가 그 구분을 주장할 자리가 여기다.
-  'tax_liability_cap.binding_code',
-  'tax_liability_cap.cap_krw',
-  'tax_liability_cap.applied',
-  'tax_liability_cap.threshold_income_tax_krw',
-  // **이번 회차에 어휘가 처음 열렸다**(`14.0.0` · D54). 22차 `open_question`이 지적한
-  // 자리이고, `tax-domain`이 그 회차에 값을 적지 않은 이유를 스스로 적었다 — 「그 칸을
-  // 무엇으로 재는지가 계약에서 아직 안 정해졌고, 정해지지 않은 것을 정답지가 먼저
-  // 단정하면 정답지가 계약을 대신 정하는 것이 된다」.
-  //
-  // **계약이 자를 정했다** — 표시 금액이다(계약 5.5절). 그래서 이 어휘를 연다.
-  // **채울 값도 그 회차가 이미 산출해 두었다**: GC-32d는 `false`(정확값 초과분 0.1원 ·
-  // 표시 초과분 0), GC-34는 `true`(표시 초과분 1원 · 대응 납입액 6.67원이 연금저축에
-  // 남는다). **값의 저자는 `tax-domain`이고 이 유닛은 정답지를 고치지 않는다.**
-  'tax_liability_cap.contribution_carryover_available',
+  // **`tax_liability_cap`의 넷이 여기 있었다** — `binding_code`(D39·D40) · `cap_krw` ·
+  // `applied` · `threshold_income_tax_krw`, 그리고 `contribution_carryover_available`
+  // (`14.0.0` · D54, D55에 `tax-domain`이 GC-32d `false` · GC-34 `true`로 갚았다).
+  // **다섯 다 정답지가 주장하고 있으므로 이 회차에 지운다.**
   'pension_withdrawal_start.computable',
   'pension_withdrawal_start.earliest_start_date',
   'pension_withdrawal_start.years_until_earliest_start',
@@ -258,45 +257,42 @@ const VOCABULARY_DEBT = [
   // 그 상태를 세우지 않았다.
   'assumption_based_isa_estimate.not_computable_reason_code',
 
-  // 미배분 갈래. 소유자가 지적한 자리이고 미배분이 0이 아닌 케이스가 있는데도
-  // 갈래는 아무도 주장하지 않는다.
-  'plan.unallocated_breakdown',
-  'unallocated_breakdown.total_annual_krw',
-  'unallocated_breakdown.pension_contribution_headroom_krw',
-  'unallocated_breakdown.isa_contribution_headroom_krw',
-  'unallocated_breakdown.no_headroom_krw',
-  'unallocated_breakdown.headrooms_overlap',
+  // **미배분 갈래 여섯이 여기 있었다** — `plan.unallocated_breakdown`과 그 아래 다섯.
+  // 소유자가 지적한 자리이고, 이제 정답지가 다섯 칸을 다 주장한다. 갚혀서 지웠다.
 
-  // 배분 **후** 잔여 공제 한도. 계약 5.13.1절의 문구를 참으로 만드는 세 값 중 하나다.
-  'plan.credit_remaining_after_plan_krw',
+  // **`plan.credit_remaining_after_plan_krw`가 여기 있었다.** 계약 5.13.1절의 문구를
+  // 참으로 만드는 세 값 중 하나이고, 갚혀서 지웠다.
 
   // 비정량 효과의 코드 목록. 새 배분안의 `pension_contribution_without_credit`이
   // 여기서만 주장될 수 있다.
   'plan.non_quantified_codes',
 
-  // ── 공제 없는 연금 납입에 딸린 사실들 (D32 후속). ──
-  // **이 열 건은 다른 빚과 성격이 다르다.** 나머지는 "값을 갖고도 못 적던" 축이지만,
-  // 이 축은 **적을 자리 자체가 이번 회차에 처음 생겼다.** D32가 그 효과를 기본안으로
-  // 옮겼으므로 이제 대다수 사용자가 그것을 보고, 계약 5.6절은 셋 중 하나라도 빠지면
-  // 화면 문장이 거짓이 된다고 적는다. **값의 저자는 `tax-domain`이다** — 넷의 참·거짓은
-  // 룰셋(`pension.contribution.beyond_credit_limit`·`pension.withdrawal.non_deducted_principal`)이
-  // 정하고, 금액은 그 안의 배분에서 나온다. 형식이 실제로 무는 것은
-  // `golden-block-format.test.mjs`가 응답 쪽 결함 주입으로 확인해 두었다.
-  'plan.non_quantified_effects',
-  'non_quantified_effect.present',
-  'non_quantified_effect.reason_code',
-  'non_quantified_effect.facts',
-  'non_quantified_facts.credit_this_year_krw',
-  'non_quantified_facts.contribution_without_credit_krw',
-  'non_quantified_facts.principal_taxed_on_withdrawal',
-  'non_quantified_facts.principal_tax_free_requires_confirmation',
-  'non_quantified_facts.principal_tax_free_confirmation_prospective_only',
-  'non_quantified_facts.returns_taxed_on_withdrawal',
+  // ── 공제 없는 연금 납입에 딸린 사실들 (D32 후속) — **열 건이 여기 있었다.** ──
+  // `plan.non_quantified_effects` · `non_quantified_effect.{present,reason_code,facts}` ·
+  // `non_quantified_facts.*` 여섯. **D32가 「적을 자리 자체가 처음 생긴」 축이라고 적은
+  // 그 열 건을 정답지가 전부 채웠다.** 계약 5.6절이 「셋 중 하나라도 빠지면 화면 문장이
+  // 거짓이 된다」고 적은 넷도 그 안에 있다. 갚혀서 이 회차에 지운다.
 
-  // 전환 특례에 붙은 조건 둘. `contribution_carryover_available`이라는 이름이
-  // 감추고 있던 것이고, 정답지가 그 이름만 봐서는 이 조건들을 검사하지 못한다.
+  // ── 이월 판정에 딸린 연쇄 넷 (D55 후속). **어휘를 이 회차에 다 열었다.** ──
+  //
+  // 앞의 둘은 D26이 연 뒤로 한 번도 쓰이지 않았고, 뒤의 둘은 이번에 처음 열린다.
+  // 계약 5.5절이 적는 연쇄는 하나다 — `contribution_carryover_available`이 거짓이면
+  // **조건 둘이 `null`이 되고 전환 특례 규칙이 근거 목록에서 빠진다.**
+  // **지금 어느 블록도 그 연쇄를 주장하지 않는다**(`tax-domain` 23차 신고).
+  //
+  // **잴 좌표는 GC-32a·32d다.** 둘 다 `applied: true`이면서 이월이 `false`라
+  // 「`applied`를 따라갔는가」가 값으로 갈린다 — `applied`만 보는 구현으로 되돌리면
+  // 이 넷이 전부 반대로 나가는데, 지금은 그것을 보는 층이 없다.
+  //
+  // **값의 저자는 `tax-domain`이고 이 유닛은 정답지를 고치지 않는다.** 채울 자리는
+  //   · GC-32a · GC-32d — 조건 둘 `null`, `basis_rule_ids_absent`에 전환 특례 규칙
+  //   · GC-31 · GC-34 — 조건 둘 참·참, `basis_rule_ids`에 전환 특례 규칙
+  // 이고, 조건 둘의 참·거짓은 룰셋(`pension.credit.unused.contribution_carryover`의
+  // `subject_to_conversion_year_credit_limits` · `automatic`)이 정한다.
   'tax_liability_cap.carryover_shares_future_year_credit_limit',
   'tax_liability_cap.carryover_requires_application',
+  'tax_liability_cap.basis_rule_ids',
+  'tax_liability_cap.basis_rule_ids_absent',
 
   // ── 헤드라인 합계와 축의 상한 (D38). **이번 회차에 자리가 처음 생겼다.** ──
   // 소유자가 제품의 목적을 다시 정의했고, 그 결과 응답에 **두 성분을 더한 수** 하나가
