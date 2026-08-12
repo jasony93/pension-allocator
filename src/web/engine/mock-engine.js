@@ -2289,12 +2289,19 @@ function computeScenario(scenario, request, rulesets) {
   }
   const annuityCreditCapEffective = annuityCreditCap + (transferDestination === 'annuity_savings' ? extraCreditLimit : 0);
   const combinedCreditCapEffective = baseCombinedCreditCap + extraCreditLimit;
-  const annuitySubRemainingBase = Math.max(0, annuityCreditCapEffective - accounts.annuity_savings.ytd_contribution_krw);
+  // **ISA 만기 전환액은 목적지 계좌에 「이미 납입된 것으로」 신용 한도를 채운다**
+  // (계약 5.4·5.6절 — `IsaTransferExtraLimit.counted_as_contribution_krw`). 이
+  // 함수 아래의 `creditFor()`는 그것을 이미 반영하는데, 배분 단계(`step`)가 보는
+  // 이 두 풀은 반영하지 않고 있었다 — 그래서 배분 단계가 "아직 room이 남았다"고
+  // 잘못 보고 전환분과 무관한 계좌(ISA)로 갈 예산을 연금계좌로 돌렸다. 4단계
+  // 게이트4 재소집(qa-report.md 11.5절)이 실제 엔진과의 차등 테스트로 잡았다 —
+  // 배분액 자체가 계좌 사이에서 뒤바뀌어 있었다.
+  const annuityBaseForPool = accounts.annuity_savings.ytd_contribution_krw + (transferDestination === 'annuity_savings' ? isaTransfer.amount_krw : 0);
+  const retirementBaseForPool = accounts.retirement_pension.ytd_contribution_krw + (transferDestination === 'retirement_pension' ? isaTransfer.amount_krw : 0);
+  const annuitySubRemainingBase = Math.max(0, annuityCreditCapEffective - annuityBaseForPool);
   const creditPoolRemainingBase = Math.max(
     0,
-    combinedCreditCapEffective -
-      Math.min(accounts.annuity_savings.ytd_contribution_krw, annuityCreditCapEffective) -
-      accounts.retirement_pension.ytd_contribution_krw,
+    combinedCreditCapEffective - Math.min(annuityBaseForPool, annuityCreditCapEffective) - retirementBaseForPool,
   );
 
   const rawPlans = PLAN_ORDER.map((planId) => {
@@ -2308,10 +2315,18 @@ function computeScenario(scenario, request, rulesets) {
     let order = 1;
     const fillOrderByAccount = {};
 
-    // 계좌 하나에 대한 한 걸음. `cap`은 이 걸음이 볼 수 있는 상한(신용 한도든
-    // 납입 한도든 호출부가 고른다). **`limited_by`는 마지막 걸음이 이긴다** —
-    // 같은 계좌가 1차·3차 두 번 걸리면 3차의 판정이 화면에 남는 판정이다.
-    function step(account, cap) {
+    // 계좌 하나에 대한 한 걸음. `cap`은 실제로 이 걸음이 배분할 수 있는 상한
+    // (신용 한도가 섞여 있을 수 있다), `poolCap`은 `limited_by` 판정에만 쓰는
+    // **납입 잔여 한도**(신용 한도를 빼고, 없으면 `cap`과 같다). **`limited_by`는
+    // 예산 대 납입 잔여 한도의 대소로만 정해진다(계약 5.5절) — 신용 한도가
+    // 실제 배분액을 줄여도 `limited_by`에는 나타나지 않는다**(D32, 「credit_limit」
+    // 폐기). 실제 엔진의 `plans.mjs`(`stepCaps`)와 같은 규약이고, 4단계 게이트4
+    // 재소집(qa-report.md 11.5절)의 차등 테스트가 이 자리의 드리프트를 잡았다 —
+    // 예전에는 "이 걸음에서 원하는 만큼 못 받았는가"만 봐서, budget이 실제
+    // 원인인데도 다른 계좌가 먼저 예산을 다 써 버린 자리를 `null`(제한 없음)로
+    // 잘못 냈다. **`limited_by`는 마지막 걸음이 이긴다** — 같은 계좌가 1차·3차
+    // 두 번 걸리면 3차의 판정이 화면에 남는 판정이다.
+    function step(account, cap, poolCap = cap) {
       if (!eligibleFor(account)) {
         limitedBy[account] = 'not_eligible';
         return 0;
@@ -2323,10 +2338,7 @@ function computeScenario(scenario, request, rulesets) {
         if (fillOrderByAccount[account] == null) fillOrderByAccount[account] = order++;
       }
       remainingBudget -= allocated;
-      // **`credit_limit`은 6.0.0에서 사라졌다** — 신용 한도로 멈추든 납입
-      // 한도로 멈추든 같은 값 `contribution_limit`으로 낸다(계약 5.5절).
-      if (allocated < want) limitedBy[account] = cap <= want ? 'contribution_limit' : 'budget';
-      else limitedBy[account] = null;
+      limitedBy[account] = want <= poolCap ? 'budget' : 'contribution_limit';
       return allocated;
     }
 
@@ -2353,7 +2365,10 @@ function computeScenario(scenario, request, rulesets) {
     function fillPensionStageOne() {
       for (const account of PENSION_FLEXIBLE_FIRST) {
         const creditCapForAccount = account === 'annuity_savings' ? Math.min(annuitySub, creditPool) : creditPool;
-        const allocated = step(account, Math.min(creditCapForAccount, pensionPool));
+        // `poolCap`은 신용 한도를 뺀 순수 납입 잔여 한도(`pensionPool`)다 —
+        // 신용 한도(`creditCapForAccount`)는 배분액은 줄이되 `limited_by`
+        // 판정에는 들어가지 않는다(위 `step` 주석).
+        const allocated = step(account, Math.min(creditCapForAccount, pensionPool), pensionPool);
         pensionPool -= allocated;
         creditPool -= allocated;
         if (account === 'annuity_savings') annuitySub -= allocated;
@@ -2668,11 +2683,17 @@ function computeScenario(scenario, request, rulesets) {
         monthly_rounding_adjustment_krw: m.roundingAdjustmentMonthlyKrw,
         annual_krw: annualKrw,
         fill_order: p.fillOrderByAccount[account] ?? null,
-        limited_by: annualKrw === 0 ? p.limitedBy[account] ?? null : p.limitedBy[account] ?? null,
+        limited_by: p.limitedBy[account] ?? null,
+        // 실제 엔진의 `basisForAccount`(D32)와 같은 규약 — **어느 한도가 실제로
+        // 이 배분을 멈췄는지와 무관하게** 그 계좌 종류가 걸릴 수 있는 근거
+        // 규칙을 통째로 싣는다(qa-report.md 11.5절 결함). 연금저축은 단독
+        // 신용 한도까지 셋 다, IRP는 합산 신용 한도·납입 한도 둘을 낸다.
         basis_rule_ids:
           account === 'isa'
             ? [isaRequirementsRule?.id, scenario === 'proposed' ? 'proposed.isa.annual_contribution_limit' : 'isa.contribution.annual_limit'].filter(Boolean)
-            : [pensionContributionLimitRule?.id].filter(Boolean),
+            : account === 'annuity_savings'
+              ? [annuityCreditLimitRule?.id, combinedCreditLimitRule?.id, pensionContributionLimitRule?.id].filter(Boolean).sort()
+              : [combinedCreditLimitRule?.id, pensionContributionLimitRule?.id].filter(Boolean).sort(),
       };
     });
 
@@ -3077,8 +3098,24 @@ function computeScenario(scenario, request, rulesets) {
   const totalRemainingLimits = sharedPensionPoolBase + isaAnnualRoom;
   if (budget > totalRemainingLimits) notices.push({ code: 'budget_exceeds_all_limits', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
   notices.push({ code: 'pension_holding_period_not_evaluated', severity: 'info', field: null, params: {}, basis_rule_ids: [] });
-  if (profile.declared_youth == null) {
-    notices.push({ code: 'youth_status_not_declared', severity: 'info', field: 'profile.declared_youth', params: {}, basis_rule_ids: [] });
+  // 실제 엔진(`limits.mjs:142-158`)은 이 두 안내를 **개정안 시나리오에서만** 낸다 —
+  // 청년 우대가 개정안에만 있는 조항이기 때문이다. 확정 시나리오에서 항상
+  // 냈던 것은 4단계 게이트4 재소집(qa-report.md 11.5절)의 차등 테스트가 잡은
+  // 드리프트다. `declared_youth === true`면 연령 범위 미확정 안내로 갈린다 —
+  // 두 안내는 서로 다른 사실을 말한다(하나는 "선언하지 않았다", 하나는
+  // "선언했지만 범위가 아직 시행령 미공개다").
+  if (scenario === 'proposed') {
+    if (profile.declared_youth === true) {
+      notices.push({
+        code: 'youth_age_range_undetermined',
+        severity: 'warning',
+        field: 'profile.declared_youth',
+        params: {},
+        basis_rule_ids: [use('proposed.pension.credit.youth_irp_rate')?.id].filter(Boolean),
+      });
+    } else {
+      notices.push({ code: 'youth_status_not_declared', severity: 'info', field: 'profile.declared_youth', params: {}, basis_rule_ids: [] });
+    }
   }
   if (scenario === 'proposed') {
     const proposedRuleIds = [...usedRules.keys()].filter((id) => id.startsWith('proposed.'));

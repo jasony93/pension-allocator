@@ -1,7 +1,7 @@
 ---
 name: product-planner
 description: 1단계 발견에서 제품 요구사항, 유저 플로우, 화면 목록, 수용 기준을 정의할 때 호출한다.
-tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
+tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch
 model: sonnet
 ---
 

@@ -9,7 +9,7 @@ export const UNITS = [
   {
     name: 'product-planner',
     model: 'sonnet',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
     writeScope: ['docs/stage-1-discovery/requirements.md'],
   },
   {

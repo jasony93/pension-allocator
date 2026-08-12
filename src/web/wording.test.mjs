@@ -186,9 +186,15 @@ import {
   ANNUITY_STARTED_HORIZON_NOTE,
   noticeMessage,
   assumptionMessage,
+  warningMessage,
   comparisonNoteMessage,
   exclusionReasonMessage,
 } from './copy.js';
+// 4단계 게이트4 재소집(qa-report.md 11.2절) — 코드 레지스트리는 `src/engine/
+// constants.mjs`가 "단일 진실 원천"이다. 아래 커버리지 테스트가 이걸 직접
+// import해서 전건을 돈다(11.4절 R6) — 손으로 옮겨 적은 부분집합이 다시
+// 생기지 않게 한다.
+import { NOTICE, ASSUMPTION, WARNING, COMPARISON_NOTE } from '../engine/constants.mjs';
 
 // **직전 과세연도 결정세액의 라벨·효과 캡션을 검증하던 테스트가 여기 있었다**
 // (D39로 폐기). 그 입력·문구가 전부 없어졌다. `SourceGuide`(「이 값을 어디서
@@ -253,53 +259,52 @@ test('the annuity-started note tells a fact and does not tell the user what to d
 // (D39로 폐기). 유일한 용례(직전 과세연도 결정세액)가 없어져 그릴 자리가 없다.
 
 test('every code the contract can send has a sentence — no raw code reaches the screen', () => {
-  const noticeCodes = [
-    // 9.0.0(D39·D40·D41) — `tax_liability_cap_unknown`을 대체했다.
-    'tax_liability_cap_estimated_from_total_salary',
-    'tax_liability_cap_direction_indeterminate',
-    'tax_liability_cap_zero',
-    'tax_liability_cap_applied',
+  // **이 테스트가 예전에는 손으로 옮겨 적은 부분집합만 돌았다**(qa-report.md
+  // 11.2절) — NOTICE 39개 중 16개, ASSUMPTION 24개 중 12개뿐이었다. 이름은
+  // "모든 코드"라고 주장했지만 실제로는 절반 이하만 봤고, 그래서 문구가
+  // 통째로 빠진 두 코드(`isa_type_cross_check_inconclusive`·
+  // `isa_rate_gap_axis_zero_because_within_tax_free_limit`)를 놓쳤다 — 화면에
+  // 코드 문자열이 그대로 뜰 자리였다. 이제 손으로 옮긴 목록을 버리고
+  // `src/engine/constants.mjs`(레지스트리의 단일 진실 원천)를 직접 돈다 —
+  // 새 코드가 문구 없이 늘어나면 이 테스트가 자동으로 붉어진다.
+  for (const code of Object.values(NOTICE)) {
+    assert.notEqual(
+      noticeMessage({ code, params: {} }),
+      code,
+      `NOTICE.${code}에 대응하는 문구가 copy.js의 NOTICE_MESSAGE에 없다 — fallback으로 코드 문자열이 그대로 화면에 뜬다`,
+    );
+  }
+  for (const code of Object.values(ASSUMPTION)) {
+    assert.notEqual(
+      assumptionMessage(code, {}),
+      code,
+      `ASSUMPTION.${code}에 대응하는 문구가 copy.js의 ASSUMPTION_MESSAGE에 없다`,
+    );
+  }
+  for (const code of Object.values(WARNING)) {
+    assert.notEqual(
+      warningMessage({ code, params: {}, trigger: 'declared' }, {}),
+      code,
+      `WARNING.${code}에 대응하는 문구가 copy.js의 WARNING_BODY에 없다`,
+    );
+  }
+  for (const code of Object.values(COMPARISON_NOTE)) {
+    assert.notEqual(
+      comparisonNoteMessage(code),
+      code,
+      `COMPARISON_NOTE.${code}에 대응하는 문구가 copy.js의 COMPARISON_NOTE_MESSAGE에 없다`,
+    );
+  }
+  // `exclusionReasonMessage`는 `NOTICE`의 부분집합만 쓰고 전용 레지스트리가
+  // 없어(qa-report.md 11.2절이 적어 둔 한계) 자동 전건 대조를 못 한다 — 실제
+  // 호출부(`eligibility.js`)가 쓰는 코드만 손으로 확인한다.
+  for (const code of [
     'pension_contribution_blocked_annuity_started',
     'pension_annuity_start_unknown',
-    'pension_start_date_not_computable',
-    'retirement_transfer_excluded_from_credit',
-    'isa_lock_in_already_elapsed',
-    // 계약 5.0.0(D27) — 공제율 판정 축의 대체값 적용 notice.
-    'credit_rate_global_income_missing',
-    // 계약 5.1.0(D28·D29·D31) — 수익률 가정.
-    'isa_return_assumption_not_supplied',
-    'isa_return_estimate_is_not_annual',
-    'isa_return_estimate_reported_as_range',
-    'isa_return_estimate_not_computable',
-    'isa_return_estimate_display_suppressed',
-    'pension_tax_deferral_not_quantified',
-  ];
-  for (const code of noticeCodes) {
-    assert.notEqual(noticeMessage({ code, params: {} }), code, `${code}에 대응하는 문구가 없다`);
-  }
-  const assumptionCodes = [
-    'age_reference_date_not_in_ruleset',
-    // 9.0.0(D39) — `prior_pension_credit_zero_assumed`가 사라졌다. 되더할
-    // 입력 자체가 없다.
-    'retirement_transfer_counted_in_contribution_limit',
-    'deferred_retirement_income_absent_assumed',
-    'local_tax_follows_income_tax_cap',
-    // 계약 5.0.0(D27) — 1단계 질문을 좁혀 물은 것이 채택한 해석.
-    'credit_rate_wage_only_excludes_separately_taxed_income',
-    // 계약 5.1.0(D28·D29) — 수익률 가정 위의 계산이 서 있는 가정들.
-    'isa_return_rate_user_supplied',
-    'isa_return_simple_interest',
-    'isa_return_principal_from_contributions',
-    'isa_settlement_years_defaulted_to_min_contract_years',
-    'isa_loss_assumed_zero',
-    'isa_comparison_baseline_is_withholding_only',
-    'isa_return_assumes_contract_held_to_settlement',
-  ];
-  for (const code of assumptionCodes) {
-    assert.notEqual(assumptionMessage(code, {}), code, `${code}에 대응하는 문구가 없다`);
-  }
-  assert.notEqual(comparisonNoteMessage('tax_credit_axis_not_discriminating'), 'tax_credit_axis_not_discriminating');
-  for (const code of ['pension_contribution_blocked_annuity_started', 'pension_annuity_start_unknown']) {
+    'irp_excluded_no_qualifying_status',
+    'isa_excluded_age',
+    'isa_excluded_financial_income_taxpayer',
+  ]) {
     assert.notEqual(exclusionReasonMessage(code), code);
   }
 });
