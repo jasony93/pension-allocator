@@ -399,6 +399,144 @@ export function extractBlocks(text) {
   return { blocks, prose: stripped };
 }
 
+// ── 중복 키 (D57) ────────────────────────────────────────────────────────────
+//
+// **`JSON.parse`는 같은 객체 안의 같은 키를 조용히 덮어쓴다** — `{"a":1,"a":2}`는
+// `{"a":2}`가 된다. 앞엣것은 예외도 경고도 없이 사라진다.
+//
+// GC-40의 한 블록에 `legal_basis`가 두 번 있었고, 그 케이스의 `isa.account.requirements`
+// 주장은 **한 번도 검사된 적이 없다.** 블록은 형식 검사를 통과했고 커버리지도 통과했다 —
+// 이 저장소가 일곱 번째로 밟은 「검사는 옳은데 재는 자리가 없다」이고, **성질이 다르다.
+// 앞의 여섯은 재는 자리가 없었고 이것은 잴 대상이 파서 단계에서 사라졌다.**
+//
+// **형식 검사로는 원리상 못 잡는다.** `validateBlock`은 `JSON.parse`의 결과에서 키를
+// 세는데, 그 시점에는 중복이 이미 하나로 뭉개져 있다. **그래서 원문을 직접 훑는다.**
+//
+// 이 스캐너는 값을 해석하지 않는다. 문자열 경계와 괄호 짝만 보고 **같은 객체 안에서
+// 같은 키가 두 번 나오는 자리**를 찾는다. 중첩된 객체와 배열 원소 안도 본다 — 실제로
+// 걸린 자리가 최상위가 아니었다.
+
+const STRUCTURAL = '{}[]:,';
+const WHITESPACE = ' \t\n\r';
+
+/**
+ * JSON 원문을 토큰으로 쪼갠다. 문자열 안의 `{`·`"`·`,`를 구조 문자로 오인하지 않도록
+ * 이스케이프(`\"`)를 넘겨 가며 읽는다. **값의 뜻은 보지 않는다** — 숫자·`true`·`null`은
+ * 전부 `scalar` 하나로 뭉뚱그린다. 이 스캐너가 알아야 하는 것은 키의 자리뿐이다.
+ */
+function* jsonTokens(text) {
+  let cursor = 0;
+  while (cursor < text.length) {
+    const char = text[cursor];
+    if (WHITESPACE.includes(char)) {
+      cursor += 1;
+      continue;
+    }
+    if (char === '"') {
+      const start = cursor;
+      cursor += 1;
+      while (cursor < text.length) {
+        if (text[cursor] === '\\') {
+          cursor += 2;
+          continue;
+        }
+        if (text[cursor] === '"') {
+          cursor += 1;
+          break;
+        }
+        cursor += 1;
+      }
+      const raw = text.slice(start, cursor);
+      let value;
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        // 원문이 깨졌다는 뜻이다. `JSON.parse`가 그 사실을 따로 신고하므로 여기서는
+        // 원문 그대로를 키로 삼아 계속 읽는다. 중복 판정이 조금 거칠어질 뿐이다.
+        value = raw;
+      }
+      yield { type: 'string', value, index: start };
+      continue;
+    }
+    if (STRUCTURAL.includes(char)) {
+      yield { type: char, index: cursor };
+      cursor += 1;
+      continue;
+    }
+    const start = cursor;
+    while (cursor < text.length && !WHITESPACE.includes(text[cursor]) && !STRUCTURAL.includes(text[cursor]) && text[cursor] !== '"') {
+      cursor += 1;
+    }
+    if (cursor === start) cursor += 1;
+    yield { type: 'scalar', index: start };
+  }
+}
+
+/** 그 컨테이너가 앉아 있는 자리의 이름. 오류 메시지가 어느 객체인지 가리켜야 한다. */
+function childPath(frame) {
+  if (frame === undefined) return '$';
+  if (frame.kind === 'object') return `${frame.path}.${frame.key ?? '?'}`;
+  return `${frame.path}[${frame.index}]`;
+}
+
+/**
+ * 한 JSON 원문에서 **같은 객체 안에 두 번 이상 나온 키**를 전부 찾는다.
+ *
+ * @param {string} text JSON 원문. **파싱된 객체가 아니다** — 파싱하면 이미 늦다.
+ * @returns {{path: string, key: string, line: number, firstLine: number}[]}
+ *   `line`은 나중에 적힌(= 살아남는) 키의 줄, `firstLine`은 먼저 적힌(= 버려지는) 키의 줄.
+ *   둘 다 `text` 안에서의 1부터 세는 상대 줄 번호다.
+ */
+export function duplicateKeysIn(text) {
+  const lineOf = (index) => text.slice(0, index).split('\n').length;
+  /** @type {{kind: string, path: string, key?: string|null, index?: number, seen?: Map<string, number>}[]} */
+  const stack = [];
+  const duplicates = [];
+
+  for (const token of jsonTokens(text)) {
+    const top = stack[stack.length - 1];
+    switch (token.type) {
+      case '{':
+        stack.push({ kind: 'object', path: childPath(top), key: null, seen: new Map() });
+        break;
+      case '[':
+        stack.push({ kind: 'array', path: childPath(top), index: 0 });
+        break;
+      case '}':
+      case ']':
+        stack.pop();
+        break;
+      case ',':
+        if (top === undefined) break;
+        if (top.kind === 'object') top.key = null;
+        else top.index += 1;
+        break;
+      case 'string': {
+        // 객체 안에서 **키를 기다리는 자리**에 놓인 문자열만 키다. 값으로 쓰인 문자열은
+        // 아무리 키처럼 생겨도(`"legal_basis"`라는 문자열 값 같은 것) 세지 않는다.
+        if (top === undefined || top.kind !== 'object' || top.key !== null) break;
+        const key = token.value;
+        if (top.seen.has(key)) {
+          duplicates.push({
+            path: `${top.path}.${key}`,
+            key,
+            line: lineOf(token.index),
+            firstLine: lineOf(top.seen.get(key)),
+          });
+        } else {
+          top.seen.set(key, token.index);
+        }
+        top.key = key;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return duplicates;
+}
+
 /**
  * 산문에 등장하는 케이스 ID를 전부 모은다. `GC-15~17`·`GC-18a~d` 같은 범위 표기를
  * 펼치므로, 표에 범위로만 적힌 케이스도 블록을 요구받는다.

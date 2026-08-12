@@ -86,9 +86,14 @@ function tokenRuns(line) {
   return runs;
 }
 
+/** 그 표지를 담은 줄들. 하나여야 한다 — 아래 검사 1이 그것을 문다. */
+function linesFor(marker) {
+  return LINES.filter((l) => l.includes(marker));
+}
+
 /** 그 줄에서 가장 긴 이음. 없으면 빈 배열이고, 그때는 아래 검사가 실패한다. */
 function declaredIn(marker) {
-  const line = LINES.find((l) => l.includes(marker));
+  const line = linesFor(marker)[0];
   if (line === undefined) return null;
   return tokenRuns(line).sort((a, b) => b.length - a.length)[0] ?? [];
 }
@@ -128,33 +133,25 @@ const PAIRS = [
 // `tax-domain`의 산출물이다. 이 유닛은 그 디렉터리를 열지 않는다 — 정답지를 엔진 쪽에서
 // 손대면 정답지가 검증 장치이기를 그만둔다. **그래서 이름과 사유를 여기 적어 넘긴다.**
 
+// ── 열세 줄을 지웠다 (D57) ───────────────────────────────────────────────────
+//
+// **둘 다 비었다.** `tax-domain`이 1-A절에 어휘 열둘을 넣고 폐기된 `tax_liability_cap.known`
+// 을 뺐다. 이 파일을 만든 회차에 적힌 빚이 **한 회차 만에 전부 갚혔다.**
+//
+// **갚힌 것을 지우는 데 사람의 전달이 필요하지 않았다.** D56이 「갚힌 빚이 `t.diagnostic`
+// 으로 나가 회차마다 인쇄되면서 아무도 안 멈췄다」고 반성해 **이 파일의 갚힘 검사만은
+// 진단이 아니라 실패로 세웠고**, 그것이 설계대로 작동했다 — 정답지 쪽 한 커밋이 이
+// 파일을 붉게 만들었고, 그래서 지금 지운다. 빚 목록이 진단이던 자리에서는 24건이 밀렸다.
+//
+// **빈 목록이 기본값이다.** 여기 이름이 하나라도 있으면 그것은 정상이 아니라 빚이고,
+// 이름과 함께 **왜 지금 못 고치는가**를 적어야 한다. 고칠 자리가
+// `docs/stage-4-verification/`이라 이 유닛이 열지 않는다는 것이 지금까지의 유일한 사유였다.
+
 const DOC_DRIFT_DEBT = {
-  // 문서가 안 적은 코드 어휘. **아홉이 그대로 `VOCABULARY_DEBT`에 있다** — 안 채운 것이
-  // 아니라 있는 줄 몰랐던 것이다.
-  missing_in_doc: [
-    // 유일하게 빚 목록에 없다 — 정답지가 어딘가에서 알아내 쓰고 있다(D36).
-    'scenario.pension_credit_ceiling',
-    // 아래 아홉은 전부 `VOCABULARY_DEBT`에도 있다.
-    'scenario.unapplied_proposed_rules',
-    'plan.headline_composite_total',
-    'assumption_based_isa_estimate.principal_basis_code',
-    'assumption_based_isa_estimate.return_accrual_code',
-    'assumption_based_isa_estimate.is_lower_bound_for_aggregate_taxpayer',
-    'assumption_based_isa_estimate.assumes_contract_held_to_settlement',
-    'assumption_based_isa_estimate.axis_ceilings',
-    'tax_liability_cap.carryover_shares_future_year_credit_limit',
-    'tax_liability_cap.carryover_requires_application',
-    // **이 회차에 새로 열었다**(D55 후속). 정답지가 GC-32a·32d·31·34에서 쓸 자리다.
-    'tax_liability_cap.basis_rule_ids',
-    'tax_liability_cap.basis_rule_ids_absent',
-  ],
-  // 문서에만 있는 키. 적으면 형식 검사가 「모르는 키」로 거절하므로 조용히 틀리지는
-  // 않는다. 다만 다음 사람이 그 이름을 믿고 한 번 헛디딘다.
-  extra_in_doc: [
-    // D39·D40에 폐기됐다. 한도를 「모르는」 상태가 사라졌고 `binding_code`가 그 자리를
-    // 대신한다 — 뜻이 다르다(「값을 아는가」 → 「걸린다는 것이 증명되는가」).
-    'tax_liability_cap.known',
-  ],
+  /** 실행기는 받는데 정답지 문서 1-A절이 안 알리는 어휘. 이 방향이 조용하다. */
+  missing_in_doc: [],
+  /** 문서에만 있는 키. 적으면 형식 검사가 「모르는 키」로 거절하므로 조용하지는 않다. */
+  extra_in_doc: [],
 };
 
 // ── 검사 1. 목록이 문서에 있기는 한가 ────────────────────────────────────────
@@ -174,6 +171,20 @@ test('정답지 문서가 어휘 목록을 열 개 다 선언한다', () => {
 
   const empty = PAIRS.filter(({ marker }) => (declaredIn(marker) ?? []).length === 0).map((p) => p.marker);
   assert.deepStrictEqual(empty, [], `키를 하나도 못 읽은 선언 문장 ${empty.length}건: ${empty.join(', ')}`);
+
+  // **읽는 쪽이 첫 줄만 본다**(D57의 훑기에서 나왔다). 같은 표지가 두 줄에 걸리면
+  // 두 번째 줄의 이름은 이 파일에 **닿기 전에 사라진다** — 문서에는 적혀 있는데
+  // 「문서가 안 알린다」로 읽히거나, 반대로 아무도 안 세는 이름이 된다.
+  // 지금은 열 표지 전부 한 줄뿐이다. 갈라지는 날 조용히 지나가지 않게 여기서 문다.
+  const split = PAIRS.filter(({ marker }) => linesFor(marker).length !== 1).map(
+    (p) => `${p.marker} — ${linesFor(p.marker).length}줄`,
+  );
+  assert.deepStrictEqual(
+    split,
+    [],
+    `한 표지가 여러 줄에 걸렸다 ${split.length}건. 읽는 쪽은 **첫 줄만** 보므로 나머지 줄의 ` +
+      `이름은 검사에 닿지 못한다:\n${split.map((s) => `  - ${s}`).join('\n')}`,
+  );
 });
 
 // ── 검사 2. 코드에 있는데 문서가 안 알리는 축 ────────────────────────────────

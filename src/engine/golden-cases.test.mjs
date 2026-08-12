@@ -36,6 +36,7 @@ import {
   buildRequest,
   caseIdsIn,
   checkCase,
+  duplicateKeysIn,
   extractBlocks,
   validateBlock,
   vocabularyUsedBy,
@@ -60,6 +61,20 @@ const blockProblems = [...rangeProblems];
 
 for (const { body, line } of blocks) {
   const where = `${DOC_RELATIVE}:${line}`;
+
+  // **파싱보다 먼저 원문을 훑는다**(D57). `JSON.parse`는 같은 객체의 같은 키를 조용히
+  // 덮어쓰므로, 파싱한 뒤에 키를 세는 어떤 검사도 이것을 원리상 못 잡는다 — 버려진 쪽은
+  // 결과에 흔적이 없다. GC-40의 `legal_basis`가 그렇게 두 번 적혔고 그 케이스의
+  // `isa.account.requirements` 주장은 한 번도 검사되지 않았다.
+  for (const duplicate of duplicateKeysIn(body)) {
+    blockProblems.push(
+      // `line`은 ```golden 울타리 줄이고 본문 첫 줄이 그 다음이므로 그대로 더한다.
+      `${DOC_RELATIVE}:${line + duplicate.line}: 같은 객체에 키가 두 번 있다 — ${duplicate.path} ` +
+        `(앞선 것은 ${DOC_RELATIVE}:${line + duplicate.firstLine}). ` +
+        'JSON.parse가 앞엣것을 조용히 버리므로 거기 적은 주장은 검사되지 않는다. 둘을 하나로 합친다.',
+    );
+  }
+
   let parsed;
   try {
     parsed = JSON.parse(body);
