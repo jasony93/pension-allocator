@@ -187,7 +187,7 @@ function validForm(store) {
 test('the request carries the contract version the engine actually supports', () => {
   const req = buildEngineRequest(initialForm(), ['current']);
   assert.equal(req.schema_version, SCHEMA_VERSION);
-  assert.equal(SCHEMA_VERSION.split('.')[0], '9', '계약이 9.0.0(major)으로 올랐다(D39·D40 — 세액 한도를 총급여액에서 산출)');
+  assert.equal(SCHEMA_VERSION.split('.')[0], '10', '계약이 10.0.0(major)으로 올랐다(D44 — IRP 가입 자격, 연금 세액공제 요건 축 분리)');
 });
 
 test('the request sends the raw birth date and no derived age at all (D21)', () => {

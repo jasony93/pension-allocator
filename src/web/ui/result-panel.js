@@ -87,6 +87,7 @@ import {
   PDF_EXPORT_LABEL,
   PDF_EXPORT_NOTE,
   PDF_EXPORT_BLOCKED_NOTE,
+  ISA_CARRYOVER_REPEAL_DIVERGENCE_NOTE,
 } from '../copy.js';
 import { formatKrw, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
@@ -1486,6 +1487,30 @@ function proposedScenarioCaption(scenario) {
   ]);
 }
 
+/**
+ * D47 — 확정 탭의 ISA 연간 납입한도에 이월 가산이 실려 있는데, 아직 국회를
+ * 통과하지 않은 개정안(정부안)이 통과되면 그 이월분을 기존 가입자도 잃는다
+ * (부칙 §27②). **두 한도가 실제로 갈릴 때만 나온다** — 대다수 사용자(누적
+ * 0·경과 0)에게는 두 값이 같아 나오지 않는다.
+ *
+ * **판정은 계약이 이미 낸 값으로 한다.** 두 시나리오의
+ * `limits.by_account[isa].contribution_limit_remaining_krw`를 그대로 비교할
+ * 뿐, 이월 산식이나 부칙 조항을 이 파일이 다시 계산하지 않는다.
+ *
+ * **확정 탭에만 나온다.** 오해를 낳는 수가 거기 있다 — 개정안 탭에만 두면
+ * 확정 탭만 보는 사용자는 못 본다.
+ */
+function isaCarryoverRepealDivergenceNote(response, scenario) {
+  if (!scenario.is_enacted) return null;
+  const proposed = response.scenarios.find((s) => !s.is_enacted);
+  if (!proposed) return null; // 개정안을 계산하지 않았으면 갈림을 판정할 수 없다
+  const currentIsa = scenario.limits.by_account.find((a) => a.account === 'isa');
+  const proposedIsa = proposed.limits.by_account.find((a) => a.account === 'isa');
+  if (!currentIsa || !proposedIsa) return null;
+  if (currentIsa.contribution_limit_remaining_krw <= proposedIsa.contribution_limit_remaining_krw) return null;
+  return el('div', { class: 'warning-note warning-note-banner' }, [el('p', {}, [ISA_CARRYOVER_REPEAL_DIVERGENCE_NOTE])]);
+}
+
 function resultPanelForScenario(
   response,
   scenario,
@@ -1509,6 +1534,7 @@ function resultPanelForScenario(
     creditRateFallbackBanner(response.echo?.credit_rate_bracket),
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
+    isaCarryoverRepealDivergenceNote(response, scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
       seatDraw,
       // 5.1.0(D28) — "무엇을 주었는가"(echo)와 "무엇을 썼는가"(estimate)를 한

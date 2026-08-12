@@ -1,11 +1,42 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 9.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 10.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `9.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `10.0.0`으로 맞췄다.
+ *
+ * **10.0.0에서 따라온 것(D44, major — 새 입력 때문이 아니다).** 사람 쪽 자격이
+ * 둘로 갈렸다 — **계좌를 열 수 있는가**(`irp.eligibility`, 근퇴법 §24②+시행령
+ * §17의 한정 열거)와 **그 납입액으로 공제를 받을 수 있는가**(`pension.credit.
+ * taxpayer_eligibility`, 소득세법 §59조의3① 「종합소득이 있는 거주자」)는 다른
+ * 축이고 어긋나는 자리가 있다 — 이자·배당소득만 있는 사람은 IRP를 못 열지만
+ * 연금저축으로는 공제를 받는다. 두 규칙 모두 산문 대신 `engine_evaluation.
+ * branches[].{when,outcome_code,direction_code}` 코드 칸을 두었고(계약 8.8절),
+ * 이 목도 실제 엔진(`statutory-eligibility.mjs`)과 같이 그 칸만 읽는다 — 산문
+ * (`basis`)은 읽지 않는다(`firstMatchingEligibilityBranch`).
+ *
+ * `AccountEligibility`에 `determination_code`·`determination_direction_code`가
+ * 붙는다(계약 5.2절). IRP는 `irp_eligible`/`irp_not_eligible`/
+ * `irp_eligibility_undetermined` 셋 중 하나이고, **미정은 배제가 아니다** —
+ * `irp_eligibility_undetermined`는 `eligible: true`와 함께 나가고 배제 코드는
+ * 응답 어디에도 없다(D44 판정 1). 연금저축·ISA는 언제나 `null`이다.
+ * `ScenarioResult`에 `pension_credit_taxpayer_eligibility`가 붙는다(계약 5.18절)
+ * — `requirement_met: false`면 두 연금계좌의 세액공제액이 0이고, **그 0은
+ * 한도에 잘린 것이 아니다.** `tax_liability_cap.applied`가 그 분기에서
+ * `true`→`false`로 바뀐다 — 금액은 둘 다 0으로 같고 **화면이 쓸 수 있는
+ * 문장만 다르다**(「낼 세금이 적어 잘렸습니다」가 아니라 「종합소득이 없어
+ * 요건이 서지 않습니다」).
+ *
+ * 새 입력 둘(`profile.has_business_income_current_year`·
+ * `profile.received_retirement_lumpsum_ever`)은 요청 형태로만 받는다 — **오늘의
+ * 확정 룰셋은 어느 분기의 `when`에서도 이 필드를 가리키지 않으므로 답을 보내도
+ * 응답이 한 원도 바뀌지 않는다**(계약 3.1절). 화면은 이 두 칸을 띄우지 않는다.
+ *
+ * `legal_basis`·`plans[].warnings`의 「사전순」이 `localeCompare`에서 코드 단위
+ * 비교(`byCodeUnit`)로 바뀐다(계약 6.1절) — `.`와 `_`의 앞뒤가 반대이고
+ * `localeCompare`는 실행 환경의 ICU 데이터에 달려 결정성 보장과 어긋난다.
  *
  * **9.0.0에서 따라온 것(D39·D40·D41·D42, major).** 소유자가 직전 과세연도
  * 결정세액 입력·문구를 전부 없애라고 지시했다(D39). `profile.prior_year_tax`가
@@ -113,8 +144,8 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 // 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '9';
-export const MOCK_SCHEMA_VERSION = '9.0.0';
+const KNOWN_SCHEMA_MAJOR = '10';
+export const MOCK_SCHEMA_VERSION = '10.0.0';
 const ANNUITY_START_VALUES = ['not_started', 'started', 'unknown'];
 // 9.0.0(D39·D40) — 세액 한도를 총급여액에서 산출한다. `profile.prior_year_tax`가
 // 요청에서 사라졌으므로 그 값의 상태 열거형(`PRIOR_TAX_STATES`)도 함께 없앤다.
@@ -187,6 +218,16 @@ function ruleFiles(rulesets) {
   return Object.keys(rulesets || {});
 }
 
+/**
+ * 「사전순」은 코드 단위 비교다(계약 6.1절, `10.0.0`). `localeCompare`가 아니다 —
+ * 그 함수의 순서는 실행 환경의 ICU 데이터에 달려 있어 결정성 보장과 어긋나고,
+ * `.`가 `_`보다 앞이냐 뒤냐가 기본 순서와 반대다.
+ */
+function byCodeUnit(a, b) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
 function findRule(rulesets, ruleId, fileKeys) {
   for (const key of fileKeys) {
     const file = rulesets[key];
@@ -195,6 +236,101 @@ function findRule(rulesets, ruleId, fileKeys) {
     if (rule) return { rule, fileKey: key };
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// 10.0.0(D44) — 사람 쪽 자격 두 규칙(`irp.eligibility`·
+// `pension.credit.taxpayer_eligibility`)이 산문 대신 `engine_evaluation.branches`
+// 코드 칸을 두었다(계약 8.8절). **이 목도 산문(`basis`)을 읽지 않는다** — 실제
+// 엔진(`statutory-eligibility.mjs`)과 같은 규약이다. `when`은 `{field, op, value}`
+// 꼴의 값이고 여기서 일반적으로 평가한다 — 조건을 코드에 다시 적지 않으므로
+// 룰셋이 분기를 늘리거나 조건을 바꿔도 이 파일을 고치지 않고 판정이 따라간다.
+// ---------------------------------------------------------------------------
+
+const ELIGIBILITY_WHEN_OPERATORS = {
+  eq: (actual, expected) => actual === expected,
+  gt: (actual, expected) => typeof actual === 'number' && typeof expected === 'number' && actual > expected,
+  not_null: (actual) => actual !== null && actual !== undefined,
+};
+
+/** 점으로 이은 경로. 값이 없는 것과 필드가 없는 것을 가른다(D44와 같은 이유). */
+function readEligibilityPath(context, path) {
+  const keys = String(path).split('.');
+  let node = context;
+  for (const key of keys) {
+    if (node === null || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, key)) {
+      return { found: false, value: undefined };
+    }
+    node = node[key];
+  }
+  return { found: true, value: node };
+}
+
+function testEligibilityCondition(condition, context) {
+  if (condition === null || typeof condition !== 'object') return null;
+  const operator = ELIGIBILITY_WHEN_OPERATORS[condition.op];
+  if (operator === undefined) return null;
+  const read = readEligibilityPath(context, condition.field);
+  if (!read.found) return null;
+  return operator(read.value, condition.value);
+}
+
+function testEligibilityWhen(when, context) {
+  if (when === null || typeof when !== 'object') return null;
+  const groups = [
+    ['all_of', (results) => results.every(Boolean)],
+    ['any_of', (results) => results.some(Boolean)],
+  ].filter(([key]) => Array.isArray(when[key]));
+  if (groups.length === 0) return null;
+  let matched = true;
+  for (const [key, combine] of groups) {
+    const results = when[key].map((condition) => testEligibilityCondition(condition, context));
+    if (results.some((result) => result === null)) return null;
+    matched = matched && combine(results);
+  }
+  return matched;
+}
+
+/**
+ * 룰셋의 `engine_evaluation.branches`에서 첫 매치를 고른다(D44/계약 8.8절).
+ * 읽는 칸은 셋뿐이다 — `when` · `outcome_code` · `direction_code`. 산문(`basis`)은
+ * 읽지 않는다. 형태가 어긋나거나 어느 분기도 맞지 않으면 `null`(= rule_missing)이다.
+ */
+function firstMatchingEligibilityBranch(rule, context, allowedOutcomeCodes) {
+  const evaluation = rule?.value?.engine_evaluation;
+  if (
+    !evaluation ||
+    evaluation.evaluation_order !== 'first_match_wins' ||
+    !Array.isArray(evaluation.branches) ||
+    !Array.isArray(evaluation.allowed_outcome_codes) ||
+    evaluation.allowed_outcome_codes.length !== allowedOutcomeCodes.length ||
+    !allowedOutcomeCodes.every((code) => evaluation.allowed_outcome_codes.includes(code))
+  ) {
+    return null;
+  }
+  for (const branch of evaluation.branches) {
+    const matched = testEligibilityWhen(branch?.when, context);
+    if (matched === null) return null;
+    if (!matched) continue;
+    if (
+      typeof branch.outcome_code !== 'string' ||
+      typeof branch.direction_code !== 'string' ||
+      !allowedOutcomeCodes.includes(branch.outcome_code)
+    ) {
+      return null;
+    }
+    return branch;
+  }
+  return null;
+}
+
+/** 그 분기를 닫을 수 있는 입력의 id(계약 8.8절 · 3.1절). 화면이 언제 물어야 하는지를 값으로 낸다. */
+function closingInputIdsForBranch(requestedInputs, branchId) {
+  if (!Array.isArray(requestedInputs)) return [];
+  return requestedInputs
+    .filter((input) => input?.closes_branch === branchId && typeof input.id === 'string')
+    .map((input) => input.id)
+    .sort();
 }
 
 /**
@@ -1127,6 +1263,18 @@ function validateProfile(p) {
     errors.push(err('invalid_enum', 'profile.declared_youth', {}));
   }
 
+  // 10.0.0(D44) — 새 입력 둘. **오늘의 확정 룰셋은 어느 분기의 `when`에서도 이
+  // 두 필드를 가리키지 않으므로 답을 보내도 응답이 한 원도 바뀌지 않는다**
+  // (계약 3.1절). 그래도 요청에서 받고 형태만 검증한다 — 룰셋이 `when`에 그
+  // 필드를 넣는 순간 엔진을 고치지 않고도 값이 판정에 반영되어야 하기 때문이다.
+  // **화면은 이 두 칸을 아직 띄우지 않는다**(관리자 D47 이전 판정).
+  if (p.has_business_income_current_year != null && typeof p.has_business_income_current_year !== 'boolean') {
+    errors.push(err('invalid_enum', 'profile.has_business_income_current_year', {}));
+  }
+  if (p.received_retirement_lumpsum_ever != null && typeof p.received_retirement_lumpsum_ever !== 'boolean') {
+    errors.push(err('invalid_enum', 'profile.received_retirement_lumpsum_ever', {}));
+  }
+
   if (p.isa_return_assumption != null) {
     errors.push(...validateIsaReturnAssumption(p.isa_return_assumption));
   }
@@ -1437,6 +1585,98 @@ function computeScenario(scenario, request, rulesets) {
     }
   }
 
+  // -- 사람 쪽 자격 둘 (10.0.0, D44) -----------------------------------------
+  // **계좌 자격보다 앞에 온다** — IRP 가입 자격이 계좌 자격의 한 축이고, 세액공제
+  // 요건은 배분 단계의 목적함수가 서는 자리이기 때문이다(실제 엔진과 같은 순서).
+  // **두 물음을 섞지 않는다**: 이자·배당소득만 있는 사람은 IRP를 못 열지만
+  // 연금저축으로는 공제를 받는다.
+  const IRP_OUTCOME_CODES = ['irp_eligible', 'irp_not_eligible', 'irp_eligibility_undetermined'];
+  const irpEligibilityRule = use('irp.eligibility', 'account_eligibility[retirement_pension]');
+  let irpBranch = null;
+  if (irpEligibilityRule) {
+    irpBranch = firstMatchingEligibilityBranch(irpEligibilityRule, { profile, accounts }, IRP_OUTCOME_CODES);
+    if (irpBranch === null) missingRules.push('irp.eligibility');
+  }
+  const irpExcluded = irpBranch?.outcome_code === 'irp_not_eligible';
+  // **미정은 배제가 아니다**(D44 판정 1). 조문상 자격이 확실한 사람(사업소득자)이
+  // 섞여 있고, 막으면 그 사람은 화면이 「불가」라고 했으므로 확인하러 가지도
+  // 않는다 — 스스로 드러나지 않는 오류다. 그래서 배분에서 빼지 않는다.
+  const irpUndetermined = irpBranch?.outcome_code === 'irp_eligibility_undetermined';
+  if (irpBranch && (irpExcluded || irpUndetermined)) {
+    const closingInputIds = closingInputIdsForBranch(
+      irpEligibilityRule.value.engine_evaluation.requested_inputs,
+      irpBranch.id,
+    );
+    const irpParams = {
+      account: 'retirement_pension',
+      branch: irpBranch.id,
+      error_direction: irpBranch.direction_code,
+      // 이 분기를 닫는 입력. 화면이 **이 분기에서만** 그 물음을 띄우게 하는 값이다.
+      closing_input_ids: closingInputIds,
+    };
+    if (irpExcluded) {
+      notices.push({
+        code: 'irp_excluded_no_qualifying_status',
+        severity: 'warning',
+        field: 'profile.current_year_total_salary_krw',
+        params: irpParams,
+        basis_rule_ids: [irpEligibilityRule.id],
+      });
+    } else {
+      // **침묵하면 안 된다.** 빼지 않는다는 것은 「자격이 있다」가 아니다(D44).
+      notices.push({
+        code: 'irp_eligibility_not_determined',
+        severity: 'warning',
+        field: 'profile.has_non_wage_global_income_current_year',
+        params: irpParams,
+        basis_rule_ids: [irpEligibilityRule.id],
+      });
+    }
+  }
+
+  // 연금저축계좌는 나이·소득으로 배분에서 빼지 않는다는 것이 판정이다 — 부재도
+  // 판정이므로 근거가 있어야 한다(D44).
+  const annuitySavingsEligibilityRule = use('pension_savings.eligibility', 'account_eligibility[annuity_savings]');
+  if (annuitySavingsEligibilityRule && annuitySavingsEligibilityRule.value?.engine_evaluation?.excludes_account !== false) {
+    // 규칙이 빼라고 말하기 시작했는데 무엇으로 빼는지는 적혀 있지 않다. 지어내지 않는다.
+    missingRules.push('pension_savings.eligibility');
+  }
+
+  // -- 연금계좌 세액공제 요건 (소득세법 §59조의3①, 계약 5.18절) ----------------
+  // **가입 자격과 다른 축이다.** 이 판정은 현재 입력만으로 완전히 끝난다 —
+  // 요건을 갖추지 못한 사람의 공제액 0은 추정이 아니라 조문에서 나오는 등식이다.
+  const CREDIT_OUTCOME_CODES = ['pension_credit_available', 'pension_credit_zero_no_global_income'];
+  const creditEligibilityRule = use(
+    'pension.credit.taxpayer_eligibility',
+    'pension_credit_taxpayer_eligibility.outcome_code',
+  );
+  let creditBranch = null;
+  if (creditEligibilityRule) {
+    creditBranch = firstMatchingEligibilityBranch(creditEligibilityRule, { profile }, CREDIT_OUTCOME_CODES);
+    if (creditBranch === null) missingRules.push('pension.credit.taxpayer_eligibility');
+  }
+  const creditRequirementMet = creditBranch ? creditBranch.outcome_code === 'pension_credit_available' : true;
+  const pensionCreditTaxpayerEligibility = creditBranch
+    ? {
+        outcome_code: creditBranch.outcome_code,
+        branch_code: creditBranch.id,
+        direction_code: creditBranch.direction_code,
+        requirement_met: creditRequirementMet,
+        is_exact: creditBranch.is_exact === true,
+        basis_rule_ids: [creditEligibilityRule.id],
+      }
+    : null;
+  if (creditBranch && !creditRequirementMet) {
+    // **오류가 아니라 그 해에 대한 사실이다**(계약 8.2절) — 오류·경고 색을 쓰지 않는다.
+    notices.push({
+      code: 'pension_credit_zero_no_global_income',
+      severity: 'info',
+      field: 'profile.has_non_wage_global_income_current_year',
+      params: { branch: creditBranch.id, is_exact: creditBranch.is_exact === true },
+      basis_rule_ids: [creditEligibilityRule.id],
+    });
+  }
+
   // -- ISA 자격 --------------------------------------------------------
   const isaEligibilityRule = use('isa.eligibility', 'scenarios[].account_eligibility');
   let isaEligible = true;
@@ -1494,9 +1734,14 @@ function computeScenario(scenario, request, rulesets) {
   const annuityStartRule = use('pension.contribution.after_annuity_start', 'scenarios[].account_eligibility');
   const pensionEligibility = {};
   for (const account of PENSION_ACCOUNTS) {
+    // **축이 둘 이상 동시에 걸릴 수 있고 그때는 둘 다 실린다**(계약 5.2절).
+    const reasonCodes = [];
+    if (account === 'retirement_pension' && irpExcluded) {
+      reasonCodes.push('irp_excluded_no_qualifying_status');
+    }
     const status = accounts[account].annuity_start_status;
     if (status === 'started') {
-      pensionEligibility[account] = { eligible: false, code: 'pension_contribution_blocked_annuity_started' };
+      reasonCodes.push('pension_contribution_blocked_annuity_started');
       notices.push({
         code: 'pension_contribution_blocked_annuity_started',
         severity: 'warning',
@@ -1505,7 +1750,7 @@ function computeScenario(scenario, request, rulesets) {
         basis_rule_ids: annuityStartRule ? [annuityStartRule.id] : [],
       });
     } else if (status === 'unknown') {
-      pensionEligibility[account] = { eligible: false, code: 'pension_annuity_start_unknown' };
+      reasonCodes.push('pension_annuity_start_unknown');
       notices.push({
         code: 'pension_annuity_start_unknown',
         severity: 'warning',
@@ -1513,9 +1758,8 @@ function computeScenario(scenario, request, rulesets) {
         params: { account },
         basis_rule_ids: [],
       });
-    } else {
-      pensionEligibility[account] = { eligible: true, code: null };
     }
+    pensionEligibility[account] = { eligible: reasonCodes.length === 0, reasonCodes };
   }
 
   const retirementTransferTotal = PENSION_ACCOUNTS.reduce(
@@ -1534,19 +1778,31 @@ function computeScenario(scenario, request, rulesets) {
   }
 
   const accountEligibility = [
-    ...PENSION_ACCOUNTS.map((account) => ({
-      account,
-      eligible: pensionEligibility[account].eligible,
-      reason_codes: pensionEligibility[account].code ? [pensionEligibility[account].code] : [],
-      basis_rule_ids:
-        pensionEligibility[account].code === 'pension_contribution_blocked_annuity_started' && annuityStartRule
-          ? [annuityStartRule.id]
-          : [],
-    })),
+    ...PENSION_ACCOUNTS.map((account) => {
+      const basisRuleIds = [];
+      if (account === 'retirement_pension' && irpEligibilityRule) basisRuleIds.push(irpEligibilityRule.id);
+      if (account === 'annuity_savings' && annuitySavingsEligibilityRule) basisRuleIds.push(annuitySavingsEligibilityRule.id);
+      if (pensionEligibility[account].reasonCodes.includes('pension_contribution_blocked_annuity_started') && annuityStartRule) {
+        basisRuleIds.push(annuityStartRule.id);
+      }
+      return {
+        account,
+        eligible: pensionEligibility[account].eligible,
+        reason_codes: pensionEligibility[account].reasonCodes,
+        // **가입 자격 축의 결론.** 연금저축은 언제나 `null`이다 — 결론 어휘를 가진
+        // 가입 자격 규칙이 룰셋에 없다(계약 5.2절).
+        determination_code: account === 'retirement_pension' && irpBranch ? irpBranch.outcome_code : null,
+        determination_direction_code: account === 'retirement_pension' && irpBranch ? irpBranch.direction_code : null,
+        basis_rule_ids: [...new Set(basisRuleIds)].sort(),
+      };
+    }),
     {
       account: 'isa',
       eligible: isaEligible,
       reason_codes: isaReasonCodes,
+      // ISA에는 결론 코드 어휘를 가진 가입 자격 규칙이 없다. 없는 것을 지어내지 않는다.
+      determination_code: null,
+      determination_direction_code: null,
       basis_rule_ids: isaEligibilityRule ? [isaEligibilityRule.id] : [],
     },
   ];
@@ -1970,7 +2226,12 @@ function computeScenario(scenario, request, rulesets) {
   const monthlyLastOrder = ACCOUNTS.length;
 
   const plans = rawPlans.map((p) => {
-    const creditEligible = creditFor(p.allocByAccount.annuity_savings, p.allocByAccount.retirement_pension);
+    // **1단계가 서지 않으면 2단계(세액 한도)는 돌지 않는다**(계약 5.18절). 요건
+    // 미충족이면 인정된 납입액 자체가 0이다 — 한도가 자른 것이 아니라 애초에
+    // 자를 것이 없다.
+    const creditEligible = creditRequirementMet
+      ? creditFor(p.allocByAccount.annuity_savings, p.allocByAccount.retirement_pension)
+      : 0;
     const incomeTaxBeforeCapKrw = Math.floor(creditEligible * incomeTaxRate);
     const localTaxBeforeCapKrw = Math.floor(creditEligible * localTaxRate);
     // 한도는 **소득세분에** 걸린다. 지방소득세분은 **인정된 소득세분에** 부가율을
@@ -2111,7 +2372,7 @@ function computeScenario(scenario, request, rulesets) {
         }
       }
     }
-    warnings.sort((a, b) => (ACCOUNTS.indexOf(a.account) - ACCOUNTS.indexOf(b.account)) || a.code.localeCompare(b.code));
+    warnings.sort((a, b) => (ACCOUNTS.indexOf(a.account) - ACCOUNTS.indexOf(b.account)) || byCodeUnit(a.code, b.code));
 
     const priorityBasisCode = {
       max_tax_credit: 'tax_credit_maximization',
@@ -2537,7 +2798,7 @@ function computeScenario(scenario, request, rulesets) {
     .sort((a, b) => {
       const statusOrder = (s) => (s === '확정' ? 0 : 1);
       const so = statusOrder(a.status) - statusOrder(b.status);
-      return so !== 0 ? so : a.rule_id.localeCompare(b.rule_id);
+      return so !== 0 ? so : byCodeUnit(a.rule_id, b.rule_id);
     });
 
   const billStages = [...new Set(legalBasis.filter((l) => l.bill_stage).map((l) => l.bill_stage))];
@@ -2576,6 +2837,10 @@ function computeScenario(scenario, request, rulesets) {
       effective_from: rulesets['2026.json']?.effective_from ?? '2026-01-01',
     },
     account_eligibility: accountEligibility,
+    // **가입 자격과 다른 축이다**(계약 5.18절, D44). 공제액 0의 경로가 「산출세액이
+    // 0이라 잘렸다」인지 「종합소득이 없어 요건이 서지 않는다」인지를 화면이
+    // 여기서 읽는다 — 금액은 같고 쓸 수 있는 문장이 다르다.
+    pension_credit_taxpayer_eligibility: pensionCreditTaxpayerEligibility,
     // 세액 한도와 **그것을 어떻게 계산했는지.** 두 시나리오에서 같은 값이다 —
     // 한도는 개정예고 규칙의 대상이 아니다(계약 5.10절, D39·D40).
     pension_credit_tax_liability_cap: capResolved?.cap ?? null,
