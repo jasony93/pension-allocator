@@ -11,6 +11,9 @@ inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json
 open_questions:
+  - "**[D53 집행·관리자에게 올린다] 정답지 네 건이 움직여야 한다. 이 유닛은 고치지 않았다.** GC-31·GC-32d·GC-34는 `plan_count`가 **3 → 2**이고(표시 공제액이 같고 IRP만 더 묶는 `annuity_savings_first`가 D53 3번으로 빠진다) 다른 값은 한 원도 안 움직인다. GC-32a는 IRP **3,000,000 → 2,999,994**, ISA **0 → 6**, `tax_credit_before_cap` **1,350,000/135,000/1,485,000 → 1,349,999/134,999/1,484,998**, `threshold_income_tax_krw` **1,350,000 → 1,349,999**, `credit_eligible_krw` **9,000,000 → 8,999,994**, `monthly_rounding_residual_krw` **0 → 12**, `fill_order`에 `isa: 3`이 는다. **`tax_credit`(1,349,999/134,999/1,484,998)과 `applied: true`·`binding_code: binds_provably`·`plan_count: 2`는 그대로다.** 값의 저자는 `tax-domain`이다."
+  - "**[D53 2번의 파급·관리자 판정이 필요하다] `tax_liability_cap.applied`가 대는 상대를 「트림 전 금액」으로 옮겼다**(계약 5.5절·0.21절). 옮기지 않으면 **세액 한도에 소수부가 있으면서 무는 모든 사용자**에게 `applied: false`가 나간다 — 표시 기준 트림이 잘라 낸 뒤의 정확값을 한도 아래로 내리기 때문이다. 그러면 화면은 한도 때문에 IRP가 잘린 사람에게 「한도에 걸리지 않았습니다」를 적는다. **근거는 이 유닛이 지어낸 것이 아니라 정답지 GC-32d의 문장이다** — 「트림 후 값이 한도와 같아졌다고 해서 한도가 안 물었다고 적으면 원인과 결과를 뒤집는다」. **딸린 대가 하나를 함께 올린다** — `contribution_carryover_available`가 `applied`를 그대로 따르므로, **실제로 밀려난 납입액이 없는 사용자에게도 `true`가 나갈 수 있다.** 그 칸을 「반환된 배분에서 실제로 잘렸는가」로 갈라 둘지는 `tax-domain`·관리자 판정이다."
+  - "**[D53 3번의 파급] 지배 판정이 `plans` 배열의 구성을 바꾼다.** 벡터가 다른데도 빠지는 안이 생겼으므로 **배열 길이를 고정으로 가정하거나 특정 `plan_id`가 반드시 있다고 가정한 화면은 조용히 깨진다.** 이 유닛은 `src/web/`을 열지 않았고 마이그레이션은 `web-dev`의 몫이다. **목이 맞춰야 할 것**: `schema_version` `13.0.0`, `plans`에서 `annuity_savings_first`가 빠질 수 있는 것, `within_isa_lock_in`인데 ISA에 돈이 들어간 응답, 그리고 `applied: true`이면서 `reduced_total_krw: 0`인 응답."
   - "**[게이트 4 직전·문서 개정] 계약의 값은 한 글자도 바뀌지 않았고 구조만 바뀌었다. `status`는 `draft` 그대로다.** 0절이 「버전 이력」에서 **「지금의 계약」**이 됐고(0.A 색인 · 0.B 지금 유효한 판정 · 0.C 폐기된 것 · 0.D 버전 규약), 버전 표와 판정 근거 0.1~0.19가 **11절 부록**으로 내려갔다. **소절 번호는 하나도 바꾸지 않았다** — 다른 문서와 `src/web`의 주석이 「계약 0.12절」처럼 이 번호로 가리킨다. **함께 고친 낡은 서술 넷**: 3.0절의 `schema_version` 예시가 `\"4.0.0\"`이었다(현재 11.0.0), 5.9절이 `4.0.0`에서 사라진 `profile.age_years`를 산식에 쓰고 있었다, 7.1절이 같은 필드를 오류 경로 예시로 들고 있었다, 10절이 「배분안이 여전히 셋」이라 적고 있었다(`5.0.0`부터 넷). **버전 규약을 0.4절 꼬리에서 0.D절로 옮겼다** — 규약을 가리키던 참조 하나가 `0.12절`이라는 틀린 번호를 적고 있었다."
   - "**`0.11`이라는 소절 번호가 둘이다**(11.B절). 하나는 `6.0.0`의 major 근거(D32)이고 하나는 D31이 남긴 되돌림 경로다. **`src/web`의 주석이 두 뜻 모두로 「0.11절」을 가리키고 있어**(`copy.js`가 앞엣것, `store.js`·`mock-engine.js`가 뒤엣것) 이 유닛이 임의로 다시 매기지 않았다. 다시 매기면 `src/web`의 주석 다섯 자리가 끊기고 이 유닛은 그 디렉터리를 열지 않는다. **번호를 바로잡을지는 관리자 판정이다.**"
   - "**계약을 10.0.0(major)으로 올렸다 — 새 입력 때문이 아니라 같은 요청이 다른 금액을 내기 때문이다**(0.18절). 무소득자에게 IRP 300만원을 권하던 배분이 사라진다. 새 필드 둘은 **선택**이고 보내지 않는 소비자는 오늘과 같은 응답을 받으므로 그것만이라면 minor였다. `src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다 — 이 유닛은 `src/web/`을 열지 않았고 마이그레이션은 `web-dev`의 몫이다. **목이 맞춰야 할 것**: `AccountEligibility`의 새 필드 둘, `ScenarioResult.pension_credit_taxpayer_eligibility`, 안내 코드 셋, 그리고 요건 미충족 사용자에게 `tax_liability_cap.applied`가 `false`로 나가는 것."
@@ -74,7 +77,7 @@ open_questions:
 
 ## 0. 지금의 계약
 
-**현재 계약 버전: `12.0.0`.**
+**현재 계약 버전: `13.0.0`.**
 
 **이 절은 지금 유효한 것만 적는다.** 여기까지 어떻게 왔는지와 **각 major 판정의 근거**는 **11절(부록)**에 버전·판정 번호와 함께 있다. 그 둘을 가른 이유는 하나다 — 다음에 이 계약을 읽는 사람이 「지금 응답에 무엇이 들어 있는가」를 알기 위해 여섯 번의 버전 상향을 따라 읽어야 했다.
 
@@ -120,13 +123,15 @@ open_questions:
 | 미정 분기에서 화면이 「최대」를 쓸 수 있나 | **못 쓴다. 「적어도」도 못 쓴다.** 근로소득 외 합산 소득이 있다고 답했는데 금액을 모르면 오차의 **부호가 정해지지 않는다.** 숫자는 나가되 방향은 말하지 않는다 | `error_direction_code: "direction_indeterminate"` · 안내 `tax_liability_cap_direction_indeterminate` | 8.7절 · **D41 2번** |
 | 원 미만은 어느 단계에서 몇 번 버리나 | **두 번이고, 성질이 다르다.** ① 조문이 정한 자리 한 번 — **과세표준**(「국고금 관리법」 §47② · 1원 미만 버림). ② 우리 규약으로 한 번 — 응답에 **정수 원으로 실릴 때.** 중간값과 **대소 비교에서는 버리지 않는다.** §47①(10원)은 우리 출력에 걸리지 않으므로 **응답 금액은 10의 배수가 아니다** | `tax_base_krw`(①) · 가정 `rounding_floor_to_won`(②) · 룰셋 `tax.rounding.won_fraction` | `engine-design.md` 13절 · **D46 1번** |
 | `applied: false`가 「한도에 안 걸렸다」인가 | **아니다.** 「우리가 아는 상한으로는 안 잘렸다」일 뿐이고 실제 한도는 더 작을 수 있다. 걸림이 **증명되는** 상태는 하나뿐이다 | `binding_code` (`binds_provably` / `binding_not_determined`) | 8.7절 · **D40** |
-| `applied === (잘린 금액 > 0)`인가 | **아니다.** `applied`는 **정확값의 대소**이고 잘린 금액은 **표시 금액의 뺄셈**이다. 화면이 「잘렸습니다」를 쓸 때는 `reduced_total_krw > 0`을 함께 본다. 한 방향만 무조건 참이다 — **금액이 줄었으면 반드시 잘린 것이다** | `applied` · `reduced_*_krw` | 5.5절 · **D46 1번 · D49** |
+| `applied === (잘린 금액 > 0)`인가 | **아니다.** `applied`는 **트림 전 금액과 한도의 정확값 대소**이고(`13.0.0`) 잘린 금액은 **반환된 배분의 표시 금액 뺄셈**이다. 화면이 「잘렸습니다」를 쓸 때는 `reduced_total_krw > 0`을 함께 본다. 한 방향만 무조건 참이다 — **금액이 줄었으면 반드시 잘린 것이다** | `applied` · `reduced_*_krw` | 5.5절 · **D46 1번 · D49** |
 | IRP 가입 자격이 미정인 사용자를 막나 | **막지 않는다.** `eligible: true`이고 IRP 배분을 받는다. 화면은 「가입할 수 없습니다」도 「가입할 수 있습니다」도 아닌 **「확인이 필요합니다」**를 쓴다 | `determination_code: "irp_eligibility_undetermined"` | 5.2절 · 8.8절 · **D44** |
 | 공제 요건이 서지 않는 사용자의 0은 「잘린 0」인가 | **아니다.** 요건이 서지 않아 **잘릴 것 자체가 없다.** 「낼 세금이 적어 잘렸습니다」를 쓰면 안 된다 | `pension_credit_taxpayer_eligibility.requirement_met: false` | 5.18절 · **D44** |
 | 배분안은 몇 개이고 무엇이 다른가 | **1개 이상 4개 이하.** 네 안이 **전부** 연금 납입 한도까지 채우므로 안을 가르는 것은 **순서뿐**이다. `plans[0]`이 기본안이다 | `plans` · `priority_basis` | 5.5절 · 6.1절 · **D32** |
-| 배분 금액을 바꾸는 입력은 무엇인가 | **`12.0.0`에서 둘이 바꾸게 됐다.** `fund_use_horizon`이 `within_isa_lock_in`이면 **전액 미배분**이고(D10을 뒤집었다), 세액 한도는 **기본안 후보의 IRP 배분 상한**을 정한다. **수익률 가정은 여전히 아무것도 안 바꾼다.** 세 고정 객체가 그 선언이고 불변식이 응답 전체에서 대조한다 | `echo.fund_use_horizon_affects` · `echo.tax_liability_cap_affects` · `echo.isa_return_affects` | 4.2절 · **D52 · D28** |
-| 3년 안에 쓸 돈이면 어디에 넣나 | **어느 계좌에도 넣지 않는다.** ISA는 의무가입기간을 못 채워 과세특례를 잃고 연금계좌는 55세 전 인출이라 기타소득세가 붙는다 — 공제율보다 낮지 않아 **받은 것을 도로 내거나 더 낸다.** 그 사실이 미배분의 **이유 코드**로 나간다 | `unallocated_breakdown.reason_code` · `allocations[].limited_by: "fund_use_horizon"` | 5.13절 · **D52 2번** |
-| 결정세액이 낮은 사람에게 IRP를 권하나 | **권하지 않는다.** 세액공제를 한 원도 더 낳지 않는 IRP 배분을 기본안 후보가 내지 않는다 — 얻는 것 없이 중도인출 제한만 지기 때문이다. **연금저축은 다르다**(그 제한을 받지 않고 이월 신청이 예정된다). **경계는 총급여가 아니라 남은 세액 한도가 정한다** | `allocations[].limited_by: "no_additional_tax_credit"` | 5.5절 · 5.12절 · **D52 1번** |
+| 배분 금액을 바꾸는 입력은 무엇인가 | **`12.0.0`에서 둘이 바꾸게 됐다.** `fund_use_horizon`이 `within_isa_lock_in`이면 **연금 두 계좌가 미배분**이고(D10을 뒤집었다), 세액 한도는 **기본안 후보의 IRP 배분 상한**을 정한다. **수익률 가정은 여전히 아무것도 안 바꾼다.** 세 고정 객체가 그 선언이고 불변식이 응답 전체에서 대조한다 | `echo.fund_use_horizon_affects` · `echo.tax_liability_cap_affects` · `echo.isa_return_affects` | 4.2절 · **D52 · D28** |
+| 3년 안에 쓸 돈이면 어디에 넣나 | **연금 두 계좌에는 넣지 않는다.** 55세 전 인출이라 기타소득세가 붙고 그 세율이 공제율보다 낮지 않아 **받은 것을 도로 내거나 더 낸다.** **ISA는 남은 의무가입기간이 있을 때만 함께 비운다**(`13.0.0`) — 기간이 이미 지난 사용자에게는 추징 요건이 **성립할 수 없으므로** 배분을 유지한다. 그 사실이 미배분의 **이유 코드**로 나간다 | `unallocated_breakdown.reason_code` · `allocations[].limited_by: "fund_use_horizon"` · `fund_use_horizon_boundaries.isa_lock_in_years_remaining` | 3.1절 · 5.13절 · **D52 2번 · D53 1번** |
+| 결정세액이 낮은 사람에게 IRP를 권하나 | **권하지 않는다.** **표시되는 세액공제액**을 한 원도 늘리지 않는 IRP 배분을 기본안 후보가 내지 않는다(`13.0.0` — `12.0.0`은 정확값으로 재었다) — 얻는 것 없이 중도인출 제한만 지기 때문이다. **연금저축은 다르다**(그 제한을 받지 않고 이월 신청이 예정된다). **경계는 총급여가 아니라 남은 세액 한도가 정한다** | `allocations[].limited_by: "no_additional_tax_credit"` | 5.5절 · 5.12절 · **D52 1번 · D53 2번** |
+| 고를 이유가 없는 안이 선택지에 남나 | **남지 않는다**(`13.0.0`). **표시되는 세액공제액이 같고 연금저축·ISA도 더 받지 못하면서 IRP만 더 묶는 안**은 `plans`에서 뺀다. 사용자가 그 안을 골라 얻는 것이 중도인출 제한뿐이기 때문이다. 「목적」은 이름이 아니라 **다른 값이 실제로 달라지는 것**으로 잰다 | `plans` 배열의 길이와 구성 | 5.5절 · 6.2절 · **D53 3번** |
+| `applied`는 무엇에 대고 재나 | **트림 전 금액에 댄다**(`13.0.0`). 한도가 물었기 때문에 IRP를 잘라 내는데, 잘라 낸 **뒤**의 금액과 대면 자름이 사라져 보인다. **`reduced_*`와 `threshold_income_tax_krw`는 여전히 반환된 배분의 표시 금액**이므로 `applied: true`이면서 `reduced_total_krw: 0`인 자리가 실재한다 | `tax_liability_cap.applied` · `reduced_*_krw` | 5.5절 · **D53 2번** |
 | 헤드라인 합계는 점인가 구간인가 | **엔진이 정해서 값으로 낸다.** 화면이 `point_estimate_krw === null`로 스스로 판정하지 않는다. 구간이면 **아래 끝이 확정 세액공제액과 같은 수**다 | `headline_composite_total.bound_code` · `lower_bound_krw` | 5.17절 · **D38** |
 | 세액공제 축의 눈금 끝은 무엇인가 | `ceiling_krw` 하나다 — **소득세분 + 지방소득세분.** 산출세액 한도를 반영해 내리지 않는다 | `pension_credit_ceiling` | 5.15절 · **D36** |
 | 연금계좌 저율과세를 금액으로 낼 수 있나 | **없다.** 그 객체에 `*_krw`가 한 칸뿐이고 그것은 조문의 **기준금액**이지 혜택이 아니다. 합계에도 들어가지 않는다 | `pension_withdrawal_tax_reference` | 5.16절 · **D36 · D38** |
@@ -153,7 +158,10 @@ open_questions:
 | 월 환산 이탈 범위 `±(개월수 − 1)` 보장 | `8.0.0` | `−(개월수 − 1)` 이상 `(갈래 수 − 1) × (개월수 − 1)` 이하 |
 | `cap_krw`가 그 사람의 한도라는 **등식** 보장 | `9.0.0` | **상한** 보장 + `is_exact`(등식이 성립하는 좁은 자리) |
 | `applied === (잘린 금액 > 0)` 보장 | `11.0.0` (D46 1번) | 한 방향만 — **금액이 줄었으면 반드시 잘린 것** |
-| `fund_use_horizon`이 배분 금액·세액공제액을 바꾸지 않는다는 보장 | `12.0.0` (D52 2번) | **세 값에서만** 참이다. `within_isa_lock_in`은 전액 미배분이다(3.1절·5.13절) |
+| `fund_use_horizon`이 배분 금액·세액공제액을 바꾸지 않는다는 보장 | `12.0.0` (D52 2번) | **세 값에서만** 참이다. `within_isa_lock_in`은 연금 두 계좌가 미배분이다(3.1절·5.13절) |
+| `within_isa_lock_in`이면 **모든** 배분안의 세 계좌 금액이 0이라는 보장 | `13.0.0` (D53 1번) | **ISA는 남은 의무가입기간이 있을 때만** 0이다. 기간이 지났으면 배분을 유지한다(3.1절) |
+| 「목적이 있는 배분안은 이름만으로 남는다」는 읽기 | `13.0.0` (D53 3번) | 표시 공제액이 같고 IRP만 더 묶는 안은 **이름과 무관하게** 빠진다(5.5절·6.2절) |
+| `tax_liability_cap.applied`가 **반환된 배분의** 자르기 전 금액과 한도의 대소라는 보장 | `13.0.0` (D53 2번) | 대는 상대가 **트림 전** 금액이다. `applied: true`이면서 `reduced_total_krw: 0`인 자리가 생겼다(5.5절) |
 | 세액 한도가 배분을 바꾸지 않는다는 보장 | `12.0.0` (D52 1번) | **연금저축·ISA에 대해서만** 참이다. 기본안 후보의 IRP 배분은 한도의 함수다(5.12절) |
 | 가정 코드 `fund_use_horizon_excluded_from_amounts`가 **언제나** 나간다는 보장 | `12.0.0` (D52 2번) | `within_isa_lock_in`에서는 나가지 않는다 — 그 시점에는 거짓이기 때문이다(8.3절) |
 
@@ -251,7 +259,7 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 | `prior_year_total_salary_krw` | integer \| null | 원/연 | 선택 | **직전** 과세기간 총급여액. `isa.tax_free_limit` 구간의 교차확인에만 쓴다. **null이면 교차확인을 건너뛰고 `prior_year_income_missing` notice를 낸다. 해당 연도 값으로 대체하지 않는다** |
 | `financial_income_taxpayer_last_3_years` | boolean \| null | — | 선택 | 직전 3개 과세기간 중 1회 이상 금융소득종합과세 대상이었는가(`isa.exclusion.financial_income_taxpayer`). `true`면 ISA를 배분 대상에서 제외한다. **null이면 배제를 적용하지 않고 `financial_income_status_unknown` notice를 낸다** |
 | `declared_youth` | boolean \| null | — | 선택 | 청년 우대 규칙 대상인지에 대한 **사용자 자기신고**. 엔진은 나이로 판정하지 않는다 — 연령 범위가 시행령 위임이고 미공개다. 개정안 시나리오에서만 쓴다. **null이면 우대를 적용하지 않고 `youth_status_not_declared` notice를 낸다** |
-| `fund_use_horizon` | `"within_isa_lock_in"` \| `"before_pension_age"` \| `"at_or_after_pension_age"` \| `"unknown"` | — | **필수** | 이 자금을 언제 쓸 계획인가. **`12.0.0`부터 값 하나가 금액을 바꾼다** — `"within_isa_lock_in"`이면 **전액 미배분**이다(D52 2번). 나머지 세 값에서는 종전대로 배분안의 순서와 경고만 바꾼다(3.1절 아래 설명). 값을 모르면 `"unknown"`을 보낸다 — **엔진이 기본값을 만들지 않는다.** 목록 밖 값이면 `invalid_enum` 오류 |
+| `fund_use_horizon` | `"within_isa_lock_in"` \| `"before_pension_age"` \| `"at_or_after_pension_age"` \| `"unknown"` | — | **필수** | 이 자금을 언제 쓸 계획인가. **`12.0.0`부터 값 하나가 금액을 바꾼다** — `"within_isa_lock_in"`이면 **연금 두 계좌가 미배분**이고(D52 2번), **ISA는 남은 의무가입기간이 있을 때만 함께 비운다**(`13.0.0` · D53 1번). 나머지 세 값에서는 종전대로 배분안의 순서와 경고만 바꾼다(3.1절 아래 설명). 값을 모르면 `"unknown"`을 보낸다 — **엔진이 기본값을 만들지 않는다.** 목록 밖 값이면 `invalid_enum` 오류 |
 | `monthly_capacity_krw` | integer | 원/월 | 필수 | 월 납입 여력. 0 이상. **0은 유효한 입력이다**(오류가 아니다) |
 | `months_remaining_in_tax_year` | integer \| null | 월 | 선택 | 해당 과세연도에 남은 납입 개월수. 1 이상 12 이하. **null이면 12로 본다**(과세연도 전체를 납입한다는 가정). 이 기본값 적용 사실은 `assumptions`에 실린다 |
 | `isa_return_assumption` | IsaReturnAssumption \| null | — | 선택 | 수익률 가정(D28). 3.6절. **null이면 ISA 금액을 한 원도 내지 않고 `isa_return_assumption_not_supplied` notice를 낸다.** 배분 금액·세액공제액·배분안 순서·경고를 바꾸지 않는다 — `echo.isa_return_affects`가 그 선언이다 |
@@ -266,7 +274,7 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 
 | 값 | 의미 | 걸리는 중도 불이익 |
 |---|---|---|
-| `within_isa_lock_in` | ISA 의무가입기간 안에 쓸 가능성이 있다 | 세 계좌 전부 — **그래서 어느 계좌에도 배분하지 않는다**(`12.0.0`) |
+| `within_isa_lock_in` | ISA 의무가입기간 안에 쓸 가능성이 있다 | 연금 두 계좌는 언제나 — **그래서 배분하지 않는다**(`12.0.0`). **ISA는 `fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0`일 때만**이고, 0이면 불이익이 성립하지 않아 **배분을 유지한다**(`13.0.0`) |
 | `before_pension_age` | 그보다는 뒤지만 연금 수령 개시 연령 전에 쓸 계획이다 | 연금저축·IRP |
 | `at_or_after_pension_age` | 연금 수령 개시 연령까지 둘 수 있다 | 없음 |
 | `unknown` | 모르겠다 | 판정하지 않음 |
@@ -277,19 +285,24 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 
 `within_isa_lock_in`을 **뺀** 세 값에서는 종전과 같다. `allocations`의 모든 금액과 `deterministic_benefit`의 모든 금액이 그 셋 어디에서나 동일하고, 달라지는 것은 `plans` 배열의 순서, 각 안의 `is_baseline`, 각 안의 `warnings`, 그리고 `comparison_note_codes`뿐이다.
 
-`within_isa_lock_in`에서는 **모든 배분안의 세 계좌 금액이 0이고 예산 전액이 미배분이다.** 근거는 조문이다 — ISA는 의무가입기간(`isa.account.requirements.min_contract_years`)을 못 채우고 해지하면 과세특례를 적용받은 세액을 추징당하고(`isa.early_termination.clawback`), 연금계좌는 55세 전 인출이 연금외수령이라 기타소득세가 붙는다(`pension.early_withdrawal.other_income_rate`). 그 세율이 세액공제율보다 낮지 않으므로 **받은 것을 도로 내거나 더 낸다.**
+`within_isa_lock_in`에서는 **계좌마다 판정한다**(`13.0.0` · D53 1번). 근거는 조문이고, **조문이 두 계좌를 다르게 정하기 때문에 판정도 갈린다.**
+
+- **연금저축·IRP — 언제나 배분하지 않는다.** 55세 전 인출이 연금외수령이라 기타소득세가 붙고(`pension.early_withdrawal.other_income_rate`), 그 세율이 세액공제율보다 낮지 않아 **받은 것을 도로 내거나 더 낸다.** 이 요건은 **ISA 의무가입기간과 아무 관계가 없으므로** 아래 예외에 영향을 받지 않는다.
+- **ISA — `fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0`일 때만 배분하지 않는다.** 근거 규칙(`isa.early_termination.clawback`)이 추징을 거는 요건이 **"의무가입기간이 되는 날 전" 해지**이고(`isa.account.requirements.min_contract_years`), **남은 기간이 0인 사용자에게는 그 요건이 성립할 수 없다.** 성립하지 않는 불이익은 배분을 비울 근거가 되지 못한다 — 그 사용자에게 「넣지 마세요」를 적으면 화면이 이유를 대지 못한다.
+
+**같은 판정을 8.5절이 이미 하고 있었다.** `all_accounts_have_early_exit_penalty`를 끄는 조건에 「예: ISA 의무가입기간이 이미 지난 사용자」가 적혀 있다. **경고를 끄는 자리에서 보이는 사용자가 배분을 비우는 자리에서 안 보이면 둘 중 하나는 반드시 거짓이다** — `12.0.0`에서 그 상태로 한 회차를 났고 D53이 그것을 닫았다.
 
 그때 달라지는 것은 이렇다.
 
-- 세 계좌의 `annual_krw`·`monthly_krw`가 전부 `0`이고 `fill_order`가 `null`이다.
-- `limited_by`가 `"fund_use_horizon"`이다(자격이 없는 계좌는 `"not_eligible"`이 이긴다 — 그 사실은 이 판정과 무관하게 참이다).
-- `unallocated_breakdown.reason_code`가 `"no_account_beneficial_within_fund_use_horizon"`이다. **「한도가 남지 않아서」가 아니다**(5.13절).
-- 네 안의 배분 벡터가 같아지므로 **하나로 합쳐진다**(6.2절). `plans_collapsed_single`이 나간다.
-- **경고가 붙지 않는다.** 넣지 않은 돈에는 경고가 붙지 않는다는 규칙(8.4절)이 그대로 걸린 결과다. 대신 `all_accounts_have_early_exit_penalty`가 그 이유를 진다(8.5절).
-- 안내 `budget_exceeds_all_limits`가 **나가지 않는다.** 한도는 멀쩡히 남아 있으므로 그 말이 거짓이 된다.
-- 가정 `fund_use_horizon_excluded_from_amounts`가 **나가지 않는다.** 그 시점에는 거짓이기 때문이다.
+- **비워지는 계좌**의 `annual_krw`·`monthly_krw`가 `0`이고 `fill_order`가 `null`이며 `limited_by`가 `"fund_use_horizon"`이다(자격이 없는 계좌는 `"not_eligible"`이 이긴다 — 그 사실은 이 판정과 무관하게 참이다).
+- **살아남은 ISA는 다른 시점과 똑같이 채워진다.** `limited_by`는 실제로 막은 것(`"budget"` 또는 `"contribution_limit"`)이고 **`"fund_use_horizon"`이 아니다** — 시점이 그 계좌를 막지 않았기 때문이다.
+- `unallocated_breakdown.reason_code`는 **열려 있으면서 비워지지 않은 계좌가 하나도 없을 때만** `"no_account_beneficial_within_fund_use_horizon"`이다. ISA가 살아남았으면 미배분의 이유는 한도이므로 `"contribution_room_exhausted"`다(5.13절·8.10절).
+- 네 안의 배분 벡터가 같아지면 **하나로 합쳐진다**(6.2절). 연금이 전부 0이고 ISA가 한 갈래뿐이라 이 시점에서는 언제나 그렇다. `plans_collapsed_single`이 나간다.
+- **연금계좌에는 경고가 붙지 않는다.** 넣지 않은 돈에는 경고가 붙지 않는다는 규칙(8.4절)이 그대로 걸린 결과다. **살아남은 ISA에도 붙지 않는다** — 그 경고의 조건이 잔여 기간 > 0이기 때문이다(8.4절). 세 계좌가 다 비는 경우에는 `all_accounts_have_early_exit_penalty`가 그 이유를 진다(8.5절).
+- 안내 `budget_exceeds_all_limits`가 **나가지 않는다.** 연금 한도가 멀쩡히 남아 있으므로 그 말이 거짓이 된다.
+- 가정 `fund_use_horizon_excluded_from_amounts`가 **나가지 않는다.** 그 시점에는 거짓이기 때문이다 — **ISA 하나가 살아남아도 거짓이다.**
 
-**한도는 이 값에서도 그대로다.** `limits`·`pension_credit_tax_liability_cap`·`pension_credit_ceiling`은 네 값 어디에서나 같다 — 전액 미배분은 **배분 판정**이지 한도 판정이 아니다.
+**한도는 이 값에서도 그대로다.** `limits`·`pension_credit_tax_liability_cap`·`pension_credit_ceiling`은 네 값 어디에서나 같다 — 이 판정은 **배분 판정**이지 한도 판정이 아니다.
 
 응답의 `echo.fund_use_horizon_affects`가 이 사실을 기계가 읽을 수 있는 형태로 싣는다(4.2절).
 
@@ -699,14 +712,14 @@ accounts.isa               : IsaAccountState
 | 필드 | 자료형 | 단위 | 설명 |
 |---|---|---|---|
 | `cap_krw` | integer | 원/연 | 한도. `ScenarioResult.pension_credit_tax_liability_cap.cap_krw`와 같은 값이고 **`null`이 아니다** |
-| `applied` | boolean | — | **이 안에서 실제로 잘렸는가.** 잘린 상태와 잘리지 않은 상태의 문구가 다르다. **`false`를 「걸리지 않았다」로 읽지 않는다** — 아래 칸이 그 구분을 낸다. **`11.0.0`부터 이 판정은 원 미만을 버리기 전의 정확값끼리 한다**(룰셋 `tax.rounding.won_fraction`의 `comparison` 단계). 그래서 **`applied === (reduced_total_krw > 0)`이 성립하지 않는다** — 잘린 양이 1원에 못 미치면 `true`인데 아래 세 칸이 전부 0이다. **화면이 「잘렸습니다」·「이 막대가 짧은 것은…」을 쓸 때는 `reduced_total_krw > 0`을 함께 보아야 한다.** 반대 방향은 무조건 참이다 — 금액이 줄었으면 반드시 잘린 것이다 |
+| `applied` | boolean | — | **세액 한도가 이 사용자에게 물었는가.** 잘린 상태와 잘리지 않은 상태의 문구가 다르다. **`13.0.0`부터 대는 상대가 「트림 전 금액」이다**(D53 2번) — 한도가 물기 때문에 IRP를 잘라 내는데(5.12절) 잘라 낸 **뒤**의 금액과 대면 자름이 사라져 보이고 **원인과 결과가 뒤집힌다.** `12.0.0`까지는 두 값이 우연히 같아 이 구분이 필요 없었다. **트림이 없었으면 두 값은 여전히 같다.** **`false`를 「걸리지 않았다」로 읽지 않는다** — 아래 칸이 그 구분을 낸다. **`11.0.0`부터 이 판정은 원 미만을 버리기 전의 정확값끼리 한다**(룰셋 `tax.rounding.won_fraction`의 `comparison` 단계). 그래서 **`applied === (reduced_total_krw > 0)`이 성립하지 않는다** — 잘린 양이 1원에 못 미치면 `true`인데 아래 세 칸이 전부 0이다. **화면이 「잘렸습니다」·「이 막대가 짧은 것은…」을 쓸 때는 `reduced_total_krw > 0`을 함께 보아야 한다.** 반대 방향은 무조건 참이다 — 금액이 줄었으면 반드시 잘린 것이다 |
 | `binding_code` | `"binds_provably"` \| `"binding_not_determined"` | — | **한도가 걸린다는 것이 증명되는가.** `applied && 상한 분기`일 때만 `binds_provably`다. 추정 한도가 상한이므로 그것이 잘랐다면 실제 한도는 더 작거나 같아 **반드시** 자른다. 반대는 성립하지 않는다 — 자르지 않았다는 사실은 아무것도 증명하지 못한다(8.7절) |
 | `reduced_income_tax_krw` | integer | 원/연 | 잘린 소득세분. **표시 금액끼리의 뺄셈이다**(자르기 전 − 자른 뒤). 정확값의 차이를 버린 값이 아니므로 위 `applied`와 어긋날 수 있고, 그 자리는 화면이 나란히 놓는 세 수가 서로 맞는 쪽을 골랐다 |
 | `reduced_local_tax_krw` | integer | 원/연 | 잘린 지방소득세분 |
 | `reduced_total_krw` | integer | 원/연 | 잘린 합계 |
 | `threshold_income_tax_krw` | integer | 원/연 | **임계값.** 세액 한도가 이 값보다 작으면 결과가 달라진다. 자르기 전 소득세분과 같다. **화면이 배분액에 공제율을 곱해 만들지 않는다.** `9.0.0`부터 이 값과 비교되는 한도는 사용자의 서류가 아니라 총급여액에서 나온다 — 「영수증의 결정세액과 맞춰 보라」는 안내는 더 이상 이 값에 붙지 않는다 |
 | `credit_carryforward` | `false` | — | 초과분의 **세액공제액**은 이월되지 않는다. 룰셋에서 읽은 값이다 |
-| `contribution_carryover_available` | boolean | — | 잘린 공제에 대응하는 **납입액**을 이후 과세기간으로 전환 신청할 수 있는가(시행령 §118의3). `applied`와 같이 움직인다. **"넣은 돈이 사라진다"는 틀린 문구다** — 정확한 서술은 "올해의 세액공제는 0이고 그 납입액은 신청을 통해 이후 과세기간으로 넘길 수 있다"이다. **이 이름 하나가 조건 둘을 감추고 있었다**(D26) — 아래 두 칸을 함께 읽어야 한다 |
+| `contribution_carryover_available` | boolean | — | 잘린 공제에 대응하는 **납입액**을 이후 과세기간으로 전환 신청할 수 있는가(시행령 §118의3). `applied`와 같이 움직인다. **`13.0.0`에서 `applied`의 기준이 트림 전으로 옮겨졌으므로 이 값도 함께 옮겨졌다** — 그래서 트림 때문에 실제로 밀려난 납입액이 없는 사용자에게도 `true`가 나갈 수 있다. **그 자리가 옳은지는 `tax-domain`·관리자 판정 대상으로 열어 둔다**(머리말 `open_questions`). **"넣은 돈이 사라진다"는 틀린 문구다** — 정확한 서술은 "올해의 세액공제는 0이고 그 납입액은 신청을 통해 이후 과세기간으로 넘길 수 있다"이다. **이 이름 하나가 조건 둘을 감추고 있었다**(D26) — 아래 두 칸을 함께 읽어야 한다 |
 | `carryover_shares_future_year_credit_limit` | `true` \| null | — | 전환금액이 **전환한 해의** 600만·900만 한도를 그 해의 새 납입액과 나눠 쓰는가. 룰셋에서 읽는다. **`true`이므로 매년 한도를 채우는 사용자에게는 전환할 자리가 생기지 않는다** — 그 사용자에게 "다음 해에 이월해 공제받을 수 있습니다"는 **거짓**이다. `contribution_carryover_available`이 `false`면 이 칸은 `null`(읽지 않은 규칙을 주장하지 않는다) |
 | `carryover_requires_application` | `true` \| null | — | 신청주의인가. 룰셋의 `automatic`에서 읽는다. **자동이 아니다.** 위와 같은 이유로 `null`일 수 있다 |
 | `error_direction_code` | string | — | 시나리오 단위 값과 같다(5.10절). **`null`이 아니다** |
@@ -850,6 +863,8 @@ accounts.isa               : IsaAccountState
 **그래서 남는 미배분은 정말로 갈 곳이 없는 돈이고, 그것은 결함이 아니다**(D32). 예산이 연금 납입 한도와 ISA 한도의 합을 넘으면 세법상 넣을 자리가 없다. 화면은 이 상태를 「미배분」이 아니라 `no_headroom_krw`가 말하는 그대로 적는다.
 
 **`12.0.0`에서 두 번째 이유가 생겼고, 그 둘은 화면에서 다른 문장이다** (D52 2번). `within_isa_lock_in`에서는 **한도가 멀쩡히 남았는데도** 전액이 미배분이다 — 갈 곳이 없어서가 아니라 **그 시점에는 어느 계좌도 이롭지 않아서**다. 그때 `no_headroom_krw`는 0이고 두 여력 칸이 크게 남으며 `headrooms_overlap`이 `true`가 된다. **이 상태에서 「넣을 자리가 없습니다」를 적으면 거짓이고, 두 여력을 「여기에 넣으세요」로 읽어도 거짓이다.** 화면은 `reason_code`로 두 상태를 가르고, 이 이유일 때는 여력 칸을 권유로 쓰지 않는다.
+
+**`13.0.0`에서 그 두 번째 이유의 조건이 좁아졌다** (D53 1번). 「어느 계좌도 이롭지 않다」는 **정말로 하나도 없을 때만** 참이다. ISA 의무가입기간이 이미 지난 사용자에게는 그 계좌가 이롭고 실제로 돈을 받으므로, **그 사용자의 남은 미배분은 시점이 아니라 ISA 납입 잔여 한도에서 멈춘 것**이고 `reason_code`가 `"contribution_room_exhausted"`다. 이 구분을 안 하면 화면은 **방금 돈을 넣은 계좌를 가리키며 「이로운 계좌가 없습니다」**를 적게 된다.
 
 **필드는 그대로 둔다.** 위와 같은 이유이고(화면에 대한 보증), 충당 순서가 다시 바뀌면 그날부터 다시 참이 된다. 산술은 `splitUnallocated`가 직접 시험받는다.
 
@@ -1220,7 +1235,9 @@ accounts.isa               : IsaAccountState
 
 - **기본안이 될 수 있는 안**(`max_tax_credit`·`isa_first`)은 그 몫을 IRP에 배분하지 않고, 그 자리의 `limited_by`가 `"no_additional_tax_credit"`이다.
 - **연금저축은 건드리지 않는다.** 공제를 못 낳아도 과세이연과 인출 자유가 남고 조문이 이월 신청을 예정한다. 위 문단이 그대로 유효하다.
-- **다른 두 안은 그대로 둔다.** 사용자가 다른 목적으로 고를 수 있고, 이번 변경은 **기본안이 그것을 앞세우지 않는다**는 것이다.
+- **다른 두 안은 트림하지 않는다.** 사용자가 다른 목적으로 고를 수 있고, 이번 변경은 **기본안이 그것을 앞세우지 않는다**는 것이다. **다만 `13.0.0`부터 그 안이 응답에 실린다는 보장은 없다**(6.2절 · D53 3번) — 트림하지 않는 것과 선택지로 내는 것은 다른 일이다.
+- **기준은 표시되는 세액공제액이다**(`13.0.0` · D53 2번). `12.0.0`은 정확값으로 재었고, 세액 한도에 소수부가 있으면 그 기준이 **0.1원짜리 증가**를 「낳았다」로 세어 15% 구간에서 1~6원, 12% 구간에서 1~8원의 IRP를 남겼다. 그 몫은 `tax_credit`에도 `tax_credit_before_cap`에도 나타나지 않으므로 **얻은 것이 아니고**, 그것 때문에 중도인출이 제한되는 계좌에 돈을 넣게 하는 것은 이 절이 방금 금지한 바로 그 형태다. 비교는 **소득세분과 지방소득세분의 표시 금액 합**으로 한다.
+- **그 트림이 `tax_liability_cap.applied`를 지우지 않는다**(5.5절). 한도가 물었기 때문에 잘라 낸 것이므로, 잘라 낸 뒤 값과 한도를 대어 「안 물었다」고 적으면 원인과 결과가 뒤집힌다.
 - **경계는 총급여가 아니라 남은 세액 한도가 정한다.** 이미 넣은 돈·ISA 전환 추가한도·개정안 청년 우대가 그 경계를 움직인다. 계약도 엔진도 총급여 임계값을 갖지 않는다.
 - **잘라 낸 몫의 대가는 0이다.** `max_tax_credit`은 여전히 세액공제액을 최대화한다(5.6절) — 그것이 이 변경의 전제이고 불변식 I18이 모든 응답에서 잰다.
 
@@ -1274,7 +1291,21 @@ accounts.isa               : IsaAccountState
 
 배분 벡터가 같은 안은 하나로 합친다. 합친 결과 `plans` 길이가 1이면 `comparison_note_codes`에 `plans_collapsed_single`이 들어간다. 이때 `web-dev`는 비교 UI 대신 단일 결과 UI로 전환해야 한다.
 
-**`12.0.0`부터 그 상태가 반드시 나오는 입력이 하나 있다** — `fund_use_horizon`이 `within_isa_lock_in`이면 네 안의 벡터가 전부 0으로 같아져 **언제나 하나로 합쳐진다**(3.1절). 남는 하나는 `max_tax_credit`이고, 그 안의 이름이 이 상태를 설명하지 않는다는 것은 `unallocated_breakdown.reason_code`와 `all_accounts_have_early_exit_penalty`가 함께 말한다.
+**`12.0.0`부터 그 상태가 반드시 나오는 입력이 하나 있다** — `fund_use_horizon`이 `within_isa_lock_in`이면 연금 두 계좌가 어느 안에서도 0이고 ISA는 한 갈래뿐이라 **네 안의 벡터가 언제나 같아진다**(3.1절). 남는 하나는 `max_tax_credit`이고, 그 안의 이름이 이 상태를 설명하지 않는다는 것은 `unallocated_breakdown.reason_code`와 `all_accounts_have_early_exit_penalty`가 함께 말한다.
+
+#### 6.2.1 목적 없이 IRP만 더 묶는 안은 내지 않는다 (`13.0.0` · D53 3번)
+
+**벡터가 달라도 빠지는 안이 생겼다.** 어떤 안 P가 이미 남기기로 한 안 Q에 대해 아래 셋을 **동시에** 만족하면 `plans`에 싣지 않는다.
+
+1. `deterministic_benefit.pension_credit_total_krw`가 **같다**(표시 금액끼리 비교한다 — 정확값으로 재면 어느 화면에도 안 나타나는 0.1원이 「다르다」가 되어 5.12절이 닫은 구멍이 여기서 다시 열린다),
+2. `retirement_pension` 배분이 **더 많고**,
+3. `annuity_savings`와 `isa` 배분이 **더 많지 않다.**
+
+그 안이 사용자에게 주는 것이 **중도인출 제한뿐**이기 때문이다(`pension.withdrawal.midterm_restriction`). D52 후속은 「목적이 있는 안은 남긴다」고 정했고 **D53이 그 읽기를 깼다** — 절세액이 0인데도 IRP를 더 묶는 안이 이름만으로 남고 있었고, **절세액이 같으면 그 안의 목적이 절세일 수 없다.** 「목적」은 이름이 아니라 **다른 값이 실제로 달라지는 것**으로 잰다.
+
+**연금저축이나 ISA가 한 원이라도 더 들어가면 빠지지 않는다.** 그때는 IRP 몫이 다른 무엇과 맞바꿔진 것이고, 그 맞바꿈의 값어치는 조문이 정하지 않으므로(과세이연·인출 자유) 엔진이 대신 판정하지 않는다.
+
+**기본안은 이 판정으로 빠지지 않는다** — 판정의 상대는 언제나 **이미 남기기로 한 안**이고 기본안이 그 목록의 첫 항목이다.
 
 ---
 
@@ -1368,7 +1399,7 @@ accounts.isa               : IsaAccountState
 | 코드 | severity | 언제 |
 |---|---|---|
 | `zero_capacity` | info | 월 납입 여력이 0 |
-| `budget_exceeds_all_limits` | info | 예산이 세 계좌 잔여 한도 합계를 넘음. **`fund_use_horizon`이 `within_isa_lock_in`이면 나가지 않는다**(`12.0.0`) — 그때는 한도가 남아 있는데도 전액이 미배분이므로 이 안내가 거짓이 된다. 그 상태는 `unallocated_breakdown.reason_code`가 말한다 |
+| `budget_exceeds_all_limits` | info | 예산이 세 계좌 잔여 한도 합계를 넘음. **`fund_use_horizon`이 `within_isa_lock_in`이면 나가지 않는다**(`12.0.0`) — 그때는 연금 한도가 남아 있는데도 그 몫이 미배분이므로 이 안내가 거짓이 된다. **의무가입기간이 지난 ISA가 살아남은 경우에도 나가지 않는다**(`13.0.0`) — 연금 한도가 그대로 남아 있기 때문이다. 그 상태는 `unallocated_breakdown.reason_code`가 말한다 |
 | `existing_contribution_over_limit` | warning | 기납입액이 이미 한도를 넘어 잔여 한도를 0으로 클램프 |
 | `prior_year_income_missing` | info | 직전 과세기간 소득 미입력으로 ISA 유형 교차확인 생략 |
 | `isa_type_conflicts_with_prior_income` | warning | 사용자가 **서민형**을 선언했는데 직전 과세기간 총급여액이 `isa.tax_free_limit`의 서민형 총급여 상한을 **넘는** 경우. 그때만 조문이 서민형 경로를 스스로 닫는다(0.8절). `params.unverifiable_bracket_ids`에 엔진이 확인하지 못한 목의 id. **계산은 사용자 선언을 따른다** |
@@ -1420,7 +1451,7 @@ accounts.isa               : IsaAccountState
 | `other_deductions_excluded` | 연말정산의 다른 공제·감면은 반영하지 않음. **`9.0.0`부터 룰셋 근거가 붙는다** — 세액 한도를 총급여액에서 산출하는 규칙이 세지 않은 항목을 `excluded_items`로 열거하고 그 결과가 어느 방향인지(과대)까지 정한다. 전에는 근거 없는 표시 규칙이었다 |
 | `rounding_floor_to_won` | 원 미만 버림. 룰셋 근거가 아닌 표시 규칙 |
 | `isa_benefit_not_quantified` | ISA의 절세 효과는 운용수익의 함수라 금액으로 내지 않음 |
-| `fund_use_horizon_excluded_from_amounts` | 자금 사용 시점은 배분 금액·세액공제액에 반영하지 않음. 순서와 경고에만 쓰임. **`12.0.0`부터 `fund_use_horizon`이 `within_isa_lock_in`이면 나가지 않는다** — 그 값에서는 이 진술이 거짓이기 때문이다(3.1절·D52 2번). 나머지 세 값에서는 그대로 참이고 그대로 나간다 |
+| `fund_use_horizon_excluded_from_amounts` | 자금 사용 시점은 배분 금액·세액공제액에 반영하지 않음. 순서와 경고에만 쓰임. **`12.0.0`부터 `fund_use_horizon`이 `within_isa_lock_in`이면 나가지 않는다** — 그 값에서는 이 진술이 거짓이기 때문이다(3.1절·D52 2번). **ISA가 살아남아도 나가지 않는다**(`13.0.0`) — 연금 두 계좌의 금액이 여전히 그 시점 때문에 0이다. 나머지 세 값에서는 그대로 참이고 그대로 나간다 |
 | `early_exit_penalty_not_quantified` | 중도 인출·해지 시의 세부담은 금액으로 내지 않음. 인출 단계가 v2로 연기됐고 필요한 수치가 룰셋에 없음 |
 | `pension_holding_period_not_evaluated` | 연금계좌 보유기간 요건은 입력 부재로 판정하지 않음 |
 | `age_reference_date_not_in_ruleset` | **이름이 낡았다. 뜻은 이 칸이 정의한다** — 룰셋 규칙 `age.reckoning.reference_date`가 **단일 기준일은 존재하지 않는다**고 정하므로, 엔진이 만 나이를 환산할 기준일은 여전히 룰셋에서 나오지 않고 엔진이 과세기간 종료일을 골랐다는 뜻이다. `params.reference_date`와 **이 가정이 걸리는 요건의 목록** `params.requires_reference_date_rule_ids`(룰셋의 `no_single_reference_date.per_rule`에서 `needs_reference_date`인 것) 포함. `basis_rule_ids`에 그 규칙이 실린다. **코드 문자열을 바꾸면 계약이 깨지므로** 개명은 계산 기준일 입력과 함께 다음 회차에 처리한다(D22) |
@@ -1454,7 +1485,7 @@ accounts.isa               : IsaAccountState
 | 코드 | 언제 |
 |---|---|
 | `plans_collapsed_single` | 배분 벡터가 같아 배분안이 하나로 합쳐짐 |
-| `all_accounts_have_early_exit_penalty` | `fund_use_horizon`이 `within_isa_lock_in` **이고, 배분 대상인 계좌가 하나 이상 있으며, 그 계좌 전부가 중도 불이익을 질 때**. 뜻은 "어느 계좌도 중도 불이익을 피하지 못한다"이고, 화면은 배분 비교보다 이 사실을 앞세워야 한다 — **`12.0.0`부터 그 시점에는 전액이 미배분이므로 이 코드가 그 이유를 지는 자리다.** **불이익이 성립하지 않는 계좌가 하나라도 있으면 나가지 않는다**(예: ISA 의무가입기간이 이미 지난 사용자) — 성립할 수 없는 불이익을 주장하지 않기 위해서다(0.3절). **어느 계좌가 무엇을 지는가는 8.4절이 정하고 여기서 다시 적지 않는다**(8.0절). `11.0.0`까지는 「반환된 배분안이 하나도 빠짐없이 `warnings`를 가질 때」로 재었고, 배분이 사라지면서 그 방법이 아무것도 재지 못하게 됐다 |
+| `all_accounts_have_early_exit_penalty` | `fund_use_horizon`이 `within_isa_lock_in` **이고, 배분 대상인 계좌가 하나 이상 있으며, 그 계좌 전부가 중도 불이익을 질 때**. **`13.0.0`부터 이 조건과 배분을 비우는 조건이 같은 사실을 본다**(3.1절 · D53 1번) — `12.0.0`까지는 이 자리에서만 잔여 의무가입기간을 보고 배분 쪽에서는 안 보았다. 뜻은 "어느 계좌도 중도 불이익을 피하지 못한다"이고, 화면은 배분 비교보다 이 사실을 앞세워야 한다 — **`12.0.0`부터 그 시점에는 전액이 미배분이므로 이 코드가 그 이유를 지는 자리다.** **불이익이 성립하지 않는 계좌가 하나라도 있으면 나가지 않는다**(예: ISA 의무가입기간이 이미 지난 사용자) — 성립할 수 없는 불이익을 주장하지 않기 위해서다(0.3절). **어느 계좌가 무엇을 지는가는 8.4절이 정하고 여기서 다시 적지 않는다**(8.0절). `11.0.0`까지는 「반환된 배분안이 하나도 빠짐없이 `warnings`를 가질 때」로 재었고, 배분이 사라지면서 그 방법이 아무것도 재지 못하게 됐다 |
 | `baseline_reordered_by_fund_use_horizon` | 기본안이 `max_tax_credit`이 아닌 다른 안으로 바뀜 |
 | `alternatives_have_equal_tax_credit` | 둘 이상의 안이 같은 세액공제액을 냄(`delta_vs_baseline_krw`가 0) |
 | `tax_credit_axis_not_discriminating` | 세액 한도가 **0으로 확정**되어 어떤 배분을 해도 세액공제액이 0이다. 뜻은 "세액공제액으로는 배분안이 갈리지 않는다"이고, `alternatives_have_equal_tax_credit`과 달리 **그 동률이 앞으로 어떤 배분에서도 깨지지 않는다**는 사실까지 말한다. 화면은 금액 열 위에 그 사실을 한 줄로 두고 계좌 구성의 차이로 비교를 이어 간다. 5.12절 |
@@ -1476,8 +1507,8 @@ accounts.isa               : IsaAccountState
 - **`budget`** — 월 납입 여력 × 개월수로 만든 예산이 먼저 떨어졌다.
 - **`contribution_limit`** — 그 계좌(또는 두 연금계좌가 나눠 쓰는 풀)의 **납입** 한도가 먼저 찼다.
 - **`not_eligible`** — 그 계좌를 열거나 납입할 수 없다(5.2절). **다른 어느 사유보다 먼저 걸린다** — 자격 문제를 다른 이름으로 덮으면 화면이 그것을 못 본다.
-- **`no_additional_tax_credit`** (`12.0.0`) — **더 넣어도 세액공제가 한 원도 늘지 않아 거기서 멈췄다.** `retirement_pension`에만, 그리고 **기본안이 될 수 있는 안**(`max_tax_credit`·`isa_first`)에서만 나온다. 그 계좌에만 걸리는 이유는 조문이 두 연금계좌의 **중도인출**을 다르게 정하기 때문이고(`pension.withdrawal.midterm_restriction`), 그 규칙 id가 같은 `Allocation`의 `basis_rule_ids`에 실린다. **연금저축에는 결코 붙지 않는다** — 공제를 못 낳아도 인출이 자유롭고 이월 신청이 예정되므로 「아무것도 얻지 않는다」가 성립하지 않는다(5.12절). **화면이 이것을 「예산이 모자랍니다」나 「한도가 찼습니다」로 적으면 거짓이다** — 사용자가 돈을 더 넣으면 채워질 것처럼 읽힌다.
-- **`fund_use_horizon`** (`12.0.0`) — **자금 사용 시점이 `within_isa_lock_in`이라 어느 계좌에도 넣지 않았다.** 세 계좌 전부에 붙는다(자격이 없는 계좌는 `not_eligible`이 이긴다). 근거 규칙은 8.10절과 같다.
+- **`no_additional_tax_credit`** (`12.0.0`) — **더 넣어도 표시되는 세액공제액이 한 원도 늘지 않아 거기서 멈췄다.** **`13.0.0`에서 기준이 정확값에서 표시 금액으로 옮겨졌다**(D53 2번) — 세액 한도에 소수부가 있으면 정확값 기준은 **0.1원짜리 증가**를 「늘었다」로 세고, 그 0.1원은 `tax_credit`에도 `tax_credit_before_cap`에도 나타나지 않는다. 어느 표시 금액에도 안 나타나는 것은 얻은 것이 아니다. `retirement_pension`에만, 그리고 **기본안이 될 수 있는 안**(`max_tax_credit`·`isa_first`)에서만 나온다. 그 계좌에만 걸리는 이유는 조문이 두 연금계좌의 **중도인출**을 다르게 정하기 때문이고(`pension.withdrawal.midterm_restriction`), 그 규칙 id가 같은 `Allocation`의 `basis_rule_ids`에 실린다. **연금저축에는 결코 붙지 않는다** — 공제를 못 낳아도 인출이 자유롭고 이월 신청이 예정되므로 「아무것도 얻지 않는다」가 성립하지 않는다(5.12절). **화면이 이것을 「예산이 모자랍니다」나 「한도가 찼습니다」로 적으면 거짓이다** — 사용자가 돈을 더 넣으면 채워질 것처럼 읽힌다.
+- **`fund_use_horizon`** (`12.0.0`) — **자금 사용 시점이 `within_isa_lock_in`이라 그 계좌를 비웠다.** 연금 두 계좌에는 언제나 붙고, **ISA에는 `fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0`일 때만** 붙는다(`13.0.0` · D53 1번). 자격이 없는 계좌는 `not_eligible`이 이긴다. 근거 규칙은 8.10절과 같다. **잔여 기간이 0인 사용자의 ISA에 이 값이 붙으면 거짓이다** — 그 계좌를 막은 것은 시점이 아니라 예산이거나 납입 한도다.
 
 **뒤 단계가 앞 단계를 덮되, `no_additional_tax_credit`만 덮이지 않는다.** 한 계좌는 두 단계에 걸쳐 채워질 수 있고 보고하는 것은 **마지막에 실제로 막은 것**이다. 다만 위에서 잘라 낸 IRP는 그 뒤 단계에서 예산이 이미 다른 계좌로 갔다는 이유로 다시 판정되는데, **그 상태 자체가 이 판정의 결과다.** 덮으면 원인이 결과로 바뀐다.
 
@@ -1486,7 +1517,7 @@ accounts.isa               : IsaAccountState
 **표를 두지 않는다.** 이유는 8.9절과 같다.
 
 - **`contribution_room_exhausted`** — **더 넣을 자리가 없다.** 예산이 세 계좌의 잔여 납입 한도 합계를 넘었다. `11.0.0`까지 「미배분」이 뜻하던 것이 이것 하나였다.
-- **`no_account_beneficial_within_fund_use_horizon`** — **자리는 있는데 그 시점에는 어느 계좌도 이롭지 않다.** `fund_use_horizon`이 `within_isa_lock_in`일 때다. 이때 `basis_rule_ids`에 `isa.account.requirements` · `isa.early_termination.clawback` · `pension.early_withdrawal.other_income_rate` · `tax.local.personal_income_surtax`가 함께 실린다 — **엔진이 그 규칙을 실제로 읽어서 이 판정을 만들고, 하나라도 읽지 못하면 `rule_missing`으로 멈춘다.**
+- **`no_account_beneficial_within_fund_use_horizon`** — **자리는 있는데 그 시점에는 어느 계좌도 이롭지 않다.** `fund_use_horizon`이 `within_isa_lock_in`이고, **열려 있으면서 비워지지 않은 계좌가 하나도 없을 때**다(`13.0.0` · D53 1번 — 의무가입기간이 지난 ISA가 살아남으면 이 값이 아니라 `contribution_room_exhausted`다). 이때 `basis_rule_ids`에 `isa.account.requirements` · `isa.early_termination.clawback` · `pension.early_withdrawal.other_income_rate` · `tax.local.personal_income_surtax`가 함께 실린다 — **엔진이 그 규칙을 실제로 읽어서 이 판정을 만들고, 하나라도 읽지 못하면 `rule_missing`으로 멈춘다.**
 - **`null`** — `total_annual_krw`가 0이다. 설명할 미배분이 없다.
 
 **두 값을 같은 문장으로 옮기지 않는다.** 앞은 「넣을 자리가 없습니다」이고 뒤는 「넣을 수는 있지만 그 시점에는 이롭지 않습니다」다. 뒤엣값에서는 `pension_contribution_headroom_krw`·`isa_contribution_headroom_krw`가 크게 남아 있고 `headrooms_overlap`이 `true`가 된다 — **그 두 칸을 권유로 읽으면 화면이 방금 하지 말라고 한 것을 권하게 된다.**
@@ -1671,6 +1702,7 @@ accounts.isa               : IsaAccountState
 
 | 버전 | 판정 | 무엇이 바뀌었나 |
 |---|---|---|
+| `13.0.0` | D53 | **D53 — 관리자가 판정해 놓고 계약에 옮기지 않은 것 하나와, 스스로 거짓이라고 확인한 문장 하나.** ① **의무가입기간이 이미 지난 ISA는 배분을 유지한다**(D52 후속 판정이 `12.0.0`에 반영되지 않았다). 같은 판정을 8.5절이 이미 하고 있었고 배분 쪽만 안 보고 있었다. ② **트림의 기준이 정확값에서 표시되는 세액공제액으로 옮겨진다** — 한도에 소수부가 있으면서 무는 모든 좌표에서 무의미한 IRP가 몇 원 남고 있었다. 그 결과 `tax_liability_cap.applied`가 **트림 전 금액**에 대고 재는 값이 된다(5.5절). ③ **표시 공제액이 같고 IRP만 더 묶는 안은 `plans`에서 뺀다** — 「목적」을 이름이 아니라 값으로 잰다(6.2.1절). **같은 요청이 다른 금액을 내고 `plans` 배열의 구성이 달라진다. 왜 major인지는 0.21절** |
 | `12.0.0` | D52 | **D52 — 소유자가 배분 로직의 결함 둘을 찾았다.** ① 세액공제를 한 원도 더 낳지 않는 **IRP 배분을 기본안 후보가 내지 않는다**(얻는 것 없이 중도인출 제한만 지므로 엄격하게 나쁘다). 그 판정의 재료가 세액 한도라 `echo.tax_liability_cap_affects.allocation_amounts`가 `true`로 뒤집히고 `limited_by`에 `no_additional_tax_credit`이 는다. ② **`fund_use_horizon`이 `within_isa_lock_in`이면 전액 미배분**이다 — **D10을 뒤집는다.** `echo.fund_use_horizon_affects`의 두 칸이 `true`로 뒤집히고, `limited_by`에 `fund_use_horizon`이 늘며, `UnallocatedBreakdown`에 **`reason_code`**가 붙는다. 가정 `fund_use_horizon_excluded_from_amounts`에 조건이 붙고, `all_accounts_have_early_exit_penalty`의 발생 조건이 바뀌며, `budget_exceeds_all_limits`가 그 시점에서 빠진다. **같은 요청이 다른 금액을 낸다. 왜 major인지는 0.20절** |
 | `11.0.0` | D46 1번 | **D46 1번 — 원 미만 끝수를 조문이 정한 자리에서만 없앤다.** 엔진이 단계마다 버려 **과세표준이 조문(「국고금 관리법」 §47②)보다 항상 정확히 1원 컸다.** 요청은 한 글자도 바뀌지 않고 새 필드도 없다. **바뀌는 것은 금액과 boolean이다** — 총급여가 20의 배수가 아닌 15% 구간 사용자의 `tax_base_krw`가 1원 내려가고, `pension_credit_tax_liability_cap`의 `cap_krw`·`computed_tax_krw`·`wage_income_amount_krw`가 0~1원 움직이며, **절단선 1원 안에 있는 사용자에게 `PlanTaxLiabilityCap.applied`가 `false` → `true`로 뒤집힌다.** `applied`의 판정이 **정확값 비교**가 되어 `applied === (잘린 금액 > 0)`이 더 이상 성립하지 않는다(5.5절). `legal_basis`에 규칙 `tax.rounding.won_fraction`이 실린다. **왜 major인지는 0.19절** |
 | `10.0.0` | D44 · D46 후속 | **D44 — IRP 가입 자격 규칙이 룰셋에 들어왔고, 엔진이 그것을 읽는다.** 무소득자에게 IRP를 권하던 배분이 사라진다(**같은 요청이 다른 금액을 낸다**). 요청에 **선택** 필드 둘이 는다 — `profile.has_business_income_current_year` · `profile.received_retirement_lumpsum_ever`. 응답의 `AccountEligibility`에 `determination_code`·`determination_direction_code`가 붙고 `reason_codes`에 `irp_excluded_no_qualifying_status`가 늘며, `ScenarioResult`에 **`pension_credit_taxpayer_eligibility`**(가입 자격과 다른 축)가 붙는다. 안내 코드 셋이 늘고(`irp_excluded_no_qualifying_status`·`irp_eligibility_not_determined`·`pension_credit_zero_no_global_income`), `legal_basis`의 사전순이 **코드 단위 비교**로 고정된다(6.1절). **왜 major인지는 0.18절** |
@@ -1716,11 +1748,26 @@ accounts.isa               : IsaAccountState
 | 0.17 | 왜 `9.0.0`(major)인가 — 요청에서 칸을 뺐기 때문만이 아니다 | `9.0.0` |
 | 0.18 | 왜 `10.0.0`(major)인가 — 새 입력 때문이 아니다 | `10.0.0` |
 | 0.19 | 왜 `11.0.0`(major)인가 — 금액은 1원인데 문장이 바뀐다 | `11.0.0` |
+| 0.21 | 왜 `13.0.0`(major)인가 — 보장 셋을 거두고 `plans`의 구성을 바꾼다 | `13.0.0` |
 | 0.20 | 왜 `12.0.0`(major)인가 — 판정 하나를 뒤집고 보장 둘을 거둔다 | `12.0.0` |
 
 **`0.11`이 둘이다.** 하나는 `6.0.0`의 major 근거(D32)이고 하나는 D31이 남긴 되돌림 경로다. 번호가 겹친 채로 굳었고 `src/web`의 주석이 **두 뜻 모두로** 「0.11절」을 가리키고 있어, 이 유닛이 임의로 다시 매기지 않았다. 아래에서 둘을 나란히 두었으니 제목으로 갈라 읽는다. **번호를 바로잡을지는 관리자 판정이다.**
 
 ---
+
+### 0.21 왜 `13.0.0`(major)인가 — 보장 셋을 거두고 `plans`의 구성을 바꾼다
+
+**요청은 한 글자도 바뀌지 않는다. 새 입력도 없다.** 그런데도 major인 이유가 넷이다.
+
+1. **`12.0.0`이 명시로 적은 보장이 거짓이 된다.** 3.1절이 「`within_isa_lock_in`에서는 **모든** 배분안의 세 계좌 금액이 0이고 예산 전액이 미배분이다」라고 적었고, 화면이 그 문장을 읽고 「전액 미배분 화면」을 만들 수 있었다. 이제 그 사용자 중 일부는 **ISA에 예산 전액이 들어간 응답**을 받는다. 0.1절이 세운 근거가 그대로 걸린다 — **소비자가 가진 것은 문서뿐이고, 문서가 보장한 것을 거두면 그것은 계약 변경이다.**
+2. **같은 요청이 다른 금액을 낸다.** 두 갈래다 — 의무가입기간이 지난 ISA 보유자의 배분이 0에서 예산까지 오르고, 세액 한도에 **소수부가 있는** 사용자의 IRP가 몇 원 내려가면서 `tax_credit_before_cap`과 `threshold_income_tax_krw`가 따라 내려간다. 뒤엣것은 금액이 작지만 **그 값을 나란히 놓고 뺄셈하는 화면**에 그대로 나간다.
+3. **`plans` 배열의 길이와 구성이 달라진다**(6.2.1절). 벡터가 다른데도 빠지는 안이 생겼고, 그 판정은 이름이 아니라 값이 한다. 배열 길이를 고정으로 가정하거나 특정 `plan_id`가 반드시 있다고 가정한 화면은 **조용히** 깨진다.
+4. **`applied`가 대는 상대가 바뀐다**(5.5절). `12.0.0`까지 「반환된 배분의 자르기 전 금액 대 한도」였고 이제 「**트림 전** 금액 대 한도」다. 그 결과 **`applied: true`이면서 `reduced_total_krw: 0`인 자리가 새로 생긴다.** 두 값이 같이 움직인다고 믿은 화면은 「잘렸습니다」를 쓰면서 0원을 보여 준다 — `11.0.0`이 이미 그 어긋남을 열었고 D49가 화면이 볼 곳을 지정했으므로 **이번에는 그 지정이 지켜지는지가 관건이다.**
+
+**채택하지 않은 대안 둘.**
+
+- **`applied`를 반환된 배분 그대로 두기(트림 전을 안 보기).** 기각한다. 그러면 **끝수가 있는 한도가 무는 모든 사용자**에게 `applied: false`가 나가고, 화면은 한도 때문에 IRP가 잘린 사람에게 「한도에 걸리지 않았습니다」를 적는다. 정답지가 GC-32d에서 같은 형태를 이미 금지했다 — 「트림 후 값이 한도와 같아졌다고 해서 한도가 안 물었다고 적으면 원인과 결과를 뒤집는다」.
+- **지배 판정을 `plan_id`별 예외 목록으로 두기(「이 안은 목적이 있으니 남긴다」).** 기각한다. 그것이 정확히 D52 후속의 읽기였고 D53이 깬 것이다. 이름이 목적을 보증하지 못하므로 **값으로 재고, 다른 값이 실제로 달라지면 남긴다.**
 
 ### 0.20 왜 `12.0.0`(major)인가 — 판정 하나를 뒤집고 보장 둘을 거둔다
 

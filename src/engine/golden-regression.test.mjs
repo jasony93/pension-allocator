@@ -298,10 +298,10 @@ function elapsedLockInRequest(overrides = {}) {
   }, overrides));
 }
 
-// **D52 2번 이후 이 프로필을 `within_isa_lock_in`으로 물으면 배분이 없다.** 경고가 붙을
-// 자리가 없으므로 그 시점으로는 M2를 잴 수 없고, 잴 수 있는 자리는 배분이 살아 있는
-// `unknown`이다(아래 두 시험과 「unknown horizon에서도」 시험). **잠금을 옮긴 것이지 푼
-// 것이 아니다** — 조건은 계약 8.4절 한 곳에 그대로 있고 세 시험이 양방향으로 문다.
+// **D53 1번 이후 이 프로필을 `within_isa_lock_in`으로 물으면 ISA만 살아남는다.**
+// `12.0.0`에서는 세 계좌가 다 비어 경고가 붙을 자리가 없었고, 그래서 그 시점으로는 M2를
+// 잴 수 없어 `unknown`으로 옮겨 두었다. **잠금을 옮긴 것이지 푼 것이 아니다** — 조건은
+// 계약 8.4절 한 곳에 그대로 있고 아래 시험들이 양방향으로 문다.
 
 test('M2 / GC-21 — 의무가입기간이 지났으면 추징 경고를 내지 않는다', () => {
   const scenario = scenarioOf(
@@ -336,20 +336,63 @@ test('M2 / GC-21 — 의무가입기간이 지났으면 추징 경고를 내지 
   );
 });
 
-test('M2 / GC-21을 원래 시점으로 물으면 배분 자체가 없다 (D52 2번)', () => {
+test('M2 / GC-21을 원래 시점으로 물으면 연금만 비고 ISA는 남는다 (D53 1번)', () => {
+  // **`13.0.0`에서 이 시험이 뒤집혔다.** `12.0.0`은 여기서 「배분 자체가 없다」를 재고
+  // 있었고, 그것이 D52 후속 판정이 계약에 옮겨지지 않아 생긴 자리다. 이 사용자에게는
+  // 조특법 §91조의18⑦의 추징 요건("3년이 되는 날 전 해지")이 **성립할 수 없으므로**
+  // ISA를 비울 근거가 없다. 연금 두 계좌는 55세 요건이 그대로 남아 계속 비워진다.
   const scenario = scenarioOf(compute(elapsedLockInRequest(), rulesets));
+  const plan = scenario.plans[0];
 
-  assert.equal(scenario.plans.length, 1);
-  for (const allocation of scenario.plans[0].allocations) {
-    assert.equal(allocation.annual_krw, 0);
-  }
-  assert.deepStrictEqual(scenario.plans[0].warnings, [], '넣지 않은 돈에 경고가 붙었다');
+  assert.equal(scenario.plans.length, 1, '네 안의 벡터가 같아 하나로 합쳐진다');
+  assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 0);
+  assert.equal(allocationOf(plan, 'annuity_savings').annual_krw, 0);
+  assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'fund_use_horizon');
+  assert.equal(allocationOf(plan, 'annuity_savings').limited_by, 'fund_use_horizon');
+
+  // **ISA가 예산 전액을 받는다.** 잔여 한도(60,000,000)가 예산(12,000,000)보다 크므로
+  // 멈춘 것은 예산이고, `limited_by`가 그 사실을 말해야 한다 — 시점이라고 말하면 거짓이다.
+  assert.equal(allocationOf(plan, 'isa').annual_krw, 12_000_000);
+  assert.equal(allocationOf(plan, 'isa').limited_by, 'budget');
+
+  // 미배분이 없으므로 설명할 이유도 없다. **「어느 계좌도 이롭지 않다」가 아니다.**
+  assert.equal(plan.unallocated_annual_krw, 0);
+  assert.equal(plan.unallocated_breakdown.reason_code, null);
+
+  // 경고는 여전히 붙지 않는다 — 연금계좌에는 넣은 돈이 없고, ISA 추징은 성립하지 않는다.
+  assert.deepStrictEqual(plan.warnings, [], '성립하지 않거나 넣지 않은 돈에 경고가 붙었다');
   assert.equal(
-    scenario.plans[0].unallocated_breakdown.reason_code,
-    'no_account_beneficial_within_fund_use_horizon',
+    scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'),
+    false,
+    '불이익이 성립하지 않는 계좌가 있는데 「어느 안도 피하지 못한다」가 나갔다',
   );
   // 입력과 현실이 어긋난다는 통지는 그대로 나간다 — 화면이 그 예외를 읽을 수 있어야 한다.
   assert.ok(noticeCodes(scenario).includes('isa_lock_in_already_elapsed'));
+});
+
+test('M2 / 의무가입기간이 남아 있으면 ISA도 함께 비워진다 (D53 1번의 반대편)', () => {
+  // **예외가 예외인 것을 이 시험이 문다.** 같은 시점·같은 예산에서 잔여 기간만 되살리면
+  // 세 계좌가 전부 비고 미배분의 이유가 「어느 계좌도 이롭지 않다」로 돌아와야 한다.
+  const scenario = scenarioOf(
+    compute(
+      elapsedLockInRequest({
+        accounts: { isa: { years_since_opening: 0, cumulative_contribution_krw: 0 } },
+      }),
+      rulesets,
+    ),
+  );
+  const plan = scenario.plans[0];
+
+  assert.ok(scenario.fund_use_horizon_boundaries.isa_lock_in_years_remaining > 0);
+  for (const allocation of plan.allocations) {
+    assert.equal(allocation.annual_krw, 0, `${allocation.account}에 돈이 들어갔다`);
+    assert.equal(allocation.limited_by, 'fund_use_horizon');
+  }
+  assert.equal(
+    plan.unallocated_breakdown.reason_code,
+    'no_account_beneficial_within_fund_use_horizon',
+  );
+  assert.ok(scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
 });
 
 test('M2 / 입력과 현실이 어긋나면 경고를 끄되 그 사실을 알린다', () => {

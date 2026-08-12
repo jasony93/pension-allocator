@@ -819,5 +819,14 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   // `false`에서 `true`로 뒤집힌다), (2) 자금 사용 시점이 `within_isa_lock_in`이면
   // **전액 미배분**이다(D10이 뒤집혔고 `fund_use_horizon_affects`의 두 칸이 함께 뒤집힌다).
   // `limited_by`에 값이 둘 늘고 `unallocated_breakdown`에 `reason_code`가 붙는다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '12');
+  //
+  // **13으로 올린 것은 `12.0.0`이 스스로 적은 보장 셋을 거두기 때문이다**(계약 0.21절, D53).
+  // (1) 「`within_isa_lock_in`이면 **모든** 배분안의 세 계좌 금액이 0이고 예산 전액이
+  // 미배분이다」가 거짓이 된다 — 의무가입기간이 이미 지난 ISA는 배분을 유지한다.
+  // (2) 트림의 기준이 정확값에서 **표시되는 세액공제액**으로 옮겨져 끝수가 있는 한도의
+  // 사용자마다 IRP 금액이 몇 원 움직이고, `tax_credit_before_cap`·`threshold_income_tax_krw`가
+  // 따라 내려간다. (3) **표시 공제액이 같고 IRP만 더 묶인 안이 `plans`에서 빠진다** —
+  // 배열의 길이와 `plan_id` 구성이 같은 요청에서 달라진다. 셋 다 「응답 쪽 보장을
+  // 거두는 것」이고 0.1절이 그것을 major로 정한다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '13');
 });

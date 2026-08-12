@@ -76,16 +76,32 @@ test('§47②의 한 번 버림 — 총급여 34,143,911원에서 여섯 단계�
   assert.equal(cap.wage_income_credit_krw, 730_848);
   assert.equal(cap.cap_krw, expected);
 
-  // **1원이 문장을 바꾼다.** 한도가 최대 공제액보다 1원 작으므로 자르고, 그 자름은
-  // 상한 분기라 증명된다 — 화면이 D37의 문장을 쓸 수 있는 유일한 상태다.
+  // **1원이 문장을 바꾼다.** 한도가 최대 공제액보다 1원 작으므로 물고, 그 물림은
+  // 상한 분기라 증명된다 — 화면이 D37의 문장을 쓸 수 있는 자리다.
+  //
+  // **`13.0.0`에서 그 1원이 배분에서 먼저 나타난다** (D53 2번). 한도가 1,349,999.888이라
+  // IRP를 6원 줄여도 **표시되는 세액공제액이 1,349,999로 같다.** 그 6원은 아무것도 낳지
+  // 않으므로 IRP에 넣지 않는다(D52 1번). 그래서 자르기 전 소득세분이 1,350,000이 아니라
+  // **1,349,999**이고 뺄셈으로 드러나는 자름은 0원이다 — **자름이 배분으로 옮겨 갔다.**
   const benefit = benefitOf(rulesets, salary);
-  assert.equal(benefit.pension_credit_income_tax_before_cap_krw, 1_350_000);
+  assert.equal(benefit.pension_credit_income_tax_before_cap_krw, 1_349_999);
   assert.equal(benefit.pension_credit_income_tax_krw, 1_349_999);
   assert.equal(benefit.pension_credit_local_tax_krw, 134_999);
   assert.equal(benefit.pension_credit_total_krw, 1_484_998);
+  assert.equal(benefit.tax_liability_cap.reduced_income_tax_krw, 0);
+
+  // **그래도 「한도가 물었다」는 참이다.** 물었기 때문에 IRP를 잘라 낸 것이고, 자른 뒤
+  // 값과 한도를 대어 「안 물었다」고 적으면 원인과 결과가 뒤집힌다(`applyCap` 머리말).
   assert.equal(benefit.tax_liability_cap.applied, true);
   assert.equal(benefit.tax_liability_cap.binding_code, 'binds_provably');
-  assert.equal(benefit.tax_liability_cap.reduced_income_tax_krw, 1);
+
+  // **사용자가 실제로 잃은 것이 2원이라는 것을 값으로 고정한다.** 한도가 없었다면
+  // IRP 3,000,000으로 1,485,000을 받는다. 트림이 그것을 감추지 않는지 여기서 잰다.
+  const plan = planOf(scenarioOf(compute(withSalary(salary), rulesets)), 'max_tax_credit');
+  const irp = plan.allocations.find((a) => a.account === 'retirement_pension');
+  assert.equal(irp.annual_krw, 2_999_994);
+  assert.equal(irp.limited_by, 'no_additional_tax_credit');
+  assert.equal(benefit.pension_credit_total_krw, 1_484_998);
 });
 
 test('엔진이 단계마다 버리면 과세표준이 정확히 1원 커진다 — 그 항등식을 값으로 고정한다', () => {

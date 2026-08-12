@@ -945,7 +945,21 @@ function checkScenario(scenario, response, request, at) {
   // 「한도가 남지 않아서」와 「그 시점에는 어느 계좌도 이롭지 않아서」는 화면에서 다른
   // 문장이 된다. 두 뜻이 한 이름으로 나가면 화면이 그 둘을 구별할 수 없고, **한도가
   // 멀쩡히 남은 사용자에게 「넣을 자리가 없습니다」를 적게 된다.**
+  //
+  // **`13.0.0`에서 이 불변식이 계좌별로 갈라졌다**(D53 1번). 종전에는 시점 하나로
+  // 세 계좌를 다 비운다고 재고 있었는데, **의무가입기간이 이미 지난 ISA에는 추징 요건이
+  // 성립하지 않아** 그 계좌는 배분을 유지한다. 재는 방법을 안 고치면 이 불변식은
+  // **계약이 틀린 자리를 「옳다」고 증명하는 검사**가 된다 — 이 조직이 반복해 만난 형태다.
   const suppressed = horizon === 'within_isa_lock_in';
+  // 이 시점에 **비워지는** 계좌. 연금 둘은 언제나이고(55세 요건은 의무가입기간과 무관),
+  // ISA는 남은 의무가입기간이 있을 때만이다. 조건을 8.4절의 경고와 같은 축으로 적는다.
+  const emptiedByHorizon = (account) =>
+    suppressed && (account !== 'isa' || boundaries.isa_lock_in_years_remaining > 0);
+  // 「어느 계좌도 이롭지 않다」가 참인가 — 열려 있으면서 비워지지 않은 계좌가 없어야 한다.
+  const noBeneficialAccount = ['retirement_pension', 'annuity_savings', 'isa'].every(
+    (account) => !eligibleOf(account) || emptiedByHorizon(account),
+  );
+
   for (const plan of plans) {
     const b = plan.unallocated_breakdown;
     const label = `${at} I43 [${plan.plan_id}]`;
@@ -955,25 +969,47 @@ function checkScenario(scenario, response, request, at) {
     } else {
       assert.equal(
         b.reason_code,
-        suppressed ? 'no_account_beneficial_within_fund_use_horizon' : 'contribution_room_exhausted',
+        suppressed && noBeneficialAccount
+          ? 'no_account_beneficial_within_fund_use_horizon'
+          : 'contribution_room_exhausted',
         `${label}: 미배분의 이유가 실제 이유와 다르다`,
       );
     }
 
     for (const allocation of plan.allocations) {
       if (allocation.limited_by !== LIMITED_BY.FUND_USE_HORIZON) continue;
-      assert.ok(suppressed, `${label}: 그 시점이 아닌데 시점이 막았다고 말한다`);
+      assert.ok(
+        emptiedByHorizon(allocation.account),
+        `${label}: 비워질 수 없는 ${allocation.account}을 시점이 막았다고 말한다`,
+      );
       assert.equal(allocation.annual_krw, 0, `${label}: 시점이 막았다면서 돈이 들어갔다`);
     }
 
     if (suppressed) {
-      // 전액 미배분이다. 한 계좌라도 돈이 들어가면 이유 코드가 거짓이 된다.
-      assert.equal(plan.total_allocated_annual_krw, 0, `${label}: 그 시점에 돈이 들어갔다`);
-      assert.deepStrictEqual(plan.warnings, [], `${label}: 넣지 않은 돈에 경고가 붙었다`);
       for (const allocation of plan.allocations) {
+        if (emptiedByHorizon(allocation.account)) {
+          // 비워지는 계좌에는 한 원도 들어가지 않고, 막은 이유는 시점이거나 자격이다.
+          assert.equal(allocation.annual_krw, 0, `${label}: ${allocation.account}에 돈이 들어갔다`);
+          assert.ok(
+            [LIMITED_BY.FUND_USE_HORIZON, LIMITED_BY.NOT_ELIGIBLE].includes(allocation.limited_by),
+            `${label}: ${allocation.account}이 막힌 이유를 시점으로도 자격으로도 말하지 않는다`,
+          );
+        } else {
+          // 살아남는 계좌를 시점으로 막지 않는다. **이 한 줄이 D53 1번이 고친 결함이다** —
+          // 뒤집으면 추징이 성립하지 않는 사용자에게 추징을 이유로 「넣지 마세요」가 나간다.
+          assert.notEqual(
+            allocation.limited_by,
+            LIMITED_BY.FUND_USE_HORIZON,
+            `${label}: 불이익이 성립하지 않는 ${allocation.account}을 시점으로 막았다`,
+          );
+        }
+      }
+      // 넣지 않은 돈에는 경고가 붙지 않는다. 살아남은 ISA의 경고는 I2가 따로 막는다
+      // (잔여 기간이 0이라 추징 경고 자체가 성립하지 않는다).
+      for (const warning of plan.warnings) {
         assert.ok(
-          [LIMITED_BY.FUND_USE_HORIZON, LIMITED_BY.NOT_ELIGIBLE].includes(allocation.limited_by),
-          `${label}: ${allocation.account}이 막힌 이유를 시점으로도 자격으로도 말하지 않는다`,
+          allocOf(plan, warning.account).annual_krw > 0,
+          `${label}: 넣지 않은 돈에 경고가 붙었다`,
         );
       }
     }

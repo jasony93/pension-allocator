@@ -92,7 +92,9 @@ export function compute(request, rulesets) {
       annual_budget_krw: normalized.profile.monthly_capacity_krw * months,
       fund_use_horizon: normalized.profile.fund_use_horizon,
       // 계약이 스스로 선언한다. **`12.0.0`에서 앞의 두 값이 뒤집혔다**(D52 2번) —
-      // `within_isa_lock_in`이면 전액 미배분이므로 이 입력이 금액을 바꾼다.
+      // `within_isa_lock_in`이면 연금 두 계좌를 비우므로 이 입력이 금액을 바꾼다.
+      // **`13.0.0`에서 그 판정이 계좌별로 갈렸고**(D53 1번) 이 선언은 그대로다 —
+      // 의무가입기간이 지난 ISA가 살아남아도 연금 쪽 금액은 여전히 이 입력이 바꾼다.
       //
       // **고정 객체를 유지한다.** 이 객체가 말하는 것은 「이 요청에서 무엇이 달라졌는가」가
       // 아니라 **「이 입력이 무엇을 바꿀 수 있는가」**이고, 그래야 qa가 선언과 동작을
@@ -250,19 +252,26 @@ function computeScenario(scenarioId, request, rulesets) {
   //      새 입력 0개·가정 0개가 이 표가 성립하는 조건이다. 금액은 없다.
   const pensionRateReference = resolvePensionWithdrawalTaxReference(access);
 
-  // 6.75. **자금 사용 시점이 금액에 닿는 유일한 판정**(D52 2번). 3년 안에 쓸 돈이면
-  //       세 계좌 중 어느 것도 이롭지 않다 — ISA는 의무가입기간을 못 채워 과세특례를
-  //       잃고 연금계좌는 55세 전 인출이라 기타소득세가 붙는다. **연수도 세율도
-  //       룰셋에서 읽는다.** 걸리지 않는 시점에서는 규칙을 한 건도 읽지 않는다.
-  const horizonSuppression = resolveHorizonSuppression(access, {
-    horizon: request.profile.fund_use_horizon,
-  });
-
   const boundaries = boundariesFrom(access, {
     birthDate: request.profile.birth_date,
     taxYear: request.tax_year,
     isaExists: request.accounts.isa.exists,
     isaYearsSinceOpening: request.accounts.isa.years_since_opening,
+  });
+
+  // 6.75. **자금 사용 시점이 금액에 닿는 유일한 판정**(D52 2번). 3년 안에 쓸 돈이면
+  //       연금 두 계좌는 55세 전 인출이라 기타소득세가 붙어 이롭지 않다. **ISA는
+  //       남은 의무가입기간이 있을 때만이다**(D53 1번) — 그 기간이 지난 사용자에게는
+  //       추징 요건 자체가 성립하지 않는다. **연수도 세율도 룰셋에서 읽는다.**
+  //       걸리지 않는 시점에서는 규칙을 한 건도 읽지 않는다.
+  //
+  //       **경계값을 먼저 만들어야 한다** — 그 판정의 재료가 남은 의무가입기간이고,
+  //       그 값은 룰셋의 `min_contract_years`에서 `boundaries.mjs`가 만든다.
+  //       같은 뺄셈을 여기서 다시 하면 두 벌이 되고, 두 벌이 갈리는 날
+  //       화면의 캡션과 배분이 서로 다른 잔여 연수 위에 서게 된다.
+  const horizonSuppression = resolveHorizonSuppression(access, {
+    horizon: request.profile.fund_use_horizon,
+    isaLockInYearsRemaining: boundaries.isa_lock_in_years_remaining,
   });
 
   // 6.8. 확정 축의 최댓값. 한도와 율을 다 읽은 뒤라야 만들 수 있다.
@@ -642,6 +651,9 @@ function buildAssumptions(request, ageReckoning, isaReturn, horizonSuppression) 
   // **이 가정에 조건이 붙었다**(`12.0.0`, D52 2번). 세 시점에서는 여전히 참이다 —
   // 자금 사용 시점이 순서와 경고만 바꾼다. `within_isa_lock_in`에서는 **거짓**이므로
   // 내지 않는다. 거짓이 된 가정을 계속 싣는 것이 이 저장소가 반복해 밟은 결함이다.
+  //
+  // **ISA가 살아남아도 내지 않는다**(`13.0.0`, D53 1번). `applies`가 재는 것은
+  // 「이 입력이 금액을 바꿨는가」이고, 연금 두 계좌가 비었으면 답은 「바꿨다」다.
   if (!horizonSuppression.applies) add(ASSUMPTION.HORIZON_EXCLUDED_FROM_AMOUNTS);
   add(ASSUMPTION.EARLY_EXIT_NOT_QUANTIFIED, {}, [
     RULE.ISA_CLAWBACK,

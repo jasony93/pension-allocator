@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '12.0.0';
-export const SUPPORTED_MAJOR = 12;
+export const SCHEMA_VERSION = '13.0.0';
+export const SUPPORTED_MAJOR = 13;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -795,7 +795,10 @@ export const LIMITED_BY = {
   CONTRIBUTION_LIMIT: 'contribution_limit',
   NOT_ELIGIBLE: 'not_eligible',
   /**
-   * **`12.0.0` 신규 (D52 1번).** 더 넣어도 **세액공제가 한 원도 늘지 않아** 거기서 멈췄다.
+   * **`12.0.0` 신규 (D52 1번).** 더 넣어도 **표시되는 세액공제액이 한 원도 늘지 않아**
+   * 거기서 멈췄다. **`13.0.0`에서 기준이 정확값에서 표시 금액으로 옮겨졌다**(D53 2번) —
+   * 세액 한도에 소수부가 있으면 정확값 기준은 어느 화면에도 안 나타나는 0.1원을
+   * 「늘었다」로 센다.
    * `retirement_pension`에만, 그리고 `IRP_CREDIT_PRODUCTIVE_ONLY_PLANS`의 안에서만 나온다.
    *
    * **`credit_limit`의 부활이 아니다.** 옛 값은 「세액공제 대상 **한도**가 막았다」였고
@@ -804,8 +807,10 @@ export const LIMITED_BY = {
    */
   NO_ADDITIONAL_CREDIT: 'no_additional_tax_credit',
   /**
-   * **`12.0.0` 신규 (D52 2번).** 자금 사용 시점이 `within_isa_lock_in`이라 어느 계좌에도
-   * 넣지 않았다. 세 계좌 전부에 붙는다(자격이 없는 계좌는 `not_eligible`이 이긴다).
+   * **`12.0.0` 신규 (D52 2번).** 자금 사용 시점이 `within_isa_lock_in`이라 그 계좌를 비웠다.
+   * 연금 두 계좌에는 언제나 붙고, **ISA에는 남은 의무가입기간이 있을 때만** 붙는다
+   * (`13.0.0` · D53 1번 — 기간이 지났으면 추징 요건이 성립하지 않아 배분을 유지한다).
+   * 자격이 없는 계좌는 `not_eligible`이 이긴다.
    */
   FUND_USE_HORIZON: 'fund_use_horizon',
 };
@@ -819,6 +824,11 @@ export const LIMITED_BY = {
  */
 export const UNALLOCATED_REASON = {
   CONTRIBUTION_ROOM_EXHAUSTED: 'contribution_room_exhausted',
+  /**
+   * **뒤엣값은 정말로 이로운 계좌가 하나도 없을 때만이다**(`13.0.0` · D53 1번).
+   * 의무가입기간이 지난 ISA가 살아남아 실제로 돈을 받는 사용자에게 이 코드를 내면
+   * 화면은 **방금 돈을 넣은 계좌를 가리키며 「이로운 계좌가 없습니다」**라고 말한다.
+   */
   NO_ACCOUNT_BENEFICIAL: 'no_account_beneficial_within_fund_use_horizon',
 };
 

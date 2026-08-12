@@ -58,6 +58,7 @@ function baselineAt(salary, overrides = {}) {
           ...(overrides.profile ?? {}),
         },
         ...(overrides.accounts ? { accounts: overrides.accounts } : {}),
+        ...(overrides.options ? { options: overrides.options } : {}),
       }),
       rulesets,
     ),
@@ -68,6 +69,31 @@ function baselineAt(salary, overrides = {}) {
 }
 
 const irpOf = (plan) => allocationOf(plan, 'retirement_pension').annual_krw;
+const creditOf = (plan) => plan.deterministic_benefit.pension_credit_total_krw;
+
+/**
+ * **IRP를 자르지 않는 안**의 배분. `annuity_savings_first`는 기본안 후보가 아니라
+ * 트림이 걸리지 않으므로, 「잘라 낸 몫이 실제로 무엇을 낳았는가」의 비교 대상이 된다.
+ *
+ * **응답 하나에서 두 안을 꺼내지 않는다** (D53 3번). 표시 세액공제액이 같으면서 IRP만
+ * 더 묶인 안은 이제 응답에서 빠지므로, 그 안을 응답에서 찾는 시험은 **비교 대상이
+ * 사라졌다는 이유로 조용히 아무것도 재지 않게 된다.** 그래서 그 안만 따로 요청한다.
+ */
+function untouchedAt(salary, overrides = {}) {
+  return baselineAt(salary, {
+    ...overrides,
+    options: { plan_variants: ['annuity_savings_first'] },
+  }).baseline;
+}
+
+/** IRP 계좌를 닫아 **IRP가 0인 상태**의 세액공제액을 얻는다. 한도는 총급여가 정하므로 그대로다. */
+function creditWithoutIrpAt(salary) {
+  return creditOf(
+    baselineAt(salary, {
+      accounts: { retirement_pension: { annuity_start_status: 'started' } },
+    }).baseline,
+  );
+}
 
 // ── 경계의 아래 ──────────────────────────────────────────────────────────────
 
@@ -96,16 +122,12 @@ test('경계 아래 — 연금저축만으로 한도를 넘기면 IRP를 한 원
 test('경계 아래 — 잘라 낸 몫의 대가가 0이다', () => {
   // **이 변경 전체의 전제다.** 잘라 낸 IRP가 세액공제를 한 원이라도 낳고 있었다면
   // 사용자가 실제로 돈을 잃는다. 손대지 않은 안과 공제액을 직접 맞댄다.
-  const { scenario, baseline } = baselineAt(CAP_COORDINATES.BINDS.total_salary_krw);
-  const untouched = scenario.plans.find((plan) => plan.plan_id === 'annuity_savings_first');
+  const salary = CAP_COORDINATES.BINDS.total_salary_krw;
+  const { baseline } = baselineAt(salary);
+  const untouched = untouchedAt(salary);
 
-  assert.ok(untouched !== undefined, '비교할 안이 응답에 없다');
   assert.ok(irpOf(untouched) > 0, '비교 대상이 IRP를 채우지 않으면 이 시험이 아무것도 재지 않는다');
-  assert.equal(
-    baseline.deterministic_benefit.pension_credit_total_krw,
-    untouched.deterministic_benefit.pension_credit_total_krw,
-    'IRP를 잘라 세액공제를 잃었다',
-  );
+  assert.equal(creditOf(baseline), creditOf(untouched), 'IRP를 잘라 세액공제를 잃었다');
   // 그 대신 잘라 낸 예산이 사라지지도 않는다 — 다른 계좌나 미배분으로 간다.
   assert.equal(
     baseline.total_allocated_annual_krw + baseline.unallocated_annual_krw,
@@ -115,14 +137,56 @@ test('경계 아래 — 잘라 낸 몫의 대가가 0이다', () => {
 
 // ── 경계의 위 ────────────────────────────────────────────────────────────────
 
-test('경계 위 — 한 원이라도 더 낳으면 IRP가 배분된다', () => {
-  // **한쪽만 잠그면 「IRP를 늘 0으로 두는」 구현도 통과한다.** 경계 바로 위에서
-  // 배분이 되살아나는 것을 본다 — 총급여 1원 차이다.
-  const below = baselineAt(CAP_COORDINATES.BINDS.total_salary_krw);
-  const above = baselineAt(CAP_COORDINATES.BINDS.total_salary_krw + 1);
+/**
+ * 경계를 **찾는다**. 좌표를 적어 두지 않는 이유가 둘이다 —
+ * (1) 그 수는 세법이 정한 것이라 시험 코드에 적을 수 없고,
+ * (2) 적어 두면 룰셋이 바뀌는 날 이 시험이 조용히 엉뚱한 자리를 재게 된다.
+ *
+ * 반복 횟수만 코드에 있고 그것은 세법과 무관하다. 창 안에서 못 찾으면 시험이 멈춘다.
+ */
+const BOUNDARY_SCAN_STEPS = 64;
 
-  assert.equal(irpOf(below.baseline), 0);
-  assert.ok(irpOf(above.baseline) > 0, '한도가 오르는데도 IRP가 0에 머문다');
+function firstSalaryWithIrp(from) {
+  for (let offset = 0; offset <= BOUNDARY_SCAN_STEPS; offset += 1) {
+    if (irpOf(baselineAt(from + offset).baseline) > 0) return from + offset;
+  }
+  return null;
+}
+
+test('경계 위 — 표시되는 세액공제액이 실제로 늘어나는 자리에서 IRP가 되살아난다', () => {
+  // **한쪽만 잠그면 「IRP를 늘 0으로 두는」 구현도 통과한다.** 경계 위에서 배분이
+  // 되살아나는 것을 본다.
+  //
+  // **`13.0.0`에서 이 시험의 기준이 바뀌었다** (D53 2번). 종전에는 총급여 1원 위에서
+  // IRP가 되살아나는 것을 재고 있었는데, 그 자리의 IRP는 **1원**이었고 그 1원이 낳는
+  // 것은 세액 한도의 소수부 0.1원이었다 — **어느 표시 금액에도 나타나지 않는다.**
+  // 관리자가 D52 후속에 「그 1원이 실제로 공제를 낳는다」고 적었고 D53에서 스스로
+  // 거짓임을 확인했다. 그래서 지금 재는 것은 **표시되는 세액공제액이 실제로 오르는가**다.
+  const below = CAP_COORDINATES.BINDS.total_salary_krw;
+  assert.equal(irpOf(baselineAt(below).baseline), 0);
+
+  const boundary = firstSalaryWithIrp(below);
+  assert.ok(boundary !== null, `총급여 ${below}원 위 ${BOUNDARY_SCAN_STEPS}원 안에서 IRP가 되살아나지 않는다`);
+  assert.ok(boundary > below, '경계 아래에서 이미 IRP가 배분됐다');
+
+  // **되살아난 그 자리에서 IRP는 표시 금액을 실제로 올린다.** IRP 계좌를 닫아
+  // IRP가 0인 상태와 맞댄다 — 한도는 총급여가 정하므로 두 요청에서 같다.
+  assert.ok(
+    creditOf(baselineAt(boundary).baseline) > creditWithoutIrpAt(boundary),
+    '되살아난 IRP가 표시되는 세액공제액을 한 원도 올리지 못한다 — 자물쇠만 지운 채 권한 것이다',
+  );
+
+  // **경계 아래의 모든 좌표에서 IRP를 꽉 채워도 표시 금액이 오르지 않는다.**
+  // 여기가 D53 2번의 자리다 — 정확값 기준으로 되돌린 구현은 이 창 안에서 IRP를
+  // 1~8원 배분하고, 그 몫은 아래 등식을 깨지 않으면서 사용자에게 중도인출 제한을 지운다.
+  for (let salary = below; salary < boundary; salary += 1) {
+    assert.equal(irpOf(baselineAt(salary).baseline), 0, `총급여 ${salary}: 경계 아래인데 IRP가 배분됐다`);
+    assert.equal(
+      creditOf(untouchedAt(salary)),
+      creditWithoutIrpAt(salary),
+      `총급여 ${salary}: IRP를 꽉 채운 안과 IRP가 없는 안의 표시 세액공제액이 다르다 — 경계 판정이 어긋났다`,
+    );
+  }
 });
 
 test('경계 한참 위 — 한도가 축의 끝에 닿으면 IRP가 남은 합산 한도를 전부 받는다', () => {
@@ -167,15 +231,74 @@ test('경계는 총급여가 아니라 남은 한도가 정한다 — 같은 총
 
 // ── 손대지 않는 안 ───────────────────────────────────────────────────────────
 
-test('기본안 후보가 아닌 안은 그대로 둔다 — 사용자가 다른 목적으로 고를 수 있다', () => {
-  const { scenario } = baselineAt(CAP_COORDINATES.BINDS.total_salary_krw);
-
+test('기본안 후보가 아닌 안은 트림하지 않는다 — 트림은 그 안의 목적이 아니다', () => {
+  // **자르는 것과 내지 않는 것은 다른 일이다.** 이 시험이 재는 것은 앞엣것이다 —
+  // 기본안 후보가 아닌 안의 IRP는 계산 단계에서 잘리지 않는다. 그 안이 응답에
+  // **실리는가**는 아래 시험이 따로 잰다(D53 3번).
   for (const planId of ['annuity_savings_first', 'pension_contribution_before_isa']) {
-    const plan = scenario.plans.find((p) => p.plan_id === planId);
-    if (!plan) continue;
-    assert.ok(irpOf(plan) > 0, `${planId}의 IRP까지 잘렸다 — 「다른 배분안은 그대로 둔다」가 깨졌다`);
+    const plan = baselineAt(CAP_COORDINATES.BINDS.total_salary_krw, {
+      options: { plan_variants: [planId] },
+    }).baseline;
+    assert.equal(plan.plan_id, planId);
+    assert.ok(irpOf(plan) > 0, `${planId}의 IRP까지 잘렸다 — 트림이 기본안 후보 밖으로 샜다`);
     assert.notEqual(allocationOf(plan, 'retirement_pension').limited_by, 'no_additional_tax_credit');
   }
+});
+
+// ── 목적 없이 IRP만 더 묶는 안은 내지 않는다 (D53 3번) ───────────────────────
+
+test('표시 공제액이 같고 IRP만 더 묶인 안은 응답에서 빠진다', () => {
+  // 관리자가 D52 후속에 「목적이 있는 안은 남긴다」고 정했고 D53에서 그 읽기를 깼다 —
+  // **절세액이 같으면 그 안의 목적이 절세일 수 없다.** 이름이 아니라 값으로 잰다.
+  const salary = CAP_COORDINATES.BINDS.total_salary_krw;
+  const { scenario, baseline } = baselineAt(salary);
+  const dropped = untouchedAt(salary);
+
+  // 전제 — 그 안은 실재하고, 기본안과 표시 공제액이 같으면서 IRP만 더 묶는다.
+  assert.equal(creditOf(dropped), creditOf(baseline), '두 안의 표시 공제액이 달라 이 시험의 전제가 없다');
+  assert.ok(irpOf(dropped) > irpOf(baseline));
+  assert.ok(
+    allocationOf(dropped, 'annuity_savings').annual_krw <=
+      allocationOf(baseline, 'annuity_savings').annual_krw &&
+      allocationOf(dropped, 'isa').annual_krw <= allocationOf(baseline, 'isa').annual_krw,
+    '다른 계좌가 더 받았다면 맞바꾼 것이지 순손해가 아니다 — 이 시험의 전제가 아니다',
+  );
+
+  // 그러므로 넷을 다 요청한 응답에는 그 벡터가 하나도 없어야 한다.
+  for (const plan of scenario.plans) {
+    assert.ok(
+      irpOf(plan) <= irpOf(baseline) || creditOf(plan) !== creditOf(baseline),
+      `${plan.plan_id}: 표시 공제액이 같은데 IRP만 더 묶인 안이 선택지로 남았다`,
+    );
+  }
+});
+
+test('다른 계좌가 실제로 더 받으면 그 안은 남는다 — 맞바꿈은 순손해가 아니다', () => {
+  // **지배 판정이 「IRP가 더 많다」만 보면 안 된다.** 연금저축을 더 채우는 안은 IRP도
+  // 더 묶지만 연금저축도 더 받는다 — 그 맞바꿈의 값어치를 조문이 정하지 않으므로
+  // 엔진이 대신 판정하지 않는다. 예산을 넉넉히 주면 그 상태가 실제로 만들어진다.
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: {
+          current_year_total_salary_krw: CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw,
+          prior_year_total_salary_krw: CAP_COORDINATES.NO_LONGER_BINDS.total_salary_krw,
+          monthly_capacity_krw: FULL_PENSION_MONTHLY * 2,
+        },
+      }),
+      rulesets,
+    ),
+  );
+
+  const before = scenario.plans.find((p) => p.plan_id === 'pension_contribution_before_isa');
+  assert.ok(before !== undefined, '연금 납입 한도를 ISA보다 먼저 채우는 안이 사라졌다');
+  const baseline = scenario.plans.find((p) => p.is_baseline);
+  assert.ok(
+    allocationOf(before, 'annuity_savings').annual_krw >
+      allocationOf(baseline, 'annuity_savings').annual_krw ||
+      irpOf(before) > irpOf(baseline),
+    '두 안이 같은 벡터라면 이 시험이 아무것도 재지 않는다',
+  );
 });
 
 // ── 결함 주입 ────────────────────────────────────────────────────────────────

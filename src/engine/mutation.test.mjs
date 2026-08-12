@@ -749,3 +749,201 @@ test('주입 / 세액공제 요건을 무시하면 요건이 서지 않는 사�
     '요건을 무시하면 그 0은 「한도가 잘랐다」로 나온다 — 이것이 우리가 갈라낸 두 경로다',
   );
 });
+
+// ── 주입 4-C. 트림의 기준을 표시 금액에서 정확값으로 되돌린다 (D53 2번) ───────
+//
+// **관리자가 D52 후속에 「그 1원이 실제로 공제를 낳는다」고 적었고 그것이 거짓이었다.**
+// 정확값 기준의 탐색은 세액 한도의 **소수부**를 「낳았다」로 세고, 그 소수부는
+// `tax_credit`에도 `tax_credit_before_cap`에도 나타나지 않는다. 그래서 사용자는
+// **어느 화면에도 안 나타나는 것**을 대가로 중도인출이 제한되는 계좌에 돈을 넣게 된다.
+//
+// 되돌리는 주입이 무는지를 여기서 확인한다. 되돌린 구현은 **기본 조건에서 옳은 답을
+// 낸다** — 끝수가 없는 한도(GC-32d 좌표)에서는 두 기준이 같은 수를 낸다. 그래서
+// 경계 하나만 보는 검사로는 잡히지 않는다.
+
+/** 한도에 **끝수가 있으면서 무는** 좌표. 두 기준이 갈리는 자리는 여기뿐이다. */
+const FRACTIONAL_CAP_REQUEST = baseRequest({
+  profile: {
+    birth_date: '1986-06-15',
+    current_year_total_salary_krw: CAP_COORDINATES.BINDS_BY_ONE_WON.total_salary_krw,
+    monthly_capacity_krw: 750_000,
+    months_remaining_in_tax_year: 12,
+  },
+});
+
+test('주입 / 트림 기준을 정확값으로 되돌리면 표시 금액을 한 원도 못 올리는 IRP가 되살아난다', async () => {
+  const exactBased = await mutatedCompute({
+    file: 'plans.mjs',
+    from: '      return ctx.rounding.display(recognized) + ctx.rounding.displayLocal(localExact);',
+    // 정확값을 비교 가능한 하나의 수로 만든다. 표시 단계를 건너뛰는 것이 이 결함의 전부다.
+    // `exact.mjs`의 정확값은 `{ n, d }`(BigInt)다. 크기가 100만 원대이고 분모가
+    // 작아 double로 옮겨도 순서가 보존된다 — 되돌린 구현과 순서가 같은 함수다.
+    to: '      return Number(recognized.n) / Number(recognized.d);',
+  });
+
+  const before = baselineOf(compute(FRACTIONAL_CAP_REQUEST, rulesets));
+  const after = baselineOf(exactBased(FRACTIONAL_CAP_REQUEST, rulesets));
+
+  // **되돌린 구현은 IRP를 6원 더 묶는다.**
+  assert.equal(amount(before, 'retirement_pension'), 2_999_994);
+  assert.equal(amount(after, 'retirement_pension'), 3_000_000);
+
+  // **그리고 그 6원이 낳는 표시 금액은 0원이다.** 소득세분도 지방세분도 합계도 같다.
+  const creditOf = (plan) => [
+    plan.deterministic_benefit.pension_credit_income_tax_krw,
+    plan.deterministic_benefit.pension_credit_local_tax_krw,
+    plan.deterministic_benefit.pension_credit_total_krw,
+  ];
+  assert.deepStrictEqual(
+    creditOf(after),
+    creditOf(before),
+    '되돌린 구현이 표시 금액을 실제로 올렸다 — 그러면 이 회차의 전제가 거짓이다',
+  );
+
+  // 잃는 것은 값으로 남는다 — 그 6원은 중도인출이 제한되는 계좌에 묶인다.
+  assert.equal(
+    before.allocations.find((a) => a.account === 'retirement_pension').limited_by,
+    'no_additional_tax_credit',
+  );
+  assert.equal(amount(before, 'isa'), 6, '잘라 낸 6원이 사라졌다 — 다른 계좌로 가야 한다');
+});
+
+test('주입 / 트림 기준을 정확값으로 되돌려도 끝수 없는 한도에서는 같은 답이다 — 그래서 좌표가 필요하다', async () => {
+  // **이 시험이 위 시험의 좌표를 정당화한다.** 되돌린 구현이 아무 데서나 갈리면
+  // 좌표를 고를 이유가 없다. 실제로는 **한도에 끝수가 있어야만** 갈린다.
+  const exactBased = await mutatedCompute({
+    file: 'plans.mjs',
+    from: '      return ctx.rounding.display(recognized) + ctx.rounding.displayLocal(localExact);',
+    // `exact.mjs`의 정확값은 `{ n, d }`(BigInt)다. 크기가 100만 원대이고 분모가
+    // 작아 double로 옮겨도 순서가 보존된다 — 되돌린 구현과 순서가 같은 함수다.
+    to: '      return Number(recognized.n) / Number(recognized.d);',
+  });
+
+  // GC-32d의 좌표 — §59②의 8/1000까지 정수로 떨어져 한도에 끝수가 없다.
+  const wholeCap = baseRequest({
+    profile: {
+      birth_date: '1986-06-15',
+      current_year_total_salary_krw: 34_142_000,
+      monthly_capacity_krw: 750_000,
+      months_remaining_in_tax_year: 12,
+    },
+  });
+
+  assert.equal(
+    amount(baselineOf(exactBased(wholeCap, rulesets)), 'retirement_pension'),
+    amount(baselineOf(compute(wholeCap, rulesets)), 'retirement_pension'),
+  );
+});
+
+// ── 주입 4-D. 의무가입기간 예외를 지운다 (D53 1번) ────────────────────────────
+//
+// **관리자가 D52 후속으로 판정해 놓고 계약에 옮기지 않은 자리다.** 남은 의무가입기간이
+// 0이면 조특법 §91조의18⑦의 추징 요건("3년이 되는 날 전 해지")이 성립할 수 없고,
+// 성립하지 않는 불이익은 배분을 비울 근거가 되지 못한다. **경고를 끄는 자리(8.5절)에서는
+// 그 사용자를 이미 보고 있었고 배분을 비우는 자리에서만 안 보고 있었다.**
+
+/** GC-21·GC-30의 형태 — 시점은 `within_isa_lock_in`인데 의무가입기간이 이미 지났다. */
+const ELAPSED_LOCK_IN_REQUEST = baseRequest({
+  profile: {
+    birth_date: '1986-06-15',
+    current_year_total_salary_krw: 45_000_000,
+    prior_year_total_salary_krw: 45_000_000,
+    fund_use_horizon: 'within_isa_lock_in',
+    monthly_capacity_krw: 1_000_000,
+    months_remaining_in_tax_year: 12,
+  },
+  accounts: {
+    isa: {
+      account_type: 'low_income',
+      cumulative_contribution_krw: 20_000_000,
+      years_since_opening: 3,
+    },
+  },
+});
+
+test('주입 / 의무가입기간 예외를 지우면 추징이 성립하지 않는 사용자의 ISA가 다시 비워진다', async () => {
+  const noException = await mutatedCompute({
+    file: 'fund-use-horizon.mjs',
+    from: '  const isaPenaltyStands = isaLockInYearsRemaining > 0;',
+    to: '  const isaPenaltyStands = true;',
+  });
+
+  const before = baselineOf(compute(ELAPSED_LOCK_IN_REQUEST, rulesets));
+  const after = baselineOf(noException(ELAPSED_LOCK_IN_REQUEST, rulesets));
+
+  assert.equal(amount(before, 'isa'), 12_000_000, '예외가 적용되면 ISA가 예산 전액을 받는다');
+  assert.equal(amount(after, 'isa'), 0, '주입이 결과를 바꾸지 못했다 — 예외가 값에 매여 있지 않다');
+
+  // **그리고 화면이 그 사용자에게 댈 근거가 없어진다.** 배분을 비운 이유가 시점이라고
+  // 나가는데, 같은 응답의 경고 조건은 그 불이익이 성립하지 않는다고 말한다.
+  assert.equal(
+    after.allocations.find((a) => a.account === 'isa').limited_by,
+    'fund_use_horizon',
+  );
+  assert.equal(
+    after.unallocated_breakdown.reason_code,
+    'no_account_beneficial_within_fund_use_horizon',
+  );
+  assert.equal(
+    before.unallocated_annual_krw,
+    0,
+    '예외가 적용되면 미배분이 없다 — 이 대비가 이 주입의 무게다',
+  );
+});
+
+test('주입 / 예외를 연금계좌까지 넓히면 55세 요건이 사라진다 — 예외가 ISA에만 걸린다', async () => {
+  // **반대 방향의 주입이다.** D53 1번은 ISA만 살린다 — 55세 전 인출 페널티는
+  // 의무가입기간과 무관하게 성립하므로 연금 두 계좌는 그대로 비워져야 한다.
+  const tooWide = await mutatedCompute({
+    file: 'fund-use-horizon.mjs',
+    from: '      [ACCOUNT.PENSION]: true,\n      [ACCOUNT.ANNUITY]: true,',
+    to: '      [ACCOUNT.PENSION]: isaPenaltyStands,\n      [ACCOUNT.ANNUITY]: isaPenaltyStands,',
+  });
+
+  const before = baselineOf(compute(ELAPSED_LOCK_IN_REQUEST, rulesets));
+  const after = baselineOf(tooWide(ELAPSED_LOCK_IN_REQUEST, rulesets));
+
+  assert.equal(amount(before, 'retirement_pension'), 0);
+  assert.equal(amount(before, 'annuity_savings'), 0);
+  assert.ok(
+    amount(after, 'retirement_pension') + amount(after, 'annuity_savings') > 0,
+    '주입이 결과를 바꾸지 못했다 — 연금 쪽 판정이 값에 매여 있지 않다',
+  );
+});
+
+// ── 주입 4-E. 목적 없이 IRP만 더 묶는 안을 다시 선택지로 낸다 (D53 3번) ──────
+
+test('주입 / 지배 판정을 지우면 절세액이 같은데 IRP만 더 묶는 안이 선택지로 돌아온다', async () => {
+  const noDominance = await mutatedCompute({
+    file: 'plans.mjs',
+    from: '    if (kept.some((other) => dominatedByIrpLock(result, benefit, other))) continue;',
+    to: '    if (false) continue;',
+  });
+
+  // 세액 한도가 0인 좌표 — **네 안의 절세액이 전부 0**이라 「목적이 절세」일 수 없다.
+  const capZero = baseRequest({
+    profile: {
+      birth_date: '1986-06-15',
+      current_year_total_salary_krw: CAP_COORDINATES.ZERO_EXACT.total_salary_krw,
+      monthly_capacity_krw: 750_000,
+      months_remaining_in_tax_year: 12,
+    },
+  });
+
+  const kept = compute(capZero, rulesets).scenarios[0].plans;
+  const restored = noDominance(capZero, rulesets).scenarios[0].plans;
+
+  assert.ok(restored.length > kept.length, '주입이 안을 되살리지 못했다 — 지배 판정이 죽어 있다');
+
+  const back = restored.find((plan) => !kept.some((k) => k.plan_id === plan.plan_id));
+  const baseline = kept[0];
+  assert.equal(
+    back.deterministic_benefit.pension_credit_total_krw,
+    baseline.deterministic_benefit.pension_credit_total_krw,
+    '되살아난 안의 절세액이 기본안과 다르면 이 주입이 겨눈 형태가 아니다',
+  );
+  assert.ok(
+    amount(back, 'retirement_pension') > amount(baseline, 'retirement_pension'),
+    '되살아난 안이 IRP를 더 묶지 않으면 이 주입이 겨눈 형태가 아니다',
+  );
+});

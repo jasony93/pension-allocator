@@ -186,42 +186,14 @@ function creditIncomeTaxExact({ annuityCounted, pensionCounted }, { state, rates
 }
 
 /**
- * 자금 사용 시점 때문에 **어느 계좌에도 넣지 않은** 배분 결과 (D52 2번).
+ * 한 배분안의 금액.
  *
- * 금액이 전부 0이므로 뒤따르는 계산(공제액·경고·월 환산·미배분 갈래)이 그대로 돌고,
- * 특별한 갈래를 만들지 않는다. **자격이 없는 계좌에는 `not_eligible`이 이긴다** —
- * 그 사실은 이 판정과 무관하게 참이고, 덮으면 화면이 자격 문제를 못 본다.
+ * `trimIrp`를 끄면 **D52 1번의 트림을 하지 않은** 배분이 나온다. 그 배분은 응답에 실리지
+ * 않는다 — 쓰는 곳은 한 자리, 「세액 한도가 이 사용자에게 실제로 물었는가」의 기준점이다
+ * (`applyCap`의 머리말). **기본값은 그 안이 기본안 후보인지가 정한다.**
  */
-function suppressedAllocation(ctx) {
-  const { state, budget, eligible } = ctx;
-  const limitedBy = {};
-  for (const account of ACCOUNT_ORDER) {
-    limitedBy[account] = eligible[account] ? LIMITED_BY.FUND_USE_HORIZON : LIMITED_BY.NOT_ELIGIBLE;
-  }
-
-  return {
-    amounts: { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0, [ACCOUNT.ISA]: 0 },
-    limitedBy,
-    fillOrder: {},
-    // 한 계좌도 채우지 않았으므로 「실제로 돈이 들어간 순서」가 없다. 고정 계좌 순서를
-    // 그대로 낸다 — 길이 3·중복 없음이라는 계약을 지키면서 순서를 지어내지 않는다.
-    observedSequence: [...ACCOUNT_ORDER],
-    annuityCounted: state.annuityCounted,
-    pensionCounted: state.pensionCounted,
-    remainingBudget: budget,
-    withoutCredit: { [ACCOUNT.PENSION]: 0, [ACCOUNT.ANNUITY]: 0 },
-    pensionPoolRemaining: state.pensionContributionRemaining,
-    isaPoolRemaining: state.isaRemaining,
-  };
-}
-
-/** 한 배분안의 금액. */
-function allocate(planId, ctx) {
+function allocate(planId, ctx, trimIrp = IRP_CREDIT_PRODUCTIVE_ONLY_PLANS.has(planId)) {
   const { state, budget, eligible, rates } = ctx;
-
-  // **자금 사용 시점이 금액에 닿는 유일한 자리다**(D52 2번). 판정은 룰셋을 읽어
-  // `fund-use-horizon.mjs`가 만들고, 여기서는 그 결론만 본다.
-  if (ctx.horizonSuppression.applies) return suppressedAllocation(ctx);
 
   // **D32 이후 모든 안이 납입 한도까지 채운다.** 그래서 어느 안에서든 공제를 낳지 않는
   // 납입분이 생길 수 있고, 그 몫은 인정액에 들어가지 않는다 — 아래 `counted`가 그
@@ -274,12 +246,26 @@ function allocate(planId, ctx) {
   };
 
   /**
-   * **이 IRP 납입이 세액공제를 한 원이라도 더 낳는 지점까지만** 자른다 (D52 1번).
+   * **이 IRP 납입이 표시되는 세액공제액을 한 원이라도 늘리는 지점까지만** 자른다
+   * (D52 1번, 기준은 D53 2번에서 옮겼다).
    *
    * 인정 공제액은 `min(산식(인정 납입액), 세액 한도)`이고 납입액에 대해 **단조**다.
-   * 그러므로 「같은 인정 공제액을 내는 가장 작은 납입액」이 존재하고, 그 위의 몫은
-   * **한 원도 공제를 늘리지 않는다.** 그 몫을 IRP에 넣으면 얻는 것 없이
-   * 중도인출 제한만 진다(`pension.withdrawal.midterm_restriction`).
+   * 표시 금액은 그 정확값을 버림한 것이라 역시 단조다. 그러므로 「같은 표시 공제액을
+   * 내는 가장 작은 납입액」이 존재하고, 그 위의 몫은 **어느 표시 금액도 늘리지 않는다.**
+   * 그 몫을 IRP에 넣으면 얻는 것 없이 중도인출 제한만 진다
+   * (`pension.withdrawal.midterm_restriction`).
+   *
+   * **기준이 정확값이 아니라 표시 금액인 이유** (D53 2번). 관리자가 D52 후속에
+   * 「그 1원이 실제로 공제를 낳는다」고 적었고 **그것이 거짓이었다.** 세액 한도에 소수부가
+   * 있으면 정확값 기준의 탐색은 **0.1원짜리 증가**를 「낳았다」고 세고, 그 0.1원은
+   * `tax_credit`에도 `tax_credit_before_cap`에도 나타나지 않는다. 한 좌표의 일이 아니라
+   * **한도에 소수부가 있으면서 무는 모든 좌표**에서 몇 원의 무의미한 IRP가 남는다.
+   * D52 1번의 취지가 「아무것도 낳지 않는 자물쇠를 권하지 않는다」이고,
+   * **어느 표시 금액에도 안 나타나는 몫은 얻은 것이 아니다.**
+   *
+   * **비교는 소득세분과 지방소득세분의 표시 금액을 더해서 한다.** 화면이 사용자에게
+   * 내미는 수가 그 합이고, 두 칸이 서로 다른 단계에서 버려지므로(§47③이 임의규정이라
+   * 지방세분 단계가 룰셋에 따로 있다) 소득세분만 보면 규약이 갈리는 날 어긋난다.
    *
    * **경계를 총급여로 자르지 않는다.** 자르는 것은 남은 세액 한도이고, 그 값은 이미
    * 넣은 연금저축·ISA 전환 추가한도·개정안 청년 우대에 따라 사람마다 다르다.
@@ -291,31 +277,49 @@ function allocate(planId, ctx) {
    * 공제 산식이 두 벌이 된다. **단조성만 쓰면 유도가 필요 없다.**
    */
   const creditProductiveCap = (maxAmount, creditRoom) => {
-    const recognizedAt = (amount) =>
-      minExact(
+    // 표시되는 세액공제액. **`benefitOf`가 응답에 싣는 것과 같은 두 손잡이를 쓴다** —
+    // 절사 단계도 단위도 룰셋에서 온 것이고 여기서 다시 정하지 않는다.
+    const displayedCreditAt = (amount) => {
+      const recognized = minExact(
         creditIncomeTaxExact(
           { annuityCounted, pensionCounted: pensionCounted + Math.min(amount, creditRoom) },
           ctx,
         ).incomeTaxExact,
         ctx.capExact,
       );
+      const localExact = scaleExact(recognized, toRatio(rates.surtaxRate));
+      return ctx.rounding.display(recognized) + ctx.rounding.displayLocal(localExact);
+    };
 
-    const target = recognizedAt(maxAmount);
+    const target = displayedCreditAt(maxAmount);
     let low = 0;
     let high = maxAmount;
     while (low < high) {
       const mid = Math.floor((low + high) / 2);
-      if (cmpExact(recognizedAt(mid), target) >= 0) high = mid;
+      if (displayedCreditAt(mid) >= target) high = mid;
       else low = mid + 1;
     }
     return low;
   };
 
-  const trimUnproductiveIrp = IRP_CREDIT_PRODUCTIVE_ONLY_PLANS.has(planId);
+  const trimUnproductiveIrp = trimIrp;
+  /** 트림이 **실제로** 금액을 깎았는가. 기준점 배분을 한 번 더 만들지 말지가 여기 달렸다. */
+  let irpTrimmed = false;
 
   for (const { account, creditBounded: stepIsCreditBounded } of fillStepsFor(planId, ctx)) {
     if (!eligible[account]) {
+      // **자격이 없는 계좌에는 `not_eligible`이 이긴다.** 그 사실은 아래 시점 판정과
+      // 무관하게 참이고, 덮으면 화면이 자격 문제를 못 본다.
       limitedBy[account] = LIMITED_BY.NOT_ELIGIBLE;
+      continue;
+    }
+
+    // **자금 사용 시점이 금액에 닿는 유일한 자리다**(D52 2번 · D53 1번). 판정은 룰셋을
+    // 읽어 `fund-use-horizon.mjs`가 계좌마다 만들고, 여기서는 그 결론만 본다.
+    // **계좌별인 것이 이 자리의 요지다** — 의무가입기간이 지난 ISA는 추징 요건이
+    // 성립하지 않아 살아남고, 그때도 연금 두 계좌는 그대로 비워진다.
+    if (ctx.horizonSuppression.accounts[account]) {
+      limitedBy[account] = LIMITED_BY.FUND_USE_HORIZON;
       continue;
     }
 
@@ -344,6 +348,7 @@ function allocate(planId, ctx) {
       if (productive < amount) {
         amount = productive;
         reason = LIMITED_BY.NO_ADDITIONAL_CREDIT;
+        irpTrimmed = true;
       }
     }
 
@@ -398,6 +403,7 @@ function allocate(planId, ctx) {
     withoutCredit,
     pensionPoolRemaining: pensionPool,
     isaPoolRemaining: isaPool,
+    irpTrimmed,
   };
 }
 
@@ -411,8 +417,26 @@ function allocate(planId, ctx) {
  * 붙는 지방세를 남겨 두면 근거가 사라진 금액이 남는다. 그래서 **인정된 소득세분에 부가율을
  * 다시 적용한다.** 지방세 쪽에 같은 한도 구조가 있는지는 룰셋이 미확인으로 남겨 두었고,
  * 그 사실은 assumptions로 나간다.
+ *
+ * **`applied`가 재는 것은 「이 사용자에게 한도가 물었는가」이지 「이 배분에서 뺄셈이
+ * 일어났는가」가 아니다** (`13.0.0`). 둘이 갈리는 자리를 D52 1번이 만들었다 — 한도가
+ * 물기 때문에 IRP를 잘라 내는데, 잘라 낸 **뒤의** 금액과 한도를 대면 자름이 사라져 보인다.
+ * **원인과 결과가 뒤집힌다.** 정답지가 GC-32d에서 같은 말을 이미 적었다("트림한 것 자체가
+ * 한도가 물었기 때문이다. 트림 후 값이 한도와 같아졌다고 해서 한도가 안 물었다고 적으면
+ * 원인과 결과를 뒤집는다"). `11.0.0`까지는 두 값이 우연히 같아 이 구분이 필요 없었고,
+ * D53 2번이 트림 기준을 표시 금액으로 옮기면서 **끝수가 있는 모든 한도에서** 갈라졌다.
+ *
+ * 그래서 `bindingExact`(트림 전 배분의 자르기 전 소득세분)를 받는다. 트림이 없었으면
+ * `null`이고 그때는 이 배분의 값이 그대로 기준이다 — 두 값이 같기 때문이다.
+ * **`reduced_*`와 `threshold_income_tax_krw`는 여전히 이 배분의 표시 금액이다.**
+ * 그 셋은 화면이 나란히 놓고 더하고 빼는 수이고, 실리지 않은 배분의 수를 섞으면
+ * 화면에서 합이 맞지 않는다(불변식 I23).
  */
-function applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, rounding, access }) {
+function applyCap(
+  incomeTaxExact,
+  localTaxExact,
+  { cap, capExact, rates, rounding, access, bindingExact = null },
+) {
   // **비교는 정확값으로 한다**(룰셋 `tax.rounding.won_fraction`의 `comparison` 단계).
   // 한도 1,349,999.888과 공제액 1,350,000은 조문상 한도가 더 작아 절단이 일어나는
   // 자리인데, 한도를 먼저 1,350,000으로 만들어 비교하면 그 절단이 사라진다.
@@ -426,8 +450,8 @@ function applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, roundin
 
   // **잘렸는가는 정확값의 대소가 정한다.** 표시 금액의 차이가 아니다 — 그 둘이 갈리는
   // 좌표가 실재하고(끝수만 잘린 경우), 표시 쪽으로 판정하면 D46 1번이 고친 결함이 다른
-  // 자리에서 그대로 되살아난다.
-  const applied = cmpExact(capExact, incomeTaxExact) < 0;
+  // 자리에서 그대로 되살아난다. **대는 상대는 트림 전 금액이다**(위 머리말).
+  const applied = cmpExact(capExact, bindingExact ?? incomeTaxExact) < 0;
   // 표시되는 잘린 금액은 **표시 금액끼리의 뺄셈**이다. 화면이 세 수를 나란히 놓으므로
   // 그 셋이 서로 맞아야 한다(불변식 I23).
   const reducedIncomeTax = incomeTax - recognizedIncomeTax;
@@ -477,14 +501,21 @@ function applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, roundin
 }
 
 /** 세액공제액. 대상액을 계좌별 공제율로 나눠 적용한다. */
-function benefitOf(counted, ctx) {
+function benefitOf(counted, ctx, bindingExact = null) {
   const { rates, cap, capExact, rounding, access } = ctx;
   // **산식은 한 벌뿐이다.** 배분 단계의 「이 IRP 납입이 공제를 더 낳는가」 판정도
   // 같은 함수를 부른다(D52 1번). 두 벌이 되면 배분과 공제액이 갈릴 수 있다.
   const { incomeTaxExact, eligibleTotal } = creditIncomeTaxExact(counted, ctx);
   const localTaxExact = scaleExact(incomeTaxExact, toRatio(rates.surtaxRate));
 
-  const capped = applyCap(incomeTaxExact, localTaxExact, { cap, capExact, rates, rounding, access });
+  const capped = applyCap(incomeTaxExact, localTaxExact, {
+    cap,
+    capExact,
+    rates,
+    rounding,
+    access,
+    bindingExact,
+  });
 
   return {
     pension_credit_income_tax_krw: capped.recognizedIncomeTax,
@@ -672,7 +703,7 @@ function unallocatedBreakdownOf(result, unallocated, ctx) {
     // **왜 미배분인가**(D52 2번). 「한도가 남지 않아서」와 「그 시점에는 어느 계좌도
     // 이롭지 않아서」는 화면에서 다른 문장이 되고, 이름 하나로 두 뜻을 나르면
     // 화면이 그 둘을 구별할 수 없다. 미배분이 0원이면 설명할 것이 없으므로 `null`이다.
-    reason_code: unallocated === 0 ? null : reasonFor(horizonSuppression),
+    reason_code: unallocated === 0 ? null : reasonFor(ctx),
     basis_rule_ids: [
       ...new Set([
         RULE.PENSION_CONTRIBUTION_LIMIT,
@@ -686,8 +717,19 @@ function unallocatedBreakdownOf(result, unallocated, ctx) {
   };
 }
 
-function reasonFor(horizonSuppression) {
-  return horizonSuppression.applies
+/**
+ * 미배분의 이유 코드.
+ *
+ * **「어느 계좌도 이롭지 않다」는 말이 참이려면 정말로 하나도 없어야 한다** (D53 1번).
+ * 의무가입기간이 지난 ISA가 살아남아 실제로 돈을 받는 사용자에게 그 코드를 내면
+ * 화면은 **방금 돈을 넣은 계좌를 가리키며 「이로운 계좌가 없습니다」**라고 말한다.
+ * 그 사용자의 남은 돈은 ISA 납입 잔여 한도에서 멈춘 것이므로 이유는 한도다.
+ */
+function reasonFor({ horizonSuppression, eligible }) {
+  const openAndBeneficial = ACCOUNT_ORDER.some(
+    (account) => eligible[account] && !horizonSuppression.accounts[account],
+  );
+  return horizonSuppression.applies && !openAndBeneficial
     ? horizonSuppression.reason_code
     : UNALLOCATED_REASON.CONTRIBUTION_ROOM_EXHAUSTED;
 }
@@ -789,6 +831,33 @@ function monthlySplitOf(result, { unallocatedAnnual, months, capacity, ctx }) {
   };
 }
 
+/**
+ * 이 안이 **목적 없이 IRP만 더 묶는가** — 그렇다면 선택지로 내지 않는다 (D53 3번).
+ *
+ * D52 후속은 「목적이 있는 안은 남긴다」고 정했고 관리자가 그 읽기를 **직접 깼다**.
+ * `annuity_savings_first`와 `max_tax_credit`의 **절세액이 둘 다 0**인데 앞엣것이 IRP를
+ * 더 묶는 좌표가 실재한다. **절세액이 0이면 그 안의 목적이 절세일 수 없다.**
+ *
+ * 그래서 「목적」을 이름이 아니라 **값**으로 잰다. 표시되는 세액공제액이 같고, 다른 두
+ * 계좌가 한 원도 더 받지 못하며, 오직 IRP만 더 묶여 있으면 — 그 안이 사용자에게 주는
+ * 것이 **중도인출 제한뿐**이다(`pension.withdrawal.midterm_restriction`). 고를 이유가
+ * 없는 것이 아니라 **고르면 엄격하게 손해다.**
+ *
+ * **연금저축이나 ISA가 한 원이라도 더 들어가면 지배가 아니다.** 그때는 IRP 몫이 다른
+ * 무엇과 맞바꿔진 것이고, 그 맞바꿈의 값어치는 이 엔진이 판정하지 않는다(과세이연·
+ * 인출 자유는 조문이 유불리를 정하지 않는 축이다). **비교는 표시 금액으로 한다** —
+ * 정확값으로 재면 어느 화면에도 안 나타나는 0.1원이 「다르다」가 되어 D53 2번이 방금
+ * 닫은 구멍이 이 자리에서 다시 열린다.
+ */
+function dominatedByIrpLock(result, benefit, other) {
+  if (benefit.pension_credit_total_krw !== other.credit) return false;
+  if (result.amounts[ACCOUNT.PENSION] <= other.amounts[ACCOUNT.PENSION]) return false;
+  return (
+    result.amounts[ACCOUNT.ANNUITY] <= other.amounts[ACCOUNT.ANNUITY] &&
+    result.amounts[ACCOUNT.ISA] <= other.amounts[ACCOUNT.ISA]
+  );
+}
+
 export function buildPlans(ctx) {
   const { options, horizon, months, budget, capacity, access, cap } = ctx;
   const requested = options.plan_variants ?? PLAN_ORDER;
@@ -798,7 +867,13 @@ export function buildPlans(ctx) {
   for (const planId of PLAN_ORDER) {
     if (!requested.includes(planId)) continue;
     const result = allocate(planId, ctx);
-    computed.set(planId, { result, benefit: benefitOf(result, ctx) });
+    // **한도가 이 사용자에게 물었는가의 기준점**(`applyCap` 머리말). 트림이 실제로
+    // 금액을 깎았을 때만 만든다 — 안 깎였으면 두 배분이 같아 기준점도 같다.
+    // 이 배분은 **응답에 실리지 않는다.**
+    const bindingExact = result.irpTrimmed
+      ? creditIncomeTaxExact(allocate(planId, ctx, false), ctx).incomeTaxExact
+      : null;
+    computed.set(planId, { result, benefit: benefitOf(result, ctx, bindingExact) });
   }
 
   // ── 여기서부터 자금 사용 시점이 쓰인다. 금액은 이미 확정됐다. ──────
@@ -810,11 +885,15 @@ export function buildPlans(ctx) {
 
   const plans = [];
   const seenVectors = new Set();
+  /** 이미 남기기로 한 안의 (표시 세액공제액, 세 계좌 금액). 지배 판정의 상대다. */
+  const kept = [];
   for (const planId of orderedIds) {
     const { result, benefit } = computed.get(planId);
     const vector = ACCOUNT_ORDER.map((a) => result.amounts[a]).join('|');
     if (seenVectors.has(vector)) continue;
+    if (kept.some((other) => dominatedByIrpLock(result, benefit, other))) continue;
     seenVectors.add(vector);
+    kept.push({ amounts: result.amounts, credit: benefit.pension_credit_total_krw });
 
     access.markUsed(RULE.CREDIT_RATE, 'plans[].deterministic_benefit');
     for (const ruleId of PRIORITY_BASIS[planId].basis_rule_ids) {
