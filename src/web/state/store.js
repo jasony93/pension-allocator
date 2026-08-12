@@ -16,7 +16,13 @@
  * `analytics.js`의 화이트리스트가 지킨다.
  */
 
-import { validateForm, parseManwonToWon, parsePercentToRate, ISA_INCOME_CHARACTERS } from './validation.js';
+import {
+  validateForm,
+  parseManwonToWon,
+  parsePercentToRate,
+  ISA_INCOME_CHARACTERS,
+  isaYearsSinceOpeningVisible,
+} from './validation.js';
 import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 const DEBOUNCE_MS = 400;
@@ -52,6 +58,10 @@ export function initialForm() {
     isaAccountType: 'general',
     isaCumulative: '',
     isaYtd: '',
+    // [게이트 6 D46] 누적 납입액이 채워졌을 때만 화면에 나타나는 선택 입력.
+    // 계약 `accounts.isa.years_since_opening`. 비어 있으면 store가 null을
+    // 보내고 엔진은 가장 보수적인 0으로 본다 — 지어내지 않는다.
+    isaYearsSinceOpening: '',
     // 금융소득종합과세 대상 여부 — 3택('yes'/'no'/'unknown'), 기본 선택 없음.
     isaFinancialIncomeTaxpayer: null,
     isaTransferEnabled: false,
@@ -147,6 +157,19 @@ export function buildIsaReturnAssumption(form) {
   };
 }
 
+/**
+ * [게이트 6 D46] 계약 `accounts.isa.years_since_opening` / 경계값 진입점의
+ * `isa_years_since_opening`이 함께 쓰는 값 — 두 호출부가 같은 사실을
+ * 어긋나지 않게 읽도록 한곳에 둔다. 칸이 보이지 않거나(`isaYearsSinceOpeningVisible`
+ * 이 false) 비어 있거나 정수 형식이 아니면 `null` — 계약이 그 경우 가장
+ * 보수적인 0으로 계산한다. **추정하지 않는다.**
+ */
+function isaYearsSinceOpeningValue(form) {
+  if (!isaYearsSinceOpeningVisible(form)) return null;
+  const raw = (form.isaYearsSinceOpening ?? '').trim();
+  return /^\d+$/.test(raw) ? Number(raw) : null;
+}
+
 function financialIncomeTaxpayer(form) {
   if (!form.isaExists) return null;
   if (form.isaFinancialIncomeTaxpayer === 'yes') return true;
@@ -210,7 +233,11 @@ export function buildEngineRequest(form, scenarios) {
         account_type: form.isaAccountType,
         cumulative_contribution_krw: form.isaExists ? manwonToWonOrZero(form.isaCumulative) : 0,
         ytd_contribution_krw: form.isaExists ? manwonToWonOrZero(form.isaYtd) : 0,
-        years_since_opening: null, // 1차 출시에서 묻지 않는 선택 입력
+        // [게이트 6 D46] 1차 출시에서 묻지 않던 선택 입력. 계속 묻지 않으면
+        // null이 가장 보수적인 0으로 계산되어 이미 ISA에 넣은 사용자의 연간
+        // 한도가 통째로 0이 되고 ISA 배분이 사라진다(D46 판정). 이제
+        // 누적 납입액이 있을 때만 묻고 그 값을 그대로 싣는다.
+        years_since_opening: isaYearsSinceOpeningValue(form),
         other_savings_contract_krw: null, // 위와 동일
       },
     },
@@ -321,7 +348,10 @@ export function createStore({ engineClient, analytics, onChange }) {
         tax_year: TAX_YEAR,
         birth_date: form.birthDate,
         isa_exists: form.isaExists,
-        isa_years_since_opening: null,
+        // [게이트 6 D46] 이제 화면이 채운 값을 그대로 싣는다 — 남은
+        // 의무가입기간 캡션(3.4절)이 같은 값을 계약 3.2절과 어긋나게
+        // 읽지 않도록 `buildEngineRequest`와 같은 함수로 얻는다.
+        isa_years_since_opening: isaYearsSinceOpeningValue(form),
         scenario: 'current',
       });
       if (res.ok) {
@@ -383,7 +413,10 @@ export function createStore({ engineClient, analytics, onChange }) {
     validation = validateForm(form);
     notify();
     scheduleCompute({ immediate });
-    if (name === 'birthDate' || name === 'isaExists') maybeFetchBoundaries();
+    // [게이트 6 D46] `isaCumulative`(경과연수 칸의 노출 조건)·
+    // `isaYearsSinceOpening`도 남은 의무가입기간 캡션(3.4절)의 입력이므로
+    // 함께 트리거한다 — 아니면 캡션이 방금 채운 값을 반영하지 못한 채 남는다.
+    if (['birthDate', 'isaExists', 'isaCumulative', 'isaYearsSinceOpening'].includes(name)) maybeFetchBoundaries();
   }
 
   function reset() {

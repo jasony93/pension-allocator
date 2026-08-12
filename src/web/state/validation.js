@@ -129,6 +129,23 @@ function isBlank(v) {
 }
 
 /**
+ * [게이트 6 D46] ISA 가입 후 경과연수 칸의 노출 조건.
+ *
+ * **이 파일 머리말(구 R2/D14 — 명시적 진술이 추론보다 낫다) 원칙의 예외다.**
+ * 여기서는 다른 필드(`isaCumulative`)에서 추론한다. 근거: 누적 납입액이
+ * 0이면 `isa.contribution.annual_limit`의 이월 산식이 배분을 전혀 바꾸지
+ * 않으므로(이월분을 더해도 뺄 것이 없다) 묻는 것 자체가 불필요한 질문이다.
+ * D46이 이 조건으로 명시했다 — "누적 납입액이 0이면 경과연수가 배분을
+ * 바꾸지 않으므로 그 칸이 채워졌을 때만 나타난다".
+ */
+export function isaYearsSinceOpeningVisible(form) {
+  if (!form.isaExists) return false;
+  if (isBlank(form.isaCumulative)) return false;
+  const won = parseManwonToWon(form.isaCumulative);
+  return !Number.isNaN(won) && won > 0;
+}
+
+/**
  * 생년월일 — `screens.md` 3.7.4절의 네 상태와 오류 문구.
  *
  * **오류 문구에 사용자가 입력한 값을 되풀이하지 않는다**(D21이 유지한 여섯 못 중
@@ -229,6 +246,15 @@ export function validateForm(form, { today } = {}) {
       parseManwonToWon(form.isaYtd || '0') > parseManwonToWon(form.isaCumulative || '0')
     ) {
       errors.isaYtd = { code: 'exceeds_cumulative', message: 'ISA 당해연도 납입액은 누적 납입액을 넘을 수 없습니다.' };
+    }
+
+    // D46 2번 — 누적 납입액이 있을 때만 나타나는 칸. 선택 입력이라 비워 두면
+    // 계약이 가장 보수적인 0으로 본다(engine-interface.md 3.2절) — 형식만 본다.
+    if (isaYearsSinceOpeningVisible(form) && !isBlank(form.isaYearsSinceOpening)) {
+      const raw = form.isaYearsSinceOpening.trim();
+      if (!/^\d+$/.test(raw)) {
+        errors.isaYearsSinceOpening = { code: 'not_integer', message: '0 이상의 정수(년)로 넣어 주세요.' };
+      }
     }
 
     if (form.isaTransferEnabled) {

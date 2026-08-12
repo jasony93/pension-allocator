@@ -4,6 +4,12 @@
  * 쓴다(게이트 2 D14) — 예: ISA 관련 항목은 `ISA 계좌가 있나요 = 예`가 조건이지
  * 누적 납입액이 0보다 크다는 사실이 조건이 아니다.
  *
+ * **[게이트 6 D46] 딱 한 자리에서 이 원칙을 뒤집는다 — ISA 가입 후 경과연수.**
+ * 여기서는 누적 납입액이 0보다 크다는 사실을 조건으로 쓴다
+ * (`isaYearsSinceOpeningVisible`, state/validation.js의 주석 참고). 누적
+ * 납입액이 0이면 그 값이 배분에 아무 영향을 주지 않아 묻는 것 자체가 불필요한
+ * 질문이 되기 때문이다 — D46이 관리자 판정으로 명시했다.
+ *
  * **아무 입력도 접지 않는다**(R3, 3.11.3절). 접힌 블록은 사용자가 그 항목의
  * 존재를 모르게 만들고, 그러면 `[4-E]`가 "당신이 답하지 않아서"로 읽히지 못한다.
  * 조건부 노출(`ConditionalGroup`)을 대신 쓴다 — 접기와 조건부는 **여닫는 주체가
@@ -59,11 +65,13 @@ import {
   ISA_INCOME_CHARACTER_LABEL,
   ISA_INCOME_CHARACTER_EXAMPLE,
   isaAccountTypeLabel,
+  ISA_YEARS_SINCE_OPENING_LABEL,
+  ISA_YEARS_SINCE_OPENING_HELP,
 } from '../copy.js';
 import { openConfirm } from './modal.js';
 import { formatYears, formatKrw } from '../format.js';
 import { isWithinYouthAgeRange } from '../engine/provisional-rules.js';
-import { parseManwonToWon, ISA_INCOME_CHARACTERS } from '../state/validation.js';
+import { parseManwonToWon, ISA_INCOME_CHARACTERS, isaYearsSinceOpeningVisible } from '../state/validation.js';
 
 /**
  * `showMissing`는 **조건부 필수 항목에만** 켠다.
@@ -612,6 +620,25 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
     onBlur: () => store.flush(),
     renderGuard,
   });
+  // [게이트 6 D46] 누적 납입액이 채워졌을 때만 나타난다 — 0이면 이 값이
+  // 연간 한도의 이월분 계산에 아무 영향을 주지 않는다. 이 파일 머리말의
+  // 일반 원칙(명시적 진술만 조건으로 쓴다, D14)의 예외를 여기서만 둔다
+  // (`isaYearsSinceOpeningVisible`의 주석 참고).
+  const isaYearsSinceOpeningField = yearsField({
+    id: 'isaYearsSinceOpening',
+    label: ISA_YEARS_SINCE_OPENING_LABEL,
+    value: form.isaYearsSinceOpening,
+    error: fieldError(errors, 'isaYearsSinceOpening'),
+    help: ISA_YEARS_SINCE_OPENING_HELP,
+    onInput: (v) => store.setField('isaYearsSinceOpening', v),
+    onBlur: () => store.flush(),
+    renderGuard,
+  });
+  const isaYearsSinceOpeningGroup = conditionalGroup(
+    isaYearsSinceOpeningVisible(form),
+    [isaYearsSinceOpeningField],
+    'isaYearsSinceOpeningGroup',
+  );
   // **ISA 보유 여부 토글 밖으로 뗐다(2026-08-10).** 엔진은 ISA 미보유
   // 사용자에게도 신규 가입을 전제로 배분하고(`isa_new_account_assumed`),
   // 계약 3.2절에서 `account_type`은 `exists`와 독립된 선택 필드다 — 일반형/
@@ -648,7 +675,11 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   });
 
   // `isaTypeToggle`은 더 이상 이 조건부 블록 안에 없다 — 위 주석 참고.
-  const isaBlock = conditionalGroup(form.isaExists, [isaCumulativeField, isaYtdField, financialIncomeToggle], 'isaBlock');
+  const isaBlock = conditionalGroup(
+    form.isaExists,
+    [isaCumulativeField, isaYearsSinceOpeningGroup, isaYtdField, financialIncomeToggle],
+    'isaBlock',
+  );
 
   const groupThree = el('section', { class: 'input-group' }, [
     el('h3', { class: 'input-group-title' }, ['③ 계좌 현황']),
