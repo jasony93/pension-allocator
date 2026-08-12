@@ -9,7 +9,10 @@ inputs:
   - docs/org/gate-decisions.md
   - docs/org/charter.md
 open_questions:
-  - "**[23차·계약이 적은 「12% 구간 트림 폭 1~8원」에 사는 사람이 없다 — 문언 정정 여부는 계약의 몫이다]** D53이 트림 기준을 표시 금액으로 옮기면서 「한도에 소수부가 있으면서 무는 모든 좌표에서 15% 구간 1~6원, **12% 구간 1~8원**의 무의미한 IRP가 남는다」고 적었다. **23차에 12% 구간을 훑었더니 그 전제를 만족하는 좌표가 하나도 없다** — 12% 구간(총급여 55,000,000 **초과**)에서 세액 한도의 **최솟값이 4,230,000**(총급여 55,000,001)이고 한도는 총급여에 대해 단조증가하는데, 그 구간에서 나올 수 있는 **최대 공제액은 1,440,000**(합산 공제한도 9,000,000 + ISA 전환 추가한도 3,000,000의 12%)이다. **한도가 최대 공제액의 세 배라 물 수가 없고, 물지 않으면 트림도 없다.** 서술이 틀린 것이 아니라 **그 구간에 서 있는 사용자가 없다.** 좌표를 GC-32e로 값에 담아 그 하한(4,230,000)이 내려가면 블록이 먼저 빨간색이 되게 했다. **계약 문언을 고칠지는 `calc-engine-dev`·관리자의 몫이고 이 유닛의 산출물 밖이다.** 23.3절."
+  - "**[24차·이 유닛이 고칠 수 없는 실패 둘을 넘긴다]** 1-A절의 어휘 선언을 코드에 맞추자 `src/engine/golden-vocabulary-doc.test.mjs`의 **양방향 검사 둘이 실패한다** — 「문서가 이미 알리는데 빚 목록에 남아 있는 것 **12건**」(이 회차가 넣은 그 열둘)과 「문서에서 이미 사라졌는데 빚 목록에 남아 있는 것 **1건**」(`tax_liability_cap.known`)이다. **결함이 아니라 갚힌 빚을 지우라는 신호이고**, D56이 「갚힌 빚이 진단으로 나가 아무도 멈추지 않았다」고 적은 반성 때문에 실패로 나간다. **그 파일은 `src/` 아래라 이 유닛이 열지 않는다** — `DOC_DRIFT_DEBT`에서 열세 줄을 지우는 것이 `calc-engine-dev`의 몫이다. 엔진 **648 / 650**, `validate.mjs` **exit 0**. 24.6절."
+  - "**[24차·블록의 중복 키를 형식 검사가 잡지 못한다]** GC-40의 `expect.current`에 `legal_basis`가 **두 번** 있었고 `JSON.parse`가 앞의 것을 버려 `isa.account.requirements`의 주장이 **한 번도 검사되지 않았다.** 합쳐서 실제로 돌게 했고 74개 블록을 훑어 다른 자리가 없음을 확인했으나, **형식 검사는 원리상 이것을 잡을 수 없다 — 파서가 이미 버린 뒤에 키를 세기 때문이다.** 블록을 읽을 때 중복 키를 **실패로** 잡는 검사가 필요하고 그 자리는 `src/engine/`이라 `calc-engine-dev`의 몫이다. 17.5절."
+  - "**[24차·어휘 둘이 남았고 이유가 다르다]** `credit_rate.effective`는 **일부러 비운다**(두 비율의 부동소수점 곱이라 정답지가 자릿수를 단정할 근거가 없다). `assumption_based_isa_estimate.not_computable_reason_code`는 **지금의 룰셋에서 도달할 좌표가 없다** — 두 사유 중 `isa_tax_free_limit_unknown`은 **확정된 룰셋 값을 미확인으로 되돌려야** 성립하고 `amount_not_representable`은 세법 좌표가 아니다. **「검사는 옳은데 재는 자리가 없다」와 「재는 자리가 조문상 없다」는 다르고, 뒤엣것은 채우는 것이 아니라 적어 두는 것이 답이다.** 1-A절 표."
+  - "~~**[23차·계약이 적은 「12% 구간 트림 폭 1~8원」에 사는 사람이 없다 — 문언 정정 여부는 계약의 몫이다]** D53이 트림 기준을 표시 금액으로 옮기면서 「한도에 소수부가 있으면서 무는 모든 좌표에서 15% 구간 1~6원, **12% 구간 1~8원**의 무의미한 IRP가 남는다」고 적었다. **23차에 12% 구간을 훑었더니 그 전제를 만족하는 좌표가 하나도 없다** — 12% 구간(총급여 55,000,000 **초과**)에서 세액 한도의 **최솟값이 4,230,000**(총급여 55,000,001)이고 한도는 총급여에 대해 단조증가하는데, 그 구간에서 나올 수 있는 **최대 공제액은 1,440,000**(합산 공제한도 9,000,000 + ISA 전환 추가한도 3,000,000의 12%)이다. **한도가 최대 공제액의 세 배라 물 수가 없고, 물지 않으면 트림도 없다.** 서술이 틀린 것이 아니라 **그 구간에 서 있는 사용자가 없다.** 좌표를 GC-32e로 값에 담아 그 하한(4,230,000)이 내려가면 블록이 먼저 빨간색이 되게 했다. **계약 문언을 고칠지는 `calc-engine-dev`·관리자의 몫이고 이 유닛의 산출물 밖이다.** 23.3절.~~ **[D56에 해소]** `calc-engine-dev`가 계약 `14.0.1`(patch)로 문언을 고쳤다 — **지우지 않고 「전제를 만족하는 좌표가 없다」로 적었고, 지우지 않은 것이 옳다.** 지우면 다음 회차가 그 좌표를 다시 찾으러 나선다. **거짓이 아니라 공허하다**는 구분이 문서 안에 남았고, 한도 최솟값 4,230,000과 최대 공제액 1,440,000이 그 근거로 함께 적혔다."
   - "~~**[22차·`contribution_carryover_available`을 무엇으로 재는가 — 관리자 판정은 옳고, 재는 자가 아직 안 정해졌다]** D53 후속의 「실제 잘림에 매단다」는 **조문상 옳다.** 시행령 §118의3 제1항이 전환 신청의 대상을 「연금계좌세액공제를 받지 아니한 **금액**」으로 정하고, 그 구조가 **의제인출 + 의제재납입**이라 **그 금액이 계좌에 남아 있어야** 한다(룰셋 `pension.credit.unused.contribution_carryover`의 `mechanism.requires_amount_still_in_account`). **밀려난 납입액이 0인 사람에게는 인출을 의제할 대상 자체가 없으므로 이월할 것이 없다.** **다만 「0인가」를 정확값으로 재면 D53 2번이 닫은 구멍이 여기서 다시 열린다** — GC-32d에서 트림 후 정확값 1,349,741.1이 한도 1,349,741을 **0.1원** 넘고, 그 0.1원에 대응하는 납입액이 **0.67원**이라 정확값 기준으로는 `true`가 된다. **원 단위 아래의 금액은 계좌에서 인출을 의제할 수 없다**(계좌 잔액의 단위가 원이다). 그러므로 **표시 금액 기준(`reduced_income_tax_krw > 0`)으로 재야** 하고, 그 단계를 정하는 조문은 없다(룰셋 `tax.rounding.won_fraction`이 `determined_by_law: false`). **계약이 그 자를 명시할 자리이고 `calc-engine-dev`·관리자의 몫이다.** 22.4절.~~ **[D54에 해소 · 23차에 값이 들어왔다]** 계약 `14.0.0`이 그 칸을 `applied`에서 떼어 **표시 잘림(`reduced_income_tax_krw > 0`)**에 매달았고, **22차가 산출해 둔 값을 조문에서 다시 뽑아 정답지에 넣었다** — **GC-32d `false` · GC-34 `true`.** 그리고 **22차가 놓친 좌표를 하나 더 찾았다: GC-32a도 `applied: true`인데 `false`다**(트림 후 정확값 1,349,999.1이 한도 1,349,999.888보다 오히려 작아 밀려난 금액이 정확값으로도 0이다). 짝을 채우려고 **GC-31에 `true`**(밀려난 납입액이 6,000,000 전액)와 **GC-32e에 `false`**(`applied`도 거짓)를 함께 못 박았다. **네 짝 중 실재하는 셋이 전부 값으로 있고, `applied: false`이면서 `true`인 넷째 짝은 실행기의 형식 검사가 대조 전에 거절한다**(주입으로 확인했다). 23.2절."
   - "~~**[21차·GC-21·29·30을 어긋난 채로 남긴다]** D52로 낡은 9건을 다시 산출해 **622 / 625**가 됐고, **셋은 엔진(정확히는 계약) 쪽이 틀렸다고 판정해 정답지를 고치지 않았다.** D52 후속이 **「ISA 의무가입기간이 이미 지난 사용자에게는 ISA 배분을 유지한다」**고 정했는데 `engine-interface.md`가 0.B·3.1·5.13절에서 `within_isa_lock_in`을 **조건 없이** 「전액 미배분」으로 적고 예외를 어디에도 적지 않았다. 근거는 조특법 §91조의18⑦의 「3년이 되는 날 전에 해지하는 경우」 요건이 그 사용자에게 **성립할 수 없다**는 것이고, **같은 조문으로 같은 판정을 계약 8.5절이 이미 한 번 했다**(`all_accounts_have_early_exit_penalty`를 끄는 조건). 대조와 도출 과정은 `verification-report.md` 21.2절.~~ **[D53 1번에 해소]** 관리자가 **계약과 엔진을 고친다**고 판정했고(「엔진은 계약을 정확히 구현했다. 틀린 것은 계약이고, 계약을 안 고친 것은 나다」) 계약 `13.0.0`이 그 예외를 적었다. **정답지를 한 글자도 고치지 않고 셋 다 초록색이 됐다** — 빨간 채로 넘긴 판단이 옳았다."
   - "~~**[21차·경계 위의 1원 — 세법은 최소 단위를 정하지 않지만 그 1원은 아무것도 낳지 않는다]** 룰셋에 `contribution.minimum_unit`(`minimum_unit_krw: null` · `determined_by_law: false`)을 넣어 「세법이 정하지 않는다」를 값으로 못 박았다. **그러나 D52가 「그 1원이 실제로 공제를 낳는다」고 적은 것은 참이 아니다** — 총급여 30,686,276원의 한도 900,000.1에서 IRP 0이든 1원이든 **표시 세액공제가 900,000으로 같다.** 트림 기준을 「표시 공제」로 바꾸면 이 잔여(15% 구간 1~6원)가 사라지지만 **지금 통과 중인 GC-32a의 IRP가 6원 움직인다.** 관리자 판정 사안이고 `verification-report.md` 21.3절에 좌표 표를 두었다.~~ **[D53 2번에 해소 · 22차에 값으로 옮겼다]** 관리자가 **트림 기준을 표시 세액공제액으로 옮긴다**고 판정했고 계약 `13.0.0`이 그렇게 고쳐졌다. **GC-32a가 IRP 2,999,994 / ISA 6으로 움직였고 딸린 다섯 칸(`tax_credit_before_cap` · `threshold_income_tax_krw` · `credit_eligible_krw` · `monthly_rounding_residual_krw` · `fill_order`)도 함께 움직였다.** 22차에 표시 산식으로 다시 산출해 경계를 **양쪽에서** 확인했다(8,999,993 → 1,484,997 / 8,999,994 → 1,484,998). **관리자가 검산한 진짜 경계도 재현했다** — 30,686,282원은 한도 900,000.85로 표시 900,000, **30,686,283원부터 900,001**이다. `verification-report.md` 22.2·22.3절."
@@ -36,7 +39,7 @@ open_questions:
   - "~~**[7차·실행할 수 없는 정답 9건]** D28로 확정한 ISA 혜택 산식의 정답 9건(10절)에 **`golden` 블록을 달지 못했다.** 엔진이 `profile.isa_return_assumption`을 받지 않고 `Plan.assumption_based_isa_estimate`를 내지 않아 대조할 필드가 없다. 계약이 그 둘을 들이는 회차에 `GC-` 번호로 옮기고 블록을 단다. **그때 기대값을 다시 산출하지 않는다 — 여기 적힌 값이 먼저다.**~~ **[13차에 해소]** 계약 `5.1.0`이 두 필드를 들였고 아홉 건이 `GC-52`~`GC-60`이 됐다(12절). **기대값을 다시 산출하지 않았다** — 10.2절의 값을 그대로 옮겼고, 형태가 달라진 둘(RF-6·RF-7)은 각각 12.2·12.3절에 근거를 적었다."
   - "~~**[7차·실행기 어휘]** 블록이 **구간**을 대조할 수 있어야 한다. `income_character`가 `mixed_or_unknown`·`listed_equity_capital_gain`이면 정답이 점이 아니라 구간이므로(RF-8), 허용 키에 `lower_bound_krw`·`upper_bound_krw`·`point_estimate_krw`(null 허용)·`settlement_years`·`is_annual`이 필요하다. **점만 적을 수 있는 어휘로는 이 회차의 결론이 검사받지 못한다** — 1-A.1절이 기록한 것과 같은 형태의 공백이다.~~ **[13차에 해소]** 허용 키에 `lower_bound_krw`·`upper_bound_krw`·`point_estimate_krw`·`settlement_years`·`is_annual`이 전부 열렸고, GC-57·GC-59가 구간으로 대조된다."
   - "**[7차·단수 처리 미확인]** 세액 계산의 원 미만·10원 미만 절사 규칙을 확인하지 못해 **절사가 걸리는 경계 케이스를 일부러 만들지 않았다**(10.3절). 비과세 한도를 1원 넘기는 케이스가 그 자리다 — 규칙을 확인한 뒤에 만든다. 없는 근거로 경계값을 만들지 않았다."
-  - "**[6차·실행기]** **이번 회차에 움직인 축 넷을 블록에 적을 수 없었다**(1-A.1절). 실행기의 허용 키에 자르기 전 금액(`*_before_cap_krw`)·임계값(`threshold_income_tax_krw`)·`objective_degenerate`·`pension_withdrawal_start`의 날짜 항목이 없다. 산출은 끝나 있고 적을 자리가 없었을 뿐이므로, `calc-engine-dev`가 키를 늘리면 같은 회차 안에 채울 수 있다. **적지 못한 축은 이번 전건 통과가 보증하지 않는다** — 그 사실을 통과 기록 옆에 함께 적었다(7.6절)."
+  - "~~**[6차·실행기]** **이번 회차에 움직인 축 넷을 블록에 적을 수 없었다**(1-A.1절). 실행기의 허용 키에 자르기 전 금액(`*_before_cap_krw`)·임계값(`threshold_income_tax_krw`)·`objective_degenerate`·`pension_withdrawal_start`의 날짜 항목이 없다.~~ **[24차에 전부 해소]** 넷의 어휘가 그 뒤 열렸는데 **어느 블록도 주장하지 않아 열여덟 회차 동안 비어 있었다** — 열린 것을 아무도 알려 주지 않았기 때문이다. 24차에 `objective_degenerate`를 GC-31 두 안에, `pension_withdrawal_start`를 GC-38(계산되는 쪽)과 GC-31(계산 못 하는 쪽)에 넣었고 앞의 둘은 7차에 들어갔다. **적을 자리가 없는 것과 자리가 있는 줄 모르는 것은 다르고, 뒤엣것이 더 오래 간다.**"
   - "**[6차·만 나이]** D21이 맡긴 기준일 규칙을 만들었다(`age.reckoning.reference_date`, 8절 (가)). **결론은 단일 기준일이 존재하지 않는다는 것이다** — 나이를 세는 방법(민법 §158)과 n년 뒤 날짜(민법 §160 ③)는 정해져 있으나 판정 시점은 요건마다 다르다. `pension.withdrawal.earliest_start`는 날짜로 환원되어 기준일이 필요 없고, `isa.eligibility`의 연령 요건은 **가입 시점**에 성립해야 한다. 엔진이 쓰는 과세기간 종료일은 ISA 쪽에서 **과대** 방향의 오차를 남긴다(그 해에 19세가 되는 사람). 계산 시점 입력을 넣을지, ISA 신규 가입 경로만 보류할지, 가정으로 드러낼지는 관리자 판정이다. 아울러 엔진의 가정 코드 `age_reference_date_not_in_ruleset`과 계약의 `reference_date_from_ruleset` 서술이 이제 사실과 다르다."
   - "**[6차·퇴직급여]** 퇴직급여 입금액이 연간 납입한도 1,800만원을 쓰는지에 **답을 내지 못했다**(8절 (다)). 시행령 §40의2 ② 1호 가목의 '납입한 금액'에 이연퇴직소득의 이체가 들어가는지를 1차 출처로 확인하지 못했다. 엔진의 선택(쓰는 쪽)은 오차 방향이 과소라 안전하므로 판정 전까지 유지를 권한다. **두 읽기가 갈리는 골든 케이스는 일부러 만들지 않았다** — 근거 없이 한쪽을 정답으로 적으면 다음 검증자가 그것을 세법 결론으로 오독한다."
   - "**[6차·지방세]** 개인지방소득세에 같은 세액 한도 구조가 있는지 **확인하지 못했다**(8절 (라)). 룰셋의 `tax.local.personal_income_surtax`는 원천징수 단계의 특별징수 규정이라 연말정산 후 확정되는 세액공제 구조를 말하지 않는다. 엔진의 선택(인정된 소득세분에 부가율 적용)은 절세액이 작게 나오는 방향이라 유지를 권하나, **방향에 근거한 선택이지 조문에 근거한 결론이 아니다.** `local_tax_follows_income_tax_cap` 가정이 결과 화면 고지 요소 4에 실려야 한다."
@@ -114,13 +117,19 @@ open_questions:
 
 > **[23차] 「어느 안이 남았는가」는 `plan_count` 혼자 재는 것이 아니다 — 내가 22차에 틀리게 적었다.** 22.8절에 「`isa_first`가 대신 빠지고 `annuity_savings_first`가 남아도 `plan_count`는 2이므로 그 뒤집힘을 블록이 잡지 못한다」고 적었는데, **결함 주입으로 확인하니 잡는다.** GC-34 블록의 `isa_first`를 `annuity_savings_first`로 바꿔 돌리자 실행기가 이렇게 실패했다 — `GC-34/current: 배분안 "annuity_savings_first"이 응답에 없다 (있는 것: max_tax_credit, isa_first)`. **적은 배분안이 응답에 없으면 그 이름을 대며 실패한다.** 그러므로 `plan_count: N` + **이름으로 적은 배분안 N개**가 함께 있으면 남은 집합이 하나로 정해진다 — 배분안 id가 넷뿐이므로 나머지가 빠졌다는 것이 따라 나온다. GC-31 · 32a · 32d · 34가 넷 다 `plan_count: 2`와 `max_tax_credit` · `isa_first` 둘을 적고 있으므로 **D53 3번이 뺀 안이 실제로 그 안인지가 값으로 검사되고 있다.** **검사가 없다고 적은 것이 틀렸고, 틀렸다는 것을 값으로 확인한 뒤에 지운다.**
 
-**시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · `pension_withdrawal_start` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent` · **`legal_basis`**. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
+**시나리오 단위로 더 적을 수 있는 것** — `plan_count`(배분안 수) · `baseline_plan`(기본안) · `isa_eligible` · `isa_reason_codes` · `limits` · `boundaries` · **`pension_credit_ceiling`** · `pension_withdrawal_start` · `notice_codes` / `notice_codes_absent` · `comparison_note_codes` / `comparison_note_codes_absent` · **`legal_basis`** · **`unapplied_proposed_rules`**. 코드 목록은 **포함 / 불포함** 검사이므로 전부 열거할 필요가 없다.
 
-**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `unallocated_breakdown` · `credit_remaining_after_plan_krw` · `non_quantified_codes` · **`non_quantified_effects`** · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline` · **`assumption_based_isa_estimate`**. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
+**배분안 단위로 더 적을 수 있는 것** — `warning_codes`(그 안에 붙은 경고 코드의 **전체 집합**) · `limited_by` · `fill_order` · `monthly_krw` · `unallocated_krw` · `unallocated_breakdown` · `credit_remaining_after_plan_krw` · `non_quantified_codes` · **`non_quantified_effects`** · `monthly_rounding_residual_krw` · `delta_vs_baseline_krw` · `credit_eligible_krw` · `tie_break` · `tax_credit_before_cap` · `tax_liability_cap` · `objective_degenerate` · `is_baseline` · **`assumption_based_isa_estimate`** · **`headline_composite_total`**. 계좌별 항목(`limited_by` · `fill_order` · `monthly_krw`)은 적은 계좌만 검사한다.
+
+> **[24차] 위 두 줄에 세 이름이 빠져 있었고, 빠진 것은 어휘가 아니라 그 어휘를 알리는 문장이었다.** `pension_credit_ceiling`은 GC-14·34·35·63·64가 **이미 값으로 쓰고 있었고**, `unapplied_proposed_rules`와 `headline_composite_total`은 열려 있는데 어느 블록도 쓰지 않았다. **방향이 비대칭이라 그렇게 됐다** — 문서에만 있는 키는 형식 검사가 「모르는 키」로 즉시 거절해 시끄럽고, **코드에만 있는 키는 아무 소리도 안 낸다.** D56이 `golden-vocabulary-doc.test.mjs`로 양방향 검사를 세웠고, 이 회차가 문서 쪽을 맞췄다. **여러 회차 「`tax-domain`이 아직 안 채웠다」고 적혀 온 것의 대부분이 채우지 않은 것이 아니라 있는 줄 몰랐던 것이다.**
 
 **`legal_basis`에 쓸 수 있는 키 (13차에 열렸다)** — 규칙 id를 키로 두고 그 아래에 `present` · `status` · `bill_stage` · `has_uncertainty_note` · `uncertainty_note_count` · `uncertainty_kinds` · `uncertainty_paths` · `applied_to`. **`uncertainty_paths`의 경로는 규칙의 `value`를 뿌리로 하며 `value.` 접두를 붙이지 않는다**(계약 5.7.1절). `uncertainty_kinds`는 종류의 집합이고 사전순이다. `present: false`로 **읽지 않았다는 주장**도 할 수 있다 — 다만 그것은 세법 사실이 아니라 엔진 동작에 대한 주장이므로, 이 문서는 **같은 블록이 이미 그 규칙에서 나온 숫자를 주장하고 있을 때에만** `present: true`를 적는다.
 
-**`assumption_based_isa_estimate`에 쓸 수 있는 키 (13차에 열렸다)** — `state` · `not_computable_reason_code` · `is_annual` · `settlement_years` · `settlement_years_source` · `taxable_share_min` · `taxable_share_max` · `principal_krw` · `total_return_krw` · `taxable_income_krw` · `loss_offset_applied_krw` · `net_income_krw` · `tax_free_limit_krw` · `comparison_side_tax_krw` · `isa_side_tax_krw` · `point_estimate_krw` · `lower_bound_krw` · `upper_bound_krw` · `axis_breakdown` · `comparison_baseline_code`. **점을 낼 수 없는 케이스에서는 `point_estimate_krw`가 `null`이고 두 끝만 적는다**(12.2절).
+**`assumption_based_isa_estimate`에 쓸 수 있는 키 (13차에 열렸다)** — `state` · `not_computable_reason_code` · `is_annual` · `settlement_years` · `settlement_years_source` · `taxable_share_min` · `taxable_share_max` · **`principal_basis_code`** · **`return_accrual_code`** · **`is_lower_bound_for_aggregate_taxpayer`** · **`assumes_contract_held_to_settlement`** · `principal_krw` · `total_return_krw` · `taxable_income_krw` · `loss_offset_applied_krw` · `net_income_krw` · `tax_free_limit_krw` · `comparison_side_tax_krw` · `isa_side_tax_krw` · `point_estimate_krw` · `lower_bound_krw` · `upper_bound_krw` · `axis_breakdown` · **`axis_ceilings`** · `comparison_baseline_code`. **점을 낼 수 없는 케이스에서는 `point_estimate_krw`가 `null`이고 두 끝만 적는다**(12.2절).
+
+**굵은 다섯은 24차에 문장이 따라왔다** — 어휘는 그전부터 열려 있었다(`axis_ceilings`는 계약 `8.2.0`·D38, 나머지 넷은 5.14절). **넷은 오차 방향을 값으로 지는 상수다** — `principal_basis_code`(`cumulative_contribution_plus_plan_allocation`: 잔액이 아니라 누적 납입액이므로 **과소**) · `return_accrual_code`(`simple_interest`: 복리·단리를 세법이 정하지 않고 단리가 **과소**) · `is_lower_bound_for_aggregate_taxpayer`(`true`) · `assumes_contract_held_to_settlement`(`true`). GC-52가 넷을 다 진다.
+
+**`axis_ceilings`에 쓸 수 있는 키** — `tax_free_krw` · `tax_free_period_code` · `tax_free_settlement_years` · `tax_free_is_lower_bound` · `rate_gap_has_ceiling` · `loss_offset_has_ceiling`. **금액 칸이 비과세 축에만 있는 것이 이 객체의 요점이다** — 나머지 두 축은 「없어서 못 낸 것」이 아니라 **없다는 것이 조문의 판정**이다(조특법 §91조의18 ①이 「비과세 한도금액을 초과하는 금액」에 상한을 두지 않는다). 분모가 조문에 없는데 「최대 ○원 중 ○원」을 그리면 그 분모는 지어낸 것이다. `tax_free_krw`는 `C × 14% × 1.1`이고 **계약 한 건 전체를 재는 값이라 연간이 아니다** — 그래서 기간 코드와 정산 연수를 함께 적는다.
 
 **`non_quantified_effects`에 쓸 수 있는 키 (16차에 열렸다)** — **효과 코드 → 계좌 id**의 두 겹이고, 그 아래에 `present` · `reason_code` · `facts`를 적는다. 효과 코드는 `pension_contribution_without_credit` / `isa_tax_free_headroom` 둘이며, 계좌 id는 `retirement_pension` / `annuity_savings` / `isa`다. 같은 코드가 두 연금계좌에 각각 붙고 **계좌마다 금액이 다르므로** 두 겹으로 둔다. `present: false`로 **그 계좌에는 붙지 않는다는 주장**도 할 수 있고, 그때는 다른 항목을 적을 수 없다.
 
@@ -138,9 +147,21 @@ open_questions:
 
 **`boundaries`에 쓸 수 있는 키** — `isa_lock_in_years` · `isa_lock_in_years_remaining` · `pension_min_age_years` · `pension_years_remaining` · `pension_holding_period_evaluated`.
 
+**`pension_credit_ceiling`에 쓸 수 있는 키** — `ceiling_krw` · `income_tax_krw` · `local_tax_krw` · `credit_limit_krw` · `rate_source_code` · `tax_liability_cap_relation_code` · `fallback_applied` · `is_axis_degenerate`. **시나리오 단위다.** GC-14·34·35·63·64가 쓴다.
+
+**`headline_composite_total`에 쓸 수 있는 키 (24차에 값이 들어왔다)** — `lower_bound_krw` · `upper_bound_krw` · `point_estimate_krw` · `bound_code` · `includes_assumption_component` · `determined_component_krw` · `assumption_component_krw` · `assumption_settlement_years` · `assumption_settlement_years_source`. **배분안 단위다.** 가정 성분이 없으면 `bound_code`가 `point`이고 세 끝이 전부 확정 세액공제액과 같은 한 수이며 가정 쪽 셋은 `null`이다 — **「합계가 없다」와 「합계가 확정 성분과 같다」는 다른 사실이고, 뒤쪽이 규칙의 세 번째 갈래다**(계약 5.17절). GC-34가 두 안에서 그 갈래를 진다.
+
+**`unapplied_proposed_rules`에 쓸 수 있는 키** — 규칙 id를 키로 두고 그 아래에 `present` · `reason_code`. **`legal_basis`와 같은 모양이고 같은 규율이 걸린다** — `present: false`로 **싣지 않았다는 주장**도 할 수 있다. GC-20이 확정 시나리오에서 `false`, 개정안 시나리오에서 `true` + `requires_input_not_collected`를 적어 **양쪽을 함께 문다.**
+
 **`tax_credit_before_cap`** — `tax_credit`과 형태가 같다(`income_tax` · `local_tax` · `total`, 셋 다 적는다). 계약 `4.0.0`에서 `tax_credit`이 **세액 한도를 적용한 뒤**의 인정액이 됐으므로, 자르기 전 금액은 이 키로 따로 적는다. 둘 다 적어야 "얼마가 잘렸는가"가 블록의 주장이 된다.
 
-**`tax_liability_cap`에 쓸 수 있는 키** — `known` · `cap_krw` · `applied` · `binding_code` · `threshold_income_tax_krw` · **`contribution_carryover_available`**(23차에 값이 들어왔다). **배분안 단위다** — 같은 케이스라도 안마다 잘리는지가 다를 수 있다. `cap_krw`의 `0`은 유효한 값이고 `null`(모름)과 다르다. 아는 키만 적으면 되고, 적은 키는 전부 검사한다.
+**`tax_liability_cap`에 쓸 수 있는 키** — `cap_krw` · `applied` · `binding_code` · `threshold_income_tax_krw` · **`contribution_carryover_available`**(23차에 값이 들어왔다) · **`carryover_shares_future_year_credit_limit`** · **`carryover_requires_application`** · **`basis_rule_ids`** / **`basis_rule_ids_absent`**(뒤의 넷은 24차에 값이 들어왔다). **배분안 단위다** — 같은 케이스라도 안마다 잘리는지가 다를 수 있다. `cap_krw`의 `0`은 유효한 값이고 `null`(모름)과 다르다. 아는 키만 적으면 되고, 적은 키는 전부 검사한다.
+
+> **[24차] `known`을 목록에서 뺐다.** D39·D40이 그 칸을 폐기했다 — 총급여액이 있으면 한도가 하나로 정해지므로 「모른다」가 성립하지 않는다. **지금 적으면 형식 검사가 「모르는 키」로 거절한다.** 문서가 더 이상 존재하지 않는 칸을 계속 알리고 있었고, **없는 칸을 알리는 것은 있는 칸을 안 알리는 것과 같은 종류의 어긋남이다.**
+
+**`basis_rule_ids` / `basis_rule_ids_absent`는 `notice_codes`와 같은 포함 / 불포함 검사다.** 근거 여덟을 다 옮겨 적게 하면 **재려는 한 줄이 나머지에 묻힌다** — 이 자리에서 재려는 것은 「전환 특례 규칙을 읽었는가」 하나뿐이다.
+
+**이월 연쇄 넷은 서로 묶여 있고 형식 검사가 어긋난 짝을 대조 전에 거절한다.** `contribution_carryover_available`이 `false`이면 조건 둘은 **반드시 `null`**이고(읽지 않은 규칙의 값을 주장하지 않는다) 근거 목록에도 그 규칙이 없다. `true`이면 둘 다 **`true`**이고 근거 목록에 그 규칙이 실린다. **두 조건의 값은 엔진이 아니라 룰셋에서 나온다** — `pension.credit.unused.contribution_carryover`의 `subject_to_conversion_year_credit_limits.value: true`가 앞의 것이고, 같은 규칙의 `automatic: false`에서 `requires_application = !automatic = true`가 뒤의 것이다. **조문 근거는 시행령 §118의3 ②(준용 대상이 「법 제59조의3 제1항 각 호 외의 부분」이라 600만·900만 한도의 단서가 그대로 걸린다)와 ①(「신청할 수 있다」)이다.**
 
 > **`applied`와 `contribution_carryover_available`을 같은 값으로 적지 마라.** 계약 `14.0.0`(D54)이 둘을 갈랐다 — `applied`는 「한도가 물었는가」를 **트림 전** 금액에 대고 **정확값**으로 재고, 뒤엣것은 「밀려난 납입액이 있는가」를 반환된 배분의 **표시 금액**(`reduced_income_tax_krw > 0`)으로 잰다. **`applied: true`이면서 뒤엣것이 `false`인 좌표가 이 문서에 둘 있다**(GC-32a · GC-32d). 반대 짝(`applied: false`이면서 `true`)은 조문상 존재할 수 없다 — 금액이 줄었으면 반드시 한도가 문 것이다. 네 짝 중 실재하는 셋을 GC-31·34(둘 다 참) · GC-32a·32d(갈린다) · **GC-32e**(둘 다 거짓)가 나눠 진다.
 
@@ -151,9 +172,20 @@ open_questions:
 **두 가지가 더 실패 사유다(6차 이후 추가).**
 
 1. **빈 객체는 거절한다.** `tax_liability_cap: {}`처럼 적으면 키는 있는데 주장이 없어 "적었으니 검사됐다"로 보이면서 실제로는 아무것도 보지 않는다. 적을 것이 없으면 키째로 뺀다. `limits` · `boundaries` · `credit_rate` · `pension_withdrawal_start`에도 같이 걸린다.
-2. **값끼리 어긋나면 대조 전에 거절한다.** `known: false`인데 `applied: true`이거나 `cap_krw`가 `null`이 아닌 경우, `computable: false`인데 `earliest_start_date`가 있는 경우다. 둘을 옮겨 적다 한쪽만 고친 자리를 잡는다. **13차에 이 검사가 새 어휘까지 무는 것을 결함 주입으로 확인했다** — `axis_breakdown` 세 축의 합이 `upper_bound_krw`와 어긋나거나, `fallback_applied: false`인데 `fallback_direction`이 남아 있거나, `uncertainty_note_count`가 `uncertainty_paths`의 길이와 다르면 **대조 전에 거절된다.** 옮겨 적다 한쪽만 고치는 사고가 이 축들에서도 막힌다.
+2. **값끼리 어긋나면 대조 전에 거절한다.** `contribution_carryover_available: false`인데 조건 둘 중 하나에 값이 남아 있는 경우, `computable: false`인데 `earliest_start_date`가 있는 경우다. 둘을 옮겨 적다 한쪽만 고친 자리를 잡는다. **13차에 이 검사가 새 어휘까지 무는 것을 결함 주입으로 확인했다** — `axis_breakdown` 세 축의 합이 `upper_bound_krw`와 어긋나거나, `fallback_applied: false`인데 `fallback_direction`이 남아 있거나, `uncertainty_note_count`가 `uncertainty_paths`의 길이와 다르면 **대조 전에 거절된다.** 옮겨 적다 한쪽만 고치는 사고가 이 축들에서도 막힌다.
 
-**허용 키가 있는데 어느 블록도 쓰지 않으면 실행기가 그 목록을 대며 실패한다**(`golden-cases.test.mjs` 검사 4). **13차에 빚 13건을 갚았다** — `credit_rate`의 다섯(`basis`·`fallback_applied`·`fallback_direction`·`local_tax`·`measured_amount`)과 `legal_basis` 계열 여덟이다. 남아 있는 것은 `credit_rate.effective`(위의 이유로 일부러 비워 둔다)와 `boundaries.isa_lock_in_years` · `boundaries.pension_min_age_years`다.
+**허용 키가 있는데 어느 블록도 쓰지 않으면 실행기가 그 목록을 대며 실패한다**(`golden-cases.test.mjs` 검사 4). **13차에 빚 13건을 갚았다** — `credit_rate`의 다섯(`basis`·`fallback_applied`·`fallback_direction`·`local_tax`·`measured_amount`)과 `legal_basis` 계열 여덟이다.
+
+**[24차] 남아 있던 것을 훑어 마흔한 건을 갚았다.** 실행기가 그 마흔하나를 이름으로 인쇄한다(`갚힌 어휘 빚` 진단). 갚은 자리는 이렇다 — `tax_liability_cap`의 이월 연쇄 넷(GC-31·32a·32d·34) · `pension_withdrawal_start`의 일곱 + `reason_code`(GC-38이 계산되는 쪽, GC-31이 **계산할 수 없는 쪽**) · `headline_composite_total`의 아홉(GC-34) · `unapplied_proposed_rules`의 둘(GC-20) · `assumption_based_isa_estimate`의 넷과 `axis_ceilings`의 여섯(GC-52) · `plan.objective_degenerate`와 `plan.non_quantified_codes`(GC-31) · `boundaries.isa_lock_in_years`와 `boundaries.pension_min_age_years`(GC-31).
+
+**남은 것은 둘이고 둘 다 이유가 있다.**
+
+| 남은 키 | 왜 못 넣는가 |
+|---|---|
+| `credit_rate.effective` | **일부러 비워 둔다.** 두 비율의 부동소수점 곱이라 **정답지가 자릿수까지 단정할 근거가 없다.** 근거 없는 값을 적지 않는다는 원칙이 여기에도 걸린다 |
+| `assumption_based_isa_estimate.not_computable_reason_code` | **지금의 룰셋에서 도달할 수 있는 좌표가 없다.** 그 칸은 `state`가 `not_computable`일 때만 값을 갖고, 계약이 정하는 두 사유는 `isa_tax_free_limit_unknown`과 `amount_not_representable`이다. 앞의 것은 룰셋 `isa.tax_free_limit`이 확정 값을 갖고 있어 성립하지 않고(성립시키려면 **확정된 값을 미확인으로 되돌려야** 한다), 뒤의 것은 정수 표현 범위를 넘기는 입력이라 세법 좌표가 아니다. **검사가 옳은데 재는 자리가 없는 것이 아니라, 재는 자리가 조문상 없다** — 그 구분을 여기 적어 둔다 |
+
+> **[24차·이 회차에 찾은 것] 블록 하나가 같은 키를 두 번 적고 있었고, JSON이 앞의 것을 조용히 버리고 있었다.** GC-40의 `expect.current`에 `legal_basis`가 **두 번** 있었다. `JSON.parse`는 뒤엣것을 남기므로 앞에 적힌 `isa.account.requirements`의 주장(`present: true` · 미확인 표시 0건)이 **한 번도 검사되지 않았다.** 형식 검사는 이것을 잡을 수 없다 — **파서가 이미 버린 뒤에 키를 세기 때문이다.** 둘을 합쳐 그 주장이 실제로 돌게 했고, 74개 블록 전체를 중복 키로 훑어 **다른 자리는 없다는 것**을 확인했다. **「적었으니 검사됐다」가 이 문서 안에서 다시 한 번 성립하고 있었다.**
 
 > ⚠ **산문에 케이스 이름의 범위 표기(`~`)를 쓸 때 조심하라.** 실행기는 커버리지 검사를 위해 **블록 밖 산문의 케이스 이름까지** 읽고 범위를 펼친다. 읽을 수 있는 것은 두 형태뿐이다 — **번호끼리** 이어지는 것(`GC-NN~NN`, 접미사 없이)과 **같은 번호 안에서 접미사끼리** 이어지는 것(`GC-NNa~d`). 번호와 접미사를 섞은 표기(`GC-NN~NNd` 꼴)는 **형식 오류로 실패한다.** 4차에서 실제로 밟은 지뢰다. 섞어 가리켜야 하면 **쉼표로 나열하라.**
 
@@ -174,6 +206,8 @@ open_questions:
 | **`tax_liability_cap.cap_krw` / `known` / `source_code`** | **못 했다** | 같음. 한도 자체는 `tax_credit`의 결과로만 간접 관측된다 |
 
 **이 문서가 할 수 있는 것은 여기까지다.** 허용 키를 늘리는 것은 실행기(`src/engine/golden-cases.test.mjs`)의 몫이고 그 파일은 이 유닛이 열지 않는다. 필요한 키를 이름으로 적어 `open_questions`에 올렸다. **못 실은 축이 넷이라는 사실 자체를 여기 적어 두는 것이, 다음 회차에 그 축이 또 조용히 빠지는 것을 막는 유일한 장치다.**
+
+> **[24차] 위 표의 「못 했다」 여섯 줄 중 다섯이 닫혔다.** `tax_credit_before_cap`(7차) · `threshold_income_tax_krw`(7차) · `tax_liability_cap.cap_krw`(7차) · **`objective_degenerate`**(24차·GC-31) · **`pension_withdrawal_start`의 날짜와 `bound_by_holding_period`**(24차·GC-38)이다. **GC-38이 「시점을 정한 것이 나이가 아니라 5년 요건」이라는 사실을 6차부터 산문에만 갖고 있었고, 이제 `bound_by_holding_period: true`로 값이 됐다.** 닫히지 않은 한 줄은 `known`인데, **그 칸은 실리지 못한 것이 아니라 D39·D40에 폐기됐다** — 「못 실었다」와 「실을 것이 없어졌다」는 다른 사실이라 지우지 않고 여기 적어 남긴다.
 
 ---
 
@@ -3159,6 +3193,8 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
 
 **도출 과정** 규칙의 `unverified`가 "'대통령령으로 정하는 청년'의 연령 범위가 미확정이므로 엔진이 청년 여부를 스스로 판정해서는 안 된다"고 정한다. 따라서 나이 30세여도 자기신고가 없으면 우대를 적용하지 않는 것이 맞다. **엔진이 나이로 청년을 추정하면 오답이다.**
 
+**24차 — 위 「기대 결과」의 마지막 문장이 값이 됐다.** 6차부터 「`unapplied_proposed_rules`에 `requires_input_not_collected`로 실린다」고 산문에 적혀 있었고 **어느 블록도 그것을 주장하지 않았다.** 이제 두 시나리오에 **양쪽으로** 적는다 — 개정안 시나리오에서 `present: true` + `reason_code: "requires_input_not_collected"`, **확정 시나리오에서 `present: false`.** 뒤엣것이 없으면 「개정예고 규칙이 확정 시나리오에 새어 들어가지 않는다」가 검사되지 않는다. **사유 코드가 `out_of_product_scope`나 `requires_rule_not_in_ruleset`이 아니라 이것인 것이 판정의 내용이다** — 규칙 자체는 룰셋에 있고 제품 범위 안에 있으며, **없는 것은 사용자의 자기신고 한 칸**이다.
+
 **세액 한도 (17차 재산출)** **해당연도** 총급여 60,000,000의 추정 한도는 S15 표로 **4,942,500**이다(§47 → §50①1 → §55① → §59). 자르기 전 소득세분 1,080,000보다 크므로 **자르지 않는다.** 블록의 `notice_codes_absent`가 그 주장을 담는다. **다만 그 주장은 「우리가 아는 상한으로는 잘리지 않았다」까지다** — 이 경로는 부양가족·보험료공제·자녀세액공제를 하나도 세지 않으므로 실제 한도는 이보다 낮을 수 있고, 그래서 `binding_code`가 `binding_not_determined`다.
 
 ```golden
@@ -3201,6 +3237,11 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
   },
   "expect": {
     "current": {
+      "unapplied_proposed_rules": {
+        "proposed.pension.credit.youth_irp_rate": {
+          "present": false
+        }
+      },
       "plans": {
         "max_tax_credit": {
           "allocation": {
@@ -3221,6 +3262,12 @@ S9 직전 40,000,000 ≤ 50,000,000 → 서민형 4,000,000. 잔차: 연금저�
       ]
     },
     "proposed": {
+      "unapplied_proposed_rules": {
+        "proposed.pension.credit.youth_irp_rate": {
+          "present": true,
+          "reason_code": "requires_input_not_collected"
+        }
+      },
       "notice_codes": [
         "youth_status_not_declared",
         "proposed_not_enacted"
@@ -4070,6 +4117,29 @@ D52 2번은 `within_isa_lock_in`이면 전액 미배분이라 정했고, **D52 �
 
 **다만 그 `true`가 「받을 수 있다」는 뜻은 아니다.** 같은 블록의 `carryover_shares_future_year_credit_limit`이 참이므로 전환금액은 **전환한 해의** 600만·900만 한도를 그 해의 새 납입액과 나눠 쓰고, 신청주의다(계약 5.5절). **이 사용자가 다음 해에도 연금저축 600만원을 채우면 전환할 자리가 생기지 않는다.** 이 케이스는 「이월 신청의 대상이 존재한다」까지만 주장한다.
 
+**24차 — 위 문단이 산문으로만 갖고 있던 조건 둘과 근거 하나가 값이 됐다.** 23차의 블록은 `contribution_carryover_available: true` 한 칸만 적었고, **그 칸이 감추고 있는 조건 둘은 어느 블록도 주장하지 않았다**(D26이 지적한 그 형태다). 이제 넷을 다 적는다.
+
+| 칸 | 값 | **어디서 나왔는가 — 엔진이 아니다** |
+|---|---|---|
+| `contribution_carryover_available` | `true` | 자르기 전 표시 소득세분 900,000 → 인정 표시 0이므로 `reduced_income_tax_krw` = 900,000 > 0 (계약 `14.0.0`의 자) |
+| `carryover_shares_future_year_credit_limit` | `true` | 룰셋 `pension.credit.unused.contribution_carryover`의 `subject_to_conversion_year_credit_limits.value`. **조문 근거는 시행령 §118의3 ②** — 준용 대상을 「법 제59조의3 제1항 각 호 외의 부분」이라고만 쓰고 본문·단서를 가리지 않으므로 600만·900만 한도의 단서가 그대로 걸린다. 같은 조 ④가 ISA 전환금액에 대해 「제1항 각 호 외의 부분 **단서에도 불구하고**」라고 쓰는 것이 반대 해석을 막는 기안 증거다 |
+| `carryover_requires_application` | `true` | 같은 규칙의 `automatic: false`를 뒤집은 값이다(`requires_application = !automatic`). **조문 근거는 시행령 §118의3 ①의 「전환하여 줄 것을 …신청할 수 있다」** — 자동이 아니다 |
+| `basis_rule_ids` | 전환 특례 규칙 **포함** | 그 규칙을 실제로 읽어 위 둘을 냈으므로 근거 목록에 실려야 한다 |
+
+**둘 다 `true`인 것이 이 사용자에게 좋은 소식이 아니다.** 앞의 것은 **다음 해 한도를 나눠 쓴다**는 뜻이고 뒤의 것은 **가만히 있으면 아무 일도 안 일어난다**는 뜻이다. **화면이 `contribution_carryover_available` 하나만 읽고 「다음 해에 이월해 공제받을 수 있습니다」라고 적으면 두 조건을 다 숨긴 문장이 된다.**
+
+**24차 — 이 케이스가 네 자리를 더 진다. 넷 다 어휘가 열려 있는데 어느 블록도 주장하지 않던 자리다.**
+
+**(1) `objective_degenerate` — 최대공제안 `true`, `isa_first` `false`.** 한도가 **0으로 확정**되면 연금계좌에 얼마를 넣든 공제액이 0이라 「최대」가 유일하지 않다. **이름이 세액공제를 근거로 든 안**은 그 근거가 이 입력에서 아무것도 가르지 못한다는 사실을 스스로 밝혀야 하고, `isa_first`는 근거가 **인출 가능성**이라 한도가 0이어도 이름이 거짓말하지 않는다. **두 안에 나란히 적어야 「언제나 참인 칸」이 아니라는 것이 검사된다** — 한쪽만 적으면 상수를 주장하는 것과 구별되지 않는다. 시나리오 단위의 `tax_credit_axis_not_discriminating`은 이미 적고 있었으나 **그것은 비교 전체의 성질이고, 어느 안이 그 성질을 지는지는 이 칸이 판다.**
+
+**(2) `non_quantified_codes` — `isa_tax_free_headroom` 하나뿐이다. 이 자리에서 내 첫 산출이 틀렸고, 틀린 이유가 값나간다.** 나는 **`pension_contribution_without_credit`도 붙는다**고 적었다 — 연금저축 6,000,000이 세액공제를 한 원도 낳지 않으므로 「세액공제를 낳지 않는 연금계좌 납입」이라는 **이름에 그대로 들어맞아 보였다.** **그러나 그 효과를 정하는 룰셋 규칙 `pension.contribution.beyond_credit_limit`의 조건은 `pension.contribution.exceeds_credit_limit == true`이고, 여기서는 그것이 거짓이다** — 납입 6,000,000은 연금저축 단독한도 600만원과 **정확히 같고 넘지 않는다.** 공제가 0인 원인은 **공제 대상 납입한도 초과**(§59의3 ① 단서)가 아니라 **세액 한도**(§61 ③)다. **두 사실은 같은 결과를 내지만 다른 조문에서 나오고, 코드는 조문을 따라간다.** 엔진이 옳고 내가 틀렸다.
+>
+> **그리고 이 좌표가 그 구분이 가장 헷갈리는 자리다** — 「공제를 한 원도 못 낳는 납입」이 실재하는데 그 이름의 코드가 안 붙는다. **다음 회차가 이 블록을 보고 「코드가 빠졌다」고 읽지 않도록, 빠진 것이 아니라 조건이 다르다는 것을 여기 적어 둔다.**
+
+**(3) `boundaries.isa_lock_in_years: 3` · `pension_min_age_years: 55`.** 13차부터 **일부러 비워 둔 것이 아니라 그냥 비어 있던** 두 칸이다(1-A절이 이름으로 적고 있었다). 값은 룰셋에서 그대로 나온다 — 조특법 §91조의18 ③ 4호의 「계약기간이 3년 이상일 것」(`isa.account.requirements.min_contract_years`)과 시행령 §40의2 ③ 1호의 55세(`pension.withdrawal.eligibility`의 `age.min_age`). **경과 연수 두 칸(`*_remaining`)은 이미 값이 있었는데 그 뺄셈의 시작점인 상수가 없었다** — 시작점이 바뀌면 남은 연수도 따라 바뀌는데, 상수를 아무도 주장하지 않으면 **둘이 함께 틀리는 개정이 검사를 통과한다.**
+
+**(4) `pension_withdrawal_start`의 계산할 수 없는 쪽.** 이 프로필은 가입일을 주지 않으므로 두 계좌 다 `computable: false` · `reason_code: "opened_on_missing"` · `earliest_start_date: null` · `holding_requirement_date: null`이고, **그런데도 `age_requirement_date`는 나온다** — **2041-06-15**(1986-06-15생이 만 55세가 되는 날, 민법 §158). **가입일을 몰라도 나이 요건의 날짜는 정해진다는 것이 계약 5.11절의 규약이고, 그 비대칭이 이 블록의 주장이다.** GC-38이 계산되는 쪽을 지므로 **두 케이스가 이 축의 양쪽을 나눠 진다** — 한쪽만 있으면 「언제나 계산된다」거나 「언제나 못 한다」는 구현이 둘 다 통과한다.
+
 ```golden
 {
   "case": "GC-31",
@@ -4120,8 +4190,29 @@ D52 2번은 `within_isa_lock_in`이면 전액 미배분이라 정했고, **D52 �
         "isa_tax_free_limit_krw": 4000000
       },
       "boundaries": {
+        "isa_lock_in_years": 3,
         "isa_lock_in_years_remaining": 3,
+        "pension_min_age_years": 55,
         "pension_years_remaining": 15
+      },
+      "pension_withdrawal_start": {
+        "annuity_savings": {
+          "computable": false,
+          "reason_code": "opened_on_missing",
+          "earliest_start_date": null,
+          "years_until_earliest_start": null,
+          "age_requirement_date": "2041-06-15",
+          "holding_requirement_date": null,
+          "holding_requirement_waived": false
+        },
+        "retirement_pension": {
+          "computable": false,
+          "reason_code": "opened_on_missing",
+          "earliest_start_date": null,
+          "age_requirement_date": "2041-06-15",
+          "holding_requirement_date": null,
+          "holding_requirement_waived": false
+        }
       },
       "notice_codes": [
         "tax_liability_cap_zero",
@@ -4157,10 +4248,19 @@ D52 2번은 `within_isa_lock_in`이면 전액 미배분이라 정했고, **D52 �
             "applied": true,
             "binding_code": "binds_provably",
             "threshold_income_tax_krw": 900000,
-            "contribution_carryover_available": true
+            "contribution_carryover_available": true,
+            "carryover_shares_future_year_credit_limit": true,
+            "carryover_requires_application": true,
+            "basis_rule_ids": [
+              "pension.credit.unused.contribution_carryover"
+            ]
           },
           "credit_eligible_krw": 6000000,
           "warning_count": 0,
+          "objective_degenerate": true,
+          "non_quantified_codes": [
+            "isa_tax_free_headroom"
+          ],
           "fill_order": {
             "annuity_savings": 1,
             "isa": 2
@@ -4182,6 +4282,7 @@ D52 2번은 `within_isa_lock_in`이면 전액 미배분이라 정했고, **D52 �
             "total": 0
           },
           "warning_count": 0,
+          "objective_degenerate": false,
           "delta_vs_baseline_krw": 0
         }
       }
@@ -4275,6 +4376,21 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
 
 **그리고 이 칸이 이 두 블록에서 실제로 무는지를 확인했다.** 값을 뒤집어(`true`) 돌리면 두 블록이 실패하고, 되돌리면 통과한다 — 23차 대조 리포트 23.2절에 결과를 적었다. **적었으니 검사됐다고 가정하지 않는다.**
 
+**24차 개정 — 조건 둘이 `null`이고 근거 목록에 그 규칙이 **없다**는 것까지 값으로 적는다.**
+
+`contribution_carryover_available`이 거짓이면 **엔진은 전환 특례 규칙을 읽지 않는다.** 그러므로 `carryover_shares_future_year_credit_limit`과 `carryover_requires_application`은 **`false`가 아니라 `null`**이다 — **「그렇지 않다」와 「읽지 않았다」는 다른 사실이고, 읽지 않은 규칙의 값을 주장하면 근거 없는 숫자를 적는 것과 같은 잘못이다.** 그 규칙의 두 값 자체는 이 좌표에서도 여전히 참이지만(한도를 나눠 쓰고 신청주의다), **이 사용자에게는 적용될 대상이 없으므로 주장하지 않는다.** 근거 목록도 같은 이유로 `basis_rule_ids_absent`로 적는다 — **`applied`가 참이라는 이유로 근거를 싣는 구현으로 되돌리면 이 두 블록이 실패한다.**
+
+**두 케이스의 값 넷은 같고, 거기 이르는 길이 다르다. 그리고 그 「길」을 재는 칸은 없다.**
+
+| | 트림 후 인정액 | 정확 공제액 | 한도(정확값) | **정확값 초과분** | **표시 초과분** | 넷의 값 |
+|---|---|---|---|---|---|---|
+| **GC-32a** | 8,999,994 | 1,349,999.1 | 1,349,999.888 | **0** — 정확값으로도 넘지 않는다 | 0 | `false` / `null` / `null` / 불포함 |
+| **GC-32d** | 8,998,274 | 1,349,741.1 | 1,349,741 | **0.1원** — 넘는데 원 미만이라 남을 수 없다 | 0 | `false` / `null` / `null` / 불포함 |
+
+**32a는 잘라 낸 6원이 IRP가 아니라 ISA에 있어 연금계좌 안에 미공제 납입액이 한 원도 없고, 32d는 연금계좌 안에 0.1원어치가 있는데 그것이 원 단위로 존재할 수 없다.** 앞은 **대상이 없고** 뒤는 **대상이 실행 불가능한 크기**다. 둘 다 시행령 §118의3 ①의 의제인출이 성립하지 않는다는 같은 결론에 이르지만 **이유가 다르다.**
+
+**그 차이를 이월 연쇄 넷은 구분하지 못한다 — 구분하는 것은 같은 블록의 다른 칸들이다.** `allocation.isa`(6 대 1,726) · `credit_eligible_krw`(8,999,994 대 8,998,274) · `cap_krw`(1,349,999 대 1,349,741)가 두 경로의 **결과**를 값으로 가른다. **그러나 「정확값으로도 0인가, 넘는데 원 미만인가」라는 원인 자체를 재는 칸은 지금 열려 있는 어휘 어디에도 없다** — 그 수(정확값 초과분 0 대 0.1)는 계약의 어느 필드에도 실리지 않는다. **이 문서가 그것을 산문으로만 갖고 있다는 사실을 여기 적어 둔다.** 산문에만 있는 사실은 검사되지 않고, 검사되지 않는 사실은 다음 회차에 조용히 뒤집힌다 — **이 조직이 이번 세션에 여러 번 밟은 형태이므로, 못 잰다는 것을 못 잰다고 적는 것이 지금 할 수 있는 전부다.**
+
 ```golden
 {
   "case": "GC-32a",
@@ -4349,7 +4465,12 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
             "applied": true,
             "binding_code": "binds_provably",
             "threshold_income_tax_krw": 1349999,
-            "contribution_carryover_available": false
+            "contribution_carryover_available": false,
+            "carryover_shares_future_year_credit_limit": null,
+            "carryover_requires_application": null,
+            "basis_rule_ids_absent": [
+              "pension.credit.unused.contribution_carryover"
+            ]
           },
           "credit_eligible_krw": 8999994,
           "warning_count": 0,
@@ -4458,7 +4579,12 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
             "applied": true,
             "binding_code": "binds_provably",
             "threshold_income_tax_krw": 1349741,
-            "contribution_carryover_available": false
+            "contribution_carryover_available": false,
+            "carryover_shares_future_year_credit_limit": null,
+            "carryover_requires_application": null,
+            "basis_rule_ids_absent": [
+              "pension.credit.unused.contribution_carryover"
+            ]
           },
           "credit_eligible_krw": 8998274,
           "warning_count": 0,
@@ -5013,6 +5139,10 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
 
 **GC-32a와 나란히 두면 두 칸이 왜 갈리는지가 보인다.** 32a는 트림된 6원이 **ISA로 옮겨 가** 연금계좌에 남은 미공제 납입액이 없고, 34는 트림이 IRP(0원)에만 걸려 **연금저축 쪽 미공제분이 그대로 남는다.** **같은 `applied: true`인데 한쪽은 이월할 것이 있고 한쪽은 없다** — 이 대비가 D54의 판정을 값으로 옮긴 자리다.
 
+**24차 — 조건 둘과 근거 목록이 값이 됐다. 산출 근거는 GC-31의 같은 표와 동일하다**(룰셋 `subject_to_conversion_year_credit_limits.value: true` · `automatic: false` → `requires_application = true`, 시행령 §118의3 ②·①). **이 케이스에서 그 셋이 실제로 무는 것을 결함 주입으로 확인했다** — `basis_rule_ids`의 규칙 id를 다른 규칙으로 바꿔 돌리면 이 블록이 실패하고, 되돌리면 통과한다. **근거 목록을 적어 두기만 하고 무는지 보지 않으면 「적었으니 검사됐다」가 된다.**
+
+**24차 — 이 케이스가 헤드라인 합계의 세 번째 갈래를 진다.** 요청에 수익률 가정이 없으므로 가정 성분이 아예 없고, 계약 5.17절이 그때 **`bound_code: "point"` · `includes_assumption_component: false` · 세 끝이 전부 확정 세액공제액과 같은 한 수**라고 정한다. 최대공제안은 **989,998**(한도 적용 **후** 인정액), `isa_first`는 **0**이다. **`isa_first`가 ISA에 9,000,000을 넣는데도 합계가 0인 것이 이 짝의 요점이다** — 수익률 가정이 없으면 ISA 몫은 금액을 낳지 않고, 그 사실이 `includes_assumption_component: false`로 나간다. **화면이 그 0을 「ISA는 혜택이 없다」로 읽으면 거짓이고**, 없는 것은 혜택이 아니라 **그것을 계산할 입력**이다.
+
 ```golden
 {
   "case": "GC-34",
@@ -5097,7 +5227,12 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
             "applied": true,
             "binding_code": "binds_provably",
             "threshold_income_tax_krw": 900000,
-            "contribution_carryover_available": true
+            "contribution_carryover_available": true,
+            "carryover_shares_future_year_credit_limit": true,
+            "carryover_requires_application": true,
+            "basis_rule_ids": [
+              "pension.credit.unused.contribution_carryover"
+            ]
           },
           "credit_eligible_krw": 6000000,
           "limited_by": {
@@ -5105,7 +5240,18 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
           },
           "unallocated_krw": 0,
           "monthly_rounding_residual_krw": 0,
-          "warning_count": 0
+          "warning_count": 0,
+          "headline_composite_total": {
+            "bound_code": "point",
+            "includes_assumption_component": false,
+            "determined_component_krw": 989998,
+            "assumption_component_krw": null,
+            "assumption_settlement_years": null,
+            "assumption_settlement_years_source": null,
+            "point_estimate_krw": 989998,
+            "lower_bound_krw": 989998,
+            "upper_bound_krw": 989998
+          }
         },
         "isa_first": {
           "allocation": {
@@ -5119,7 +5265,16 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
             "total": 0
           },
           "warning_count": 0,
-          "delta_vs_baseline_krw": -989998
+          "delta_vs_baseline_krw": -989998,
+          "headline_composite_total": {
+            "bound_code": "point",
+            "includes_assumption_component": false,
+            "determined_component_krw": 0,
+            "assumption_component_krw": null,
+            "point_estimate_krw": 0,
+            "lower_bound_krw": 0,
+            "upper_bound_krw": 0
+          }
         }
       }
     }
@@ -5438,6 +5593,19 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
 
 **도출 과정** S1~S14는 GC-32b와 같다. S12 `pension.withdrawal.eligibility`의 55세에서 만 54세를 빼 1년. 경고는 계약 8.4절 — 배분액 > 0인 연금계좌 둘, horizon이 `before_pension_age`. ISA 배분이 0이므로 ISA 경고는 성립하지 않는다.
 
+**24차 — 1-A.1이 6차에 「못 실었다」고 적은 축이 여기서 값이 됐다.** 그 표의 마지막 줄이 「GC-38이 보려는 **시점을 정한 것이 나이가 아니라 5년 요건**이라는 사실은 산문에만 남았다」였다. 어휘는 그 뒤 열렸는데 **어느 블록도 그 자리를 주장하지 않아 열여덟 회차 동안 비어 있었다.** 위 표의 다섯 수를 그대로 블록에 옮긴다.
+
+| 블록의 칸 | 값 | 근거 |
+|---|---|---|
+| `age_requirement_date` | **2027-06-15** | 민법 §158 — 1972-06-15생이 만 55세가 되는 날 |
+| `holding_requirement_date` | **2031-03-02** | 시행령 §40의2 ③의 5년 요건. 가입일 2026-03-02 + 5년. 기간 계산은 국세기본법 §4 → 민법 §160 ② |
+| `earliest_start_date` | **2031-03-02** | 두 요건은 선택이 아니라 병렬이므로 **늦게 충족되는 쪽**이 정한다 |
+| `bound_by_holding_period` | **`true`** | **이 한 칸이 이 케이스의 이름이다** — 시점을 정한 것이 나이 요건이 아니다 |
+| `holding_requirement_waived` | **`false`** | 이연퇴직소득이 없다. 있으면 5년 요건이 면제되어 나이 요건만으로 정해진다(시행령 §40의2 ③ 2호 단서) |
+| `years_until_earliest_start` | **5** | 과세기간 종료일 2026-12-31부터 2031-03-02까지 **4년 2개월**이고 계약 5.11절이 **올림**으로 정한다 — 짧게 보이는 쪽이 위험하기 때문이다 |
+
+**`pension_years_remaining: 1`과 `years_until_earliest_start: 5`가 같은 블록 안에 나란히 있는 것이 요점이다.** 앞의 것은 나이 경계까지의 햇수이고 뒤의 것은 **실제로 꺼낼 수 있을 때까지의 햇수**다. **두 수가 네 해나 벌어지는 사람이 실재하고, 앞의 수만 읽은 문구는 그 사람에게 틀린다.** 두 계좌 모두 가입일이 같으므로 값도 같다.
+
 ```golden
 {
   "case": "GC-38",
@@ -5484,6 +5652,26 @@ D52 1번은 **세액공제를 한 원도 더 낳지 않는 IRP 배분을 내지 
       "boundaries": {
         "pension_years_remaining": 1,
         "isa_lock_in_years_remaining": 3
+      },
+      "pension_withdrawal_start": {
+        "annuity_savings": {
+          "computable": true,
+          "earliest_start_date": "2031-03-02",
+          "years_until_earliest_start": 5,
+          "age_requirement_date": "2027-06-15",
+          "holding_requirement_date": "2031-03-02",
+          "holding_requirement_waived": false,
+          "bound_by_holding_period": true
+        },
+        "retirement_pension": {
+          "computable": true,
+          "earliest_start_date": "2031-03-02",
+          "years_until_earliest_start": 5,
+          "age_requirement_date": "2027-06-15",
+          "holding_requirement_date": "2031-03-02",
+          "holding_requirement_waived": false,
+          "bound_by_holding_period": true
+        }
       },
       "notice_codes_absent": [
         "pension_start_date_not_computable",
@@ -6102,11 +6290,9 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
   },
   "expect": {
     "current": {
-      "legal_basis": {
-        "isa.account.requirements": {"present":true,"has_uncertainty_note":false,"uncertainty_note_count":0}
-      },
       "plan_count": 2,
       "legal_basis": {
+        "isa.account.requirements": { "present": true, "has_uncertainty_note": false, "uncertainty_note_count": 0 },
         "pension.credit.rate.basis_determination": { "present": true, "status": "확정", "bill_stage": null, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["unverified"], "uncertainty_paths": ["error_direction_when_judged_by_salary_only.reverse.unverified"] },
         "isa.early_termination.clawback": { "present": true, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["unverified"], "uncertainty_paths": ["unverified"] },
         "pension.withdrawal.eligibility": { "present": true, "has_uncertainty_note": true, "uncertainty_note_count": 1, "uncertainty_kinds": ["text_marker"], "uncertainty_paths": ["requirements[2].formula"] },
@@ -7278,6 +7464,13 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
 
 **이 케이스가 함께 고정하는 것.** `isa.benefit.formula`와 `isa.benefit.settlement_period` 두 규칙의 미확인 표시 건수를 근거 목록에서 주장한다. 두 규칙은 이 아홉 건에서만 읽히므로 **다른 어느 케이스도 그 자리를 대신할 수 없다.**
 
+**24차 — 축의 상한과 오차 방향 넷을 이 블록이 진다.** 어휘가 계약 `8.2.0`(D38)과 5.14절에 열려 있는데 **아홉 건 어디에도 없었다.**
+
+- **`axis_ceilings.tax_free_krw` = 308,000.** `C × 14% × 1.1` = 2,000,000 × 0.154. **이 케이스에서 이 수가 축의 값(`axis_breakdown.tax_free_krw`)과 같은 것은 우연이 아니라 정의다** — 축이 `min(N, C) × …`이고 여기서 `N = C = 2,000,000`이라 축이 상한에 정확히 닿는다. **GC-52가 「상한선 위에 선 케이스」인 이유가 그것이고, 그래서 두 수가 같은 것이 이 좌표에서만 성립한다.**
+- **`tax_free_period_code` = `contract_settlement_period` · `tax_free_settlement_years` = 1.** **이 상한은 한 해가 아니라 계약 한 건 전체를 잰다** — 비과세 한도의 기준 시점이 「가입일 또는 연장일」이라 해마다 반복되지 않는다. **옆에 놓인 세액공제 축은 연간 값이므로, 기간을 값으로 내보내지 않으면 사용자가 이 수도 연간으로 읽는다.**
+- **`rate_gap_has_ceiling` = `false` · `loss_offset_has_ceiling` = `false`.** **없어서 못 낸 것이 아니라 없다는 것이 조문의 판정이다** — 조특법 §91조의18 ①이 「비과세 한도금액을 초과하는 금액」에 상한을 두지 않고, 손익통산되는 이익 `G`에도 법정 상한이 없다. **분모가 조문에 없는데 막대를 그리면 그 분모는 지어낸 것이다.**
+- **`tax_free_is_lower_bound` · `is_lower_bound_for_aggregate_taxpayer` · `principal_basis_code` · `return_accrual_code` · `assumes_contract_held_to_settlement`.** 다섯이 전부 **오차 방향이 과소**라는 같은 사실의 다른 얼굴이다 — 원금을 잔액이 아니라 누적 납입액으로 보고(이미 난 운용수익이 빠진다), 복리가 아니라 단리로 굴리고, 비교 세율을 14%로 잡고(종합과세 대상자에게는 더 높다), 정산 시점까지 계약을 유지하는 것을 전제한다. **다섯이 같은 방향인 것이 중요하다** — 방향이 섞이면 「적어도 이만큼」이라고 말할 수 없는데, 섞이지 않으므로 말할 수 있다.
+
 ```golden
 {
   "case": "GC-52",
@@ -7393,6 +7586,18 @@ GC-42의 총급여 57,631,578원은 **근로소득금액이 정확히 45,000,000
               "rate_gap_krw": 0,
               "rounding_residual_krw": 0
             },
+            "axis_ceilings": {
+              "tax_free_krw": 308000,
+              "tax_free_period_code": "contract_settlement_period",
+              "tax_free_settlement_years": 1,
+              "tax_free_is_lower_bound": true,
+              "rate_gap_has_ceiling": false,
+              "loss_offset_has_ceiling": false
+            },
+            "principal_basis_code": "cumulative_contribution_plus_plan_allocation",
+            "return_accrual_code": "simple_interest",
+            "is_lower_bound_for_aggregate_taxpayer": true,
+            "assumes_contract_held_to_settlement": true,
             "comparison_baseline_code": "withholding_at_general_rate"
           }
         }
@@ -8948,3 +9153,61 @@ GC-04는 여섯 중 유일하게 **세액 한도가 실제로 무는** 좌표다
   }
 }
 ```
+
+---
+
+## 17. 24차 — 열려 있는데 아무도 주장하지 않던 자리를 훑었다 (2026-08-12)
+
+**이 회차는 새 케이스를 만들지 않았다.** 좌표는 그대로 **74건**이고, 바뀐 것은 **기존 블록이 무엇을 주장하는가**다. 금액은 한 원도 움직이지 않았고 엔진은 **650 / 650**으로 그대로다.
+
+### 17.1 이월 연쇄 넷을 네 블록에 넣었다 (D56 후속 ①)
+
+`calc-engine-dev`가 **어휘를 열고 값은 넣지 않았다.** 그 상태에서는 「`applied`를 따라가는 구현으로 되돌리면 정답지가 무는가」가 **값으로 갈리지 않는다.**
+
+| 케이스 | `contribution_carryover_available` | 조건 둘 | 근거 목록 |
+|---|---|---|---|
+| GC-32a · GC-32d | `false` (`applied`는 `true`) | 둘 다 `null` | `basis_rule_ids_absent`에 전환 특례 규칙 |
+| GC-31 · GC-34 | `true` | 둘 다 `true` | `basis_rule_ids`에 전환 특례 규칙 |
+
+**조건 둘의 값을 엔진에서 얻지 않았다.** 룰셋 `pension.credit.unused.contribution_carryover`를 열어 `subject_to_conversion_year_credit_limits.value: true`와 `automatic: false`를 읽고, 그 두 값이 딛고 선 조문(시행령 §118의3 ②·①)을 확인한 뒤에 적었다. **적고 나서 돌렸고, 네 블록이 다 통과했다 — 엔진 결함 0건.**
+
+**그리고 그 넷이 실제로 무는지를 양방향으로 확인했다.**
+
+- `basis_rule_ids`의 규칙 id를 다른 규칙으로 바꾸자 **GC-34가 실패**했다 → **포함 검사가 문다.**
+- `basis_rule_ids_absent`에 실제로 실려 있는 규칙(`pension.credit.tax_liability_cap`)을 적자 **GC-32a가 실패**했다 → **불포함 검사가 문다.**
+- `contribution_carryover_available: false`인데 조건에 값을 넣자 **대조 전에 형식이 거절**했다 → **어긋난 짝이 대조까지 가지 못한다.**
+
+**세 번째가 앞의 둘과 다른 층이라는 것을 적어 둔다** — 그것은 엔진과 대조한 결과가 아니라 **블록 자체의 정합성 검사**다. 셋을 다 확인해야 「적었으니 검사됐다」가 아니게 된다.
+
+### 17.2 GC-32a와 32d는 값이 같고 이유가 다르며, 그 이유를 재는 칸은 없다
+
+관리자가 「블록이 그 구분을 재는지 보라」고 지시했다. **재지 못한다.** 넷의 값이 두 케이스에서 완전히 같다.
+
+- **32d**는 트림 후 정확값이 한도를 **0.1원 넘는다.** 넘는데도 원 미만이라 계좌에 남을 수 없어 `false`다.
+- **32a**는 트림 후 정확값이 한도보다 **오히려 작다.** 밀려난 금액이 **정확값으로도 0**이고, 잘라 낸 6원은 IRP가 아니라 **ISA에 있어** 연금계좌 안에 미공제 납입액이 한 원도 없다.
+
+**두 경로의 결과는 블록이 가른다** — `allocation.isa`(6 대 1,726) · `credit_eligible_krw` · `cap_krw`가 다르다. **원인은 가르지 못한다** — 「정확값 초과분 0 대 0.1원」이라는 수가 계약의 어느 필드에도 실리지 않는다. **없는 칸을 지어내지 않고, 못 잰다는 사실을 32절 산문과 이 절에 적는다.**
+
+### 17.3 1-A절이 코드를 못 따라오고 있었다 (D56 후속 ②)
+
+**빠져 있던 것은 어휘가 아니라 그 어휘를 알리는 문장이다.** 넣은 이름: `scenario.pension_credit_ceiling`(다섯 블록이 **이미 쓰고 있었다**) · `scenario.unapplied_proposed_rules` · `plan.headline_composite_total` · `assumption_based_isa_estimate`의 다섯 · `tax_liability_cap`의 넷. **뺀 이름**: `tax_liability_cap.known` — D39·D40에 폐기됐고 **지금 적으면 형식이 거절한다.** 하위 키 목록 넷(`pension_credit_ceiling` · `headline_composite_total` · `unapplied_proposed_rules` · `axis_ceilings`)도 새로 적었다.
+
+**「없는 칸을 알리는 것」과 「있는 칸을 안 알리는 것」이 같은 종류의 어긋남이다.** 앞은 다음 회차가 없는 칸을 채우려다 형식 검사에 막히게 하고, 뒤는 있는 칸을 영원히 비워 둔다. **D56이 세운 양방향 검사가 이제 둘 다 문다.**
+
+### 17.4 훑어서 찾은 「주장하지 않는 칸」 — 마흔하나를 갚았고 둘이 남았다
+
+**허용 키를 전부 꺼내 74개 블록이 실제로 쓰는 키와 맞댔다.** 갚은 자리는 1-A절에 이름으로 적었다. 새로 값을 받은 케이스는 다섯이다 — GC-20(개정예고 미반영 규칙, 양방향) · GC-31(목적함수 퇴화 · 비정량 코드 · 경계 상수 둘 · **시점을 계산할 수 없는 쪽**) · GC-34(헤드라인 합계, 두 안) · GC-38(**시점을 계산할 수 있는 쪽**) · GC-52(축 상한 여섯 + 오차 방향 상수 넷).
+
+**남은 둘은 이유가 다르다.** `credit_rate.effective`는 **정답지가 자릿수를 단정할 근거가 없어 일부러 비워 둔다.** `assumption_based_isa_estimate.not_computable_reason_code`는 **지금의 룰셋에서 도달할 좌표가 없다** — 그 칸의 두 사유 중 하나는 **확정된 룰셋 값을 미확인으로 되돌려야** 성립하고 다른 하나는 세법 좌표가 아니다. **「검사는 옳은데 재는 자리가 없다」와 「재는 자리가 조문상 없다」는 다르고, 뒤엣것은 채우는 것이 아니라 적어 두는 것이 답이다.**
+
+### 17.5 이 회차에 찾은 것 — 블록 하나가 같은 키를 두 번 적고 있었다
+
+GC-40의 `expect.current`에 `legal_basis`가 **두 번** 있었다. `JSON.parse`가 앞의 것을 버리므로 `isa.account.requirements`에 대한 주장이 **한 번도 검사되지 않았다.** **형식 검사는 이것을 잡을 수 없다 — 파서가 이미 버린 뒤에 키를 세기 때문이다.** 둘을 합쳐 그 주장이 실제로 돌게 했고(통과한다), **74개 블록 전체를 중복 키로 훑어 다른 자리가 없음을 확인했다.**
+
+**`calc-engine-dev`에게 넘긴다** — 블록을 읽을 때 중복 키를 **실패로** 잡을 수 있다. 그 검사가 없으면 이 형태는 다음에도 조용히 통과한다.
+
+### 17.6 내가 틀린 것 하나 — 이름이 조문처럼 보였다
+
+GC-31에 `non_quantified_codes`를 적으면서 **`pension_contribution_without_credit`도 붙는다**고 산출했다. **틀렸다.** 그 효과의 조건은 룰셋 `pension.contribution.beyond_credit_limit`의 `exceeds_credit_limit`이고, GC-31의 연금 납입 6,000,000은 단독한도 600만원과 **정확히 같아 넘지 않는다.** 공제가 0인 원인은 **한도 초과 납입**(§59의3 ① 단서)이 아니라 **세액 한도**(§61 ③)이며, **두 사실은 같은 결과를 내지만 다른 조문에서 나온다.**
+
+**엔진이 옳고 내가 틀렸다.** 그리고 내가 틀린 이유는 **효과의 이름이 「세액공제를 낳지 않는 연금계좌 납입」이라 이 좌표에 그대로 들어맞아 보였기** 때문이다 — **이름을 조문으로 읽었다.** 22차에 내가 `annuity_savings_limit_first`라는 **이름**을 목적의 증거로 읽어 뒤집혔던 것과 같은 형태이고, 같은 회차의 나에게 두 번째다. **이름은 근거가 아니다.**
