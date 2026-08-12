@@ -908,3 +908,176 @@ test('the mock and the real engine agree on the estimate shape for a supplied as
     Object.keys(realRes.scenarios[0].plans[0].assumption_based_isa_estimate).sort(),
   );
 });
+
+// ---------------------------------------------------------------------------
+// 차등(differential) 테스트 — mock이 실제 엔진과 갈라지는 자리를 잡는다.
+//
+// **QA가 스크래치패드에서 만든 것을 여기로 옮긴다**(4단계 게이트4 재소집,
+// qa-report.md 11.5절). 스크래치패드에 있을 때는 계약이 바뀔 때마다 사람이
+// 손으로 다시 돌려야 했다 — 이제 이 파일의 나머지와 같은 실행, 같은 회귀
+// 방지 대상이다.
+//
+// QA는 대표 시나리오 6개를 돌려 **여섯 다 갈라진 것**을 찾았다 —
+// `allocation.limited_by` 상실(60회), `allocation.basis_rule_ids` 누락(40회),
+// ISA 전환 시나리오에서 배분액 자체의 불일치. 셋 다 고쳤다. **거기서 멈추지
+// 않고 좌표를 넓혔다** — 29개 시나리오로 다시 돌리자 12개에서 새 드리프트가
+// 나왔다: ISA 미보유(`accounts.isa.exists`가 방을 통째로 막고 있었다),
+// 서민형·15세 이상 근로소득자 ISA 연령 요건("입력을 받지 않는다"는 주석이
+// 거짓이었다), ISA 전환 목적지가 연금저축일 때 개별 신용 한도 자체가 잘못
+// 올라감, `existing_contribution_over_limit`이 납입 한도 초과만 보고 신용
+// 한도 초과를 놓침, `limits.by_account[].credit_eligible_limit_remaining_krw`가
+// 배분 단계가 이미 고친 풀과 따로 놀아 여러 곳에서 어긋남, 자금 사용 시점별
+// 기본안 선정이 "경고 최소" 동적 계산이었던 것(실제 엔진은 고정 표),
+// `delta_vs_baseline_krw`를 0 아래로 눌러 담아 진짜 더 유리한 대안을 "동률"로
+// 잘못 말함. 아래 20개 시나리오가 이 전부를 회귀로 고정한다.
+//
+// **이 검사가 하는 것과 안 하는 것의 경계는 610행 머리말과 같다** — 계약이
+// 정한 자리(코드 집합·`limited_by`·`basis_rule_ids`·`is_baseline`·금액)는
+// 정확히 대조하고, 어느 규칙을 읽었는가 같은 알고리즘 세부는 보지 않는다.
+// ---------------------------------------------------------------------------
+
+function setDiff(realArr, mockArr) {
+  const real = new Set(realArr ?? []);
+  const mock = new Set(mockArr ?? []);
+  return { onlyReal: [...real].filter((x) => !mock.has(x)), onlyMock: [...mock].filter((x) => !real.has(x)) };
+}
+
+/**
+ * 실제 엔진과 목의 응답을 대조해, 갈라진 자리를 사람이 읽을 수 있는 목록으로
+ * 만든다. 드리프트가 있으면 그 목록 전체를 실패 메시지에 싣는다 — "다르다"만
+ * 말하고 어디가 다른지 숨기면 다음 사람이 또 처음부터 찾아야 한다.
+ */
+function driftLines(request) {
+  const realRes = realCompute(request, rulesets);
+  const mockRes = compute({ ...request, schema_version: SCHEMA_VERSION }, rulesets);
+  if (realRes.ok !== mockRes.ok) {
+    return [`ok mismatch — real=${realRes.ok}(${JSON.stringify(realRes.errors ?? [])}) mock=${mockRes.ok}(${JSON.stringify(mockRes.errors ?? [])})`];
+  }
+  if (!realRes.ok) return [];
+
+  const lines = [];
+  for (const scKey of Object.keys(realRes.scenarios)) {
+    const rs = realRes.scenarios[scKey];
+    const ms = mockRes.scenarios[scKey];
+    if (!ms) { lines.push(`[${scKey}] mock에 이 시나리오가 없다`); continue; }
+
+    const nd = setDiff(rs.notices.map((n) => n.code), ms.notices.map((n) => n.code));
+    if (nd.onlyReal.length) lines.push(`[${scKey}] notices — real에만: ${nd.onlyReal.join(', ')}`);
+    if (nd.onlyMock.length) lines.push(`[${scKey}] notices — mock에만: ${nd.onlyMock.join(', ')}`);
+
+    const rPlans = new Map(rs.plans.map((p) => [p.plan_id, p]));
+    const mPlans = new Map(ms.plans.map((p) => [p.plan_id, p]));
+    const pd = setDiff([...rPlans.keys()], [...mPlans.keys()]);
+    if (pd.onlyReal.length || pd.onlyMock.length) {
+      lines.push(`[${scKey}] plan_id 집합 — real에만: [${pd.onlyReal.join(', ')}] / mock에만: [${pd.onlyMock.join(', ')}]`);
+    }
+
+    for (const [planId, rp] of rPlans) {
+      const mp = mPlans.get(planId);
+      if (!mp) continue;
+      if (rp.is_baseline !== mp.is_baseline) {
+        lines.push(`[${scKey}/${planId}] is_baseline: real=${rp.is_baseline} vs mock=${mp.is_baseline}`);
+      }
+      for (const alloc of rp.allocations) {
+        const malloc = mp.allocations.find((a) => a.account === alloc.account);
+        if (!malloc) continue;
+        if (alloc.limited_by !== malloc.limited_by) {
+          lines.push(`[${scKey}/${planId}/${alloc.account}] limited_by: real=${JSON.stringify(alloc.limited_by)} vs mock=${JSON.stringify(malloc.limited_by)}`);
+        }
+        const bd = setDiff(alloc.basis_rule_ids, malloc.basis_rule_ids);
+        if (bd.onlyReal.length || bd.onlyMock.length) {
+          lines.push(`[${scKey}/${planId}/${alloc.account}] basis_rule_ids — real에만: [${bd.onlyReal.join(', ')}] / mock에만: [${bd.onlyMock.join(', ')}]`);
+        }
+        for (const field of ['monthly_krw', 'annual_krw', 'monthly_annualized_krw']) {
+          if (alloc[field] !== malloc[field]) {
+            lines.push(`[${scKey}/${planId}/${alloc.account}] ${field}: real=${alloc[field]} vs mock=${malloc[field]}`);
+          }
+        }
+      }
+    }
+    const cnd = setDiff(rs.comparison_note_codes, ms.comparison_note_codes);
+    if (cnd.onlyReal.length || cnd.onlyMock.length) {
+      lines.push(`[${scKey}] comparison_note_codes — real에만: [${cnd.onlyReal.join(', ')}] / mock에만: [${cnd.onlyMock.join(', ')}]`);
+    }
+
+    const re = new Map(rs.account_eligibility.map((e) => [e.account, e]));
+    const me = new Map(ms.account_eligibility.map((e) => [e.account, e]));
+    for (const [account, rEnt] of re) {
+      const mEnt = me.get(account);
+      if (!mEnt) { lines.push(`[${scKey}] account_eligibility[${account}] — mock에 없다`); continue; }
+      if (rEnt.eligible !== mEnt.eligible) {
+        lines.push(`[${scKey}] account_eligibility[${account}].eligible: real=${rEnt.eligible} vs mock=${mEnt.eligible}`);
+      }
+      const rd = setDiff(rEnt.reason_codes, mEnt.reason_codes);
+      if (rd.onlyReal.length || rd.onlyMock.length) {
+        lines.push(`[${scKey}] account_eligibility[${account}].reason_codes — real에만: [${rd.onlyReal.join(', ')}] / mock에만: [${rd.onlyMock.join(', ')}]`);
+      }
+    }
+
+    const rl = new Map(rs.limits.by_account.map((l) => [l.account, l]));
+    const ml = new Map(ms.limits.by_account.map((l) => [l.account, l]));
+    for (const [account, rEnt] of rl) {
+      const mEnt = ml.get(account);
+      if (!mEnt) continue;
+      for (const field of ['contribution_limit_remaining_krw', 'credit_eligible_limit_remaining_krw', 'clamped_to_zero']) {
+        if (rEnt[field] !== mEnt[field]) {
+          lines.push(`[${scKey}] limits.by_account[${account}].${field}: real=${rEnt[field]} vs mock=${mEnt[field]}`);
+        }
+      }
+    }
+  }
+  return lines;
+}
+
+function assertNoDrift(label, request) {
+  const lines = driftLines(request);
+  assert.equal(lines.length, 0, `${label}에서 mock이 실제 엔진과 갈라진다:\n${lines.join('\n')}`);
+}
+
+const BOTH_SCENARIOS = ['current', 'proposed'];
+
+const differentialScenarios = [
+  { label: '기본(넉넉한 여력)', build: () => baseRequest({ scenarios: BOTH_SCENARIOS }) },
+  { label: '여력 소액(30만)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.monthly_capacity_krw = 300000; return r; } },
+  { label: '여력 초과(3000만)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.monthly_capacity_krw = 30000000; return r; } },
+  { label: '여력 0', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.monthly_capacity_krw = 0; return r; } },
+  { label: 'ISA 미보유', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.isa.exists = false; return r; } },
+  { label: '어린 나이(15세 이상 근로소득자 ISA 요건)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.birth_date = '2010-03-02'; r.profile.prior_year_total_salary_krw = 5000000; return r; } },
+  { label: 'ISA 금융소득종합과세 배제', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.financial_income_taxpayer_last_3_years = true; return r; } },
+  { label: '연금저축 개시(annuity_savings started)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.annuity_savings.annuity_start_status = 'started'; return r; } },
+  { label: 'IRP 개시 여부 모름', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.retirement_pension.annuity_start_status = 'unknown'; return r; } },
+  // `declared_youth: true`(개정안, 공제율이 갈리는 경우)는 여기 넣지 않는다 —
+  // 아래 별도 `todo` 테스트로 옮겼다. 이 파일 머리말이 이미 "공제율이 갈리는
+  // 재정렬(D17)은 이 목의 근사치가 다루지 않는다"고 선언한 범위다.
+  { label: '연금 기납입이 개별·합산 신용 한도를 모두 넘김', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.current_year_total_salary_krw = 34143911; r.profile.monthly_capacity_krw = 500000; r.accounts.annuity_savings.ytd_contribution_krw = 9000000; return r; } },
+  { label: 'IRP 기납입이 합산 한도에 근접', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.retirement_pension.ytd_contribution_krw = 9000000; return r; } },
+  { label: 'ISA 전환 — 목적지 IRP', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.isa.exists = true; r.accounts.isa.cumulative_contribution_krw = 20000000; r.isa_transfer = { amount_krw: 10000000, destination: 'retirement_pension', prior_year_applied_extra_credit_krw: null, prior_multi_year_applied_extra_credit_krw: null }; return r; } },
+  { label: 'ISA 전환 — 목적지 연금저축(단독 한도에 먼저 걸림)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.isa.exists = true; r.accounts.isa.cumulative_contribution_krw = 5000000; r.isa_transfer = { amount_krw: 3000000, destination: 'annuity_savings', prior_year_applied_extra_credit_krw: null, prior_multi_year_applied_extra_credit_krw: null }; return r; } },
+  { label: 'ISA 전환 — 직전연도 적용액 있음', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.isa.exists = true; r.accounts.isa.cumulative_contribution_krw = 15000000; r.isa_transfer = { amount_krw: 8000000, destination: 'retirement_pension', prior_year_applied_extra_credit_krw: 200000, prior_multi_year_applied_extra_credit_krw: null }; return r; } },
+  { label: 'before_pension_age — 기본안이 isa_first로 고정된다', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.fund_use_horizon = 'before_pension_age'; return r; } },
+  { label: 'within_isa_lock_in — 기본안이 max_tax_credit에 고정된다(재정렬하지 않는다)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.fund_use_horizon = 'within_isa_lock_in'; r.profile.monthly_capacity_krw = 3000000; r.accounts.annuity_savings.ytd_contribution_krw = 9000000; return r; } },
+  { label: '종합소득 있음, 금액 모름(오차 방향 미정)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.has_non_wage_global_income_current_year = true; r.profile.current_year_global_income_krw = null; return r; } },
+  { label: 'ISA 서민형 선언', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.isa.exists = true; r.accounts.isa.account_type = 'low_income'; return r; } },
+  { label: '개월수 6개월(부분 연도)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.months_remaining_in_tax_year = 6; return r; } },
+];
+
+for (const { label, build } of differentialScenarios) {
+  test(`mock-vs-real 차등 — ${label}`, () => assertNoDrift(label, build()));
+}
+
+// **알려진, 선언된 한계 — 실패해도 전체를 붉게 만들지 않되 조용히 사라지지도
+// 않는다.** 개정안에서 청년을 선언하면 IRP·연금저축의 한계 공제율이 갈리고,
+// 실제 엔진은 D17(합산 한도 절단 시 IRP 우선 인정)에 따라 1차 순서를 다시
+// 짠다(`plans.mjs` `pensionRateIsHigher`). 이 목은 그 재정렬을 구현하지 않는다
+// — 파일 머리말이 이미 "공제율이 갈리는 재정렬은 이 목의 근사치가 다루지
+// 않는다"고 선언한 자리다. `todo`로 표시해 실패를 기록하되 실패로 세지 않는다
+// — 이 시나리오가 조용히 통과 목록에서 사라지면 다음 사람이 이 한계를 잊는다.
+test(
+  'mock-vs-real 차등 — 청년 선언(개정안, 공제율이 갈림) — 알려진 근사치 한계(D17 미구현)',
+  { todo: '이 목은 공제율이 갈리는 재정렬(D17 IRP 우선 인정)을 구현하지 않는다 — 이 파일 머리말의 선언된 범위 밖' },
+  () => {
+    const req = baseRequest({ scenarios: ['proposed'] });
+    req.profile.declared_youth = true;
+    assertNoDrift('청년 선언(개정안)', req);
+  },
+);

@@ -2126,6 +2126,18 @@ function computeScenario(scenario, request, rulesets) {
   // 비과세 한도를 영영 보일 수 없다. (이전에는 `exists &&`가 앞에 있었다 —
   // `isaAccountType` 게이트와 같은 뿌리의 결함이었다.)
   const isaTaxFreeRule = use('isa.tax_free_limit', 'scenarios[].limits.by_account[isa].tax_free_limit_krw');
+  // **두 안내는 서로 다른 사실을 말하고, 독립으로 판정한다**(실제 엔진
+  // `limits.mjs:898-905`) — 유형 미선언과 직전 소득 미입력은 동시에 일어날 수
+  // 있고, 예전에는 if/else로 묶여 있어 유형을 선언하지 않았을 때는 직전 소득이
+  // 없어도 그 사실을 알리지 않았다(4단계 게이트4 재소집, qa-report.md 11.5절 —
+  // 넓힌 좌표에서 새로 찾음. 이 좌표는 이 파일의 `baseRequest`가 두 값 다
+  // 기본으로 비워 두는 시나리오 전부에서 재현됐다).
+  if (accounts.isa.account_type == null) {
+    notices.push({ code: 'isa_type_not_declared', severity: 'info', field: 'accounts.isa.account_type', params: {}, basis_rule_ids: [] });
+  }
+  if (profile.prior_year_total_salary_krw == null) {
+    notices.push({ code: 'prior_year_income_missing', severity: 'info', field: 'profile.prior_year_total_salary_krw', params: {}, basis_rule_ids: [] });
+  }
   let taxFreeLimit = null;
   if (accounts.isa.account_type != null && isaTaxFreeRule) {
     const bracket = isaTaxFreeRule.value.brackets.find((b) => b.id === (accounts.isa.account_type === 'low_income' ? '서민형' : '일반형'));
@@ -2133,23 +2145,36 @@ function computeScenario(scenario, request, rulesets) {
 
     if (profile.prior_year_total_salary_krw != null) {
       const lowIncomeBracket = isaTaxFreeRule.value.brackets.find((b) => b.id === '서민형');
-      const qualifiesLowIncome =
-        lowIncomeBracket && profile.prior_year_total_salary_krw <= lowIncomeBracket.prev_total_salary_max_krw;
+      const salaryCeiling = lowIncomeBracket ? lowIncomeBracket.prev_total_salary_max_krw : null;
+      // **"교차확인의 결론을 낼 수 있는가"를 먼저 본다** — 확인 못 하는 목이
+      // 하나라도 있으면 결론(합치/충돌)을 내지 않고 사실만 통지한다(실제 엔진
+      // `limits.mjs:983-993` `crossCheckIsaType`). 예전에는 이 갈래가 아예
+      // 없어, 서민형 상한 이하인 사용자에게 늘 "선언이 틀렸다"는 무게의
+      // 충돌 경고를 잘못 냈다 — 실제로는 결론을 내릴 수 없는 상태였다.
+      const statutoryItems = isaTaxFreeRule.value.brackets_statutory?.items ?? [];
+      const unverifiable = statutoryItems.filter((item) => item?.restriction !== undefined || item?.delegated !== undefined).map((item) => item.id);
+      const canConcludeQualifies = unverifiable.length === 0;
+      const aboveSalaryCeiling = salaryCeiling != null && profile.prior_year_total_salary_krw > salaryCeiling;
       const declaredLowIncome = accounts.isa.account_type === 'low_income';
-      if (qualifiesLowIncome !== declaredLowIncome) {
+
+      if (!aboveSalaryCeiling && !canConcludeQualifies) {
+        notices.push({
+          code: 'isa_type_cross_check_inconclusive',
+          severity: 'info',
+          field: 'accounts.isa.account_type',
+          params: { unverifiable_bracket_ids: unverifiable },
+          basis_rule_ids: [isaTaxFreeRule.id],
+        });
+      } else if (!aboveSalaryCeiling !== declaredLowIncome) {
         notices.push({
           code: 'isa_type_conflicts_with_prior_income',
           severity: 'warning',
           field: 'accounts.isa.account_type',
-          params: {},
+          params: { unverifiable_bracket_ids: unverifiable },
           basis_rule_ids: [isaTaxFreeRule.id],
         });
       }
-    } else {
-      notices.push({ code: 'prior_year_income_missing', severity: 'info', field: 'profile.prior_year_total_salary_krw', params: {}, basis_rule_ids: [] });
     }
-  } else if (accounts.isa.account_type == null) {
-    notices.push({ code: 'isa_type_not_declared', severity: 'info', field: 'accounts.isa.account_type', params: {}, basis_rule_ids: [] });
   }
 
   // -- 가정 기반 ISA 정산액의 재료 (5.1.0, D28·D29 / 계약 3.6절) -------------
