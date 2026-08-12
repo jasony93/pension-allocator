@@ -272,6 +272,19 @@ test('no limited_by value can produce the old unconditional claim unless every a
   }
 });
 
+test('limited_by=fund_use_horizon — the sentence names the horizon, not a limit (D52 2번)', () => {
+  const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy('fund_use_horizon', 'fund_use_horizon', 'fund_use_horizon')));
+  assert.match(text, /지금 밝히신 자금 사용 시점에는 이롭지 않아 넣지 않았습니다/);
+  assert.ok(!text.includes('한도'), text);
+});
+
+test('limited_by=no_additional_tax_credit — the sentence never claims a budget or a limit (D52 1번·D53 2번)', () => {
+  const text = unallocatedReasonMessage(unallocatedBlockers(planLimitedBy('no_additional_tax_credit', null, null)));
+  assert.match(text, /IRP는 더 넣어도 세액공제액이 늘지 않아 넣지 않았습니다\(중도인출 제한만 지게 됩니다\)/);
+  assert.ok(!text.includes('예산'), text);
+  assert.ok(!text.includes('한도가 찼'), text);
+});
+
 test('accounts are named in the fixed screen order, matching the charts', () => {
   const groups = unallocatedBlockers(planLimitedBy('contribution_limit', 'contribution_limit', 'contribution_limit'));
   assert.deepEqual(groups[0].accounts, CHART_ACCOUNT_ORDER, '문장과 차트가 계좌를 다른 순서로 부르면 대조가 깨진다');

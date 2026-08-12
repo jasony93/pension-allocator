@@ -120,8 +120,10 @@ test('a basic successful request returns three accounts in every plan, in fixed 
   assert.equal(scenario.plans[0].is_baseline, true);
 });
 
-test('fund_use_horizon never changes allocation amounts or tax credit, only ordering/warnings', () => {
-  const horizons = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
+test('fund_use_horizon never changes allocation amounts or tax credit for the three non-lock-in values', () => {
+  // `12.0.0`에서 `within_isa_lock_in`이 이 불변식에서 빠졌다(D52 2번) — 남은
+  // 셋에서만 참이다. 그 값은 별도 시험이 진다(아래).
+  const horizons = ['before_pension_age', 'at_or_after_pension_age', 'unknown'];
   const vectors = horizons.map((h) => {
     const req = baseRequest();
     req.profile.fund_use_horizon = h;
@@ -145,11 +147,54 @@ test('fund_use_horizon never changes allocation amounts or tax credit, only orde
   }
 });
 
-test('echo.fund_use_horizon_affects is always the fixed contract shape', () => {
+test('within_isa_lock_in empties the two pension accounts, and the ISA too when the lock-in has not elapsed (D52 2번·D53 1번)', () => {
+  const req = baseRequest();
+  req.profile.fund_use_horizon = 'within_isa_lock_in';
+  req.accounts.isa.exists = true;
+  req.accounts.isa.account_type = 'general';
+  req.accounts.isa.cumulative_contribution_krw = 1000000;
+  req.accounts.isa.years_since_opening = 0; // 의무가입기간이 아직 안 지났다.
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, true);
+  const scenario = res.scenarios[0];
+  for (const plan of scenario.plans) {
+    for (const account of ['retirement_pension', 'annuity_savings', 'isa']) {
+      assert.equal(plan.allocations.find((a) => a.account === account).annual_krw, 0, `${plan.plan_id}/${account} should be 0`);
+      assert.equal(plan.allocations.find((a) => a.account === account).limited_by, 'fund_use_horizon');
+    }
+  }
+  assert.equal(scenario.plans[0].unallocated_breakdown.reason_code, 'no_account_beneficial_within_fund_use_horizon');
+  assert.ok(scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
+});
+
+test('within_isa_lock_in keeps the ISA allocation once its lock-in has already elapsed (D53 1번)', () => {
+  const req = baseRequest();
+  req.profile.fund_use_horizon = 'within_isa_lock_in';
+  req.accounts.isa.exists = true;
+  req.accounts.isa.account_type = 'general';
+  req.accounts.isa.cumulative_contribution_krw = 1000000;
+  req.accounts.isa.years_since_opening = 10; // 의무가입기간(3년)을 이미 넘겼다.
+  const res = compute(req, rulesets);
+  assert.equal(res.ok, true);
+  const scenario = res.scenarios[0];
+  for (const plan of scenario.plans) {
+    assert.equal(plan.allocations.find((a) => a.account === 'retirement_pension').annual_krw, 0);
+    assert.equal(plan.allocations.find((a) => a.account === 'annuity_savings').annual_krw, 0);
+    const isaAlloc = plan.allocations.find((a) => a.account === 'isa');
+    assert.ok(isaAlloc.annual_krw > 0, 'ISA should keep receiving an allocation once the lock-in has elapsed');
+    assert.notEqual(isaAlloc.limited_by, 'fund_use_horizon');
+    assert.ok(!plan.warnings.some((w) => w.account === 'isa'), 'a penalty that cannot occur must not be warned about');
+  }
+  // 그 시점에는 어느 계좌도 이롭지 않다는 안내가 성립하지 않는다 — ISA가 살아남았다.
+  assert.ok(!scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty'));
+  assert.ok(scenario.notices.some((n) => n.code === 'isa_lock_in_already_elapsed'));
+});
+
+test('echo.fund_use_horizon_affects is always the fixed contract shape (12.0.0 — the first two flipped, D52 2번)', () => {
   const res = compute(baseRequest(), rulesets);
   assert.deepEqual(res.echo.fund_use_horizon_affects, {
-    allocation_amounts: false,
-    tax_credit_amounts: false,
+    allocation_amounts: true,
+    tax_credit_amounts: true,
     limits: false,
     plan_ordering: true,
     baseline_selection: true,
@@ -592,10 +637,19 @@ test('a zero cap flattens the tax-credit axis and says so, without moving the al
 
   assert.ok(zero.comparison_note_codes.includes('tax_credit_axis_not_discriminating'));
   assert.ok(!rich.comparison_note_codes.includes('tax_credit_axis_not_discriminating'));
-  // **배분은 그대로다** — 한도는 공제액만 자른다(계약 4.2절의 자기 선언).
-  assert.deepEqual(
-    zero.plans[0].allocations.map((a) => a.annual_krw),
-    rich.plans[0].allocations.map((a) => a.annual_krw),
+  // **연금저축·ISA 배분은 그대로다 — IRP만 갈라진다**(`12.0.0`, D52 1번). 한도가
+  // 0이면 IRP는 표시 세액공제를 한 원도 못 늘리므로 기본안(`max_tax_credit`)은
+  // 그 몫을 배분하지 않는다(`limited_by: no_additional_tax_credit`) — 그 자리가
+  // 대신 ISA로 흘러가는 것이 사실이다(예산이 순차 충당을 그대로 따라간다).
+  const zeroBaseline = zero.plans[0];
+  const richBaseline = rich.plans[0];
+  assert.equal(zeroBaseline.plan_id, 'max_tax_credit');
+  assert.equal(richBaseline.plan_id, 'max_tax_credit');
+  assert.equal(zeroBaseline.allocations.find((a) => a.account === 'retirement_pension').annual_krw, 0);
+  assert.equal(zeroBaseline.allocations.find((a) => a.account === 'retirement_pension').limited_by, 'no_additional_tax_credit');
+  assert.equal(
+    zeroBaseline.allocations.find((a) => a.account === 'annuity_savings').annual_krw,
+    richBaseline.allocations.find((a) => a.account === 'annuity_savings').annual_krw,
   );
   assert.equal(zero.plans[0].deterministic_benefit.pension_credit_total_krw, 0);
   assert.ok(zero.plans[0].deterministic_benefit.pension_credit_total_before_cap_krw > 0);
@@ -1059,6 +1113,87 @@ const differentialScenarios = [
   { label: '종합소득 있음, 금액 모름(오차 방향 미정)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.has_non_wage_global_income_current_year = true; r.profile.current_year_global_income_krw = null; return r; } },
   { label: 'ISA 서민형 선언', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.accounts.isa.exists = true; r.accounts.isa.account_type = 'low_income'; return r; } },
   { label: '개월수 6개월(부분 연도)', build: () => { const r = baseRequest({ scenarios: BOTH_SCENARIOS }); r.profile.months_remaining_in_tax_year = 6; return r; } },
+  // ---------------------------------------------------------------------
+  // 13.0.0(D53·D54) — 계약이 세 보장을 거둔 자리를 넓힌 좌표로 잡는다. 지난
+  // 회차에 여섯을 스물아홉으로 넓히자 열둘이 새로 나왔던 것과 같은 규율이다.
+  // ---------------------------------------------------------------------
+  {
+    label: 'within_isa_lock_in — ISA 의무가입기간이 아직 안 지났다(세 계좌 전부 미배분)',
+    build: () => {
+      const r = baseRequest({ scenarios: BOTH_SCENARIOS });
+      r.profile.fund_use_horizon = 'within_isa_lock_in';
+      r.accounts.isa.exists = true;
+      r.accounts.isa.account_type = 'general';
+      r.accounts.isa.cumulative_contribution_krw = 1000000;
+      r.accounts.isa.years_since_opening = 0;
+      return r;
+    },
+  },
+  {
+    label: 'within_isa_lock_in — ISA 의무가입기간이 이미 지났다(ISA만 살아남는다, D53 1번)',
+    build: () => {
+      const r = baseRequest({ scenarios: BOTH_SCENARIOS });
+      r.profile.fund_use_horizon = 'within_isa_lock_in';
+      r.accounts.isa.exists = true;
+      r.accounts.isa.account_type = 'general';
+      r.accounts.isa.cumulative_contribution_krw = 1000000;
+      r.accounts.isa.years_since_opening = 10;
+      return r;
+    },
+  },
+  {
+    label: 'within_isa_lock_in — ISA 의무가입기간 경과 + 금융소득종합과세 배제(not_eligible이 이긴다)',
+    build: () => {
+      const r = baseRequest({ scenarios: BOTH_SCENARIOS });
+      r.profile.fund_use_horizon = 'within_isa_lock_in';
+      r.profile.financial_income_taxpayer_last_3_years = true;
+      r.accounts.isa.exists = true;
+      r.accounts.isa.account_type = 'general';
+      r.accounts.isa.cumulative_contribution_krw = 1000000;
+      r.accounts.isa.years_since_opening = 10;
+      return r;
+    },
+  },
+  {
+    label: 'IRP 트림 — applied는 참인데 표시 금액은 한 원도 안 준다(D53 2번 경계)',
+    build: () => {
+      const r = baseRequest({ scenarios: BOTH_SCENARIOS });
+      r.profile.current_year_total_salary_krw = 24795208;
+      r.profile.monthly_capacity_krw = 2666667;
+      r.profile.months_remaining_in_tax_year = 1;
+      return r;
+    },
+  },
+  {
+    label: '세액 한도 0 — IRP가 기본안에서 전부 트림되고 안이 하나 빠진다(D52 1번·D53 3번)',
+    build: () => {
+      const r = baseRequest({ scenarios: ['current'] });
+      r.profile.current_year_total_salary_krw = 5000000;
+      return r;
+    },
+  },
+  {
+    label: '세액 한도가 IRP를 부분 트림한다(끝수 있는 한도, 중간 구간)',
+    build: () => {
+      const r = baseRequest({ scenarios: BOTH_SCENARIOS });
+      r.profile.current_year_total_salary_krw = 30686275;
+      r.profile.monthly_capacity_krw = 1500000;
+      return r;
+    },
+  },
+  {
+    label: 'within_isa_lock_in + IRP 기납입으로 신용 한도까지 이미 참(reason_code 대조)',
+    build: () => {
+      const r = baseRequest({ scenarios: BOTH_SCENARIOS });
+      r.profile.fund_use_horizon = 'within_isa_lock_in';
+      r.accounts.isa.exists = true;
+      r.accounts.isa.account_type = 'general';
+      r.accounts.isa.cumulative_contribution_krw = 1000000;
+      r.accounts.isa.years_since_opening = 10;
+      r.accounts.retirement_pension.ytd_contribution_krw = 9000000;
+      return r;
+    },
+  },
 ];
 
 for (const { label, build } of differentialScenarios) {

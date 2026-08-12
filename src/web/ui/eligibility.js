@@ -95,8 +95,19 @@ const ACCOUNT_DISPLAY_ORDER = ['annuity_savings', 'retirement_pension', 'isa'];
  * 자리를 지우지 않은 이유는 (a) 오래된 요청·기록된 응답을 재생하는 화면 밖
  * 소비자가 있을 수 있고, (b) 지워도 얻는 것이 없기 때문이다 — `unallocatedBlockers`가
  * 실제 응답에서 관측되지 않는 값을 걸러내므로 죽은 분기가 렌더로 이어지지 않는다.
+ *
+ * **`12.0.0`에서 둘이 늘었다**(D52) — `fund_use_horizon`(자금 사용 시점이
+ * 그 계좌를 비웠다)과 `no_additional_tax_credit`(더 넣어도 표시되는 세액공제가
+ * 늘지 않아 IRP를 거기서 멈췄다). 사용자가 「IRP가 트림됐다」는 사실을 알려면
+ * 이 값이 화면까지 살아 있어야 한다 — 계약 8.9절이 그 뜻을 정의한다.
  */
-export const UNALLOCATED_REASON_ORDER = ['contribution_limit', 'credit_limit', 'not_eligible'];
+export const UNALLOCATED_REASON_ORDER = [
+  'contribution_limit',
+  'credit_limit',
+  'not_eligible',
+  'fund_use_horizon',
+  'no_additional_tax_credit',
+];
 
 /**
  * 미배분 금액이 **왜** 남았는지를 엔진의 `limited_by`에서 읽어 사유별로 묶는다.

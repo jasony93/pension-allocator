@@ -26,6 +26,7 @@
 import { el } from './dom.js';
 import {
   FUND_USE_HORIZON_LABEL,
+  fundUseHorizonLabel,
   FUND_USE_HORIZON_DESCRIPTION,
   HORIZON_EFFECT_CAPTION,
   HORIZON_CAPTION_BASIS_PREFIX,
@@ -526,12 +527,17 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
           // **"입력하신 값 기준"을 항상 붙인다** — 아직 고르지 않은 선택지에도
           // 같은 형식의 숫자가 붙어 "가상의 경우"처럼 읽혔던 것을, 말을 지어내지
           // 않고 사실(입력에서 계산됐다는 것)을 캡션 자체에 새겨 바로잡는다.
+          //
+          // **소유자 3번(D52 3번) — 범위의 위 끝은 이제 라벨 자체에 있다**
+          // (`fundUseHorizonLabel`). `within_isa_lock_in`의 캡션은 그래도 남긴다 —
+          // 라벨의 숫자(고정된 의무가입기간 총 연수)와 이 캡션의 숫자(**남은**
+          // 연수, 이미 계좌를 갖고 있으면 총 연수보다 작을 수 있다)가 다른 사실을
+          // 말하기 때문이다. `before_pension_age`는 라벨이 이미 같은 숫자(그
+          // 나이까지 남은 연수)를 말하므로 캡션을 중복해 그리지 않는다.
           const caption =
             value === 'within_isa_lock_in' && boundariesInfo?.isa_lock_in_years_remaining != null
               ? `${HORIZON_CAPTION_BASIS_PREFIX} · 남은 의무가입기간 ${formatYears(boundariesInfo.isa_lock_in_years_remaining)}`
-              : value === 'before_pension_age' && boundariesInfo?.pension_years_remaining != null
-                ? `${HORIZON_CAPTION_BASIS_PREFIX} · 그 나이까지 ${formatYears(boundariesInfo.pension_years_remaining)}`
-                : null;
+              : null;
           return el(
             'button',
             {
@@ -547,7 +553,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
                 // 숫자 아이콘 — 소유자 지시. 순서만 나타내고 값을 나르지 않으므로
                 // `aria-hidden`이다(선택 상태는 `aria-checked`가 이미 말한다).
                 el('span', { class: 'horizon-option-index', 'aria-hidden': 'true' }, [String(index + 1)]),
-                el('span', { class: 'horizon-option-label' }, [FUND_USE_HORIZON_LABEL[value]]),
+                el('span', { class: 'horizon-option-label' }, [fundUseHorizonLabel(value, boundariesInfo)]),
               ]),
               FUND_USE_HORIZON_DESCRIPTION[value]
                 ? el('span', { class: 'horizon-option-desc' }, [FUND_USE_HORIZON_DESCRIPTION[value]])

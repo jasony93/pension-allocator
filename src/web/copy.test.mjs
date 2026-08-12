@@ -8,6 +8,11 @@ import {
   assumptionAxisCaption,
   isaTaxFreeCeilingSentence,
   ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX,
+  fundUseHorizonLabel,
+  FUND_USE_HORIZON_LABEL,
+  unallocatedBreakdownMessage,
+  notAllocatedInPlanCaption,
+  NOT_ALLOCATED_IN_PLAN_CAPTION,
 } from './copy.js';
 
 /**
@@ -109,4 +114,88 @@ test('ISA 비과세 행은 분자가 구간 위 끝이면 괄호 부기를 쓰�
 
 test('법정 상한이 없는 축에는 고정 접미사가 있다', () => {
   assert.equal(ACCOUNT_BENEFIT_NO_STATUTORY_CEILING_SUFFIX, '법정 상한 없음');
+});
+
+// ---------------------------------------------------------------------------
+// 지평 선택지 라벨 (소유자 3번 · D52 3번)
+// ---------------------------------------------------------------------------
+
+test('within_isa_lock_in 라벨은 경계값이 있으면 그 연수를 명시한다', () => {
+  const label = fundUseHorizonLabel('within_isa_lock_in', { isa_lock_in_years: 3, pension_years_remaining: 9 });
+  assert.ok(label.includes('3년'), `라벨이 의무가입기간 연수를 담아야 한다: "${label}"`);
+});
+
+test('before_pension_age 라벨은 아래 끝(의무가입기간)과 위 끝(그 사람의 값)을 함께 적는다', () => {
+  const label = fundUseHorizonLabel('before_pension_age', { isa_lock_in_years: 3, pension_years_remaining: 9 });
+  assert.ok(label.includes('3년') && label.includes('9년'), `라벨이 범위를 명시해야 한다: "${label}"`);
+  // 위 끝은 사람마다 다르다 — 지어낸 상수(예: 10년)를 쓰지 않는다.
+  assert.ok(!label.includes('10년'), `위 끝을 지어내면 안 된다: "${label}"`);
+});
+
+test('경계값을 아직 모르면(생년월일 미입력) 숫자를 지어내지 않고 원래 문구로 떨어진다', () => {
+  assert.equal(fundUseHorizonLabel('within_isa_lock_in', null), FUND_USE_HORIZON_LABEL.within_isa_lock_in);
+  assert.equal(fundUseHorizonLabel('before_pension_age', undefined), FUND_USE_HORIZON_LABEL.before_pension_age);
+  assert.equal(fundUseHorizonLabel('before_pension_age', { isa_lock_in_years: 3, pension_years_remaining: null }), FUND_USE_HORIZON_LABEL.before_pension_age);
+});
+
+test('나머지 두 선택지는 경계값과 무관하게 고정 문구다', () => {
+  assert.equal(fundUseHorizonLabel('at_or_after_pension_age', { isa_lock_in_years: 3 }), FUND_USE_HORIZON_LABEL.at_or_after_pension_age);
+  assert.equal(fundUseHorizonLabel('unknown', { isa_lock_in_years: 3 }), FUND_USE_HORIZON_LABEL.unknown);
+});
+
+// ---------------------------------------------------------------------------
+// 미배분 갈래 (D52 2번·D53 1번) — 이유마다 다른 문장
+// ---------------------------------------------------------------------------
+
+test('reason_code가 no_account_beneficial이면 여력을 권유로 적지 않는다', () => {
+  const message = unallocatedBreakdownMessage({
+    total_annual_krw: 12000000,
+    pension_contribution_headroom_krw: 9000000,
+    isa_contribution_headroom_krw: 21000000,
+    no_headroom_krw: 0,
+    headrooms_overlap: true,
+    reason_code: 'no_account_beneficial_within_fund_use_horizon',
+  });
+  assert.ok(message.includes('12,000,000'), '전액이 문장에 있어야 한다');
+  assert.ok(!message.includes('더 납입할 수 있습니다'), `권유 문장이 남아 있으면 안 된다: "${message}"`);
+  assert.ok(message.includes('이롭지 않'), `이유가 명시돼야 한다: "${message}"`);
+});
+
+test('reason_code가 contribution_room_exhausted이면 기존 권유 문장을 그대로 쓴다', () => {
+  const message = unallocatedBreakdownMessage({
+    total_annual_krw: 5000000,
+    pension_contribution_headroom_krw: 5000000,
+    isa_contribution_headroom_krw: 0,
+    no_headroom_krw: 0,
+    headrooms_overlap: false,
+    reason_code: 'contribution_room_exhausted',
+  });
+  assert.ok(message.includes('더 납입할 수 있습니다'), `한도가 남았으면 권유 문장이 있어야 한다: "${message}"`);
+});
+
+test('미배분액이 0이면(설명할 미배분이 없다) null을 낸다', () => {
+  assert.equal(unallocatedBreakdownMessage({ total_annual_krw: 0, reason_code: null }), null);
+  assert.equal(unallocatedBreakdownMessage(null), null);
+});
+
+// ---------------------------------------------------------------------------
+// 계좌 한 행의 "배분 없음" 캡션 (D52·D53) — 시점·IRP 트림이면 이유를 말한다
+// ---------------------------------------------------------------------------
+
+test('fund_use_horizon으로 0원인 계좌는 그 행에서 바로 이유를 말한다', () => {
+  const caption = notAllocatedInPlanCaption('fund_use_horizon');
+  assert.ok(caption.includes('이롭지 않'), `"${caption}"`);
+  assert.notEqual(caption, NOT_ALLOCATED_IN_PLAN_CAPTION);
+});
+
+test('no_additional_tax_credit으로 0원인 IRP는 그 행에서 트림 이유를 말한다', () => {
+  const caption = notAllocatedInPlanCaption('no_additional_tax_credit');
+  assert.ok(caption.includes('세액공제액이 늘지 않아'), `"${caption}"`);
+  assert.notEqual(caption, NOT_ALLOCATED_IN_PLAN_CAPTION);
+});
+
+test('그 밖의 이유(예산·한도·없음)는 원래의 일반 캡션으로 떨어진다', () => {
+  for (const reason of ['budget', 'contribution_limit', null, undefined]) {
+    assert.equal(notAllocatedInPlanCaption(reason), NOT_ALLOCATED_IN_PLAN_CAPTION);
+  }
 });

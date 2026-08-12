@@ -189,8 +189,8 @@ test('the request carries the contract version the engine actually supports', ()
   assert.equal(req.schema_version, SCHEMA_VERSION);
   assert.equal(
     SCHEMA_VERSION.split('.')[0],
-    '11',
-    '계약이 11.0.0(major)으로 올랐다(D46 1번·D49 — 원 미만을 단계마다 버리지 않고 §47②에서 한 번만 버린다)',
+    '13',
+    '계약이 13.0.0(major)으로 올랐다(D53 — 트림 기준이 표시 금액으로 옮겨지고 목적 없이 IRP만 묶는 안이 빠진다)',
   );
 });
 

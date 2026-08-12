@@ -66,6 +66,34 @@ export const FUND_USE_HORIZON_LABEL = {
   unknown: '아직 모르겠다',
 };
 
+/**
+ * 지평 선택지의 **라벨 자체**에 범위를 명시한다(소유자 3번 · D52 3번).
+ *
+ * **아래 끝(ISA 의무가입기간)은 고정이지만 하드코딩하지 않는다** — 룰셋에서
+ * 나온 `fund_use_horizon_boundaries.isa_lock_in_years`를 읽는다. 두 계좌
+ * 선택지가 같은 경계(그 기간이 끝나는 시점)를 공유하므로 같은 값을 쓴다.
+ *
+ * **위 끝(연금 수령 개시 나이까지 남은 해)은 사람마다 다르다** — 쉰 살이면
+ * 5년 뒤다. `pension_years_remaining`이 그 값이고, **모두에게 같은 수를
+ * 적으면 그 사람에게 거짓이 된다**(D52 3번). 그래서 값이 없으면(생년월일을
+ * 아직 넣지 않았으면) 숫자를 지어내지 않고 일반적인 말로만 적는다 —
+ * `boundariesInfo`가 `null`이면 `FUND_USE_HORIZON_LABEL`의 원래 문구로
+ * 떨어진다.
+ */
+export function fundUseHorizonLabel(value, boundariesInfo) {
+  if (value === 'within_isa_lock_in') {
+    return boundariesInfo?.isa_lock_in_years != null
+      ? `${formatYears(boundariesInfo.isa_lock_in_years)} 안에 쓸 수도 있다`
+      : FUND_USE_HORIZON_LABEL.within_isa_lock_in;
+  }
+  if (value === 'before_pension_age') {
+    return boundariesInfo?.isa_lock_in_years != null && boundariesInfo?.pension_years_remaining != null
+      ? `${formatYears(boundariesInfo.isa_lock_in_years)} 후 ~ ${formatYears(boundariesInfo.pension_years_remaining)} 이내 쓸 계획이다`
+      : FUND_USE_HORIZON_LABEL.before_pension_age;
+  }
+  return FUND_USE_HORIZON_LABEL[value] ?? value;
+}
+
 export const FUND_USE_HORIZON_DESCRIPTION = {
   // 12.2(c) — 같은 사실을 더 짧게.
   within_isa_lock_in: 'ISA 의무가입기간 안에 해지할 수도 있다',
@@ -487,6 +515,15 @@ const UNALLOCATED_REASON_CLAUSE = {
   // `eligibility.js`의 `UNALLOCATED_REASON_ORDER`와 같은 이유로 남겨 둔다.
   credit_limit: (names) => `${names}는 세액공제 대상 납입액을 모두 채웠습니다(납입 잔여 한도는 남아 있습니다)`,
   not_eligible: (names) => `${names}는 이번 계산의 배분 대상이 아닙니다`,
+  // **`12.0.0`(D52 2번)** — 지금 밝히신 자금 사용 시점(의무가입기간 안에 쓸
+  // 가능성)에서는 이 계좌가 이롭지 않다. 이유는 이 계좌의 경고에 이미 적혀
+  // 있으므로 여기서 다시 적지 않는다(계약 8.0절 — 조건은 한 곳에만).
+  fund_use_horizon: (names) => `${names}는 지금 밝히신 자금 사용 시점에는 이롭지 않아 넣지 않았습니다`,
+  // **`13.0.0`(D52 1번·D53 2번)** — IRP 트림. 더 넣어도 **표시되는** 세액공제액이
+  // 한 원도 늘지 않아 거기서 멈췄다. 「예산이 모자랍니다」·「한도가 찼습니다」로
+  // 적으면 거짓이다 — 더 넣으면 채워질 것처럼 읽힌다(계약 8.9절).
+  no_additional_tax_credit: (names) =>
+    `${names}는 더 넣어도 세액공제액이 늘지 않아 넣지 않았습니다(중도인출 제한만 지게 됩니다)`,
 };
 
 const UNALLOCATED_LEAD = '이 배분에 들어가지 않은 금액입니다.';
@@ -514,9 +551,35 @@ export function unallocatedReasonMessage(groups) {
 // 두 번 세는 것이므로, 그럴 때는 각 여력을 따로 말하고 합계를 만들지 않는다.
 // ---------------------------------------------------------------------------
 
+/**
+ * **`12.0.0`(D52 2번)** — 「한도가 남지 않아서」와 「그 시점에는 어느 계좌도
+ * 이롭지 않아서」는 다른 사실이다. 뒤엣것에서는 `pension_contribution_headroom_krw`·
+ * `isa_contribution_headroom_krw`가 크게 남아 있다 — 한도가 멀쩡하기 때문이다.
+ * **그 두 칸을 아래 일반 절처럼 "더 넣을 수 있습니다"로 읽으면, 화면이 방금
+ * `limited_by: fund_use_horizon`으로 "넣지 마세요"라고 판정한 돈을 다시
+ * 권하는 것이 된다.** 그래서 이 이유일 때는 여력 금액을 권유 문장에 쓰지 않고,
+ * 별도의 문장으로 「자리는 있지만 지금 시점에는 넣지 않았다」는 사실만 말한다.
+ */
+const NO_ACCOUNT_BENEFICIAL_REASON = 'no_account_beneficial_within_fund_use_horizon';
+
 export function unallocatedBreakdownMessage(breakdown) {
-  if (!breakdown) return null;
-  const { pension_contribution_headroom_krw: pension, isa_contribution_headroom_krw: isa, no_headroom_krw: none, headrooms_overlap: overlap } = breakdown;
+  if (!breakdown || !breakdown.total_annual_krw) return null;
+  const {
+    reason_code: reason,
+    pension_contribution_headroom_krw: pension,
+    isa_contribution_headroom_krw: isa,
+    no_headroom_krw: none,
+    headrooms_overlap: overlap,
+    total_annual_krw: total,
+  } = breakdown;
+
+  if (reason === NO_ACCOUNT_BENEFICIAL_REASON) {
+    return (
+      `${formatKrw(total)}은 이번에 넣지 않았습니다. 납입 한도는 남아 있지만, ` +
+      `지금 밝히신 자금 사용 시점에는 어느 계좌도 이롭지 않기 때문입니다 — 이유는 위 경고에 있습니다.`
+    );
+  }
+
   const clauses = [];
   if (pension > 0) {
     clauses.push(
@@ -611,6 +674,25 @@ export const CONDITIONAL_PENDING_STALE_CAPTION = '아래 결과에는 ISA 만기
  */
 // 12.2(c) — 같은 사실을 더 짧게.
 export const NOT_ALLOCATED_IN_PLAN_CAPTION = '배분 없음';
+
+/**
+ * **`12.0.0`·`13.0.0`(D52·D53)** — 위 `NOT_ALLOCATED_IN_PLAN_CAPTION`만으로는
+ * 부족한 자리가 생겼다. 이 계좌가 이 배분안에서 0원인 이유가 **자금 사용
+ * 시점** 때문인지 **IRP 트림**(더 넣어도 표시 세액공제가 늘지 않아 멈췄다)
+ * 때문인지를, 그 사실이 "미배분" 요약 행(전체가 남아야만 뜨는 자리)에
+ * 도달하지 않아도 **이 계좌의 행 자체에서** 알 수 있어야 한다. 다른 이유
+ * (`budget`·`contribution_limit`·`null`)는 여전히 "배분 없음"으로 충분하다 —
+ * 그 자리는 이미 위 예산·한도 줄이 사실을 말하고 있다.
+ */
+const NOT_ALLOCATED_REASON_CAPTION = {
+  fund_use_horizon: '지금 밝히신 자금 사용 시점에는 이롭지 않아 배분하지 않았습니다',
+  no_additional_tax_credit: '더 넣어도 세액공제액이 늘지 않아 배분하지 않았습니다(중도인출 제한만 지게 됩니다)',
+};
+
+/** 배분액 0인 계좌 한 행의 캡션. `limited_by`를 읽어 이유가 있으면 이유를, 없으면 원래 캡션을 낸다. */
+export function notAllocatedInPlanCaption(limitedBy) {
+  return NOT_ALLOCATED_REASON_CAPTION[limitedBy] ?? NOT_ALLOCATED_IN_PLAN_CAPTION;
+}
 
 /** 조각이 하나뿐인 도넛의 캡션 (5.12절). 12.2(c) — 더 짧게. */
 export function donutSingleSliceCaption(account) {

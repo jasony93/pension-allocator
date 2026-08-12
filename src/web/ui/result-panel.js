@@ -26,7 +26,7 @@ import {
   unallocatedReasonMessage,
   unallocatedBreakdownMessage,
   pensionWithoutCreditMessage,
-  NOT_ALLOCATED_IN_PLAN_CAPTION,
+  notAllocatedInPlanCaption,
   CONDITIONAL_PENDING_ALERT,
   CONDITIONAL_PENDING_STALE_CAPTION,
   RESULT_PLACEHOLDER_COPY,
@@ -643,7 +643,11 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
         el('p', { class: 'field-help' }, [contributionRemainingCaption(remaining, Math.min(1, percentOfLimit))]),
         // 배분액이 0인 계좌는 도넛에 조각이 없다(design-system 5.20절 비활성).
         // "그 계좌는 어디 갔나"에 답하는 자리가 여기다 — screens.md 5.4절이 정한 캡션.
-        alloc.annual_krw === 0 ? el('p', { class: 'field-help' }, [NOT_ALLOCATED_IN_PLAN_CAPTION]) : null,
+        // **`12.0.0`·`13.0.0`(D52·D53)** — 이유가 자금 사용 시점이거나 IRP
+        // 트림이면 이 행에서 바로 그 사실을 말한다. "미배분" 요약 행은 계좌
+        // 전체가 남아야만 뜨므로, 다른 계좌가 그 몫을 흡수하면 이 행이 이유를
+        // 말할 유일한 자리가 된다.
+        alloc.annual_krw === 0 ? el('p', { class: 'field-help' }, [notAllocatedInPlanCaption(alloc.limited_by)]) : null,
         // 연금계좌 묶음의 세액공제 인정 여지는 **마지막 연금계좌 행에 한 번만**
         // 적는다(5.10절 (4)). 계좌마다 적으면 사용자가 둘을 더한다.
         account === creditCaptionAccount ? creditHeadroomBlock(scenario, plan) : null,
