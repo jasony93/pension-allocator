@@ -326,6 +326,12 @@ export const PLAN_TAX_CAP_KEYS = [
   'applied',
   'binding_code',
   'threshold_income_tax_krw',
+  // **`applied`와 다른 자를 쓰는 칸이다**(`14.0.0` · D54). `applied`는 「한도가 물었는가」를
+  // 정확값으로 재고, 이 칸은 「**밀려난 납입액이 있는가**」를 **표시 금액**으로 잰다 —
+  // 의제인출의 대상이 계좌에 남아 있어야 하는데 원 미만은 남을 수 없기 때문이다.
+  // **둘이 갈리는 자리가 실재하므로 정답지가 이 칸을 따로 주장할 수 있어야 한다** —
+  // `applied`만 주장하면 그 갈림은 어느 케이스에서도 보이지 않는다.
+  'contribution_carryover_available',
   'carryover_shares_future_year_credit_limit',
   'carryover_requires_application',
 ];
@@ -533,6 +539,23 @@ function validatePlanTaxCap(value, where, errors) {
       `${where}: applied:false인데 binding_code가 ${CAP_BINDING.PROVABLE}다 — ` +
         '자르지 않은 결과는 한도가 걸린다는 것을 증명하지 못한다',
     );
+  }
+
+  if ('contribution_carryover_available' in value) {
+    requireBoolean(
+      value.contribution_carryover_available,
+      `${where}.contribution_carryover_available`,
+      errors,
+    );
+    // **한 방향만 참이다**(`14.0.0` · D54). 이월할 납입액이 있으면 한도가 물었다.
+    // 반대는 성립하지 않는다 — 정확값으로만 잘린 좌표에서는 `applied`가 참인데
+    // 밀려난 납입액이 0이다. 그 방향을 형식 단계에서 막으면 갈리는 자리를 적을 수 없게 된다.
+    if (value.applied === false && value.contribution_carryover_available === true) {
+      errors.push(
+        `${where}: applied:false인데 contribution_carryover_available:true다 — ` +
+          '자르지 않았으면 밀려난 납입액이 없다',
+      );
+    }
   }
 }
 

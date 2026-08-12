@@ -431,6 +431,29 @@ function allocate(planId, ctx, trimIrp = IRP_CREDIT_PRODUCTIVE_ONLY_PLANS.has(pl
  * **`reduced_*`와 `threshold_income_tax_krw`는 여전히 이 배분의 표시 금액이다.**
  * 그 셋은 화면이 나란히 놓고 더하고 빼는 수이고, 실리지 않은 배분의 수를 섞으면
  * 화면에서 합이 맞지 않는다(불변식 I23).
+ *
+ * **`contribution_carryover_available`은 `applied`를 따르지 않는다** (`14.0.0` · D54 후속).
+ * 두 칸이 **서로 다른 물음**에 답한다.
+ *
+ *   · `applied` — 「이 사용자에게 **한도가 물었는가**」. 트림 전 금액에 대고 **정확값**으로 잰다.
+ *   · `contribution_carryover_available` — 「**밀려난 납입액이 있는가**」. 이 배분에서 실제로
+ *     잘린 **표시 금액**으로 잰다.
+ *
+ * **왜 자가 표시 금액인가.** 시행령 §118의3①의 대상은 「연금계좌세액공제를 받지 아니한
+ * **금액**」이고 그 구조가 **의제인출 + 의제재납입**이라 **그 금액이 계좌에 남아 있어야**
+ * 한다(룰셋 `pension.credit.unused.contribution_carryover`의
+ * `mechanism.requires_amount_still_in_account`). **원 미만의 연금보험료를 「가장 먼저
+ * 인출하여 다시 납입한 것으로 본다」는 처분은 실행될 수 없다** — 계좌 잔액의 단위가 원이다.
+ * 실행될 수 없는 처분의 대상을 「있다」고 적으면 사용자를 없는 절차로 보낸다(D49가
+ * 「막대가 짧다」를 실제 잘림에 매단 것과 같은 판단이다).
+ *
+ * **그 단계를 정하는 조문은 없다.** 국고금관리법 §47②가 지목하는 것은 과세표준 하나이고,
+ * 룰셋 `tax.rounding.won_fraction`의 표시 단계는 `determined_by_law: false`다. **이 조직이
+ * 정한 자이며 계약 5.5절이 그렇게 명시한다.**
+ *
+ * **둘이 갈리는 좌표가 실재한다** — 총급여 24,795,208 · 월 2,666,667에서 정확값 초과분은
+ * 0.045원이라 `applied: true`인데 표시 초과분은 0이다. 정확값으로 재면 D53 2번이 닫은
+ * 구멍(어느 표시 금액에도 나타나지 않는 끝수를 「얻은 것」으로 세는 것)이 여기서 다시 열린다.
  */
 function applyCap(
   incomeTaxExact,
@@ -459,10 +482,16 @@ function applyCap(
   // 잘린 것은 공제액이고 납입액이 아니다. 그 납입액은 전환 신청의 대상이 된다 —
   // "넣은 돈이 사라진다"가 아니라 "올해의 공제는 0이고 납입액은 넘길 수 있다"가 정확한 서술이다.
   //
+  // **자는 표시 금액이다**(위 머리말 · D54). `applied`가 아니라 이 배분에서 실제로 줄어든
+  // 표시 금액이 정한다 — 의제인출의 대상이 계좌에 남아 있어야 하고, 원 미만은 남을 수 없다.
+  // **소득세분으로 잰다**: 전환의 대상은 납입액이고 그 납입액에 대응하는 것이 소득세분
+  // 공제액이다. 지방소득세분은 그 소득세분에서 산출된 값이라 자를 새로 세우지 않는다.
+  const carryoverAvailable = reducedIncomeTax > 0;
+
   // **다만 그 서술에는 조건이 둘 붙는다**(D26). 이름 하나(`..._available`)가 그것을
   // 감추고 있었으므로 조건을 값으로 함께 낸다. 전환이 걸리지 않는 안에서는 읽지 않는다 —
   // 읽지 않은 규칙을 근거로 싣지 않는다는 규약 때문이다.
-  const carryover = applied ? resolveCarryoverConditions(access) : null;
+  const carryover = carryoverAvailable ? resolveCarryoverConditions(access) : null;
 
   return {
     incomeTax,
@@ -485,7 +514,7 @@ function applyCap(
       threshold_income_tax_krw: incomeTax,
       // 초과분의 세액공제액은 이월되지 않는다. 다만 그 납입액은 신청으로 넘길 수 있다.
       credit_carryforward: cap.credit_carryforward,
-      contribution_carryover_available: applied,
+      contribution_carryover_available: carryoverAvailable,
       // 전환금액도 **전환한 해의** 600만·900만 한도를 그 해의 새 납입액과 나눠 쓴다.
       // 매년 한도를 채우는 사용자에게는 전환할 자리가 생기지 않는다.
       carryover_shares_future_year_credit_limit: carryover?.shares_future_year_credit_limit ?? null,
@@ -494,7 +523,9 @@ function applyCap(
       error_direction_code: cap.error_direction_code,
       basis_rule_ids: [
         ...cap.basis_rule_ids,
-        ...(applied ? [RULE.CREDIT_UNUSED_CARRYOVER] : []),
+        // 전환 특례 규칙은 **읽었을 때만** 실린다. 밀려난 납입액이 0이면 위에서 읽지
+        // 않았고, 읽지 않은 규칙을 근거로 싣지 않는다.
+        ...(carryoverAvailable ? [RULE.CREDIT_UNUSED_CARRYOVER] : []),
       ].sort(),
     },
   };

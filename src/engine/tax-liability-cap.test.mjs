@@ -410,8 +410,84 @@ test('1원에 못 미치게 잘리면 잘림 표시는 참이고 잘린 금액�
   assert.equal(benefit.pension_credit_income_tax_krw, 400_000);
   assert.equal(cap.applied, true);
   assert.equal(cap.reduced_income_tax_krw, 0);
+  assert.equal(cap.reduced_local_tax_krw, 0);
+  assert.equal(cap.reduced_total_krw, 0);
   // 자름이 증명되는 분기이므로 표시가 있는 쪽 코드가 나간다.
   assert.equal(cap.binding_code, 'binds_provably');
+});
+
+test('밀려난 납입액이 0이면 전환 가능 표시가 false다 — applied와 갈리는 것이 설계다', () => {
+  // **같은 좌표를 두 번째 자로 다시 잰다**(D54 후속). 총급여 24,795,208 · 월 2,666,667은
+  // `applied: true`이면서 **표시 초과분이 0**인 자리이고, `13.0.0`까지 이 칸이 `applied`에
+  // 직결돼 있어 **밀려난 납입액이 없는 사용자에게 `true`가 나갔다.**
+  //
+  // **두 칸은 다른 물음에 답한다.**
+  //   · `applied` — 「한도가 물었는가」. 트림 전 금액에 대고 **정확값**으로 잰다.
+  //   · `contribution_carryover_available` — 「밀려난 납입액이 있는가」. **표시 금액**으로 잰다.
+  //
+  // **자가 표시 금액인 근거는 조문이다** — 시행령 §118의3①의 대상이 「세액공제를 받지
+  // 아니한 **금액**」이고 구조가 **의제인출 + 의제재납입**이라 그 금액이 계좌에 남아
+  // 있어야 한다. **원 미만의 연금보험료를 「가장 먼저 인출하여 다시 납입한 것으로 본다」는
+  // 처분은 실행될 수 없다.** 그 단계를 정하는 조문은 없고(국고금관리법 §47②가 지목하는
+  // 것은 과세표준 하나다) 이 조직이 정한 자다 — 계약 5.5절이 그렇게 명시한다.
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: {
+          birth_date: '1986-06-15',
+          current_year_total_salary_krw: 24_795_208,
+          monthly_capacity_krw: 2_666_667,
+          months_remaining_in_tax_year: 1,
+        },
+      }),
+      rulesets,
+    ),
+  );
+
+  // **`applied: true`이면서 `false`인 자리가 실제로 서는지를 먼저 확인한다.** 이 좌표에서
+  // 한도가 물지 않으면 아래 반복문은 통과하면서 아무것도 재지 않는다.
+  assert.equal(
+    planOf(scenario, 'max_tax_credit').deterministic_benefit.tax_liability_cap.applied,
+    true,
+    '이 좌표에서 한도가 물지 않으면 두 자가 갈리는 자리가 아니다',
+  );
+
+  // **모든 배분안에서 성립한다.** 한 안에서만 재면 다른 안이 조용히 갈릴 수 있다.
+  // (`isa_first`는 연금 공제액 자체가 한도 아래라 `applied`가 `false`다 — 그 안에서도
+  //  밀려난 납입액은 없으므로 이 칸은 같은 `false`다.)
+  for (const plan of scenario.plans) {
+    const cap = plan.deterministic_benefit.tax_liability_cap;
+    assert.equal(cap.reduced_total_krw, 0, plan.plan_id);
+    assert.equal(
+      cap.contribution_carryover_available,
+      false,
+      `${plan.plan_id}: 인출을 의제할 대상이 계좌에 없는데 전환 가능하다고 적었다`,
+    );
+    // 읽지 않은 규칙을 주장하지 않는다 — 조건 둘도 근거도 함께 빠진다.
+    assert.equal(cap.carryover_shares_future_year_credit_limit, null, plan.plan_id);
+    assert.equal(cap.carryover_requires_application, null, plan.plan_id);
+    assert.ok(
+      !cap.basis_rule_ids.includes('pension.credit.unused.contribution_carryover'),
+      `${plan.plan_id}: 읽지 않은 전환 특례 규칙이 근거로 실렸다`,
+    );
+  }
+});
+
+test('한 원이라도 밀려나면 전환 가능 표시가 true다 — 대조군', () => {
+  // **위 좌표의 대조군이다.** 자가 표시 금액이라는 것은 「언제나 false」가 아니다.
+  // 표시로 1원이라도 잘리면 그 금액에 대응하는 납입액이 계좌에 실제로 남아 있고,
+  // 의제인출이 실행될 수 있다.
+  const cap = planOf(
+    scenarioOf(compute(withSalary(CAP_COORDINATES.BINDS.total_salary_krw, FULL_PENSION), rulesets)),
+    'max_tax_credit',
+  ).deterministic_benefit.tax_liability_cap;
+
+  assert.ok(cap.reduced_income_tax_krw > 0, '이 좌표가 자르지 않으면 대조군이 아니다');
+  assert.equal(cap.applied, true);
+  assert.equal(cap.contribution_carryover_available, true);
+  assert.equal(cap.carryover_shares_future_year_credit_limit, true);
+  assert.equal(cap.carryover_requires_application, true);
+  assert.ok(cap.basis_rule_ids.includes('pension.credit.unused.contribution_carryover'));
 });
 
 // ── 한도가 0일 때 ────────────────────────────────────────────────
@@ -828,5 +904,13 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   // 따라 내려간다. (3) **표시 공제액이 같고 IRP만 더 묶인 안이 `plans`에서 빠진다** —
   // 배열의 길이와 `plan_id` 구성이 같은 요청에서 달라진다. 셋 다 「응답 쪽 보장을
   // 거두는 것」이고 0.1절이 그것을 major로 정한다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '13');
+  //
+  // **14로 올린 것은 금액이 한 원도 안 바뀌기 때문이다**(계약 0.22절, D54 후속).
+  // `contribution_carryover_available`이 `applied`에 직결돼 있던 것을 끊고 **실제
+  // 잘림(표시 금액)**에 매달았다. 뒤집히는 것은 참·거짓 한 칸과 그것에 딸린 셋뿐이고
+  // **금액은 하나도 움직이지 않는다** — 그래서 **금액을 보는 어떤 검사에도 걸리지
+  // 않는다.** minor로 내면 목은 계속 돌면서 이 칸을 옛 뜻으로 읽고, 화면은 **넘길
+  // 금액이 한 원도 없는 사용자**에게 이월 신청을 계속 안내한다. 규약의 「기존 필드의
+  // 의미 변경」이고, `8.0.0`이 **값이 하나도 안 바뀌는데도** major를 고른 선례가 있다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '14');
 });

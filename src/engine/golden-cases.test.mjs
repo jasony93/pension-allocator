@@ -201,6 +201,16 @@ const VOCABULARY_DEBT = [
   'tax_liability_cap.cap_krw',
   'tax_liability_cap.applied',
   'tax_liability_cap.threshold_income_tax_krw',
+  // **이번 회차에 어휘가 처음 열렸다**(`14.0.0` · D54). 22차 `open_question`이 지적한
+  // 자리이고, `tax-domain`이 그 회차에 값을 적지 않은 이유를 스스로 적었다 — 「그 칸을
+  // 무엇으로 재는지가 계약에서 아직 안 정해졌고, 정해지지 않은 것을 정답지가 먼저
+  // 단정하면 정답지가 계약을 대신 정하는 것이 된다」.
+  //
+  // **계약이 자를 정했다** — 표시 금액이다(계약 5.5절). 그래서 이 어휘를 연다.
+  // **채울 값도 그 회차가 이미 산출해 두었다**: GC-32d는 `false`(정확값 초과분 0.1원 ·
+  // 표시 초과분 0), GC-34는 `true`(표시 초과분 1원 · 대응 납입액 6.67원이 연금저축에
+  // 남는다). **값의 저자는 `tax-domain`이고 이 유닛은 정답지를 고치지 않는다.**
+  'tax_liability_cap.contribution_carryover_available',
   'pension_withdrawal_start.computable',
   'pension_withdrawal_start.earliest_start_date',
   'pension_withdrawal_start.years_until_earliest_start',

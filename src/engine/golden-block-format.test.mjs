@@ -640,6 +640,14 @@ const INJECTIONS = [
   // 대조 이전에 형식에서 걸린다 — 옮겨 적다 방향이 뒤집히는 것이 가장 흔한 사고다.
   { via: 'format', block: CAP_APPLIED, name: 'applied:false + binds_provably', path: P('max_tax_credit', 'tax_liability_cap'), value: { applied: false, binding_code: 'binds_provably' }, token: '한도가 걸린다는 것을 증명하지 못한다' },
   { via: 'format', block: CAP_APPLIED, name: 'binding_code에 없는 값', path: P('max_tax_credit', 'tax_liability_cap'), value: { binding_code: 'cap_has_headroom' }, token: '계약 8.7절의 두 값이 아니다' },
+  // ── 이월 판정의 자 (`14.0.0` · D54) ──
+  // **`applied`와 다른 자를 쓰는 칸이라 따로 물어야 한다.** GC-90은 표시로 1원이 잘리는
+  // 좌표이므로 `true`가 옳고, 정답지가 `false`로 적으면 대조가 물어야 한다.
+  { via: 'compare', block: CAP_APPLIED, name: 'tax_liability_cap.contribution_carryover_available', path: P('max_tax_credit', 'tax_liability_cap', 'contribution_carryover_available'), value: false, mentions: ['GC-90', 'max_tax_credit', 'contribution_carryover_available'] },
+  // **한 방향만 형식이 문다.** 자르지 않았는데 이월할 납입액이 있다고 적는 것은 불가능하다.
+  // 반대 방향(`applied:true` + `false`)은 **실재하는 좌표이므로 막지 않는다** — 막으면
+  // 정답지가 두 자가 갈리는 자리를 적을 수 없게 되고, 그것이 이 회차가 연 자리다.
+  { via: 'format', block: CAP_APPLIED, name: 'applied:false + 이월 가능', path: P('max_tax_credit', 'tax_liability_cap'), value: { applied: false, binding_code: 'binding_not_determined', contribution_carryover_available: true }, token: '자르지 않았으면 밀려난 납입액이 없다' },
 
   // ── 목적함수 무력화 — 양쪽 방향 다 ──
   { via: 'compare', block: CAP_ZERO, name: 'objective_degenerate (참→거짓)', path: P('max_tax_credit', 'objective_degenerate'), value: false, mentions: ['GC-91', 'max_tax_credit', '목적함수'] },

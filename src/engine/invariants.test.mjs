@@ -194,6 +194,24 @@ const PROFILES = [
     },
   },
   {
+    // **`applied`와 「밀려난 납입액」이 갈리는 유일한 형태**(D54 · 계약 5.5절). 한도가
+    // **1원에 못 미치게** 물어서 `applied: true`인데 표시 금액은 한 원도 줄지 않는다
+    // (한도 400,000.005 · 공제액 400,000.05).
+    //
+    // **이 줄이 없으면 I23의 이월 판정 검사가 통과하면서 아무것도 막지 못한다** — 나머지
+    // 좌표에서는 두 자가 같은 값을 내기 때문이다. 실제로 확인했다: 이 줄을 넣기 전에는
+    // 엔진을 `13.0.0`의 구현(`applied` 직결)으로 되돌려도 I23이 침묵했다.
+    label: '한도가 1원에 못 미치게 문다 (이월 판정의 자가 갈리는 좌표)',
+    patch: {
+      profile: {
+        birth_date: '1986-06-15',
+        current_year_total_salary_krw: 24_795_208,
+        monthly_capacity_krw: 2_666_667,
+        months_remaining_in_tax_year: 1,
+      },
+    },
+  },
+  {
     label: '오차 방향이 미정인 분기 (종합소득 있음 · 금액 모름)',
     patch: {
       profile: {
@@ -840,10 +858,36 @@ function checkScenario(scenario, response, request, at) {
       `${at} I23: 걸림 증명 표시가 자름·오차 방향과 어긋난다`,
     );
     // 잘린 것은 공제액이고 납입액이 아니다. 납입액은 전환 신청의 대상으로 살아남는다.
+    //
+    // **자가 `applied`가 아니라 표시 금액이다**(`14.0.0` · D54). 두 칸이 다른 물음에
+    // 답한다 — `applied`는 「한도가 물었는가」이고 이 칸은 「**밀려난 납입액이 있는가**」다.
+    // 시행령 §118의3①의 대상이 「받지 아니한 **금액**」이고 구조가 의제인출 + 의제재납입이라
+    // **그 금액이 계좌에 남아 있어야** 하는데, **원 미만은 계좌에 남을 수 없다.**
+    // 그래서 `applied: true`이면서 이 칸이 `false`인 좌표가 실재하고, 그것이 결함이 아니라
+    // 설계다(총급여 24,795,208 · 예산 2,666,667 — `tax-liability-cap.test.mjs`).
     assert.equal(
       c.contribution_carryover_available,
-      c.applied,
-      `${at} I23: 잘렸는데 납입액 전환 가능 표시가 따라오지 않았다`,
+      c.reduced_income_tax_krw > 0,
+      `${at} I23: 납입액 전환 가능 표시가 실제로 밀려난 금액과 어긋난다`,
+    );
+    // 한 방향은 무조건 참이다 — **이월할 것이 있으면 한도가 물었다.** 반대는 아니다.
+    if (c.contribution_carryover_available) {
+      assert.equal(c.applied, true, `${at} I23: 이월할 납입액이 있는데 잘림 표시가 없다`);
+    }
+    // 조건 둘은 그 칸을 따라간다. 읽지 않은 규칙을 주장하지 않는다(D26).
+    const conditionsRead =
+      c.carryover_shares_future_year_credit_limit !== null || c.carryover_requires_application !== null;
+    assert.equal(
+      conditionsRead,
+      c.contribution_carryover_available,
+      `${at} I23: 전환 조건 둘이 전환 가능 표시와 어긋난다 — 읽지 않은 규칙을 주장했거나 그 반대다`,
+    );
+    // 근거도 같은 자를 쓴다. 읽지 않은 규칙이 `basis_rule_ids`에 남으면 화면이 그것을
+    // 근거로 문장을 쓴다.
+    assert.equal(
+      c.basis_rule_ids.includes('pension.credit.unused.contribution_carryover'),
+      c.contribution_carryover_available,
+      `${at} I23: 전환 특례 규칙이 근거 목록과 전환 가능 표시 사이에서 어긋난다`,
     );
   }
 

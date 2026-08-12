@@ -947,3 +947,110 @@ test('주입 / 지배 판정을 지우면 절세액이 같은데 IRP만 더 묶�
     '되살아난 안이 IRP를 더 묶지 않으면 이 주입이 겨눈 형태가 아니다',
   );
 });
+
+// ── 주입 4-F. 이월 판정의 자를 표시 금액에서 정확값으로 되돌린다 (D54) ────────
+//
+// **이 주입은 금액을 한 원도 바꾸지 않는다.** 배분도 세액공제액도 그대로이고 뒤집히는
+// 것은 참·거짓 한 칸뿐이다. 그래서 **금액을 보는 어떤 검사에도 걸리지 않는다** — 이
+// 저장소가 반복해 밟은 형태이고(값은 다 유효 범위 안인데 화면 문장이 거짓이 된다),
+// 되돌린 구현은 실제로 `13.0.0`까지의 코드다.
+//
+// 되돌리면 **인출을 의제할 대상이 계좌에 없는 사용자**에게 「납입액을 이후 과세기간으로
+// 넘길 수 있습니다」가 나간다. 원 미만의 연금보험료를 「가장 먼저 인출하여 다시 납입한
+// 것으로 본다」는 처분은 실행될 수 없으므로, 그 안내는 사용자를 없는 절차로 보낸다.
+
+/** 정확값 초과분이 1원에 못 미치는 좌표. 두 자가 갈리는 자리는 여기다. */
+const SUB_WON_EXCESS_REQUEST = baseRequest({
+  profile: {
+    birth_date: '1986-06-15',
+    current_year_total_salary_krw: 24_795_208,
+    monthly_capacity_krw: 2_666_667,
+    months_remaining_in_tax_year: 1,
+  },
+});
+
+/** 응답에서 금액으로 나가는 것 전부. 주입이 금액을 건드렸는지 보는 자다. */
+const amountsOf = (plan) => ({
+  allocations: plan.allocations.map((a) => [a.account, a.annual_krw, a.monthly_krw]),
+  credit: [
+    plan.deterministic_benefit.pension_credit_income_tax_krw,
+    plan.deterministic_benefit.pension_credit_local_tax_krw,
+    plan.deterministic_benefit.pension_credit_total_krw,
+    plan.deterministic_benefit.pension_credit_income_tax_before_cap_krw,
+    plan.deterministic_benefit.pension_credit_local_tax_before_cap_krw,
+    plan.deterministic_benefit.pension_credit_total_before_cap_krw,
+    plan.deterministic_benefit.credit_eligible_contribution_krw,
+  ],
+  cap: [
+    plan.deterministic_benefit.tax_liability_cap.cap_krw,
+    plan.deterministic_benefit.tax_liability_cap.reduced_income_tax_krw,
+    plan.deterministic_benefit.tax_liability_cap.reduced_local_tax_krw,
+    plan.deterministic_benefit.tax_liability_cap.reduced_total_krw,
+    plan.deterministic_benefit.tax_liability_cap.threshold_income_tax_krw,
+  ],
+});
+
+test('주입 / 이월 판정을 정확값(applied)으로 되돌리면 밀려난 납입액이 없는 사람에게 이월 안내가 되살아난다', async () => {
+  const exactBased = await mutatedCompute({
+    file: 'plans.mjs',
+    // `13.0.0`까지의 코드 그대로다 — 두 뜻을 한 값으로 쓰던 자리.
+    from: 'const carryoverAvailable = reducedIncomeTax > 0;',
+    to: 'const carryoverAvailable = applied;',
+  });
+
+  const before = baselineOf(compute(SUB_WON_EXCESS_REQUEST, rulesets));
+  const after = baselineOf(exactBased(SUB_WON_EXCESS_REQUEST, rulesets));
+
+  const capBefore = before.deterministic_benefit.tax_liability_cap;
+  const capAfter = after.deterministic_benefit.tax_liability_cap;
+
+  // 갈리는 자리인지부터 확인한다 — 한도가 물었는데 표시로는 한 원도 안 줄었다.
+  assert.equal(capBefore.applied, true);
+  assert.equal(capBefore.reduced_total_krw, 0);
+
+  assert.equal(capBefore.contribution_carryover_available, false);
+  assert.equal(
+    capAfter.contribution_carryover_available,
+    true,
+    '주입이 판정을 뒤집지 못했다 — 이 자리는 이미 정확값을 쓰고 있거나 주입이 빗나갔다',
+  );
+
+  // **되살아나는 것은 한 칸이 아니다.** 조건 둘과 근거 규칙이 함께 따라 나간다.
+  assert.equal(capAfter.carryover_shares_future_year_credit_limit, true);
+  assert.equal(capAfter.carryover_requires_application, true);
+  assert.ok(capAfter.basis_rule_ids.includes('pension.credit.unused.contribution_carryover'));
+
+  // **그리고 금액은 한 원도 움직이지 않는다.** 이것이 이 주입의 요점이다 — 금액을 보는
+  // 검사로는 잡히지 않으므로 이 칸을 값으로 못 박아 두지 않으면 아무도 보지 않는다.
+  assert.deepStrictEqual(
+    amountsOf(after),
+    amountsOf(before),
+    '주입이 금액을 바꿨다 — 그러면 이 주입이 겨눈 형태가 아니다',
+  );
+});
+
+test('주입 / 되돌려도 표시로 잘리는 좌표에서는 같은 답이다 — 그래서 좌표가 필요하다', async () => {
+  // **위 시험의 좌표를 정당화한다.** 되돌린 구현은 대부분의 자리에서 옳은 답을 낸다 —
+  // 표시로 1원이라도 잘리면 두 자가 같은 값을 낸다. 경계 하나만 보는 검사로는 못 잡는다.
+  const exactBased = await mutatedCompute({
+    file: 'plans.mjs',
+    from: 'const carryoverAvailable = reducedIncomeTax > 0;',
+    to: 'const carryoverAvailable = applied;',
+  });
+
+  const binds = baseRequest({
+    profile: {
+      birth_date: '1986-06-15',
+      current_year_total_salary_krw: CAP_COORDINATES.BINDS.total_salary_krw,
+      monthly_capacity_krw: 750_000,
+      months_remaining_in_tax_year: 12,
+    },
+  });
+
+  const before = baselineOf(compute(binds, rulesets)).deterministic_benefit.tax_liability_cap;
+  const after = baselineOf(exactBased(binds, rulesets)).deterministic_benefit.tax_liability_cap;
+
+  assert.ok(before.reduced_income_tax_krw > 0, '표시로 잘리지 않으면 대조군이 아니다');
+  assert.equal(before.contribution_carryover_available, true);
+  assert.equal(after.contribution_carryover_available, before.contribution_carryover_available);
+});
