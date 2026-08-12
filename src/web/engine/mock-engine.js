@@ -1,11 +1,19 @@
 /**
- * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 13.0.0)의
+ * 엔진 목(mock) — `docs/stage-2-design/engine-interface.md` (schema_version 14.0.0)의
  * `compute` / `computeFundUseHorizonBoundaries` 계약을 그대로 구현한다.
  *
  * **왜 아직 있는가.** 실행 경로는 이미 실제 엔진(`src/engine/`)이다(`engine-client.js`).
  * 이 파일은 계약을 화면 쪽에서 어떻게 읽었는지를 남긴 대조 기준이고, **계약이
  * major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 된다** — 목이 낡으면
- * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `13.0.0`으로 맞췄다.
+ * 테스트가 통과해도 아무것도 증명하지 않는다. 그래서 `14.0.0`으로 맞췄다.
+ *
+ * **14.0.0에서 따라온 것(D54, major).** `tax_liability_cap.contribution_carryover_available`가
+ * `applied`와 끊겼다 — 재는 자가 **`reduced_income_tax_krw > 0`**이다(표시 금액).
+ * 전환의 대상이 납입액이고 그 납입액에 대응하는 것이 표시된 소득세분 공제액이기
+ * 때문이다. 딸린 셋(`carryover_shares_future_year_credit_limit`·
+ * `carryover_requires_application`·`basis_rule_ids`의 전환 특례 규칙)도 같은
+ * 자를 따른다. 금액은 한 원도 바뀌지 않는다 — 그래서 금액을 보는 검사로는 이
+ * 변경을 잡을 수 없고, 그것이 major를 고른 이유다.
  *
  * **13.0.0에서 따라온 것(D53, major).** 세 보장이 거둬졌다. ① `within_isa_lock_in`이면
  * 연금 두 계좌는 언제나 비지만 **ISA는 남은 의무가입기간이 있을 때만** 빈다 — 기간이
@@ -186,8 +194,8 @@ const SCENARIO_ORDER = ['current', 'proposed'];
 // 유불리를 정하지 않으므로 이 안은 여전히 기본안이 되지 않는다.
 const PLAN_ORDER = ['max_tax_credit', 'annuity_savings_first', 'isa_first', 'pension_contribution_before_isa'];
 const PENSION_ACCOUNTS = ['retirement_pension', 'annuity_savings'];
-const KNOWN_SCHEMA_MAJOR = '13';
-export const MOCK_SCHEMA_VERSION = '13.0.0';
+const KNOWN_SCHEMA_MAJOR = '14';
+export const MOCK_SCHEMA_VERSION = '14.0.0';
 // 12.0.0(D52)의 BASELINE_BY_HORIZON에서 파생된다(실제 엔진 `constants.mjs`의
 // `IRP_CREDIT_PRODUCTIVE_ONLY_PLANS`와 같은 값) — 기본안이 **될 수 있는** 안 전부에
 // 건다. 「기본안일 때만」 자르면 같은 안의 금액이 자금 사용 시점에 따라 달라진다.
@@ -2900,31 +2908,41 @@ function computeScenario(scenario, request, rulesets) {
     // `reduced_total_krw > 0`을 함께 봐야 하는 이유가 이것이다(계약 5.5절).
     const capApplied =
       capKnown && incomeTaxExact ? cmpExact(capExactValue, bindingIncomeTaxExact ?? incomeTaxExact) < 0 : false;
+    const reducedIncomeTaxKrw = incomeTaxBeforeCapKrw - incomeTaxKrw;
+    // **`contribution_carryover_available`은 `applied`를 따르지 않는다**(`14.0.0`,
+    // D54). `applied`는 트림 전 정확값 대소로 「한도가 물었는가」를 재고, 이 칸은
+    // 「밀려난 납입액이 있는가」를 **반환된 배분의 표시 금액**으로 잰다 — 전환의
+    // 대상이 납입액이고 그 납입액에 대응하는 것이 표시된 소득세분 공제액이기
+    // 때문이다(대응 관계). 끝수만 잘려 표시 금액이 그대로면(`applied: true`이면서
+    // `reduced_income_tax_krw === 0`) 계좌 잔액 단위(원)로 실행할 수 있는 전환
+    // 대상이 없다 — 없는 절차로 사용자를 보내지 않는다.
+    const carryoverAvailable = reducedIncomeTaxKrw > 0;
     const planCap = {
       cap_krw: capKrw,
       applied: capApplied,
       // **잘렸다는 사실과 「걸린다는 것이 증명된다」는 사실은 다르다**(D40). 추정
       // 한도가 상한인 분기에서만 잘림이 실제 한도의 잘림을 증명한다.
       binding_code: capBindingCodeFor(capApplied, capIsUpperBound),
-      reduced_income_tax_krw: incomeTaxBeforeCapKrw - incomeTaxKrw,
+      reduced_income_tax_krw: reducedIncomeTaxKrw,
       reduced_local_tax_krw: localTaxBeforeCapKrw - localTaxKrw,
       reduced_total_krw: totalBeforeCapKrw - totalCreditKrw,
       // **임계값.** 화면이 배분액에 공제율을 곱해 만들지 않는다 — 사용자가 나중에
       // 영수증을 보고 스스로 대조할 수 있게 하는 값이다.
       threshold_income_tax_krw: incomeTaxBeforeCapKrw,
       credit_carryforward: creditCarryforward,
-      contribution_carryover_available: capApplied,
+      contribution_carryover_available: carryoverAvailable,
       // **이름 하나(`contribution_carryover_available`)가 조건 둘을 감추고
       // 있었다**(D26) — 전환금액도 전환한 해의 600만·900만 한도를 그 해의 새
       // 납입액과 나눠 쓰고(그래서 매년 한도를 채우는 사용자에게는 전환할 자리가
       // 없다), 신청주의라 자동이 아니다. 전환이 걸리지 않으면 읽지 않은 규칙을
-      // 근거로 싣지 않는다 — `null`이다.
+      // 근거로 싣지 않는다 — `null`이다. **딸린 셋도 위 자를 따른다**(`14.0.0`).
       carryover_shares_future_year_credit_limit:
-        capApplied && carryoverRule ? (carryoverRule.value.subject_to_conversion_year_credit_limits?.value ?? null) : null,
+        carryoverAvailable && carryoverRule ? (carryoverRule.value.subject_to_conversion_year_credit_limits?.value ?? null) : null,
       carryover_requires_application:
-        capApplied && carryoverRule ? carryoverRule.value.automatic !== true : null,
+        carryoverAvailable && carryoverRule ? carryoverRule.value.automatic !== true : null,
       error_direction_code: capErrorDirection,
-      basis_rule_ids: capApplied && carryoverRule ? [...capBasisRuleIds, carryoverRule.id].sort() : capBasisRuleIds,
+      basis_rule_ids:
+        carryoverAvailable && carryoverRule ? [...capBasisRuleIds, carryoverRule.id].sort() : capBasisRuleIds,
     };
 
     // -- 7.0.0(0.12절) — 월 환산 잔차를 네 갈래(세 계좌 + 미배분)에 나눈다 ------

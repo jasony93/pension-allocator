@@ -1032,6 +1032,35 @@ function driftLines(request) {
       if (rp.is_baseline !== mp.is_baseline) {
         lines.push(`[${scKey}/${planId}] is_baseline: real=${rp.is_baseline} vs mock=${mp.is_baseline}`);
       }
+      // **`tax_liability_cap`(D54) — 금액이 갈리지 않는 자리도 잰다.** `applied`와
+      // `contribution_carryover_available`은 서로 다른 자로 재므로(계약 5.5절),
+      // 두 값이 갈리는 좌표(총급여 24,795,208·월 2,666,667)에서 이 필드들을 보지
+      // 않으면 어느 검사도 두 자의 불일치를 잡지 못한다 — I23이 침묵했던 자리다.
+      const rCap = rp.deterministic_benefit?.tax_liability_cap ?? null;
+      const mCap = mp.deterministic_benefit?.tax_liability_cap ?? null;
+      if (!rCap !== !mCap) {
+        lines.push(`[${scKey}/${planId}] tax_liability_cap 존재 여부: real=${!!rCap} vs mock=${!!mCap}`);
+      } else if (rCap && mCap) {
+        for (const field of [
+          'applied',
+          'binding_code',
+          'reduced_income_tax_krw',
+          'reduced_local_tax_krw',
+          'reduced_total_krw',
+          'contribution_carryover_available',
+          'carryover_shares_future_year_credit_limit',
+          'carryover_requires_application',
+          'error_direction_code',
+        ]) {
+          if (rCap[field] !== mCap[field]) {
+            lines.push(`[${scKey}/${planId}] tax_liability_cap.${field}: real=${rCap[field]} vs mock=${mCap[field]}`);
+          }
+        }
+        const capBd = setDiff(rCap.basis_rule_ids, mCap.basis_rule_ids);
+        if (capBd.onlyReal.length || capBd.onlyMock.length) {
+          lines.push(`[${scKey}/${planId}] tax_liability_cap.basis_rule_ids — real에만: [${capBd.onlyReal.join(', ')}] / mock에만: [${capBd.onlyMock.join(', ')}]`);
+        }
+      }
       for (const alloc of rp.allocations) {
         const malloc = mp.allocations.find((a) => a.account === alloc.account);
         if (!malloc) continue;

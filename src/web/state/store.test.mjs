@@ -189,8 +189,8 @@ test('the request carries the contract version the engine actually supports', ()
   assert.equal(req.schema_version, SCHEMA_VERSION);
   assert.equal(
     SCHEMA_VERSION.split('.')[0],
-    '13',
-    '계약이 13.0.0(major)으로 올랐다(D53 — 트림 기준이 표시 금액으로 옮겨지고 목적 없이 IRP만 묶는 안이 빠진다)',
+    '14',
+    '계약이 14.0.0(major)으로 올랐다(D54 — contribution_carryover_available이 applied가 아니라 reduced_income_tax_krw > 0을 따른다)',
   );
 });
 
