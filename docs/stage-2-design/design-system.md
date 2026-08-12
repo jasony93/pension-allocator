@@ -1,7 +1,7 @@
 ---
 unit: designer
 stage: 2
-status: draft
+status: approved
 inputs:
   - docs/stage-1-discovery/requirements.md
   - docs/org/charter.md

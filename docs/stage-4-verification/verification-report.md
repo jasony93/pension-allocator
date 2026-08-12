@@ -1,7 +1,7 @@
 ---
 unit: tax-domain
 stage: 4
-status: draft
+status: approved
 inputs:
   - docs/stage-4-verification/golden-cases.md
   - data/tax-rules/2026.json
