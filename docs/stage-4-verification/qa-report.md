@@ -1,7 +1,7 @@
 ---
 unit: qa
 stage: 4
-status: approved
+status: draft
 inputs:
   - docs/stage-1-discovery/requirements.md
   - docs/stage-2-design/screens.md
@@ -686,3 +686,878 @@ $ awk 'NR==80,NR==133' docs/stage-5-launch/seo-plan.md | grep -nE '세무|세무
 ---
 
 **개정 이력.** 게이트 4에서 `approved`로 승인됐던 1~9절은 게이트 5 재소집에서 내용을 고치지 않았다(대상 커밋·수치는 게이트 4 시점 기준으로 남긴다). 10절만 이번 재소집에서 추가했다. 관리자가 10.4를 판정한 뒤 이 문서 전체를 다시 승인한다.
+
+
+---
+
+## 11. 재소집 — 판별력 감사와 새 검사 도입 (2026-08-12)
+
+### 11.0 소집 배경과 범위
+
+**대상 커밋:** `1a3ab98`(작업 트리 `git status` 빈 출력 확인). **계약 `schema_version` 11.0.0.**
+
+관리자가 게이트 4를 다시 열며 세 임무를 줬다.
+
+1. **이번 세션에 사람이 눈으로 찾은 여덟 가지 결함 형태**(체크리스트가 폐기된 규칙을 주장, 설계 문서가 폐기된 구현을 정답처럼 적음, 옛 폭 규칙을 주장하는 브라우저 검사, 캡션이 엉뚱한 축을 확정 축이라 부름, sticky 배너가 실제로는 안 붙어 있었음, 엔진 안내 코드를 화면이 말할 줄 몰랐음, 불변식이 없어진 필드를 갈아 끼우며 통과) 중 **최소 셋을 기계 검사로 세우는 것**. 구체적으로 지목된 것: (a) 엔진→화면 문구 커버리지, (b) 문서·체크리스트의 폐기 규칙 잔존, (c) `git add -A`로 유닛 writeScope를 넘어 커밋하는 것.
+2. **판별력 감사** — "통과하지만 아무것도 증명하지 않는 검사"를 표본이 아니라 체계적으로 훑는다.
+3. **코드 리뷰** — `src/engine/`·`src/web/` 전체, 특히 이번 세션에 새로 생긴 `exact.mjs`·`rounding.mjs`·`liability-cap.mjs`·`statutory-eligibility.mjs`·`headline.mjs`·`pension-reference.mjs`와 `mock-engine.js`(두 번째 엔진 구현이 갈라지는 자리).
+
+**이 절이 하지 않은 것.** 세법 계산의 옳고 그름은 판정하지 않는다. `src/`·`docs/`의 어떤 파일도 고치지 않았다 — 새 검사 스크립트 넷은 전부 스크래치패드(`C:\Users\ADMINI~1\AppData\Local\Temp\claude\...\scratchpad\`)에서 작성·실행했고, 이 문서(`qa-report.md`)만 개정했다. 검증 종료 시점 `git status`가 빈 출력임을 확인했다(아래 스크립트들은 저장소를 **읽기만** 한다 — `import()`와 `readFileSync`뿐이고 쓰기 호출이 없다).
+
+**새 검사 스크립트 넷은 지금 이 저장소에 커밋되어 있지 않다.** QA의 쓰기 권한이 리포트 경로로 제한되어 있어 `scripts/org/`에 직접 추가할 수 없다. 아래 각 절에 스크립트 전문과 실행 결과를 그대로 옮겼다 — 이 문서가 그 자체로 재현 가능한 기록이다. **관리자가 이 중 상시 검사로 남길 것을 판단해 적절한 유닛(`calc-engine-dev`·`web-dev`)에게 `scripts/org/` 또는 각 유닛의 `.test.mjs`로 이관하도록 지시할 것을 권고한다.**
+
+---
+
+### 11.1 회귀 전건 재실행 결과
+
+**주의 사항(재현자를 위해).** 이 저장소 경로에 공백과 한글이 들어 있어 `node --test <디렉터리>` 형태가 실패한다. glob을 써야 한다.
+
+```
+$ node --test "src/engine/*.test.mjs"
+ℹ tests 613
+ℹ pass 613
+ℹ fail 0
+ℹ duration_ms 9095.9186
+
+$ node --test "src/web/*.test.mjs" "src/web/**/*.test.mjs"
+ℹ tests 352
+ℹ pass 352
+ℹ fail 0
+ℹ duration_ms 2015.1592
+
+$ node --test "tests/org/*.test.mjs"
+ℹ tests 53
+ℹ pass 53
+ℹ fail 0
+ℹ duration_ms 1577.0983
+
+$ node scripts/org/validate.mjs
+OK   에이전트 정의
+OK   조직 헌장
+OK   세법 룰셋
+OK   산출물 머리말
+OK   엔진 코드 정의 자리
+
+모든 조직 규약 검사를 통과했습니다.
+$ echo $?
+0
+```
+
+**엔진 613 + 웹 352 + 조직 53 = 1,018건 전건 통과.** 관리자가 인계한 수치와 일치한다. 검증기는 이번에 `OK 엔진 코드 정의 자리`가 새로 추가돼 있었다 — `scripts/org/validate-code-definitions.mjs`가 `engine-interface.md` 8.1~8.5절의 코드 정의 표와 `src/engine/constants.mjs`의 `NOTICE`·`ASSUMPTION`·`WARNING`·`COMPARISON_NOTE`가 **양방향으로** 같은지 본다. 이 검사기 자신의 머리말이 정직하게 적어 둔 한계가 있다 — "무엇을 못 보는가 — 계약↔엔진 정의 표만 보고, `src/web/copy.js`(화면 문구)는 대상이 아니다." 11.2절의 검사 ①이 정확히 이 자리를 잇는다.
+
+**브라우저 E2E — 전체 glob이 정체되어, 파일별로 나눠 돌렸다.** `node --test "src/web/browser/*.browser.mjs"`를 백그라운드로 돌렸으나 관측 CPU 시간이 2분 넘게 전혀 늘지 않아(동일 프로세스의 `KernelModeTime`·`UserModeTime`을 두 시점에 비교해 확인) 정체로 판단했다. **원인은 특정하지 못했다** — 좀비 Chrome 프로세스 누적으로 인한 자원 경합 추정이나 확증하지 못했으므로 추정으로만 남긴다. `taskkill`을 쓰지 말라는 지시에 따라 그 프로세스는 죽이지 않고 방치했으며, 대신 13개 파일을 하나씩(각각 별도의 `node --test` 호출, 90~120초 제한) 돌렸다.
+
+```
+$ node --test "src/web/browser/account-benefit-strip.browser.mjs"     → 13 pass
+$ node --test "src/web/browser/donut-geometry.browser.mjs"            →  6 pass
+$ node --test "src/web/browser/donut-optimal-kicker.browser.mjs"      →  3 pass
+$ node --test "src/web/browser/headline-baseline-only.browser.mjs"    →  3 pass
+$ node --test "src/web/browser/input-caret.browser.mjs"               →  4 pass
+$ node --test "src/web/browser/input-focus.browser.mjs"               →  5 pass
+$ node --test "src/web/browser/plan-comparison-mobile.browser.mjs"    →  4 pass
+$ node --test "src/web/browser/print.browser.mjs"                     →  8 pass
+$ node --test "src/web/browser/result-panel.browser.mjs"              →  4 pass
+$ node --test "src/web/browser/result-placeholder.browser.mjs"        → 13 pass
+$ node --test "src/web/browser/sandboxed-frame.browser.mjs"           →  6 pass
+$ node --test "src/web/browser/single-scroll-layout.browser.mjs"      → 10 pass
+$ node --test "src/web/browser/theme.browser.mjs"                     → 14 pass
+```
+
+**합계 93건 전건 통과, 실패 0.** 관리자가 인계한 수치(93)와 일치한다. **이 운영상의 관찰 자체를 기록해 둔다** — 여러 브라우저 테스트 파일을 한 번의 `node --test` 글롭으로 몰아 돌리면 정체될 수 있고, 파일 단위로 나눠 돌리면 안정적으로 끝난다. 다음 회차 QA·CI 설계에 참고할 사실이다.
+
+**총 자동 테스트: 엔진 613 + 웹 352 + 조직 53 + 브라우저 93 = 1,111건, 전건 통과.**
+
+이 재실행에서 개별로 확인해 둘 값들(11.7·11.8절에서 근거로 쓴다):
+
+- `single-scroll-layout.browser.mjs` — "`[4-A]` DisclosureBanner가 스크롤 후에도 실제로 헤더 바로 아래에 붙어 있다 — 속성이 아니라 위치로 잰다" **통과.** D48 후속에서 발견된 "sticky인데 실제로는 안 붙어 있던" 결함이 지금은 위치 측정(`getBoundingClientRect()`, 속성이 아니라)으로 고정돼 있다.
+- `sandboxed-frame.browser.mjs` — "이 환경에서 `window.confirm()`은 조용히 `false`를 돌려준다" 등 6건 통과. 옛 코드 리뷰 지적 Q4(네이티브 `confirm()`)가 포커스 트랩을 가진 인페이지 모달로 교체돼 있음을 확인했다.
+- `print.browser.mjs` — "인쇄 미디어에서 입력 패널이 통째로 사라진다 — 입력값이 인쇄물에 실릴 방법이 없다" 통과.
+
+---
+
+### 11.2 새 검사 ① — 엔진 안내 코드 ↔ 화면 문구 커버리지 (완전 자동)
+
+**동기.** D47 후속에서 실제로 벌어진 사고 — 엔진이 새 안내 코드(`irp_excluded_no_qualifying_status` 등)를 내기 시작했는데 `src/web/copy.js`에 대응 문구가 없어 코드 문자열이 그대로 사용자에게 나갈 뻔했다. `scripts/org/validate-code-definitions.mjs`(11.1절)는 "계약↔엔진"만 양방향으로 보고 "엔진→화면 문구"는 안 본다 — 그 검사기 자신의 주석이 그렇게 적어 두었다.
+
+**방법.** `src/engine/constants.mjs`의 코드 레지스트리(`NOTICE`·`ASSUMPTION`·`WARNING`·`COMPARISON_NOTE` — 이 프로젝트가 스스로 "단일 진실 원천"이라 부르는 평면 객체들)를 실제로 `import`해서, 각 코드 문자열로 `src/web/copy.js`의 대응 함수(`noticeMessage`·`assumptionMessage`·`warningMessage`·`comparisonNoteMessage`)를 직접 호출한다. 함수가 **코드 문자열을 그대로 반환**하면 그것이 fallback이 발동했다는 뜻 — 화면이 이 코드를 모른다는 뜻이다.
+
+**스크립트 전문** (`check-notice-copy-coverage.mjs`):
+
+```js
+// QA 게이트4 검사 1 — "엔진이 내는 안내 코드 중 화면이 문구를 갖지 않은 것"을
+// 기계로 훑는다.
+//
+// D47 후속에서 실제로 벌어진 사고: 엔진이 새 안내 코드(irp_excluded_no_qualifying_status
+// 등)를 내기 시작했는데 src/web/copy.js에 대응 문구가 없어, 화면의 fallback 경로가
+// 코드 문자열을 그대로 사용자에게 보여줄 뻔했다. 검증기(scripts/org/validate.mjs)는
+// "계약↔엔진"은 양방향으로 보지만 "엔진→화면 문구"는 보지 않는다.
+//
+// 이 스크립트는 src/engine/constants.mjs의 코드 레지스트리(NOTICE·ASSUMPTION·
+// WARNING·COMPARISON_NOTE — 이 프로젝트가 스스로 "단일 진실 원천"으로 쓰는 객체들)를
+// 실제로 import해서 각 코드 문자열로 src/web/copy.js의 대응 함수(noticeMessage 등)를
+// 직접 호출한다. 함수가 코드 문자열을 그대로 반환하면 그것이 fallback이 발동했다는
+// 뜻이고, 곧 "화면이 이 코드를 말할 줄 모른다"는 뜻이다.
+//
+// 실행: node check-notice-copy-coverage.mjs <repo-root>
+
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const repoRoot = process.argv[2];
+if (!repoRoot) {
+  console.error('usage: node check-notice-copy-coverage.mjs <repo-root>');
+  process.exit(2);
+}
+
+const constantsUrl = pathToFileURL(path.join(repoRoot, 'src/engine/constants.mjs')).href;
+const copyUrl = pathToFileURL(path.join(repoRoot, 'src/web/copy.js')).href;
+
+const constants = await import(constantsUrl);
+const copy = await import(copyUrl);
+
+function codesOf(obj) {
+  return Object.values(obj);
+}
+
+const registries = [
+  { name: 'NOTICE', codes: constants.NOTICE ? codesOf(constants.NOTICE) : null, probe: (code) => copy.noticeMessage({ code, params: {} }) },
+  { name: 'ASSUMPTION', codes: constants.ASSUMPTION ? codesOf(constants.ASSUMPTION) : null, probe: (code) => copy.assumptionMessage(code, {}) },
+  { name: 'WARNING', codes: constants.WARNING ? codesOf(constants.WARNING) : null, probe: (code) => copy.warningMessage({ code, params: {}, trigger: 'declared' }, {}) },
+  { name: 'COMPARISON_NOTE', codes: constants.COMPARISON_NOTE ? codesOf(constants.COMPARISON_NOTE) : null, probe: (code) => copy.comparisonNoteMessage(code) },
+];
+
+let totalCodes = 0;
+let totalMissing = 0;
+const report = [];
+
+for (const registry of registries) {
+  if (!registry.codes) {
+    report.push({ registry: registry.name, error: 'constants.mjs에 이 이름의 export가 없다 — 레지스트리 이름이 바뀌었을 수 있다.' });
+    continue;
+  }
+  const missing = [];
+  for (const code of registry.codes) {
+    totalCodes += 1;
+    let result;
+    try {
+      result = registry.probe(code);
+    } catch (err) {
+      missing.push({ code, reason: `probe 함수가 예외를 던졌다: ${err.message}` });
+      totalMissing += 1;
+      continue;
+    }
+    if (result === code) {
+      missing.push({ code, reason: 'copy.js가 이 코드에 대응하는 문구를 갖지 않아 코드 문자열이 그대로 반환된다' });
+      totalMissing += 1;
+    }
+  }
+  report.push({ registry: registry.name, total: registry.codes.length, missing });
+}
+
+console.log(`검사한 코드 레지스트리: ${registries.map((r) => r.name).join(', ')}`);
+console.log(`전체 코드 수: ${totalCodes}`);
+console.log(`문구 없음(fallback로 코드 문자열이 그대로 나갈 자리): ${totalMissing}`);
+console.log('');
+
+for (const r of report) {
+  if (r.error) { console.log(`[${r.registry}] 검사 불가 — ${r.error}`); continue; }
+  console.log(`[${r.registry}] ${r.total}개 코드 중 ${r.missing.length}개 미대응`);
+  for (const m of r.missing) console.log(`  - ${m.code}: ${m.reason}`);
+}
+
+process.exit(totalMissing > 0 ? 1 : 0);
+```
+
+**실행 결과** (대상 커밋 `1a3ab98`):
+
+```
+$ node check-notice-copy-coverage.mjs "D:\personal\Claude 프로젝트\Account optimization"
+검사한 코드 레지스트리: NOTICE, ASSUMPTION, WARNING, COMPARISON_NOTE
+전체 코드 수: 70
+문구 없음(fallback로 코드 문자열이 그대로 나갈 자리): 2
+
+[NOTICE] 39개 코드 중 2개 미대응
+  - isa_type_cross_check_inconclusive: copy.js가 이 코드에 대응하는 문구를 갖지 않아 코드 문자열이 그대로 반환된다
+  - isa_rate_gap_axis_zero_because_within_tax_free_limit: copy.js가 이 코드에 대응하는 문구를 갖지 않아 코드 문자열이 그대로 반환된다
+[ASSUMPTION] 24개 코드 중 0개 미대응
+[WARNING] 2개 코드 중 0개 미대응
+[COMPARISON_NOTE] 5개 코드 중 0개 미대응
+$ echo $?
+1
+```
+
+**결함 실재 확인 — 코드 리뷰 지적 R1 (심각도 중간).** 두 코드 다 죽은 코드가 아니라 실제로 도달 가능하다.
+
+- `NOTICE.ISA_TYPE_CROSS_CHECK_INCONCLUSIVE`(`isa_type_cross_check_inconclusive`) — **`src/engine/limits.mjs:987`**에서 낸다. 트리거 조건: ISA 계좌 유형(서민형/일반형)을 선언했는데, 직전 과세연도 총급여가 서민형 상한을 넘지 않고, 룰셋의 "확인 불가한 한정 목"이 비어 있지 않을 때(`limits.mjs:983`) — 소득만으로는 서민형 여부를 결론지을 수 없어 사실만 안내하는 `info` 등급 notice다.
+- `NOTICE.ISA_RATE_GAP_AXIS_ZERO`(`isa_rate_gap_axis_zero_because_within_tax_free_limit`) — **`src/engine/compute.mjs:489`**에서 낸다(D36). 트리거 조건: ISA 저율 분리과세 세율차 축이 0인 배분안이 하나라도 있을 때 — "혜택 없음"이 아니라 "아직 비과세 한도 안이라 9%가 아니라 0%로 과세되고 있다"는, D36이 명시로 챙긴 더 유리한 사실을 알리는 자리다.
+
+둘 다 재현하면 `noticeMessage({ code: 'isa_type_cross_check_inconclusive', params: {...} })`가 그 코드 문자열을 그대로 반환한다 — 화면에 `isa_type_cross_check_inconclusive`라는 영문 스네이크케이스 문자열이 그대로 노출될 자리다. **담당: `web-dev`**(`src/web/copy.js`의 `NOTICE_MESSAGE`에 두 항목 추가). 문구 등급 조건(설명 대상이 "낼 세금이 적어서"가 아니라 D36이 정한 "더 유리한 사실"임을 정확히 전해야 함)이 있으므로 **문구 승인은 `designer`.**
+
+**기존 검사와의 대조 — "판별력 없는 검사"의 실물.** `src/web/wording.test.mjs:255`에 이름이 `'every code the contract can send has a sentence — no raw code reaches the screen'`인 테스트가 있고 352건 전건 통과 목록에 포함돼 있다. 그런데 그 테스트 본문(255~304행)은 `NOTICE`·`ASSUMPTION`을 `import`하지 않고 **손으로 옮겨 적은 부분집합**만 돈다 — `noticeCodes` 배열이 16개(실제 39개 중), `assumptionCodes` 배열이 12개(실제 24개 중)뿐이다. 이번에 빠진 것으로 드러난 두 코드도 그 손으로 옮긴 목록에는 애초에 없었다. **테스트 이름은 "모든 코드"라고 주장하지만 실제로는 절반 이하만 검사한다** — 통과해도 "화면이 모든 코드에 문구를 가졌다"를 증명하지 못한다. 이것이 관리자가 찾고 있던 "통과하지만 아무것도 증명하지 않는 검사"의 실물이다(11.6절에서 체계적으로 더 다룬다).
+
+**과거 재현 — 이 검사가 D47 후속의 사고를 잡았을까.** 그 사고 당시 실제 코드를 스크래치패드로 되돌려 재생하지는 않았다(관리자가 이미 그 상태를 고쳐 커밋했고, 옛 결함 커밋을 되살리는 것은 결함 주입 규율 밖의 위험한 작업이라 판단해 하지 않았다). 대신 **구조적으로 같은 형태의 두 코드가 실제로 잡혔다는 사실 자체**가 이 검사가 그 사고를 잡을 수 있었음을 실증한다 — `irp_excluded_no_qualifying_status` 등도 정확히 같은 통로(`NOTICE` 레지스트리에는 있고 `copy.js`에는 없음)로 빠졌었다.
+
+**이 검사가 못 잡는 것.** `warningMessage`의 `INFO_PREFIX` 분기(`trigger === 'horizon_unknown'`)처럼 코드 하나가 여러 문맥에서 다른 문장으로 조립되는 경우, 조립된 문장이 사실과 맞는지는 보지 않는다(오직 "빈 문자열이 아니고 코드 그대로가 아닌가"만 본다). `exclusionReasonMessage`(배제 사유)는 `NOTICE`의 부분집합만 쓰므로 이번 스크립트에 포함하지 않았다 — 전용 레지스트리가 없어 자동 대조가 어렵다(수동 대조로 별도 확인했고 결측 0건).
+
+---
+
+### 11.3 새 검사 ② — 문서·코드가 폐기된 규칙을 주장하는 자리 (부분 자동화)
+
+**완전 자동화는 못 한다.** `gate-decisions.md`는 자연어 산문이라 "이 문장이 나중에 폐기됐다"를 일반 파싱할 방법이 없다. 대신 이번 세션에 실제로 확인한 구체적 폐기 사례를 사람이 큐레이션한 레지스트리로 스크립트에 박고, 그 사례들이 "역사적 기록"이 아니라 "지금도 유효한 주장"으로 남은 자리가 있는지 훑는다. **못 잡는 것을 정직하게 적는다** — 레지스트리에 없는, 아직 아무도 모르는 새 폐기 사례는 잡지 못한다. 이 스크립트는 D20~D49를 훑어 만든 **스냅샷**이고, 다음 회차의 결정이 뭔가를 또 폐기하면 그 항목을 레지스트리에 손으로 추가해야 잡힌다. "역사적 기록"과 "실수로 안 고친 문장"을 문자열만으로 완전히 구별하지 못해 `HISTORICAL_MARKER`라는 휴리스틱(같은 줄에 폐기·D번호·취소선 등 표시가 있으면 넘어감)을 쓰는데, 이 자체가 오탐을 낸다 — 아래 결과에 실제 오탐 사례를 그대로 남기고 사람이 어떻게 걸러냈는지도 적는다.
+
+**스크립트 전문** (`check-stale-decisions.mjs`, 조사 중 두 항목(D20·D32 관련)을 추가로 발견해 레지스트리에 얹었다 — 아래는 그 갱신을 반영한 최종본):
+
+```js
+// QA 게이트4 검사 2 — "문서·체크리스트가 폐기된 규칙을 주장하는 것"을 부분
+// 기계화한다.
+//
+// 완전 자동화는 못 한다. gate-decisions.md는 자연어 산문이라, "이 문장이
+// 나중에 폐기됐다"를 일반적으로 파싱할 방법이 없다. 대신 이번 세션에 실제로
+// 확인한 구체적 폐기 사례들을 사람이 큐레이션한 레지스트리로 코드에 박고,
+// 그 사례들이 "역사적 기록"이 아니라 "지금도 유효한 주장"으로 남아 있는
+// 자리가 있는지 grep으로 훑는다.
+//
+// 이 검사가 못 잡는 것(정직하게 적는다):
+//   - 레지스트리에 없는, 아직 아무도 모르는 새 폐기 사례는 잡지 못한다.
+//   - "역사적 기록으로 남긴 문장"과 "실수로 안 고친 문장"을 문자열만으로는
+//     구별 못 한다. HISTORICAL_MARKER 휴리스틱이 오탐을 낸다 — 사람이 최종 확인한다.
+//
+// 실행: node check-stale-decisions.mjs <repo-root>
+
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
+const repoRoot = process.argv[2];
+if (!repoRoot) {
+  console.error('usage: node check-stale-decisions.mjs <repo-root>');
+  process.exit(2);
+}
+
+const HISTORICAL_MARKER = /폐기|취소|없앴|지웠|삭제|당시 기록|~~|D[3-9][0-9]|D2[0-9]|재개정|다시 열었다|기각|종결|판정 — |재확인|승인한다|승인\.|이유가 있다|근거가 있다/;
+
+const REGISTRY = [
+  {
+    name: 'D35 — 「반 사이즈」(도넛 외경 50%·최소 240px) 폭 규칙',
+    decision: 'D35(소유자가 두 번째로 지시, 「반 사이즈」를 명시적으로 취소)',
+    pattern: /도넛 외경의 50%|최소 240px|반 정도 되는 사이즈/,
+    files: ['docs/stage-2-design/design-system.md', 'docs/stage-2-design/screens.md'],
+  },
+  {
+    name: 'D43 — 가정 축이 「윤곽만」(outline-only)이라는 등급 서술',
+    decision: 'D43(소유자 재지시로 채움으로 변경, 구분은 빗금+조건절이 짐)',
+    pattern: /윤곽만/,
+    files: ['docs/stage-2-design/design-system.md', 'docs/stage-2-design/screens.md'],
+  },
+  {
+    name: 'D39 — 「가정 기반」 칩이 렌더된다는 서술',
+    decision: 'D39(소유자 지시로 칩을 지움, 구분은 빗금+조건절만 남음)',
+    pattern: /가정 기반.{0,4}칩(?!.{0,20}(지웠|없앴|폐기|삭제))/,
+    files: ['docs/stage-2-design/design-system.md', 'docs/stage-2-design/screens.md'],
+  },
+  {
+    name: 'D45 — 「최적」을 예외 없이 금지한다는 서술',
+    decision: 'D45(헌장의 조건부 허용 — 계산 대상이 명시될 때만 허용됨을 소유자가 재확인)',
+    pattern: /「?최적」?\s*(을|를)?\s*(쓰지 않는다|금지|쓸 수 없다)/,
+    files: ['docs/stage-2-design/design-system.md', 'docs/stage-2-design/screens.md', '.claude/agents/qa.md', '.claude/agents/designer.md', '.claude/agents/web-dev.md'],
+  },
+  {
+    name: 'D39 — 「직전 과세연도 결정세액」 입력이 화면에 있다는 서술(전면 개정으로 걷어냄)',
+    decision: 'D39(입력 자체를 없앰, 한도는 총급여에서 엔진이 직접 산출)',
+    pattern: /직전 과세연도 결정세액(?!.{0,40}(걷어|없애|폐기|전면 개정|당시 기록))/,
+    files: ['docs/stage-2-design/screens.md'],
+  },
+  {
+    name: 'D20 이후 — 「1차 출시에서 묻지 않는 선택 입력 4개」 목록에 실제로 노출된 필드가 남아 있음',
+    decision: 'D20(declared_youth 노출 여부를 소유자 판단으로 올림) 이후 소유자가 승인 — src/web/ui/input-panel.js가 declaredYouth·isaYearsSinceOpening을 실제로 조건부 렌더한다(각각 362·627행)',
+    pattern: /청년 자기신고 여부|ISA 가입경과연수/,
+    files: ['docs/stage-1-discovery/requirements.md'],
+  },
+  {
+    name: 'D32(4번째 배분안) 이후 — 대안 개수 상한이 여전히 0~2(총 1~3)로 적혀 있음',
+    decision: 'D32(4번째 배분안 pension_contribution_before_isa 도입) — engine-interface.md 864행은 이미 plans 1~4개로 정정됨',
+    pattern: /대안 0~2개|plans.{0,4}1~3개|나머지 1~2개가 대안/,
+    files: ['docs/stage-1-discovery/requirements.md', 'docs/stage-2-design/screens.md'],
+  },
+];
+
+const SOURCE_REGISTRY = [
+  {
+    name: 'D39/D40 — 폐기된 NOTICE 코드 tax_liability_cap_unknown',
+    decision: 'D39·D40(「모름」 상태 자체가 사라짐)',
+    pattern: /tax_liability_cap_unknown/,
+    files: ['src/engine', 'src/web'],
+    exts: ['.mjs', '.js'],
+  },
+  {
+    name: 'D39 — 폐기된 ASSUMPTION 코드 prior_pension_credit_zero_assumed',
+    decision: 'D39(되더할 입력 자체가 사라짐)',
+    pattern: /prior_pension_credit_zero_assumed/,
+    files: ['src/engine', 'src/web'],
+    exts: ['.mjs', '.js'],
+  },
+  {
+    name: 'D39 — 폐기된 화면 가정 코드 isa_not_held_excluded',
+    decision: '2026-08-10(신규 가입 전제로 배분하므로 "제외" 서술이 거짓이었다)',
+    pattern: /isa_not_held_excluded(?!['"]?\s*\)\s*—)/,
+    files: ['src/web'],
+    exts: ['.js'],
+  },
+  {
+    name: 'D32 — 폐기된 LIMITED_BY 값 credit_limit(6.0.0에서 사라짐)',
+    decision: 'D32(어떤 안도 세액공제 대상 한도에서 멈추지 않음)',
+    pattern: /['"]credit_limit['"]/,
+    files: ['src/engine'],
+    exts: ['.mjs'],
+  },
+];
+
+function walk(dir, exts, out = []) {
+  const full = path.join(repoRoot, dir);
+  if (!existsSync(full)) return out;
+  const st = statSync(full);
+  if (st.isFile()) {
+    if (exts.some((e) => full.endsWith(e))) out.push(full);
+    return out;
+  }
+  for (const entry of readdirSync(full, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.git')) continue;
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(p, exts, out);
+    else if (exts.some((e) => entry.name.endsWith(e))) out.push(path.join(repoRoot, p));
+  }
+  return out;
+}
+
+let totalViolations = 0;
+console.log('=== 문서 레지스트리 ===\n');
+for (const entry of REGISTRY) {
+  const violations = [];
+  for (const relFile of entry.files) {
+    const full = path.join(repoRoot, relFile);
+    if (!existsSync(full)) continue;
+    const lines = readFileSync(full, 'utf8').split('\n');
+    lines.forEach((line, idx) => {
+      if (entry.pattern.test(line) && !HISTORICAL_MARKER.test(line)) {
+        violations.push({ file: relFile, lineNo: idx + 1, text: line.trim().slice(0, 160) });
+      }
+    });
+  }
+  console.log(`[${entry.name}]  근거: ${entry.decision}`);
+  if (violations.length === 0) console.log('  위반 없음');
+  else { totalViolations += violations.length; for (const v of violations) console.log(`  ${v.file}:${v.lineNo}: ${v.text}`); }
+  console.log('');
+}
+
+console.log('=== 소스코드 레지스트리 ===\n');
+for (const entry of SOURCE_REGISTRY) {
+  const violations = [];
+  for (const relDir of entry.files) {
+    for (const full of walk(relDir, entry.exts)) {
+      if (full.endsWith('.test.mjs') || full.includes('golden-cases.md')) continue;
+      const lines = readFileSync(full, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (entry.pattern.test(line) && !HISTORICAL_MARKER.test(line)) {
+          violations.push({ file: path.relative(repoRoot, full), lineNo: idx + 1, text: line.trim().slice(0, 160) });
+        }
+      });
+    }
+  }
+  console.log(`[${entry.name}]  근거: ${entry.decision}`);
+  if (violations.length === 0) console.log('  위반 없음');
+  else { totalViolations += violations.length; for (const v of violations) console.log(`  ${v.file}:${v.lineNo}: ${v.text}`); }
+  console.log('');
+}
+
+console.log(`총 위반: ${totalViolations}`);
+process.exit(totalViolations > 0 ? 1 : 0);
+```
+
+
+
+**부분 자동화 실행 결과** (대상 커밋 `1a3ab98`):
+
+```
+=== 문서 레지스트리 ===
+
+[D35 — 「반 사이즈」(도넛 외경 50%·최소 240px) 폭 규칙]  근거: D35(...)
+  docs/stage-2-design/design-system.md:1489: (240px를 둔 이유 설명 문단)
+  docs/stage-2-design/screens.md:1557: (소유자 원문 인용)
+  docs/stage-2-design/screens.md:1611: (신고 경위 서술)
+
+[D43 — 가정 축이 「윤곽만」이라는 등급 서술]  근거: D43(...)
+  docs/stage-2-design/design-system.md:891, :1448 / docs/stage-2-design/screens.md:2359
+
+[D39 — 「가정 기반」 칩이 렌더된다는 서술]  근거: D39(...)
+  docs/stage-2-design/screens.md:2564
+
+[D45 — 「최적」을 예외 없이 금지한다는 서술]  위반 없음
+[D39 — 「직전 과세연도 결정세액」 입력이 화면에 있다는 서술]  위반 없음
+
+[D20 이후 — 「1차 출시에서 묻지 않는 선택 입력 4개」 목록에 실제로 노출된 필드가 남아 있음]
+  docs/stage-1-discovery/requirements.md:65: - ISA 가입경과연수
+  docs/stage-1-discovery/requirements.md:68: - 청년 자기신고 여부
+
+[D32(4번째 배분안) 이후 — 대안 개수 상한이 여전히 0~2(총 1~3)로 적혀 있음]
+  docs/stage-1-discovery/requirements.md:84, :142
+  docs/stage-2-design/screens.md:92
+
+=== 소스코드 레지스트리 ===
+
+[D39/D40 — 폐기된 NOTICE 코드 tax_liability_cap_unknown]
+  src/web/engine/mock-engine.js:75(주석) / src/web/ui/result-panel.js:1315
+[D39 — 폐기된 ASSUMPTION 코드 prior_pension_credit_zero_assumed]
+  src/web/ui/result-panel.js:1303
+[D39 — 폐기된 화면 가정 코드 isa_not_held_excluded]  위반 없음
+[D32 — 폐기된 LIMITED_BY 값 credit_limit]  위반 없음
+
+총 위반: 15
+$ echo $?
+1
+```
+
+(원문은 스크래치패드 `check2-final.txt`에 그대로 있다. 위는 지면상 각 히트의 본문을 요약했다 — 실제 실행 시 각 줄의 전체 텍스트가 그대로 나온다.)
+
+**사람이 15건을 직접 확인한 결과 — 실제 결함 4건, 오탐 11건.**
+
+| # | 판정 | 내용 |
+|---|---|---|
+| D35(3건) | **오탐** | 전부 "소유자가 이렇게 말했었다"·"신고 경위"를 서술하는 역사적 narrative다. 다만 `design-system.md:1489`는 애매하다 — D33 재개정 절(1651행)보다 **앞쪽**에 있어, 문서를 순서대로 읽는 사람은 낡은 240px 근거를 새 규칙보다 먼저 만난다. 취소선·날짜 주석이 없다. **낮은 심각도로 담당 `designer`에게 넘긴다** — 지우지 않아도 되지만 앞쪽에 전방 참조(`→ 5.14.6절이 최신`)를 붙이는 것을 권고 |
+| D43(3건) | **오탐** | 셋 다 "가정 축(assumption)"이 아니라 **"배제(excluded)" 등급**의 점선 윤곽 서술이다 — 정규식이 "윤곽만"이라는 문자열만 보고 등급을 구분하지 못했다. 이 스크립트의 알려진 한계로 남긴다 |
+| D39 칩(1건) | **오탐** | "지운다(소유자 1번 지시)"라고 이미 서술하는 문장 자체가 걸렸다 — `HISTORICAL_MARKER`가 "지운다"(현재형)를 "지웠다"(과거형)만 잡아 놓쳤다. 정규식 보강 여지로 남긴다 |
+| **D20 이후(2건)** | **실제 결함, 심각도 중간** | `requirements.md` 2절이 "1차 출시에서 아예 묻지 않는다"고 단정한 넷 중 **둘(ISA 가입경과연수·청년 자기신고 여부)이 실제로는 조건부로 화면에 노출되고 있다** — `src/web/ui/input-panel.js:362-364`(`declaredYouth` 체크박스), `:627-640`(`isaYearsSinceOpeningGroup`, `isaYearsSinceOpeningVisible(form)`로 조건부 표시). 각각 D20(청년, 소유자 승인으로 노출 반전)과 D46 2번(ISA 경과연수, "묻는다. 다만 필요할 때만")이 근거다. **product-planner의 산출물이 두 차례의 뒤집힘을 따라잡지 못했다.** 담당: `product-planner` |
+| **D32 이후(3건)** | **실제 결함, 심각도 중간~높음** | 아래 11.8절 AC13에서 자세히 다룬다. 요약: `requirements.md`(AC13·3절)와 `screens.md`(G2)가 "대안 0~2개(총 1~3개)"라고 적고 있는데, `engine-interface.md:864`는 이미 "**1개 이상 4개 이하**"로 정정돼 있고 실제로 4개(기본안+대안 3개)가 뜨는 경로가 있음을 브라우저로 실측했다(11.5·11.8절) |
+| 소스: `tax_liability_cap_unknown`(2건) | **실제 결함, 심각도 낮음** | `mock-engine.js:75`는 "없어지고 ~가 대체했다"는 설명 주석이라 진짜 위반이 아니다(정규식이 "없어지고"를 못 잡은 오탐). 그러나 `result-panel.js:1315`는 다르다 — `ASSUMPTION_TIER` 우선순위 맵에 **죽은 키**로 남아 있다(11.7절에서 자세히) |
+| 소스: `prior_pension_credit_zero_assumed`(1건) | **실제 결함, 심각도 낮음** | 같은 `ASSUMPTION_TIER` 맵의 또 다른 죽은 키(`result-panel.js:1303`) |
+
+**이 검사의 실효성.** 15건의 원시 히트 중 4건(27%)이 진짜였다. **정밀도는 낮지만 재현 가능하고, 진짜 결함을 실제로 냈다** — 특히 D20/D32 두 항목은 이번 세션에 아무도 몰랐던 새 발견이다. 오탐 11건의 원인은 전부 특정됐다(등급 혼동, 시제 불일치, 서술 위치) — 다음 사람이 정규식을 좁히면 정밀도를 올릴 수 있다.
+
+---
+
+### 11.4 새 검사 ③ — 유닛 `writeScope` 교차 커밋 탐지 (`git add -A` 스윕)
+
+**동기.** 관리자가 이번 세션에 `git add -A`·`git add docs`로 다른 유닛의 미완성 작업을 자기 커밋에 두 번 쓸어 담았다(커밋 `48d4af7`·`ce6524d`, 관리자가 직접 신고 — `gate-decisions.md` D49). `scripts/org/units.mjs`가 각 유닛의 `writeScope`를 이미 데이터로 갖고 있으므로 **기계로 확인할 수 있다.**
+
+**방법.** `units.mjs`의 `UNITS`를 실제로 `import`해, 저장소 전체 커밋 이력에서 각 커밋이 건드린 파일을 `writeScope` 접두사로 유닛에 매핑한다. **한 커밋이 서로 다른 두 유닛 이상의 `writeScope`에 동시에 걸치면** "cross-unit commit"으로 표시한다 — 이것이 `git add -A`로 남의 작업을 쓸어 담았을 때 나타나는 서명이다(정상적인 한 유닛의 세션은 자기 `writeScope` 안에서만 움직인다).
+
+**스크립트 전문** (`check-cross-unit-commits.mjs`):
+
+```js
+// QA 게이트4 검사 3 — "관리자가 유닛 작업 중 git add -A로 남의 미완성 작업을
+// 쓸어 담는 것"을 기계로 훑는다.
+//
+// scripts/org/units.mjs의 writeScope(단일 진실 원천)를 그대로 읽어, 저장소
+// 전체 커밋 이력에서 각 커밋이 건드린 파일을 유닛별 writeScope에 매핑한다.
+// 한 커밋이 서로 다른 두 유닛 이상의 writeScope에 동시에 걸치면
+// "cross-unit commit"으로 표시한다.
+//
+// 실행: node check-cross-unit-commits.mjs <repo-root> [<rev-range>]
+
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const repoRoot = process.argv[2];
+const revRange = process.argv[3] || 'HEAD';
+if (!repoRoot) {
+  console.error('usage: node check-cross-unit-commits.mjs <repo-root> [<rev-range>]');
+  process.exit(2);
+}
+
+const { UNITS } = await import(pathToFileURL(path.join(repoRoot, 'scripts/org/units.mjs')).href);
+
+function unitForFile(file) {
+  let best = null;
+  for (const unit of UNITS) {
+    for (const scope of unit.writeScope) {
+      if (file === scope || file.startsWith(scope)) {
+        if (!best || scope.length > best.scopeLen) best = { name: unit.name, scope, scopeLen: scope.length };
+      }
+    }
+  }
+  return best ? best.name : null;
+}
+
+function git(args) { return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }); }
+
+const log = git(['log', '--format=%H\t%s', revRange]).trim();
+const commits = log ? log.split('\n').map((line) => { const i = line.indexOf('\t'); return { sha: line.slice(0, i), subject: line.slice(i + 1) }; }) : [];
+
+const flagged = [];
+for (const commit of commits) {
+  const filesOut = git(['show', '--no-commit-id', '--name-only', '--pretty=format:', commit.sha]).trim();
+  const files = filesOut ? filesOut.split('\n').filter(Boolean) : [];
+  const byUnit = new Map();
+  for (const file of files) {
+    const unit = unitForFile(file);
+    if (unit) { if (!byUnit.has(unit)) byUnit.set(unit, []); byUnit.get(unit).push(file); }
+  }
+  if (byUnit.size >= 2) {
+    flagged.push({ sha: commit.sha.slice(0, 7), subject: commit.subject, units: Object.fromEntries(byUnit) });
+  }
+}
+
+console.log(`검사한 커밋: ${commits.length}`);
+console.log(`cross-unit 커밋(둘 이상의 유닛 writeScope를 동시에 건드림): ${flagged.length}`);
+console.log('');
+for (const f of flagged) {
+  console.log(`--- ${f.sha} ${f.subject}`);
+  for (const [unit, files] of Object.entries(f.units)) {
+    console.log(`  [${unit}] ${files.length}개 파일`);
+    for (const file of files) console.log(`    ${file}`);
+  }
+  console.log('');
+}
+process.exit(0);
+```
+
+**실행 결과** (`HEAD` 전체 129개 커밋 대상):
+
+```
+검사한 커밋: 129
+cross-unit 커밋(둘 이상의 유닛 writeScope를 동시에 건드림): 30
+```
+
+**30건을 하나씩 사람이 대조했다 — `git show --stat`으로 각 커밋의 실제 diff와 커밋 메시지의 서사가 맞는지 확인했다.**
+
+| 유형 | 건수 | 판정 |
+|---|---|---|
+| **관리자가 이미 자백한 사고** | 2 | `48d4af7`("Measure which lever moves the page...")가 `designer` 몫(디자인 문서·CSS)과 함께 `src/engine/exact.mjs`·`liability-cap.mjs`·`rounding.mjs` 등 `calc-engine-dev`의 새 파일 10개를 실었다. `ce6524d`("Make the page scroll as one...")가 `web-dev` 몫과 함께 `engine-design.md`·`engine-interface.md`·`golden-cases.md`를 실었다. 둘 다 D49가 이미 지목한 그 커밋이다 — **이 검사가 알려진 사고를 놓치지 않고 잡았다** |
+| **이번에 새로 찾은 것(낮은 심각도)** | 1 | `ed98e41`("The share image was never being saved...", `web-dev` 세션)이 `src/engine/pension-limit-fill.test.mjs → pension-contribution-fill.test.mjs`의 **파일명 변경**(0줄 diff, 순수 rename)을 함께 실었다. 내용 손실은 없었지만 **같은 형태(다른 유닛의 로컬 변경을 무심코 쓸어 담음)**다. `calc-engine-dev`가 로컬에서 파일명을 바꿔 두고 아직 커밋하지 않은 상태에서, `web-dev` 세션의 커밋이 그것을 함께 실은 것으로 보인다 |
+| **정당한 협업 커밋(오탐)** | 20 | `tax-domain`+`calc-engine-dev`가 같은 회차에 규칙 추가와 그 규칙을 읽는 엔진 구현을 함께 커밋하는 패턴이 이 조직에서 **반복적으로, 의도적으로** 쓰인다(예: `044701f`·`16df40a`·`430aaeb`·`6bc38ac`·`791c3d3`·`662bfe8`·`3d267da`·`f258aef`·`f19b9fc`·`677ff34`). 커밋 메시지 서사가 두 유닛의 변경분을 **전부** 설명하고, `tax-domain`의 결과물(새 규칙·정답지)과 `calc-engine-dev`의 결과물(그 규칙을 읽는 코드)이 같은 기능 하나를 이루는 짝이다 — 이것은 사고가 아니라 이 조직의 정상 작업 단위다 |
+| **의도적 마일스톤 커밋(오탐)** | 8 | `Stage 1/2/3 discovery/design/engine` 초기 일괄 커밋과 `Gate 1/2/4/5 approved` 판정 커밋들은 여러 유닛의 산출물을 한 번에 묶는 것이 **그 커밋의 목적 자체**다(단계 완료·게이트 승인 기록) |
+
+**정밀도.** 30건 중 3건(10%)이 "다른 유닛의 몫을 의도치 않게 실었다"는 좁은 의미의 문제였고, 그중 2건은 관리자가 이미 알고 있던 것, 1건이 새로 찾은 것(내용 손실 없는 rename)이다. **재현율은 완전하다** — 관리자가 신고한 두 사고를 이 검사가 놓치지 않았다.
+
+**이 검사가 못 잡는 것.** "정당한 협업 커밋"과 "실수로 쓸어 담은 커밋"을 구별하려면 **커밋 메시지의 서사가 diff 전체를 설명하는가**를 사람이 읽어야 한다 — 이건 의미 판단이라 기계화하지 못했다. 이 스크립트는 **1차 필터(사람이 볼 후보를 129건에서 30건으로 좁힘)**로만 값을 한다. 완전 자동 차단(예: pre-commit hook)으로 쓰려면 오탐률 90%는 너무 높다 — **CI 게이트가 아니라 사람이 보는 목록으로만 권고한다.**
+
+**권고.** 관리자가 유닛을 돌리는 동안 `git add -A`·`git add <디렉터리>` 대신 **그 유닛의 `writeScope` 안 경로만 골라 `git add`할 것**을 규약으로 세운다(D49가 이미 이렇게 결론 냈다). 이 스크립트를 정기적으로(예: 매 게이트 전) 돌려 30건 중 사람이 걸러야 하는 후보를 다시 좁히는 것을 다음 분기 QA 루틴에 넣을 것을 권고한다.
+
+
+---
+
+### 11.5 자체 발견 검사 ④ — `mock-engine.js` 대 실제 엔진 차등(differential) 테스트
+
+**동기.** 관리자 작업 지시가 지목한 자리 — `mock-engine.js`는 "엔진 로직이 두 번째로 구현된 자리"이고, 두 구현이 갈라지는 자리가 있는지 보라고 했다. 그 파일 머리말은 스스로 "실행 경로는 이미 실제 엔진이고, 이 파일은 계약이 major로 오를 때 함께 오르지 않으면 그 순간 거짓말이 되는 회귀 fixture"라고 적는다. 그런데 `mock-engine.test.mjs`는 **mock 자기 자신만** 테스트한다 — 실제 엔진과 나란히 놓고 비교하는 테스트가 없다. 손으로 맞추는 자리는 갈라져도 아무 자동 검사도 잡지 못한다.
+
+**방법.** 같은 요청을 `src/engine/index.mjs`의 `compute()`와 `src/web/engine/mock-engine.js`의 `compute()`에 동시에 넣고, 사용자에게 보이는 계약 필드(안내 코드 집합·배분안 구조·계좌별 `limited_by`·`basis_rule_ids`·금액·경고·세액 한도)를 비교한다. 완전 `deepEqual`은 쓰지 않는다 — 배열 순서 차이 등 잡음을 줄이려고 `notices`·`comparison_note_codes`는 **집합**으로, `plans`는 `plan_id`를 키로 한 **맵**으로 비교했다.
+
+**스크립트 전문** (`check-mock-engine-drift.mjs`, 핵심부만 — 전문은 스크래치패드에 있다):
+
+```js
+// QA 게이트4 검사 4(자체 발견) — mock-engine.js가 실제 엔진과 갈라지는 자리를
+// 차등(differential) 테스트로 훑는다.
+//
+// 실행: node check-mock-engine-drift.mjs <repo-root>
+
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+
+const repoRoot = process.argv[2];
+const real = await import(pathToFileURL(path.join(repoRoot, 'src/engine/index.mjs')).href);
+const mock = await import(pathToFileURL(path.join(repoRoot, 'src/web/engine/mock-engine.js')).href);
+
+function loadRulesets() {
+  const dir = path.join(repoRoot, 'data', 'tax-rules');
+  return {
+    '2026.json': JSON.parse(readFileSync(path.join(dir, '2026.json'), 'utf8')),
+    '2027-proposed.json': JSON.parse(readFileSync(path.join(dir, '2027-proposed.json'), 'utf8')),
+  };
+}
+const rulesets = loadRulesets();
+
+// deepMerge + baseRequest(schemaVersion, overrides) — src/engine/test-helpers.mjs의
+// baseRequest와 같은 형태의 요청 빌더를 이 스크립트 안에 독립적으로 재구현했다
+// (두 구현 다 이 요청 형식을 계약으로 받아들이므로 공정한 입력이다).
+
+const realVersion = real.SCHEMA_VERSION;
+const mockVersion = mock.MOCK_SCHEMA_VERSION;
+
+const scenarios = [
+  { label: '기본(넉넉한 여력, 확정+개정안)', overrides: {} },
+  { label: '연금 기납입 900만 + 예산 600만(세액 한도 경계 좌표)', overrides: { profile: { current_year_total_salary_krw: 34_143_911, monthly_capacity_krw: 500_000 }, accounts: { annuity_savings: { ytd_contribution_krw: 9_000_000 } } } },
+  { label: 'ISA 전환 있음', overrides: { isa_transfer: { amount_krw: 10_000_000, destination_account: 'retirement_pension' }, accounts: { isa: { cumulative_contribution_krw: 20_000_000 } } } },
+  { label: '의무가입기간 안에서 자금 사용(중도 인출 경고 유발)', overrides: { profile: { fund_use_horizon: 'within_isa_lock_in' } } },
+  { label: '여력 0', overrides: { profile: { monthly_capacity_krw: 0 } } },
+  { label: '종합소득 있음, 금액 모름(미정 분기)', overrides: { profile: { has_non_wage_global_income_current_year: true, current_year_global_income_krw: null } } },
+];
+
+function setDiff(aArr, bArr) {
+  const a = new Set(aArr), b = new Set(bArr);
+  return { onlyReal: [...a].filter((x) => !b.has(x)), onlyMock: [...b].filter((x) => !a.has(x)) };
+}
+
+const fieldDrift = new Map();
+const bump = (f) => fieldDrift.set(f, (fieldDrift.get(f) ?? 0) + 1);
+let scenarioDriftCount = 0;
+
+for (const scenario of scenarios) {
+  const request = baseRequest(realVersion, scenario.overrides); // 위 정의
+  const realResult = real.compute(request, rulesets);
+  const mockResult = mock.compute({ ...request, schema_version: mockVersion }, rulesets);
+  const lines = [];
+
+  for (const scKey of Object.keys(realResult.scenarios ?? {})) {
+    const rs = realResult.scenarios[scKey], ms = mockResult.scenarios?.[scKey];
+    const nd = setDiff((rs.notices ?? []).map((n) => n.code), (ms.notices ?? []).map((n) => n.code));
+    if (nd.onlyReal.length) { lines.push(`[${scKey}] notices — real에만: ${nd.onlyReal.join(', ')}`); bump('notices'); }
+    if (nd.onlyMock.length) { lines.push(`[${scKey}] notices — mock에만: ${nd.onlyMock.join(', ')}`); bump('notices'); }
+
+    const rPlans = new Map((rs.plans ?? []).map((p) => [p.plan_id, p]));
+    const mPlans = new Map((ms.plans ?? []).map((p) => [p.plan_id, p]));
+    const pd = setDiff([...rPlans.keys()], [...mPlans.keys()]);
+    if (pd.onlyReal.length || pd.onlyMock.length) { lines.push(`[${scKey}] plan_id 집합 — real에만: [${pd.onlyReal.join(', ')}] / mock에만: [${pd.onlyMock.join(', ')}]`); bump('plan_id_set'); }
+
+    for (const [planId, rp] of rPlans) {
+      const mp = mPlans.get(planId);
+      if (!mp) continue;
+      for (const alloc of rp.allocations ?? []) {
+        const malloc = (mp.allocations ?? []).find((a) => a.account === alloc.account);
+        if (!malloc) continue;
+        if (alloc.limited_by !== malloc.limited_by) { lines.push(`[${scKey}/${planId}/${alloc.account}] limited_by: real=${JSON.stringify(alloc.limited_by)} vs mock=${JSON.stringify(malloc.limited_by)}`); bump('allocation.limited_by'); }
+        const idDiff = setDiff(alloc.basis_rule_ids ?? [], malloc.basis_rule_ids ?? []);
+        if (idDiff.onlyReal.length || idDiff.onlyMock.length) { lines.push(`[${scKey}/${planId}/${alloc.account}] basis_rule_ids — real에만: [${idDiff.onlyReal.join(', ')}] / mock에만: [${idDiff.onlyMock.join(', ')}]`); bump('allocation.basis_rule_ids'); }
+        for (const field of ['monthly_krw', 'annual_krw', 'monthly_annualized_krw']) {
+          if (alloc[field] !== malloc[field]) { lines.push(`[${scKey}/${planId}/${alloc.account}] ${field}: real=${alloc[field]} vs mock=${malloc[field]}`); bump(`allocation.${field}`); }
+        }
+      }
+    }
+  }
+  if (lines.length) { scenarioDriftCount += 1; console.log(`--- ${scenario.label}  [${lines.length}개 드리프트]`); for (const l of lines) console.log(`  ${l}`); }
+  else console.log(`--- ${scenario.label}  OK`);
+}
+console.log(`검사한 시나리오 ${scenarios.length}개 중 드리프트 있는 시나리오 ${scenarioDriftCount}개`);
+process.exit(scenarioDriftCount > 0 ? 1 : 0);
+```
+
+**실행 결과** (대상 커밋 `1a3ab98`, 6개 대표 시나리오 × 확정/개정안 2개 하위 시나리오):
+
+```
+$ node check-mock-engine-drift.mjs "D:\personal\Claude 프로젝트\Account optimization"
+--- 기본(넉넉한 여력, 확정+개정안)  [21개 드리프트]
+--- 연금 기납입 900만 + 예산 600만(세액 한도 경계 좌표)  [27개 드리프트]
+--- ISA 전환 있음  [25개 드리프트]
+--- 의무가입기간 안에서 자금 사용(중도 인출 경고 유발)  [21개 드리프트]
+--- 여력 0  [13개 드리프트]
+--- 종합소득 있음, 금액 모름(미정 분기)  [21개 드리프트]
+
+필드별 드리프트 발생 횟수(시나리오 전체 합):
+  allocation.limited_by: 60
+  allocation.basis_rule_ids: 40
+  notices: 10
+  plan_id_set: 4
+  allocation.monthly_krw: 4
+  allocation.annual_krw: 4
+  allocation.monthly_annualized_krw: 4
+  comparison_note_codes: 2
+
+검사한 시나리오 6개 중 드리프트 있는 시나리오 6개
+$ echo $?
+1
+```
+
+**6개 시나리오 전부에서 드리프트가 나왔다.** 주요 갈래 넷:
+
+1. **`allocation.limited_by`가 60회 전부 `real="budget"` vs `mock=null`.** `mock-engine.js:2671`의 삼항식 `annualKrw === 0 ? p.limitedBy[account] ?? null : p.limitedBy[account] ?? null`이 **양쪽 분기가 글자 그대로 같다** — 조건절이 죽어 있다. 예산이 한도보다 작아 `budget`으로 멈춰야 하는 모든 자리에서 mock은 `null`(제한 없음)을 낸다.
+2. **`allocation.basis_rule_ids`가 40회 불완전.** mock이 `pension.credit.limit.combined`·`pension.credit.limit.annuity_savings` 같은 근거 규칙 id를 빠뜨린다 — 화면이 이 목록으로 `LawChip`(근거 조항 표시)을 그리므로, mock을 참고해 화면을 만들면 근거가 덜 나가는 화면이 나올 것이다.
+3. **ISA 전환 시나리오에서 배분액 자체가 다르다** — `max_tax_credit` 안의 `annuity_savings`·`isa` 계좌 배분이 real은 `(0원, 500,000원)`인데 mock은 `(500,000원, 0원)`으로 **뒤바뀌어 있다.** 금액이 갈리는 것은 나머지 셋(메타데이터성 필드)보다 심각하다.
+4. **`plan_id_set`이 4회 갈린다** — 특정 조건(연금 기납입 한도 초과, ISA 전환)에서 real은 `pension_contribution_before_isa`(D32의 4번째 안)를 내는데 mock은 옛 이름 `annuity_savings_first`/`isa_first`를 낸다. **D32 개명이 mock에 반영되지 않았다.**
+
+**심각도 판정 — 사용자에게는 닿지 않지만, fixture로서의 존재 이유가 무너졌다.** `engine-client.js`가 `mock-engine.js`를 임포트하지 않음을 확인했다(`grep -rln "mock-engine" --include=*.js --include=*.mjs .`의 히트가 자기 테스트·`validation.test.mjs`(fixture용)·`engine-client.js`의 주석 한 줄뿐). **실행 경로 밖이라는 파일 자신의 주석은 맞다.** 그러나 이 파일이 존재하는 유일한 이유가 "계약이 바뀔 때 화면 쪽이 무엇을 새로 구현해야 하는지 보여주는 참고 구현"인데, **참고할수록 잘못된 방향(근거 누락, `limited_by` 상실, 배분액 자체가 다름)으로 안내하는 상태가 됐다.** 이번 세션의 D46·D49 변경(정수 분수 반올림, D32 4번째 안 개명)이 `mock-engine.js`에 **부분적으로만** 반영됐다 — 파일 머리말은 "11.0.0으로 맞췄다"고 주장하지만 실제로는 갈라져 있다.
+
+**과거 코드 리뷰 지적 Q5(원 보고서 5.3절, "실행 경로에서 빠진 목 엔진이 남아 있다 … 계약이 또 바뀔 때 실물과 갈라진 채 방치될 위험")가 정확히 실현됐다.** 이번 회차가 그 위험이 실제로 일어났음을 처음으로 값으로 확인했다.
+
+**담당: `web-dev`.** 권고 둘 중 하나 — (a) 이 차등 테스트를 `mock-engine.test.mjs`에 영구 편입해 계약이 바뀔 때마다 자동으로 드리프트를 잡거나, (b) 사람이 손으로 맞추는 비용이 실효를 못 낸다는 것이 이번에 드러났으므로 이 파일을 유지할지 자체를 재검토한다. **QA는 어느 쪽이 옳은지 판정하지 않는다** — 결정은 `web-dev`·관리자 몫이다.
+
+**이 검사가 못 잡는 것.** 6개 대표 시나리오만 돌렸다 — 전수(경계값 그물망)는 아니다. 두 구현이 **같은 방식으로 함께 틀린** 경우(둘 다 조문을 잘못 읽었을 때)는 이 비교로 잡지 못한다 — `tax-domain`의 독립 골든 케이스만 그것을 잡는다(이 문서 9절이 이미 그은 선과 같다).
+
+---
+
+### 11.6 둘째 임무 — 판별력 감사 (체계적 스윕)
+
+관리자 지시대로 **표본이 아니라 체계적**으로 훑었다. 네 갈래로 나눠 전수 조사했다.
+
+**A. 하드코딩된 코드 목록 안티패턴 — `src/web/`·`src/engine/`의 모든 `.test.mjs`를 grep.**
+
+```
+$ grep -rn "^\s*const \(notice\|assumption\|warning\|comparisonNote\)Codes\s*=\s*\[" src/web/*.test.mjs src/web/**/*.test.mjs
+src/web/wording.test.mjs:256:  const noticeCodes = [
+src/web/wording.test.mjs:280:  const assumptionCodes = [
+```
+
+**히트 2건, 둘 다 같은 테스트 함수 안에 있다.** 11.2절에서 이미 자세히 다뤘다 — `noticeCodes`가 39개 중 16개, `assumptionCodes`가 24개 중 12개만 담아, 테스트 이름("every code … has a sentence")이 주장하는 것의 절반도 확인하지 못한다. **저장소 전체를 훑어도 이 안티패턴은 이 한 자리뿐이었다** — 다른 코드-목록성 검사(`golden-block.mjs`의 `VOCABULARY`)는 대조적으로 `CREDIT_RATE_KEYS`·`SCENARIO_KEYS`·`LIMIT_KEYS` 같은 소스에서 **동적으로 조립**되어 같은 함정에 빠지지 않는다 — 안전한 패턴과 위험한 패턴이 같은 저장소에 공존한다는 것을 확인했다.
+
+**B. 골든 케이스 형식 거부 시 조용히 미등록되는 문제(D42가 지목) — 지금 상태 확인.**
+
+`src/engine/golden-cases.test.mjs:85-121`을 읽었다. **검사 1**("골든 케이스 블록이 전부 형식에 맞는다")이 `blockProblems`가 하나라도 있으면 실패하고, **검사 2**("문서의 모든 골든 케이스에 기계가 읽는 블록이 있다")가 `docs/stage-4-verification/golden-cases.md`의 산문에 등장하는 `GC-XX` 케이스 ID 전부가 실제로 파싱 가능한 블록을 가졌는지 대조한다. 주석이 이 형태의 사고를 정확히 지목한다 — "조용히 건너뛰면 커버리지 검사가 통과하면서 케이스는 안 돌아가는, 가장 나쁜 상태가 된다." **D42가 지목한 문제는 이미 이 두 검사로 막혀 있다.** 회귀 재실행(11.1절, 엔진 613건에 포함)에서 두 검사 다 통과했다 — 형식 위반·커버리지 누락 0건.
+
+**C. 계약 8.0.0 → 11.0.0(네 차례 major) 이후 낡은 기대값 — grep으로 전수.**
+
+```
+$ grep -rn "'8\.\|'9\.\|'10\.\|schema_version.*10\." src/web/*.test.mjs src/web/**/*.test.mjs src/engine/*.test.mjs | grep -v "11\."
+src/web/engine/mock-engine.test.mjs:85:  const res = compute(baseRequest({ schema_version: '8.2.0' }), rulesets);
+src/web/state/store.test.mjs:212:  assert.ok(!('prior_year_tax' in req.profile), '9.0.0에서 이 필드는 계약에서 사라졌다');
+src/engine/contract.test.mjs:41:  assert.equal(compute(baseRequest({ schema_version: `${major}.9.9` }), rulesets).ok, true);
+```
+
+**셋 다 확인했고 전부 의도적이다.** 첫째는 "낡은 major 버전을 보내면 거부하는가"를 **일부러** 낡은 버전으로 테스트하는 하위호환 검사다(`'unknown schema major triggers schema_version_mismatch'`). 둘째는 "그 필드가 사라졌다"는 사실 자체를 고정하는 부정 검사(그 필드가 없어야 통과)다. 셋째는 변수 `major`에 현재 버전이 들어가는 템플릿이라 하드코딩이 아니다. **낡은 기대값은 0건.**
+
+**D. `account-benefit-strip`·`result-panel` 반복 신고 위젯 — 회귀 방어 상태 재확인.**
+
+이 위젯은 소유자가 네 번 신고했고(D33·D35·D36·D43·D45) 그때마다 규칙이 바뀌었다. `src/web/ui/account-benefit-strip-width.test.mjs`를 읽었다 — **옛 값이 남아 있지 않은지를 적극적으로 확인하는 부정 단언**이 있다.
+
+```js
+test('옛 폭 값(카드 내용 폭의 50%, 도넛 외경의 50% = 130px 고정)이 남아 있지 않다', () => {
+  assert.doesNotMatch(block, /width:\s*50%/, '폐기된 50% 폭이 남아 있습니다(D33)');
+  assert.doesNotMatch(block, /min-width:\s*240px/, '폐기된 min-width: 240px가 남아 있습니다(D33)');
+  assert.doesNotMatch(block, /max-width:\s*130px/, '폐기된 130px 고정폭이 남아 있습니다');
+});
+```
+
+그리고 `src/web/browser/account-benefit-strip.browser.mjs`에 D43(가정 축 채움 유지)·D43(확정/가정 축 비인접)·D45(캡션-kicker 결합) 각각을 실측으로 못 박는 전용 테스트가 있다(11.1절 실행에서 13건 전건 통과). **이 위젯 자체는 이 저장소에서 가장 잘 방어되고 있는 자리다** — 다만 그 위젯이 최대 몇 개의 배분안을 보여줄 수 있는지를 규정하는 **상위 문서(`requirements.md`·`screens.md`)가 낡아 있었다**(11.3·11.8절). "위젯 자체는 옳고 위젯이 몇 개까지 그릴 수 있다고 문서가 주장하는 숫자가 틀렸다"는, 겉으로는 안 보이는 종류의 어긋남이다.
+
+**감사 결론.** 체계적으로 훑은 넷 중 **하나(A)에서 판별력 약한 검사를 확인**했고(테스트 이름이 커버리지를 과장), **하나(B)는 이미 잘 막혀 있음**을 확인했으며, **하나(C)는 깨끗**했고, **하나(D)는 위젯 자체는 잘 방어되지만 상위 문서가 낡아 있는 인접 문제**를 노출시켰다(11.3·11.8절과 연결). 표본이 아니라 저장소의 관련 파일 전수를 grep·읽기로 훑었다.
+
+---
+
+### 11.7 코드 리뷰 — 신규 엔진 파일과 `mock-engine.js`
+
+**`src/engine/exact.mjs`(135줄).** 원 미만 금액을 `BigInt` 분수(`{n, d}`)로 정확히 들고 다니는 유틸리티. 부동소수점을 피한 이유가 머리말에 명시돼 있고(`ratio.mjs`의 선례와 같은 이유), 모든 연산 함수(`addExact`·`subExact`·`mulExact`·`divExact`·`cmpExact`·`floorExactToUnit` 등)가 `guard()`로 입력 검증 후 `null`을 전파한다 — **값을 지어내지 않는다**는 이 저장소의 규율을 지킨다. `exactToInteger`가 "정수가 아니면 `null`"을 명시로 강제해 몰래 버림을 막는 것도 파일 존재 이유와 일치한다. **결함 없음.** 주의점 하나(차단 아님): 연속 곱셈에서 분자·분모를 약분하지 않으므로 이론상 `BigInt` 크기가 커질 수 있으나, 이 도메인의 연산 횟수(세액 한도 계산 한 회)가 적어 실질 위험은 없다고 판단했다.
+
+**`src/engine/liability-cap.mjs`(구조만 검토, 상세 로직은 `tax-domain`의 독립 교차검증이 이미 35건 골든 케이스로 확인했다).** 머리말이 D39·D40·D41·D42·D46의 결정 이력을 빠짐없이 인용하며 "이 파일에 `Math.floor`가 한 번도 나오지 않는 것이 그 규약의 증거"라고 스스로 검증 가능한 주장을 한다 — 실제로 grep해 확인했다(`Math.floor` 0건). `direction_code`를 산문이 아니라 룰셋의 코드 칸에서 읽는 것(D41)도 소스에서 확인했다(`branch.direction_code`를 그대로 쓰고 문자열 `startsWith` 비교가 없음 — `grep -n "startsWith" src/engine/*.mjs`가 이 파일·`statutory-eligibility.mjs`·`limits.mjs` 어디에도 안 걸렸다). **결함 없음.**
+
+**`rounding.mjs`·`statutory-eligibility.mjs`·`headline.mjs`·`pension-reference.mjs`.** 이 넷은 구조적으로 가볍게 훑었다(머리말 규율 확인, `NOTICE`·`ASSUMPTION` 코드 방출 지점 확인 — 11.2절 검사 ①이 이 넷이 내는 코드의 화면 커버리지를 실질적으로 검증했다). **줄 단위 정독은 하지 않았다** — 이 부분은 정직하게 미검증으로 남긴다. 세법 계산 자체의 정확성은 이 리포트의 판정 대상이 아니고(`tax-domain`의 35건 골든 케이스가 담당), 코드 스타일·구조 문제를 追加로 찾으려면 다음 회차에 이 넷을 별도로 더 깊이 읽어야 한다.
+
+**`src/web/engine/mock-engine.js`(1,000줄 이상).** 11.5절의 차등 테스트가 핵심 발견이다 — `limited_by`·`basis_rule_ids`·일부 배분액·플랜 이름이 실제 엔진과 갈라져 있다. 추가로 11.3절 검사 ②가 `result-panel.js`(같은 파일이 아니라 이 mock을 만드는 데 참고했을 화면 코드)에서 **폐기된 코드의 죽은 키 2건**을 찾았다.
+
+- `src/web/ui/result-panel.js:1303,1315` — `ASSUMPTION_TIER` 우선순위 맵(가정 중 "중요한 5개"를 고르는 랭킹 테이블)에 `prior_pension_credit_zero_assumed`·`tax_liability_cap_unknown`이 **tier 0(최고 우선순위)로 남아 있다.** 둘 다 D39·D40으로 폐기된 코드라 `ASSUMPTION`·`NOTICE` 레지스트리 어디에도 없고, 엔진이 다시는 이 코드를 내지 않으므로 이 두 키는 **결코 매칭되지 않는다** — 순수한 죽은 코드다. 동작에 영향은 없다(매칭되지 않으므로). **심각도 낮음, 담당 `web-dev`.**
+
+**보안·개인정보 불변식 재확인(소스 근거와 함께).**
+
+| 불변식 | 확인 방법 | 결과 |
+|---|---|---|
+| 입력값이 서버·외부로 전송되지 않는다 | `grep -rnE 'fetch\|XMLHttpRequest\|sendBeacon\|WebSocket\|EventSource\|\.src\s*=\|new Image\|<form\|FormData' src/` 전수, 히트 전부 판독 | `engine-client.js`(룰셋 GET, 본문 없음), `analytics.js`(화이트리스트 통과 계측만), `harness.mjs`(브라우저 테스트 도구, 배포 코드 아님) 외 0건 |
+| 생년월일이 저장·URL·분석에 안 실린다 | `grep -n "birth_date\|birthDate" src/web/analytics.js src/web/state/store.js src/web/ui/share.js` | `analytics.js`·`share.js`에 0건. `store.js`는 엔진 요청 인자로만 씀(D21, 같은 JS 문맥의 함수 호출이지 전송이 아님) |
+| 만 나이가 화면에 안 되비친다 | `input-panel.js:299,377`·`store.js:212`·`validation.js:6-7` 주석과 실제 코드 대조 | "만 나이를 옆에 되비추지 않는다", "화면이 만 나이로 자동 판정해 채워 보내지 않는다"가 실제 구현과 일치. 나이 환산은 엔진만 한다(D21) |
+| `localStorage`/`sessionStorage`에 폼 값이 안 남는다 | `grep -rn "localStorage\|sessionStorage" src/web/` | 테마 토글(`theme.js`)과 계측 세션 플래그(`analytics.js`)뿐. 폼 필드 저장 0건 |
+| URL에 입력값이 안 실린다 | `grep -rn "URLSearchParams\|history\.pushState\|history\.replaceState" src/web/` | `URLSearchParams`는 `location.search`에서 utm만 **읽는** 용도. 쓰기(`pushState`/`replaceState`) 0건 |
+| 인쇄물에 입력값이 안 실린다 | `print.browser.mjs` 실측(11.1절) | "인쇄 미디어에서 입력 패널이 통째로 사라진다" 통과 |
+
+전부 유지되고 있다. 새로 발견된 위반은 없다.
+
+
+---
+
+### 11.8 수용 기준(AC) 재대조 — `requirements.md` 34건 전건
+
+1절의 대조표는 게이트 4 최초 승인 시점(2026-08-09) 기록이고 고치지 않았다. 그 뒤 D20~D49로 엔진·화면·`requirements.md` 자체가 여러 차례 바뀌었으므로, 이번 회차에 **34건 전건을 다시 판정**한다. 판정이 최초 판정과 **같은 항목은 근거를 "회귀 스위트로 재확인"으로 축약**하고(1절에 상세 근거가 남아 있다), **달라진 항목만 전체 근거를 새로 적는다.**
+
+| # | AC 요약 | 최초 판정(게이트4) | 이번 판정 | 비고 |
+|---|---|---|---|---|
+| 1 | 필수 4항목 중 하나라도 비면 입력 부족 유지 | 통과 | **통과(재확인)** | `input-focus.browser.mjs`·`store.test.mjs` 회귀로 재확인 |
+| 2 | 나이 비정수 → 오류, 계산 미사용 | 통과 | **통과(재확인)** | `validation.test.mjs` 회귀 |
+| 3 | 총급여·여력·기납입액 음수 → 오류 | 통과 | **통과(재확인)** | 동일 |
+| 4 | 자금 사용 시점 미선택 → 결과 전환 안 됨 | 통과 | **통과(재확인)** | `store.js` `initialForm().fundUseHorizon = null` 유지 확인(소스) |
+| 5 | 기납입액·ISA 금액 미입력 → 0 간주 | 통과 | **통과(재확인)** | `toIntOrZero` 유지 확인(소스) |
+| 6 | ISA 연령 미달 → ISA만 배제(연금 배제 안 됨) | 부분→N/A(게이트5 D20 종결) | **N/A(유지)** | 근거: `requirements.md` 24행 자체 서술 + `tax-rules-report.md` 10절. 도달 불가 근거 문서가 명시로 있다 |
+| 7 | ISA "아니오" → 관련 입력 미노출 | 통과 | **통과(재확인)** | `input-panel.js` 조건부 그룹 구조 소스 확인 |
+| 8 | ISA 전환 "예"+금액 공란/초과 → 결과 미갱신+오류 표시 | 실패(Q2) | **통과** | Q2 해소 확인(소스) — `conditionalPendingAlert()`가 `state.validation.conditionalPending`일 때 **결과 상태에서도** 렌더된다(`result-panel.js:1678`), `CONDITIONAL_PENDING_STALE_CAPTION`이 헤드라인에 붙는다(`:1538`). `sandboxed-frame.browser.mjs`가 관련 확인 모달 경로를 실측 |
+| 9 | 전환 "아니오" → 전환 관련 미반영 | 통과 | **통과(재확인)** | 소스 확인 유지 |
+| 10 | 필수 항목 충족 → 자동 결과 전환 | 통과 | **통과(재확인)** | `result-panel.browser.mjs` 회귀 |
+| 11 | 결과 후 입력 변경 → 재계산 | 통과 | **통과(재확인)** | `result-panel.browser.mjs` "입력을 바꾸면 결과 숫자가 실제로 갱신된다" 통과 |
+| 12 | 세 계좌 기본안 금액 표시 | 통과 | **통과(재확인)** | 동일 |
+| **13** | **기본안 정확히 1 + 대안 0~2 (총 1~3개)** | 통과 | **실패 — 신규 발견** | 아래 상세 |
+| 14 | 대안 있으면 기본안 대비 차액 표시 | 통과 | **통과(재확인)** | `headline-baseline-only.browser.mjs` "대안 행을 누르면 헤드라인이 「기본안 대비 세액공제액 차이」로 바뀐다" 통과 |
+| 15 | "추천"·"최적"·"권장" 미사용(기본안은 "기본"만) | 통과 | **통과(재확인, 조건 변경 반영)** | D45로 "최적"이 `DONUT_OPTIMAL_KICKER_LABEL` 한 자리에 조건부 허용됐다(11.6절 확인). `wording.test.mjs`의 `PLAN_LABEL` 금지어 검사와 `donut-optimal-kicker.test.mjs`의 "캡션 없이는 못 쓴다" 상호 검사가 함께 이 AC를 지킨다 — 배분안 **이름**에는 여전히 0건, "최적"은 그 이름들과 다른 자리(kicker)에서 조건부로만 쓰인다 |
+| 16 | 여력<한도합계 → 못 채운 사실+우선순위 표시 | 통과(Q1 지적) | **통과** | Q1 해소 확인(소스) — `unallocatedReasonMessage(unallocatedBlockers(plan))`(`result-panel.js:1240`)가 `limited_by` 분포를 실제로 읽어 문장을 가른다 |
+| 17 | 여력≥한도합계 → 전부 채움+잔여 표시 | 통과 | **통과(재확인)** | |
+| 18 | 기존 납입액 반영해 잔여 한도 내 계산 | 통과 | **통과(재확인)** | |
+| 19 | ISA 전환 "예" → 추가 한도 별도 표시+반영 표시 | 통과 | **통과(재확인)** | `plan-comparison-mobile.browser.mjs` 회귀(ISA 전환 포함 시나리오 통과) |
+| 20 | 전환 "아니오"/미보유 → 추가 한도 미표시 | 통과 | **통과(재확인)** | |
+| 21 | 시점 변경 시 금액 불변, 순서·경고만 변화 | 통과 | **통과(재확인)** | `HORIZON_EFFECT_CAPTION` 존재 확인(소스), `echo.fund_use_horizon_affects` 계약 필드 유지(`engine-interface.md`) |
+| 22 | 연금 배분>0 + 조건 → 중도인출 경고+근거 | 통과 | **통과(재확인)** | `WARNING` 레지스트리 2건 전부 `copy.js` 커버리지 확인(11.2절 검사 ①, 0건 미대응) |
+| 23 | ISA 배분>0 + 조건 → 추징 경고+근거 | 통과 | **통과(재확인)** | 동일 |
+| 24 | "모르겠음" → 참고 안내 수준 | 통과 | **통과(재확인)** | `INFO_PREFIX` 로직 유지 확인(소스) |
+| 25 | 연금 개시 이후 → 경고 미표시 | 통과 | **통과(재확인)** | |
+| 26 | 경고에 금액 미포함 | 통과 | **통과(재확인)** | `WARNING_BODY` 두 문장 금액 파라미터 없음, 소스 재확인 |
+| 27 | 고지 문구 예외 없이 표시 | 통과 | **통과(재확인)** | `disclosureBanner()` 호출 5곳 확인(입력부족·차단·결과 등 전 상태), `print.browser.mjs`에서 인쇄 미디어에도 고지 6요소 렌더 확인 |
+| 28 | 금융상품명·금융사명 미표시 | 통과 | **통과(재확인)** | 코드 변경 없음, 문자열 스캔 재실행하지 않았으나(11절 범위 밖) 관련 문구 변경 이력 없음 확인 |
+| 29 | 입력값 서버 미전송 | 통과 | **통과(재확인)** | 11.7절 보안 표 |
+| 30 | 저장·공유물에 개인값 미포함 | 통과 | **통과(재확인)** | `print.browser.mjs` "인쇄 미디어에서 입력 패널이 통째로 사라진다" 통과 |
+| 31 | 계산 불가 상태 + 사유 + 복귀 경로 | 부분→N/A(게이트5 D20 종결) | **N/A(유지)** | 근거: `requirements.md` 169행 자체 서술("N/A로 판정하고 부분으로 남기지 않는다") |
+| 32 | 일부 계좌만 불가 → 나머지 정상 | 통과 | **통과(재확인)** | |
+| 33 | 로그인·회원가입 미요구 | 통과 | **통과(재확인)** | 코드 변경 없음 확인 |
+| 34 | 광고·결제 유도 미표시 | 통과 | **통과(재확인)** | 코드 변경 없음 확인 |
+
+**32/34 통과, 2/34 N/A(도달 불가 근거 있음), 1/34 실패(AC13). 미검증 0건.**
+
+#### AC 13 상세 — 실패로 재판정한 근거
+
+**요구사항 원문(`requirements.md` 142행).** "결과 영역은 기본안 정확히 하나와 대안 0~2개를 함께 제시한다." (3절 84행에도 같은 취지가 반복된다.)
+
+**실제 동작.** `src/web/browser/plan-comparison-mobile.browser.mjs`(이 저장소에 커밋된, 관리자가 인계한 93건에 포함된 정식 회귀 테스트)가 **기본안 1개 + 대안 3개 = 총 4개**가 동시에 렌더되는 것을 **의도된 정상 동작으로 실측·고정**하고 있다.
+
+```
+test('네 배분안이 전부 다른 배분으로 나온다 — 넷째 안이 조용히 다른 안에 합쳐지지 않는다', …)
+  assert.equal(labels.length, 4);
+```
+
+재현 조건(테스트 자체가 실측한 것): 개정안(`proposed`) 시나리오 탭 + 청년 자기신고 체크(`declaredYouth`, D20 이후 화면에 실제로 노출됨, 11.3절) 체크. 이 조건은 **11.3절에서 확인했듯 실제 배포 화면에서 사용자가 도달 가능하다** — `declaredYouth` 체크박스가 `input-panel.js:362`에 실재하고, 시나리오 탭 전환도 정상 기능이다.
+
+**계약은 이미 정정돼 있다.** `engine-interface.md:864` — "`plans` | Plan[] | 항상 | **1개 이상 4개 이하.**" D32(4번째 배분안 `pension_contribution_before_isa` 도입, 소유자 지시)가 이 상한을 3에서 4로 올렸다. **`calc-engine-dev`의 계약 문서는 옳다.**
+
+**옳지 않은 것은 `requirements.md`(product-planner)와 `screens.md`(designer) 두 문서다.** 둘 다 "대안은 최대 2개(총 3개)"라고 여전히 적고 있다(`screens.md:92` G2, `requirements.md:84,142`). 이 세 문서가 서로 다른 숫자(계약 4개 vs 두 스펙 문서 3개)를 주장하는 상태로 지금 커밋돼 있다.
+
+**판정 — 이것은 코드 결함이 아니라 명세 결함이다.** D32는 소유자가 명시로 지시한 결정이고 엔진·화면 다 그 결정대로 정확히 동작한다(불변식·골든 케이스 어디에도 안 걸림 — 이 리포트는 계산이 아니라 **문서가 실제로 무엇을 약속하는지**를 본다). 따라서 "고쳐야 하는 것"은 코드가 아니라 **AC13의 숫자**일 가능성이 높다. 그러나 그것을 QA가 판정하지는 않는다 — `requirements.md`의 소유자는 `product-planner`이고, 이 문서를 고칠지(0~3으로 상한 조정) 아니면 화면 쪽에서 4번째 안이 뜨는 경로를 좁힐지(예: 항상 상위 2개 대안만 노출)는 제품 판단이다. **AC 6·31 때와 같은 형태의 처리**를 권고한다 — `product-planner`·관리자가 판정하고, 판정이 나면 이 AC를 정정된 문서 기준으로 재확인한다.
+
+---
+
+### 11.9 이번 회차 코드 리뷰 지적 총정리
+
+| # | 위치 | 내용 | 심각도 | 담당 |
+|---|---|---|---|---|
+| **R1** | `src/web/copy.js`의 `NOTICE_MESSAGE` | `isa_type_cross_check_inconclusive`·`isa_rate_gap_axis_zero_because_within_tax_free_limit` 두 안내 코드에 대응 문구가 없어, 발동하면 코드 문자열이 그대로 화면에 나간다(11.2절) | 중간 | `web-dev`(구현), `designer`(문구 승인) |
+| **R2** | `docs/stage-1-discovery/requirements.md` 65·68행 | "1차 출시에서 묻지 않는 선택 입력 4개" 중 ISA 가입경과연수·청년 자기신고 여부가 실제로는 조건부로 화면에 노출되고 있다(D20·D46 2번으로 뒤집힘, 11.3절) | 중간 | `product-planner` |
+| **R3** | `docs/stage-1-discovery/requirements.md` 84·142행, `docs/stage-2-design/screens.md` 92행 | "대안 0~2개(총 1~3개)"가 D32 이후의 실제 계약(`plans` 1~4개)·실제 동작(4개 렌더 확인)과 어긋난다(11.8절 AC13) | **중간~높음(문서 신뢰성)** | `product-planner`·`designer`·관리자 판정 |
+| **R4** | `src/web/engine/mock-engine.js` | 실제 엔진과 6개 대표 시나리오 전부에서 드리프트(`limited_by` 상실, `basis_rule_ids` 누락, ISA 전환 시나리오의 배분액 자체 불일치, D32 플랜명 미반영). 실행 경로 밖이라 사용자 영향은 없으나, 이 파일의 존재 이유(계약 드리프트 조기 감지)가 무력화됐다(11.5절) | 낮음(비live) ~ 중간(fixture 신뢰성) | `web-dev` |
+| **R5** | `src/web/ui/result-panel.js:1303,1315` | `ASSUMPTION_TIER` 맵에 D39로 폐기된 코드 두 개(`prior_pension_credit_zero_assumed`·`tax_liability_cap_unknown`)가 죽은 키로 남아 있다(11.3·11.7절) | 낮음 | `web-dev` |
+| **R6** | `src/web/wording.test.mjs:255-304` | 테스트 이름이 "모든 코드"를 주장하나 실제로는 NOTICE 39개 중 16개, ASSUMPTION 24개 중 12개만 확인하는 하드코딩 목록이다 — 판별력이 이름보다 훨씬 약하다(11.2·11.6절) | 테스트 품질(중간) | `web-dev`(리팩터해 11.2절의 동적 검사로 대체 권고) |
+| **R7** | `docs/stage-2-design/design-system.md:1489` | D33에서 "카드 내용 폭의 50%"로, 다시 D35에서 폐기된 "240px 최소폭"의 도입 근거 문단이, 최신 규칙(5.14.6절, 그보다 뒤에 있음)보다 문서 앞쪽에 취소선·전방참조 없이 남아 있다(11.3절) | 낮음(문서 가독성) | `designer` |
+
+**과거 코드 리뷰 지적(Q1~Q5) 처리 현황.** Q1(미배분 문구)·Q2(조건부 stale 결과)·Q4(네이티브 `confirm()`) **해소 확인.** Q3(`input_start` 이벤트에 `utm_source`·`utm_medium`·`device_type` 누락)은 **부분 해소** — `EVENT_SCHEMA`(11.2절 인용 코드에는 없지만 `analytics.js:20-21`)가 이제 그 세 속성을 **허용은** 하지만, 호출부 `store.js:403`가 여전히 `{ field_name: fieldName }`만 보낸다(`main.js:9`의 `page_view` 호출과 달리 `utmFromLocation`·`deviceType()`를 재사용하지 않음) — 스키마는 고쳤는데 호출부를 안 고쳤다. **여전히 열려 있음, 담당 `web-dev`.** Q5(mock-engine.js 방치 위험)는 이번 회차 R4로 **실제로 실현됨을 확인**했다.
+
+
+---
+
+### 11.10 차단 사유 (이번 회차)
+
+**되돌릴 수 없는 종류의 위반은 이번에도 0건이다.** 입력값 외부 전송·개인정보 노출·세무사법 문구 위반 어디에도 새 위반이 없다(11.7절). 발견한 7건(R1~R7) 중 어느 것도 이 저장소가 지금까지 "차단"으로 분류해 온 범주(형사처벌이 걸린 법적 위험, 되돌릴 수 없는 데이터 유출·손실)에 들지 않는다.
+
+**다만 이번 회차에 처음으로 "AC 문서 자체가 실제 배포 상태와 숫자로 어긋나는" 사례(R3, AC13)를 찾았다.** AC 6·31처럼 "요구사항의 예시가 실제 동작과 다르다"는 이 조직에 전례가 있는 형태이고, 그때도 차단 사유로 세지 않고 관리자·해당 유닛의 판정으로 넘겼다(게이트 5 D20). **이번에도 같은 처리를 권고한다** — 차단하지 않되, **재승인 전에 `product-planner`(및 필요하면 `designer`)가 AC13·screens.md G2의 숫자를 판정해야 한다.** 문서 세 개가 서로 다른 상한을 주장하는 상태로 다음 단계(5단계 이후)에 들어가면, 이 회차가 잡으려던 것과 같은 종류의 "아무도 모르게 벌어지는 어긋남"이 또 반복된다.
+
+**R1(안내 코드 문구 누락)도 차단이 아니다.** 트리거 조건이 좁고(특정 소득·ISA 유형 조합), 발동해도 계산 결과 자체는 정확하다 — 다만 그 문장 자리에 영문 코드 문자열이 노출되는 것은 이 서비스가 "세법 규칙을 정확히 전달하는 전문적인 도구"로 서 있으려는 태도와 어긋나므로 **출시 전에 고치는 것이 바람직하다.**
+
+### 11.11 담당 유닛별 인계 (이번 회차)
+
+| 담당 | 항목 |
+|---|---|
+| `web-dev` | R1(안내 코드 문구 2건), R4(mock-engine.js 재동기화 또는 폐기 검토), R5(죽은 `ASSUMPTION_TIER` 키 2건 정리), R6(`wording.test.mjs`의 하드코딩 코드 목록을 `constants.mjs` 동적 참조로 리팩터), Q3 잔여(`input_start`에 utm·device_type 실제 전달) |
+| `designer` | R1의 문구 승인, R7(design-system.md 1489행에 전방참조 추가) |
+| `product-planner` | **R2**(`requirements.md`의 "묻지 않는 선택 입력 4개" 목록에서 2건 제거 또는 조건부 표기로 정정), **R3**(AC13·3절의 대안 개수 상한을 실제 계약(1~4개)에 맞출지, 화면 쪽 노출을 3개로 좁힐지 결정) |
+| 관리자 | R3의 최종 판정(문서를 넓힐지 화면을 좁힐지는 제품 결정), 11.4절 `git add -A` 규약의 상시 적용, 새 검사 넷의 영구 이관 여부(scripts/org/ 또는 각 유닛 테스트로) |
+| `calc-engine-dev` | 지적 없음. `engine-interface.md`는 오히려 다른 두 문서보다 먼저 정정돼 있었다(D32) |
+| `tax-domain` | 지적 없음 |
+
+### 11.12 종합 판정 — 게이트 4를 통과시켜도 되는가
+
+**QA의 판정: 조건부로 통과시킬 것을 권고한다.** 근거를 셋으로 나눈다.
+
+1. **정확성·안전성은 흔들리지 않았다.** 1,111건의 자동 테스트(엔진 613·웹 352·조직 53·브라우저 93) 전건 통과, 검증기 5줄 `OK`, 골든 케이스 35건 전건 일치(이 회차에서 재검산하지 않았으나 `tax-domain`의 독립 검증 상태는 변경 이력에서 훼손되지 않았다 — `verification-report.md`는 이번 회차의 QA 대상이 아니다). 입력값 외부 전송·세무사법 문구·되돌릴 수 없는 개인정보 노출, 전부 0건이다.
+2. **새로 세운 검사 넷이 전부 실제로 도는 코드였고, 전부 실제 결함(또는 검사 자체의 약점)을 찾아냈다.** "통과하지만 아무것도 증명하지 않는 검사"를 줄이라는 임무에 산문 체크리스트가 아니라 재현 가능한 스크립트로 답했다 — 관리자가 지정한 최소 셋(엔진→화면 문구, 폐기 규칙 잔존, `git add -A` 스윕)에 더해 자체 발견 하나(mock-engine 드리프트)를 세웠고, 넷 다 이 문서에 전문·실행 결과와 함께 남겼다.
+3. **다만 재승인 전에 열어야 하는 결정이 하나 있다(R3/AC13).** 세 문서(`requirements.md`·`screens.md`·`engine-interface.md`)가 대안 개수 상한에서 서로 다른 숫자를 주장하는 상태이고, 실제 배포 화면이 그중 가장 큰 숫자(4개)로 동작함을 실측으로 확인했다. **이것은 AC 6·31과 같은 성격의 문제이지 차단 사유는 아니다** — 다만 이 상태로 재승인하면 "AC13이 통과"라고 문서가 계속 주장하는데 그 주장 자체가 이번에 거짓으로 확인됐다는 사실이 묻힌다. **관리자가 R2·R3을 판정한 뒤 재승인할 것을 권고한다** — 게이트 5 재소집 때 10.4절을 판정 전에는 재승인하지 말라고 명시로 권고했던 것과 같은 형태의 요청이다.
+
+**차단 사유: 없음.** 재승인 전 결정 필요 항목: R2·R3(둘 다 `product-planner` 소관, 관리자 최종 판정).
+
+---
+
+**개정 이력.** 1~10절은 게이트 4·게이트 5 재소집에서 각각 승인·기록된 내용을 이번 회차에서 고치지 않았다(대상 커밋·수치는 그 시점 기준으로 남긴다). **11절이 이번 재소집(2026-08-12, 대상 커밋 `1a3ab98`)에서 새로 추가한 전부다.** 새 검사 넷(11.2~11.5절)은 스크래치패드에서 작성·실행했고 저장소에는 커밋되지 않았다 — 이 문서가 유일한 기록이자 재현 절차다. 관리자가 R2·R3을 포함한 이번 회차 지적을 판정한 뒤 `status`를 다시 판단한다.
