@@ -556,3 +556,102 @@ test('주입 / 근로소득세액공제 차감을 빼면 한도가 검산 좌표
     '공제를 덜 빼면 한도는 올라간다 — 방향이 반대로 나왔다면 산식이 뒤집힌 것이다',
   );
 });
+
+// ── 주입 5. 미정을 배제로 옮긴다 (D44) ───────────────────────────────────────
+//
+// **룰셋 변형으로는 이 자리를 잡지 못한다.** 룰셋이 정하는 것은 「이 분기의 결론이
+// 미정이다」까지이고, **미정을 어떻게 다루는지는 엔진 한 줄**이다. 그 한 줄이 배제 쪽으로
+// 넘어가면 조문상 자격이 확실한 사업소득자가 스스로 드러나지 않는 방식으로 막힌다 —
+// 화면이 「불가」라고 했으므로 그 사용자는 확인하러 가지도 않는다(D44 판정 1).
+
+/** 총급여 0 · 합산소득 있음. 미정 분기가 걸리는 좌표이고 소유자 케이스 8이 여기다. */
+const UNDETERMINED = baseRequest({
+  profile: {
+    current_year_total_salary_krw: 0,
+    has_non_wage_global_income_current_year: true,
+    current_year_global_income_krw: 80_000_000,
+    monthly_capacity_krw: 1_000_000,
+  },
+});
+
+const irpOf = (response) => {
+  assert.equal(response.ok, true, JSON.stringify(response.errors));
+  return response.scenarios[0].account_eligibility.find((e) => e.account === 'retirement_pension');
+};
+
+test('주입 / 미정을 배제로 다루면 프리랜서의 IRP가 사라진다', async () => {
+  const excludesUndetermined = await mutatedCompute({
+    file: 'statutory-eligibility.mjs',
+    from: 'const excluded = branch.outcome_code === IRP_OUTCOME.NOT_ELIGIBLE;',
+    to: 'const excluded = branch.outcome_code !== IRP_OUTCOME.ELIGIBLE;',
+  });
+
+  const before = irpOf(compute(UNDETERMINED, rulesets));
+  assert.equal(before.eligible, true);
+  assert.ok(amount(baselineOf(compute(UNDETERMINED, rulesets)), 'retirement_pension') > 0);
+
+  const after = irpOf(excludesUndetermined(UNDETERMINED, rulesets));
+  assert.equal(after.eligible, false, '미정을 배제로 옮겼는데 자격이 그대로다 — 그 갈래가 죽어 있다');
+  assert.equal(
+    amount(baselineOf(excludesUndetermined(UNDETERMINED, rulesets)), 'retirement_pension'),
+    0,
+    '자격을 뺐는데 배분이 그대로다 — 자격이 배분을 정하고 있지 않다',
+  );
+  // **결론 코드는 그대로 미정이다.** 그래서 코드만 보는 검사는 이 뒤집힘을 못 잡고,
+  // `eligible`과 배분액을 함께 보는 검사만 잡는다. 소유자 케이스 8이 그 자리다.
+  assert.equal(after.determination_code, 'irp_eligibility_undetermined');
+});
+
+test('주입 / 배제 분기를 통과시키면 무소득자에게 IRP가 다시 나타난다', async () => {
+  const neverExcludes = await mutatedCompute({
+    file: 'statutory-eligibility.mjs',
+    from: 'const excluded = branch.outcome_code === IRP_OUTCOME.NOT_ELIGIBLE;',
+    to: 'const excluded = false;',
+  });
+
+  const noIncome = baseRequest({
+    profile: {
+      current_year_total_salary_krw: 0,
+      has_non_wage_global_income_current_year: false,
+      monthly_capacity_krw: 1_000_000,
+    },
+  });
+
+  assert.equal(amount(baselineOf(compute(noIncome, rulesets)), 'retirement_pension'), 0);
+  assert.equal(irpOf(neverExcludes(noIncome, rulesets)).eligible, true);
+});
+
+test('주입 / 세액공제 요건을 무시하면 요건이 서지 않는 사람에게 공제액이 되살아난다', async () => {
+  // **1단계를 건너뛰는 구현**을 만든다. 오늘의 좌표에서는 산출세액이 0이라 최종 공제액은
+  // 여전히 0이지만, **자르기 전 금액**과 인정액이 되살아나고 배분 순서가 바뀐다 —
+  // 「잘렸다」와 「요건이 서지 않는다」를 가르는 값이 정확히 그것들이다.
+  const ignoresRequirement = await mutatedCompute({
+    file: 'plans.mjs',
+    from: 'if (!ctx.creditEligibility.requirement_met) return 0;',
+    to: 'if (false) return 0;',
+  });
+
+  const noIncome = baseRequest({
+    profile: {
+      current_year_total_salary_krw: 0,
+      has_non_wage_global_income_current_year: false,
+      monthly_capacity_krw: 1_000_000,
+    },
+  });
+
+  const before = baselineOf(compute(noIncome, rulesets)).deterministic_benefit;
+  assert.equal(before.pension_credit_total_before_cap_krw, 0);
+  assert.equal(before.credit_eligible_contribution_krw, 0);
+  assert.equal(before.tax_liability_cap.applied, false);
+
+  const after = baselineOf(ignoresRequirement(noIncome, rulesets)).deterministic_benefit;
+  assert.ok(
+    after.pension_credit_total_before_cap_krw > 0,
+    '요건 검사를 지웠는데 자르기 전 금액이 그대로 0이다 — 그 검사가 아무것도 하고 있지 않다',
+  );
+  assert.equal(
+    after.tax_liability_cap.applied,
+    true,
+    '요건을 무시하면 그 0은 「한도가 잘랐다」로 나온다 — 이것이 우리가 갈라낸 두 경로다',
+  );
+});

@@ -3261,6 +3261,108 @@
         "verified_on": "2026-08-11",
         "verified_by": "tax-domain"
       }
+    },
+    {
+      "id": "tax.rounding.won_fraction",
+      "title": "원 미만 끝수의 처리 — 조문이 정한 단계와 정하지 않은 단계, 그리고 정하지 않은 자리에서 우리가 세운 규약",
+      "conditions": [
+        { "field": "calculation.stage", "op": "in", "value": ["tax_base", "treasury_receipt_or_payment", "intermediate_amount", "comparison", "displayed_amount"] }
+      ],
+      "value": {
+        "type": "rounding_convention",
+        "why_this_rule_exists": "한도 산식은 조문 자체가 소수를 낳는다 — 소득세법 제47조의 15%, 제55조 제1항의 15%, 제59조 제2항의 8/1000이 모두 원 미만을 만든다. 어느 단계에서 어떻게 끝수를 없애는지가 정해져 있지 않으면 같은 사람에게 1원이 갈리고, 그 1원이 세액 한도의 절단 여부(적용/미적용)를 뒤집는다.",
+        "stages": [
+          {
+            "stage_code": "tax_base",
+            "applies_to": "종합소득 과세표준",
+            "operation_code": "floor",
+            "unit_krw": 1,
+            "determined_by_law": true,
+            "statutory_text": "국세의 과세표준액을 산정할 때 1원 미만의 끝수가 있으면 이를 계산하지 아니한다.",
+            "law": "국고금 관리법 제47조 제2항",
+            "note": "이 단계에만 조문이 있다. 과세표준을 구하기 전의 금액(근로소득공제액·근로소득금액·종합소득공제액)은 이 항의 적용 대상이 아니다 — 조문이 지목한 것은 '과세표준액'이다."
+          },
+          {
+            "stage_code": "treasury_receipt_or_payment",
+            "applies_to": "국고금의 수입 또는 지출 — 실제로 납부하거나 환급받는 금액",
+            "operation_code": "floor",
+            "unit_krw": 10,
+            "determined_by_law": true,
+            "statutory_text": "국고금의 수입 또는 지출에서 10원 미만의 끝수가 있을 때에는 그 끝수는 계산하지 아니하고, 전액이 10원 미만일 때에도 그 전액을 계산하지 아니한다. 다만, 대통령령으로 정하는 경우에는 그러하지 아니하다.",
+            "law": "국고금 관리법 제47조 제1항",
+            "binds_engine_output": false,
+            "why_not_binding": "이 엔진이 내는 금액은 납부세액도 환급세액도 아니다. 세액공제로 줄어드는 세액(절세액)과 그 한도이며, 둘 다 국고금의 수입·지출 그 자체가 아니라 그것을 계산하는 도중의 값이다. 그러므로 10원 단위 절사를 이 엔진의 출력에 걸지 않는다.",
+            "withholding_stage_is_the_same": "원천징수 단계도 같은 조문을 쓴다. 국세청은 일용근로소득의 원천징수세액을 '납부할 때' 10원 미만 끝수를 절사한다고 회신하면서 근거로 국고금관리법 제47조를 들었다(원천세과-240, 2012-05-02). 즉 원천징수와 확정신고가 서로 다른 단수 규정을 쓰는 것이 아니라, 둘 다 '납부하는 금액'이 되는 시점에 제1항이 걸린다."
+          },
+          {
+            "stage_code": "intermediate_amount",
+            "applies_to": "근로소득공제액 · 근로소득금액 · 산출세액 · 근로소득세액공제액 · 연금계좌 세액공제의 세액 한도",
+            "operation_code": "none",
+            "unit_krw": null,
+            "determined_by_law": false,
+            "chosen_by": "이 조직",
+            "convention": "끝수를 없애지 않고 정확값 그대로 다음 단계로 넘긴다.",
+            "why": "국고금 관리법 제47조는 끝수를 없애는 자리를 두 곳으로 지목했다 — 과세표준(제2항)과 국고금의 수입·지출(제1항)이다. 그 사이의 계산 중간값을 지목하지 않았다. 지목되지 않은 단계에서 임의로 절사하면 조문이 정한 두 자리 밖에 세 번째 절사 자리를 우리가 만드는 것이 되고, 그 절사가 위로 전파되어 과세표준·세액이 조문의 값과 달라진다.",
+            "error_direction_code": "direction_indeterminate",
+            "error_direction_basis": "절사하지 않는 것이 기준이므로 이 단계 자체에는 오차가 없다. 다른 규약(단계마다 절사)을 쓰면 그쪽에 오차가 생기고 방향은 절사 지점에 따라 갈린다."
+          },
+          {
+            "stage_code": "comparison",
+            "applies_to": "세액 한도와 세액공제액의 대소 판정 등, 금액이 아니라 참·거짓을 내는 자리",
+            "operation_code": "none",
+            "unit_krw": null,
+            "determined_by_law": false,
+            "chosen_by": "이 조직",
+            "convention": "비교는 정확값으로 한다. 비교 전에 양쪽을 절사하지 않는다.",
+            "why": "절사한 값으로 비교하면 1원 미만의 차이가 사라져 판정이 뒤집힌다. 한도 1,349,999.94와 공제액 1,350,000은 조문상 한도가 더 작아 절단이 일어나는 자리인데, 한도를 먼저 1,350,000으로 반올림하면 절단이 일어나지 않는 것으로 뒤집힌다. 금액의 1원 차이는 사용자에게 1원이지만 판정의 뒤집힘은 안내 문구 전체를 바꾼다.",
+            "error_direction_code": "not_applicable"
+          },
+          {
+            "stage_code": "displayed_amount",
+            "applies_to": "화면·응답에 정수 원으로 실리는 최종 금액 — 절세액의 소득세분·지방세분·합계",
+            "operation_code": "floor",
+            "unit_krw": 1,
+            "determined_by_law": false,
+            "chosen_by": "이 조직",
+            "convention": "계약이 모든 금액을 정수 원으로 정하므로 마지막에 한 번 원 미만을 버린다.",
+            "why": "올림·반올림은 조문에 없는 금액을 만들어 낸다. 버림은 사용자가 실제로 받을 수 있는 금액 이하를 말하므로, 틀리더라도 사용자를 과대한 기대로 밀지 않는다.",
+            "error_direction_code": "understated_or_equal",
+            "error_direction_basis": "절세액을 실제보다 작거나 같게 본다. 한 금액당 최대 1원 미만이다."
+          }
+        ],
+        "local_income_tax_stage": {
+          "applies_to": "개인지방소득세분(tax.local.personal_income_surtax)",
+          "operation_code": "floor",
+          "unit_krw": 1,
+          "determined_by_law": false,
+          "chosen_by": "이 조직",
+          "statutory_hook": "국고금 관리법 제47조 제3항은 '지방자치단체, 그 밖에 대통령령으로 정하는 공공단체와 공공기관의 경우에는 제1항 및 제2항을 준용할 수 있다'고 정한다.",
+          "why_not_determined_by_law": "제3항이 '준용할 수 있다'는 임의규정이라, 지방소득세에 제1항·제2항이 실제로 걸리는지가 조문만으로 정해지지 않는다.",
+          "error_direction_code": "understated_or_equal"
+        },
+        "engine_contract": {
+          "note": "엔진은 이 규칙의 산문을 읽지 않는다. stage_code와 operation_code, unit_krw만 읽는다.",
+          "operation_codes": ["floor", "none"],
+          "stage_codes": ["tax_base", "treasury_receipt_or_payment", "intermediate_amount", "comparison", "displayed_amount"]
+        },
+        "unverified": [
+          "계산 중간값(근로소득공제액·산출세액·세액공제액·세액 한도)의 끝수를 어떻게 다루는지 정한 조문·예규·집행기준을 2026-08-12에 찾지 못했다. 위 intermediate_amount·comparison·displayed_amount 세 단계의 operation_code는 조문에서 읽은 것이 아니라 이 조직이 정한 규약이다.",
+          "개인지방소득세에 국고금 관리법 제47조가 준용되는지를 정한 조례·규칙을 확인하지 못했다. 제47조 제3항이 임의규정이라 준용 여부가 조문만으로 정해지지 않는다.",
+          "국고금 관리법 제47조 제1항 단서의 '대통령령으로 정하는 경우'(분할 징수·수납·지급 시 끝수를 최초 수입금·지급금에 합산하는 경우)의 시행령 조문 원문을 1차 출처로 열지 못했다. 이 엔진의 출력이 제1항의 적용 대상이 아니므로 결과에 걸리지는 않는다."
+        ]
+      },
+      "status": "확정",
+      "effective_from": "2026-01-01",
+      "source": {
+        "law": "국고금 관리법 제47조(국고금의 끝수 계산) 제1항·제2항·제3항",
+        "law_version": "제1항·제2항의 문언을 2026-08-12에 확인했다. 제2항 '국세의 과세표준액을 산정할 때 1원 미만의 끝수가 있으면 이를 계산하지 아니한다'는 두 출처에서 같은 문언으로 나왔다.",
+        "url": "https://casenote.kr/법령/국고금_관리법/제47조",
+        "corroborating_url": "https://ko.wikisource.org/wiki/국고금_관리법",
+        "interpretation_url": "https://casenote.kr/국세청/원천세과-240-03b03a",
+        "interpretation_law": "국세청 원천세과-240(2012-05-02) — 원천징수세액을 납부할 때 10원 미만 끝수를 절사하는 근거로 국고금관리법 제47조를 들었다.",
+        "verified_on": "2026-08-12",
+        "verified_by": "tax-domain"
+      }
     }
   ]
 }

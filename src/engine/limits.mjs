@@ -541,7 +541,19 @@ export function resolveTransfer(access, { request, scenarioId }) {
   };
 }
 
-export function resolveEligibility(access, { profile, accounts, taxYear }) {
+/**
+ * 계좌별 배분 자격.
+ *
+ * **자격의 축이 계좌마다 다르다.**
+ *   · ISA — 연령·금융소득종합과세(`isa.eligibility`·`isa.exclusion.financial_income_taxpayer`)
+ *   · 연금계좌 둘 — 연금수령 개시 여부(`pension.contribution.after_annuity_start`)
+ *   · 그리고 **IRP에는 축이 하나 더 있다** — 근퇴법 §24②의 가입 자격(D44).
+ *
+ * 마지막 축은 이 함수가 판정하지 않는다. `statutory-eligibility.mjs`가 룰셋의 코드 칸을
+ * 읽어 결론을 내고, 여기서는 그 결론을 계좌 자격에 합칠 뿐이다. **두 축이 동시에 걸릴 수
+ * 있으므로 사유 코드를 덮어쓰지 않고 모은다.**
+ */
+export function resolveEligibility(access, { profile, accounts, taxYear, irp, annuitySavings }) {
   const notices = [];
   // 만 나이는 생년월일에서 여기서 만든다. 화면이 환산하지 않는다(D21).
   const ageYears = ageOn(profile.birth_date, endOfTaxYear(taxYear));
@@ -592,29 +604,45 @@ export function resolveEligibility(access, { profile, accounts, taxYear }) {
   // 조문이 대상을 '연금계좌'로 쓰고 연금저축과 퇴직연금을 가르지 않는다.
   // 중도인출이 비대칭이었다고 이 항목도 그럴 것이라 보아서는 안 된다(규칙의 asymmetry_finding).
   const pensionEligibility = PENSION_ACCOUNT_KEYS.map((account) => {
-    const status = accounts[account].annuity_start_status;
-    if (status === ANNUITY_START.NOT_STARTED) {
-      return { account, eligible: true, reason_codes: [], basis_rule_ids: [] };
+    const reasonCodes = [];
+    const basisRuleIds = [];
+
+    // 가입 자격 축. IRP만 이 축을 갖고(근퇴법 §24②), 연금저축은 **없다는 것이 판정**이다
+    // (`pension_savings.eligibility` — 세법에 연령 하한도 소득 요건도 없다).
+    const statutory = account === ACCOUNT.PENSION ? irp : null;
+    if (account === ACCOUNT.ANNUITY) basisRuleIds.push(...annuitySavings.basisRuleIds);
+    if (statutory !== null) {
+      basisRuleIds.push(...statutory.basisRuleIds);
+      if (statutory.excluded) reasonCodes.push(statutory.reasonCode);
     }
 
-    const appliedToAccount = `account_eligibility[${account}]`;
-    access.use(RULE.CONTRIBUTION_AFTER_ANNUITY_START, appliedToAccount);
+    const status = accounts[account].annuity_start_status;
+    if (status !== ANNUITY_START.NOT_STARTED) {
+      const appliedToAccount = `account_eligibility[${account}]`;
+      access.use(RULE.CONTRIBUTION_AFTER_ANNUITY_START, appliedToAccount);
 
-    // 모름은 아니오가 아니다. 수령 중인 사람에게 납입 가능액을 주는 방향이 과대이므로
-    // 모르는 동안에는 이 계좌의 배분을 보류한다.
-    const code =
-      status === ANNUITY_START.STARTED ? NOTICE.ANNUITY_STARTED : NOTICE.ANNUITY_START_UNKNOWN;
-    notices.push(
-      notice(code, 'warning', `accounts.${account}.annuity_start_status`, { account }, [
-        RULE.CONTRIBUTION_AFTER_ANNUITY_START,
-      ]),
-    );
+      // 모름은 아니오가 아니다. 수령 중인 사람에게 납입 가능액을 주는 방향이 과대이므로
+      // 모르는 동안에는 이 계좌의 배분을 보류한다.
+      const code =
+        status === ANNUITY_START.STARTED ? NOTICE.ANNUITY_STARTED : NOTICE.ANNUITY_START_UNKNOWN;
+      notices.push(
+        notice(code, 'warning', `accounts.${account}.annuity_start_status`, { account }, [
+          RULE.CONTRIBUTION_AFTER_ANNUITY_START,
+        ]),
+      );
+      reasonCodes.push(code);
+      basisRuleIds.push(RULE.CONTRIBUTION_AFTER_ANNUITY_START);
+    }
 
     return {
       account,
-      eligible: false,
-      reason_codes: [code],
-      basis_rule_ids: [RULE.CONTRIBUTION_AFTER_ANNUITY_START],
+      eligible: reasonCodes.length === 0,
+      reason_codes: reasonCodes,
+      // **미정은 배제가 아니다.** 결론 코드는 자격 그 자체이고, `eligible`은 배분 대상
+      // 여부다 — 미정 분기에서 앞은 `irp_eligibility_undetermined`이고 뒤는 `true`다.
+      determination_code: statutory === null ? null : statutory.outcomeCode,
+      determination_direction_code: statutory === null ? null : statutory.directionCode,
+      basis_rule_ids: [...new Set(basisRuleIds)].sort(),
     };
   });
 
@@ -625,6 +653,9 @@ export function resolveEligibility(access, { profile, accounts, taxYear }) {
       account: ACCOUNT.ISA,
       eligible: isaReasons.length === 0,
       reason_codes: isaReasons,
+      // ISA에는 결론 코드 어휘를 가진 가입 자격 규칙이 없다. 없는 것을 지어내지 않는다.
+      determination_code: null,
+      determination_direction_code: null,
       basis_rule_ids: [...new Set(isaBasis)].sort(),
     },
   ];

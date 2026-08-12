@@ -110,6 +110,22 @@ export function createAccess({ base, proposed }) {
 }
 
 /**
+ * 문자열 사전순 — **코드 단위 비교이고 로케일을 타지 않는다.**
+ *
+ * 전에는 `localeCompare`를 썼는데 그 함수의 순서는 ICU 데이터에 달려 있어 실행 환경이
+ * 바뀌면 응답의 순서가 바뀔 수 있고, 무엇보다 **`Array.prototype.sort()`의 기본 순서와
+ * 다르다.** 응답의 다른 자리(`basis_rule_ids` 등)는 전부 기본 순서를 쓰므로 두 순서가
+ * 같은 저장소 안에 섞여 있었다. `irp.eligibility`·`pension_savings.eligibility`가 들어오며
+ * 그 차이가 처음 실제로 드러났다 — `.`(0x2E)와 `_`(0x5F)의 앞뒤가 두 비교에서 반대다.
+ *
+ * **한 가지 순서로 모은다.** 계약 6.1절의 「rule_id 사전순」이 뜻하는 것이 이것이다.
+ */
+export function byCodeUnit(a, b) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+/**
  * 규칙 value 안의 불확실성 표시를 **전부 모아 위치와 함께** 낸다.
  *
  * **왜 유무(boolean)가 아니라 목록인가.** 룰셋의 `unverified`는 문서가 아니라 사용자
@@ -171,7 +187,7 @@ export function uncertaintyNotesIn(value) {
 
   walk(value, null, '');
   // 같은 규칙 안에서 순서가 흔들리면 결정성이 깨진다. 경로 사전순으로 고정한다.
-  return found.sort((a, b) => a.path.localeCompare(b.path));
+  return found.sort((a, b) => byCodeUnit(a.path, b.path));
 }
 
 /** 근거 목록. 확정 → 개정예고, 그 안에서 rule_id 사전순 (engine-interface.md 6.1절). */
@@ -202,6 +218,6 @@ export function buildLegalBasis(access) {
     .sort((a, b) => {
       const rank = (entry) => (entry.status === RULESET_STATUS.CONFIRMED ? 0 : 1);
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
-      return a.rule_id.localeCompare(b.rule_id);
+      return byCodeUnit(a.rule_id, b.rule_id);
     });
 }

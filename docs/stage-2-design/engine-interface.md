@@ -11,6 +11,10 @@ inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json
 open_questions:
+  - "**계약을 10.0.0(major)으로 올렸다 — 새 입력 때문이 아니라 같은 요청이 다른 금액을 내기 때문이다**(0.18절). 무소득자에게 IRP 300만원을 권하던 배분이 사라진다. 새 필드 둘은 **선택**이고 보내지 않는 소비자는 오늘과 같은 응답을 받으므로 그것만이라면 minor였다. `src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다 — 이 유닛은 `src/web/`을 열지 않았고 마이그레이션은 `web-dev`의 몫이다. **목이 맞춰야 할 것**: `AccountEligibility`의 새 필드 둘, `ScenarioResult.pension_credit_taxpayer_eligibility`, 안내 코드 셋, 그리고 요건 미충족 사용자에게 `tax_liability_cap.applied`가 `false`로 나가는 것."
+  - "**새 입력 둘이 오늘은 응답을 한 원도 바꾸지 않는다**(3.1절). 확정 룰셋의 어느 `when`도 `has_business_income_current_year`·`received_retirement_lumpsum_ever`를 가리키지 않는다. 계약이 두 칸과 **언제 물어야 하는지**를 정한 것은 `tax-domain`의 요청이자 화면이 항상 묻지 않게 하기 위한 것이고, 값이 판정에 반영되는 시점은 룰셋이 정한다. **화면이 지금 이 두 칸을 띄울지는 관리자·`product-planner` 판정이다** — 결과를 바꾸지 않는 입력을 묻는 것은 D44가 케이스 14에서 경계한 형태다."
+  - "**미정 분기를 배제하지 않는다는 것이 응답 표면에 그대로 있다**(5.2절). `determination_code`가 `irp_eligibility_undetermined`인 사용자는 `eligible: true`이고 IRP 배분을 받는다. **화면이 이 상태를 「불가」로 옮겨 적으면 D44의 판정이 화면 층에서 뒤집힌다** — 계약이 금지 문장을 5.2절에 적었으나 그것을 강제할 장치는 계약 쪽에 없다. `designer`의 문구 사전과 `qa`의 확인이 필요하다."
+  - "**`legal_basis`의 정렬을 `localeCompare`에서 코드 단위 비교로 바꿨다**(6.1절). 응답의 다른 모든 정렬과 같은 순서로 모은 것이고 결정성 보장을 지키는 방향이다(`localeCompare`는 ICU 데이터에 달려 있다). **rule_id 두 개의 상대 순서가 실제로 움직인다** — `pension_savings.eligibility`가 `pension.*` 앞으로 온다. 목이 순서를 고정해 대조하고 있으면 그 자리도 함께 고쳐야 한다."
   - "**계약을 9.0.0(major)으로 올렸다 — 소유자가 없앤 것은 「그 물음」이지 「그 한도」가 아니다**(0.17절). 요청에서 `profile.prior_year_tax`가 통째로 빠지고 세액 한도가 해당 과세기간 총급여액에서 산출된다. **새 입력은 하나도 늘지 않았다.** major로 판정한 결정적 근거는 요청 쪽이 아니라 **응답 쪽 보장을 거두는 것**이다 — `cap_krw`가 등식에서 상한이 되고 `applied: false`의 뜻이 「잘리지 않았다」에서 「잘리는지 알 수 없다」로 바뀐다. `src/web`의 목이 즉시 `schema_version_mismatch`로 멈춘다. 이 유닛은 `src/web/`을 열지 않았고 마이그레이션은 `web-dev`의 몫이다."
   - "**골든 케이스 14건이 이 개정으로 낡았다. 값을 고치지 않고 그대로 두었다** — 재산출은 `tax-domain`의 몫이다(정답지의 저자가 그 유닛이고, 실행기가 기대값을 엔진에 맞추는 순간 대조 장치가 무력해진다). 깨진 축은 셋이다 — (1) 폐기된 안내 코드 `tax_liability_cap_unknown`을 기대하는 블록 6건(GC-09·34·35·43·44·45·46), (2) 직전 연도 결정세액으로 세운 한도가 사라져 자름 여부가 뒤집힌 블록 4건(GC-04·14·31·32a), (3) 블록이 지워진 키 `tax_liability_cap.known`을 실어 **형식 단계에서** 읽히지 않는 블록 3건(GC-62·63·64). 실측값은 최종 보고에 적었다. **GC-14만 금액이 움직인다**(세액공제 0 → 276,750/27,675/304,425)."
   - "**`8.7절`에서 코드 문자열의 정의 자리를 계약 소유자로서 정했다** — 룰셋의 `unresolved.for_manager`가 남긴 물음이다. 룰셋이 값으로 적어 둔 코드(`overstated_or_equal`, `branches`의 세 키)는 **룰셋이 정의 자리**이고 엔진이 읽어서 낸다. 룰셋이 산문으로만 적은 것(미정 방향)과 조문에 대응이 없는 것(`binding_code`)은 **계약이 정한다.** 엔진은 분기의 `direction`이 룰셋의 상한 코드로 시작하는지만 보고 산문을 파싱하지 않는다 — 이 읽기 규약이 옳은지 관리자 확인이 필요하다."
@@ -68,10 +72,11 @@ open_questions:
 
 ## 0. 버전
 
-**현재 계약 버전: `9.0.0`.**
+**현재 계약 버전: `10.0.0`.**
 
 | 버전 | 무엇이 바뀌었나 |
 |---|---|
+| `10.0.0` | **D44 — IRP 가입 자격 규칙이 룰셋에 들어왔고, 엔진이 그것을 읽는다.** 무소득자에게 IRP를 권하던 배분이 사라진다(**같은 요청이 다른 금액을 낸다**). 요청에 **선택** 필드 둘이 는다 — `profile.has_business_income_current_year` · `profile.received_retirement_lumpsum_ever`. 응답의 `AccountEligibility`에 `determination_code`·`determination_direction_code`가 붙고 `reason_codes`에 `irp_excluded_no_qualifying_status`가 늘며, `ScenarioResult`에 **`pension_credit_taxpayer_eligibility`**(가입 자격과 다른 축)가 붙는다. 안내 코드 셋이 늘고(`irp_excluded_no_qualifying_status`·`irp_eligibility_not_determined`·`pension_credit_zero_no_global_income`), `legal_basis`의 사전순이 **코드 단위 비교**로 고정된다(6.1절). **왜 major인지는 0.18절** |
 | `9.0.0` | **D39·D40 — 직전 과세연도 결정세액 입력이 사라지고, 세액 한도가 해당 과세기간 총급여액에서 계산된다.** 요청에서 `profile.prior_year_tax`가 **통째로 빠진다**(새 입력은 하나도 늘지 않는다 — 이미 받고 있는 총급여액과 「근로소득 외 합산 소득」 두 물음이 분기를 정한다). 응답의 `TaxLiabilityCap`이 다시 짜인다 — `known`·`determined_tax_krw`·`prior_pension_credit_krw`·`source_code`·`declared_nonzero`가 빠지고 `cap_krw`가 **결코 `null`이 아니게** 되며, `branch_code`·`is_upper_bound`·`is_exact`와 산출 중간값 여섯이 붙는다. `PlanTaxLiabilityCap`에 **`binding_code`**가 붙고 `known`이 빠진다. 안내 코드 `tax_liability_cap_unknown`이 **사라지고** `tax_liability_cap_estimated_from_total_salary`·`tax_liability_cap_direction_indeterminate`가 들어온다. 가정 코드 `prior_pension_credit_zero_assumed`가 사라진다. `tax_liability_cap_relation_code`에서 `cap_unknown`이 빠진다. **왜 major인지는 0.17절** |
 | `8.2.0` | **D38 — 헤드라인이 세액공제만의 것이 아니게 됐다.** `Plan`에 `headline_composite_total`(합계의 두 끝·점/구간 코드·가정 성분 유무)이 붙고, `AssumptionBasedIsaEstimate`에 `axis_ceilings`(비과세 축의 상한과 그 상한이 재는 **기간**, 나머지 두 축의 상한 유무)가 붙는다. **기존 필드는 하나도 바뀌지 않고 금액도 한 원도 움직이지 않는다** — 새 값은 전부 새 자리에 실린다. 함께 **틀린 수 하나를 고쳤다**: 연 환산 과대율의 「최대 1.75배」는 거꾸로였고 1.75는 **하한**이다(0.16절). **왜 minor인지는 0.15절** |
 | `8.1.0` | **D36 — 축을 둘로 가른 화면이 그려지려면 계약에 없던 값 둘이 필요했다.** `ScenarioResult`에 `pension_credit_ceiling`(확정 축의 최댓값)과 `pension_withdrawal_tax_reference`(연금 저율과세 세율표, **금액 없음**)가 붙는다. `AssumptionBasedIsaEstimate`에 `axis_breakdown_bound_code`·`rate_gap_axis_zero_reason_code`가 붙고, 안내 코드 `isa_rate_gap_axis_zero_because_within_tax_free_limit`이 늘었다. **기존 필드는 하나도 바뀌지 않고 금액도 한 원도 움직이지 않는다.** **왜 minor인지는 0.14절** |
@@ -414,6 +419,27 @@ D36 판정 그대로다. `pension.rate_gap.quantifiability`가 금액으로도 �
 
 **목이 맞춰야 할 것:** 요청에서 `profile.prior_year_tax` 제거, `TaxLiabilityCap`의 새 형태(5.10절), `PlanTaxLiabilityCap.binding_code`(5.5절), 안내 코드 둘의 교체(8.2절), 가정 코드 하나 제거(8.3절).
 
+### 0.18 왜 `10.0.0`(major)인가 — 새 입력 때문이 아니다 (D44)
+
+**새 입력 둘은 major의 근거가 아니다.** 둘 다 선택이고 기본값이 `null`이며, 보내지 않는 소비자는 오늘과 완전히 같은 응답을 받는다. 그것만이라면 minor였다.
+
+**(1) 같은 요청이 다른 금액을 낸다 — 이것이 결정적이다.** 총급여가 0이고 합산되는 다른 소득이 없다고 답한 사용자에게 이 엔진은 IRP 300만원을 권해 왔다. 근퇴법 §24② + 시행령 §17이 가입 자격을 **여섯 갈래로 한정 열거**하고 그 밖을 허용하는 문언이 없으므로 **그 사람은 계좌를 열 수조차 없다.** 이제 IRP가 배분에서 빠지고, 같은 사람의 연금 세액공제 요건도 서지 않아(소득세법 §59조의3① — 「종합소득이 있는 거주자」) 공제를 낳는 여력이 0이 된다. **`6.0.0`을 major로 만든 근거(같은 요청에 기본안이 다른 금액을 낸다)와 같은 자리다.**
+
+**(2) 열거형이 늘고 새 필드가 생긴다.** `AccountEligibility.reason_codes`에 `irp_excluded_no_qualifying_status`가 들어오고, 같은 객체에 `determination_code`·`determination_direction_code`가 붙으며, `ScenarioResult`에 `pension_credit_taxpayer_eligibility`가 붙는다. 늘어난 값만 보면 minor로 볼 여지가 있으나 (1) 때문에 판정이 바뀌지 않는다.
+
+**(3) 응답의 뜻이 조용히 바뀌는 자리가 하나 있다.** `PlanTaxLiabilityCap.applied`가 요건 미충족 분기에서 `true` → `false`가 된다. 금액은 둘 다 0으로 같다. **바뀌는 것은 화면이 적을 수 있는 문장이다** — 「낼 세금이 적어 잘렸습니다」(소득이 늘면 공제도 는다를 함의한다)에서 「그 과세기간에 종합소득이 없어 요건이 서지 않습니다」(그 해에 대한 사실의 진술)로 간다. **금액을 보는 어떤 검사도 이 바뀜을 잡지 못하므로** 값으로 갈라 냈다.
+
+**(4) 정렬이 하나로 모인다.** `legal_basis`가 `localeCompare`로 정렬되고 있었고 응답의 다른 자리(`basis_rule_ids` 등)는 전부 `Array.prototype.sort()`의 기본 순서를 썼다. 두 순서는 `.`(0x2E)와 `_`(0x5F)의 앞뒤가 반대이고, `pension_savings.eligibility`가 들어오며 그 차이가 **처음 실제로 드러났다.** 코드 단위 비교로 통일한다 — `localeCompare`는 ICU 데이터에 달려 있어 실행 환경이 바뀌면 순서가 바뀔 수 있고, 그것은 결정성 보장과도 어긋난다.
+
+**미정을 배제로 옮기지 않는다는 것이 이 회차의 판정이다**(D44 판정 1). 총급여가 0인데 합산되는 다른 소득이 있는 사람은 사업소득이면 자격이 있고 이자·배당뿐이면 없는데, **우리 입력으로 갈리지 않는다.** 막았는데 자격이 있었다면 사용자는 화면이 「불가」라고 했으므로 확인하러 가지도 않는다 — **스스로 드러나지 않는 오류**다. 안 막았는데 자격이 없었다면 계좌를 열러 갔다가 거절당하고 **그 자리에서 드러난다.** 그래서 배제하지 않고, 화면은 「불가」가 아니라 **「확인이 필요하다」**를 말한다. 그 구분이 `determination_code`의 셋째 값과 `irp_eligibility_not_determined`로 나간다.
+
+**채택하지 않은 대안 둘.**
+
+- **미정 분기를 배제로 처리하기** — 위 판정이 기각한다. 값이 더 「안전해 보이는」 쪽이 실제로는 드러나지 않는 오류를 만든다.
+- **새 입력 둘의 뜻을 엔진이 정하기** — 예를 들어 「퇴직 일시금을 받은 적이 있다」에 `true`가 오면 자격이 있다고 보는 것. **기각한다.** 그 대응은 조문의 해석이고 룰셋의 `engine_evaluation.branches[].when`이 그것을 적는 자리다. 오늘의 확정 룰셋은 두 필드를 `when`에서 가리키지 않으므로 **답이 판정을 바꾸지 않는다** — 그 사실을 3.1절에 명시했고, 룰셋이 가리키는 순간 값이 흐른다는 것은 `fault-injection.test.mjs`가 룰셋 사본으로 확인한다.
+
+**목이 맞춰야 할 것:** `AccountEligibility`의 새 필드 둘(5.2절), `ScenarioResult.pension_credit_taxpayer_eligibility`(5.18절), 새 안내 코드 셋(8.2절), 그리고 **요건 미충족 사용자에게 `tax_liability_cap.applied`가 `false`로 나가는 것**(5.5절).
+
 ### 0.10 수익률을 들이면서 지킨 선 셋 (D28·D31)
 
 소유자가 **규제 검토 없이 표시를 켜기로 결정했다**(D31 ②). 자본시장법의 투자자문업·유사투자자문업은 이 조직이 한 번도 검토한 적이 없고, 이 결정은 그 상태로 출시하는 것을 뜻한다. **그래서 D28이 그은 선 셋이 전보다 중요하고, 계약이 그 셋을 자료형으로 진다.**
@@ -552,6 +578,8 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 | `current_year_total_salary_krw` | integer | 원/연 | 필수 | **해당** 과세기간 총급여액. 0 이상. **쓰이는 곳이 둘이다** — (a) `pension.credit.rate` 구간 판정(아래 두 필드가 `total_salary` 축을 고를 때), (b) **세액 한도 산출**(`9.0.0`부터. 분기와 무관하게 언제나 쓰인다 — 5.10절). 직전 과세연도 결정세액을 묻던 자리를 이 값이 대체한다(0.17절) |
 | `has_non_wage_global_income_current_year` | boolean | — | **필수** | **해당** 과세기간에 근로소득 외에 **종합소득과세표준에 합산되는** 소득(사업·부동산임대·합산되는 이자배당·연금·기타)이 있는가. **`false`면 총급여액으로 판정하고 끝난다** — 대다수 사용자에게 입력이 늘지 않는다. 왜 선택 필드로 두지 않았는지는 0.6절, 질문을 이 범위로 좁힌 것이 무엇을 뜻하는지는 0.7절. **`9.0.0`부터 이 값이 세액 한도의 분기도 정한다**(5.10절) |
 | `current_year_global_income_krw` | integer \| null | 원/연 | 선택 | **해당** 과세기간의 종합소득과세표준에 합산되는 **종합소득금액**(수입금액이 아니다. 근로소득금액도 이 합계에 들어간다). 「종합소득세 과세표준확정신고 및 납부계산서」의 '종합소득금액' 칸. 0 이상. **`has_non_wage_global_income_current_year`가 `false`인데 값이 실려 오면 `invalid_enum` 오류** — 둘 중 무엇이 사용자의 답인지 엔진이 고르지 않는다. **`true`인데 `null`이면** 본문 구간(우대가 아닌 쪽)을 적용하고 `credit_rate_global_income_missing` notice를 내며, **세액 한도의 오차 방향이 미정이 된다**(5.10절) |
+| `has_business_income_current_year` | boolean \| null | — | 선택 | **해당** 과세기간에 그 합산 소득 중 **사업소득**(자영업·프리랜서 포함)이 있는가. **묻는 자리가 하나뿐이다** — `current_year_total_salary_krw === 0` **이고** `has_non_wage_global_income_current_year === true`인 사용자에게만, 즉 `account_eligibility[retirement_pension].determination_code`가 `irp_eligibility_undetermined`인 분기에서만 뜬다. 그 분기에 오지 않는 사용자(총급여가 0보다 큰 대다수)에게는 **화면에 나타날 일이 없다.** 어느 분기에서 물어야 하는지는 그 분기의 안내 코드가 `params.closing_input_ids`로 값으로 말한다 — 화면이 조건을 코드에 다시 적지 않는다. **「IRP 가입 자격이 있습니까」로 묻지 않는다**(사용자에게 법령 해석을 시키는 물음이다). **null이면 답하지 않은 것이고 미정 분기가 그대로 남는다** |
+| `received_retirement_lumpsum_ever` | boolean \| null | — | 선택 | 과거에 퇴직금·퇴직연금을 **일시금으로 수령한 적이 있는가**(근퇴법 §24② 제1호 — 이 호에는 소득 요건도 기간 제한도 없다). **묻는 자리는 배제 분기 하나뿐이다** — `determination_code`가 `irp_not_eligible`일 때만 뜬다. 같은 방식으로 `params.closing_input_ids`가 그 조건을 값으로 낸다. **null이면 답하지 않은 것이다** |
 | `prior_year_total_salary_krw` | integer \| null | 원/연 | 선택 | **직전** 과세기간 총급여액. `isa.tax_free_limit` 구간의 교차확인에만 쓴다. **null이면 교차확인을 건너뛰고 `prior_year_income_missing` notice를 낸다. 해당 연도 값으로 대체하지 않는다** |
 | `financial_income_taxpayer_last_3_years` | boolean \| null | — | 선택 | 직전 3개 과세기간 중 1회 이상 금융소득종합과세 대상이었는가(`isa.exclusion.financial_income_taxpayer`). `true`면 ISA를 배분 대상에서 제외한다. **null이면 배제를 적용하지 않고 `financial_income_status_unknown` notice를 낸다** |
 | `declared_youth` | boolean \| null | — | 선택 | 청년 우대 규칙 대상인지에 대한 **사용자 자기신고**. 엔진은 나이로 판정하지 않는다 — 연령 범위가 시행령 위임이고 미공개다. 개정안 시나리오에서만 쓴다. **null이면 우대를 적용하지 않고 `youth_status_not_declared` notice를 낸다** |
@@ -561,6 +589,8 @@ computeFundUseHorizonBoundaries(request: BoundariesRequest, rulesets: RulesetBun
 | `isa_return_assumption` | IsaReturnAssumption \| null | — | 선택 | 수익률 가정(D28). 3.6절. **null이면 ISA 금액을 한 원도 내지 않고 `isa_return_assumption_not_supplied` notice를 낸다.** 배분 금액·세액공제액·배분안 순서·경고를 바꾸지 않는다 — `echo.isa_return_affects`가 그 선언이다 |
 
 연간 예산 = `monthly_capacity_krw × months_remaining_in_tax_year`.
+
+**새 입력 둘이 오늘 무엇을 바꾸고 무엇을 바꾸지 않는가**(`10.0.0`, D44). 두 필드는 룰셋의 분기 평가 문맥에 그대로 실린다. 그러나 **오늘의 확정 룰셋은 어느 분기의 `when`에서도 이 두 필드를 가리키지 않으므로, 답을 보내도 응답이 한 원도 바뀌지 않는다.** 그 대응(예: 「일시금을 받은 적이 있다」 → 자격이 있다)은 조문의 해석이고 룰셋이 적는 자리이며, **엔진이 대신 정하면 그것이 세법 판단이다**(0.18절의 기각한 대안 둘째). 룰셋이 `when`에 그 필드를 넣는 순간 엔진을 고치지 않고도 값이 판정에 반영된다. **화면이 지금 이 두 칸을 띄울지는 관리자·`product-planner` 판정이다** — 계약은 「물어야 한다면 어느 분기에서만 물어야 하는가」를 정하고, 그 값이 결과를 바꾸기 시작하는 시점은 룰셋이 정한다.
 
 **`age_years`는 `4.0.0`에서 제거됐다.** 생년월일에서 만 나이를 얻으려면 **어느 날짜 기준인지**를 정해야 하고 그것은 세법 판단이다. 화면이 그것을 정하면 `web-dev` 금지사항 1번을 정면으로 어긴다(D21). 그래서 요청은 생년월일을 싣고 환산은 엔진이 한다. **기준일 규칙은 룰셋에 없다** — 엔진은 규칙을 만들지 않고 과세기간 종료일로 환산한 뒤 그 사실을 `assumptions`에 싣는다. 쓴 나이와 기준일은 `echo.derived_age`로 되돌아온다.
 
@@ -829,9 +859,15 @@ accounts.isa               : IsaAccountState
 | 필드 | 자료형 | 설명 |
 |---|---|---|
 | `account` | 계좌 id | |
-| `eligible` | boolean | 배분 대상인가 |
-| `reason_codes` | string[] | `eligible: false`일 때의 사유 코드. `eligible: true`면 빈 배열 |
-| `basis_rule_ids` | string[] | 판정에 쓴 규칙 id. 판정 근거 규칙이 없으면 빈 배열(연금계좌가 그렇다) |
+| `eligible` | boolean | **배분 대상인가.** 아래 `determination_code`와 다른 물음이다 — 이 값은 「이 계좌에 돈을 배정하는가」이고, 저것은 「그 계좌를 설정할 수 있는 사람인가」다 |
+| `reason_codes` | string[] | `eligible: false`일 때의 사유 코드. `eligible: true`면 빈 배열. **축이 둘 이상 동시에 걸릴 수 있고 그때는 둘 다 실린다**(예: 가입 자격 밖 + 연금수령 개시) |
+| `determination_code` | string \| null | **가입 자격 축의 결론.** 값과 정의 자리는 8.8절. IRP는 `irp_eligible` / `irp_not_eligible` / `irp_eligibility_undetermined` 셋 중 하나이고, **연금저축과 ISA는 언제나 `null`이다** — 결론 어휘를 가진 가입 자격 규칙이 룰셋에 없다(연금저축은 「요건이 없다」는 것이 판정이고, ISA의 연령·금융소득 배제는 `reason_codes` 쪽 축이다). **`irp_eligibility_undetermined`는 `eligible: true`와 함께 나간다** — 미정은 배제가 아니다(0.18절) |
+| `determination_direction_code` | string \| null | 그 결론이 틀렸을 때의 **오차 방향**. 정의 자리는 8.7절과 같은 문자열 집합이고 값은 룰셋의 분기에서 그대로 온다. 결론이 조문으로 닫히는 분기는 `not_applicable`, 배제 분기는 `understated_or_equal`(잘못 막으면 절세액이 작아진다), 미정 분기는 `direction_indeterminate`. `determination_code`가 `null`이면 이 값도 `null` |
+| `basis_rule_ids` | string[] | 판정에 쓴 규칙 id. **`10.0.0`부터 세 계좌가 모두 비어 있지 않다** — 연금저축에도 「가입 요건이 없다」를 확정한 규칙(`pension_savings.eligibility`)이 실린다. 부재의 판정도 판정이므로 근거가 있어야 한다 |
+
+**화면이 적으면 안 되는 문장**(D44). `determination_code`가 `irp_eligibility_undetermined`인 사용자에게 **「가입할 수 없습니다」를 적지 않는다.** 이 분기에는 조문상 자격이 확실한 사람(사업소득자 = 시행령 §17조 제1호)이 섞여 있고, 막는 오류는 사용자가 확인하러 가지 않으므로 **스스로 드러나지 않는다.** 적을 수 있는 것은 「가입 자격을 확인해 보셔야 합니다」이고, 무엇을 확인해야 하는지는 `irp_eligibility_not_determined` 안내의 `params.closing_input_ids`가 가리킨다.
+
+**같은 이유로 「가입할 수 있습니다」도 적지 않는다.** 미정은 두 방향 어느 쪽으로도 확정이 아니다.
 
 ### 5.3 `LimitBreakdown`
 
@@ -1483,6 +1519,33 @@ accounts.isa               : IsaAccountState
 
 **`isa_first`만 `objective_degenerate: false`인 이유.** 그 안의 근거는 `pension.withdrawal.eligibility`와 `pension.early_withdrawal.other_income_rate`, 즉 **인출 가능성**이다. 한도가 0이어도 그 사실은 그대로 성립하므로 이름이 거짓말하지 않는다. 반대로 `max_tax_credit`(`tax_credit_maximization`)과 `annuity_savings_first`(`annuity_savings_limit_first`)는 둘 다 공제를 근거로 든 이름이라, 그 근거가 이 입력에서 아무것도 가르지 못한다는 사실을 스스로 밝혀야 한다.
 
+**`10.0.0`이 이 절에 조건을 하나 붙인다** — 위는 **요건을 갖춘 사람의 한도가 0인 경우**다. 요건 자체가 서지 않는 사람(5.18절)은 다른 자리이고, 그때는 잘릴 공제액이 애초에 없다.
+
+### 5.18 `PensionCreditTaxpayerEligibility` — 공제를 받을 수 있는 사람인가 (`10.0.0`, D44)
+
+`ScenarioResult.pension_credit_taxpayer_eligibility`. **가입 자격(5.2절의 `determination_code`)과 다른 축이고, 계약이 두 축을 섞지 않는다.**
+
+소득세법 §59조의3① 첫 문장이 「**종합소득이 있는 거주자가** 연금계좌에 납입한 금액…」이다. 근퇴법이 정하는 IRP 설정 자격과 요건도 근거 법률도 다르며, **두 자격이 어긋나는 자리가 넷이다.** 그 중 화면에 실제로 걸리는 것은 마지막 줄이다 — **이자·배당소득만 있어 종합과세되는 사람은 IRP를 열 수 없지만 연금저축 납입으로는 공제를 받는다.** 두 사실을 하나로 뭉개면 그 사람에게 남은 유일한 통로가 화면에서 사라진다.
+
+| 필드 | 자료형 | 단위 | 설명 |
+|---|---|---|---|
+| `outcome_code` | string | — | 결론. 값과 정의 자리는 8.8절 |
+| `branch_code` | string | — | 어느 분기로 판정했는가. 룰셋의 `branches[].id`를 그대로 싣는다 |
+| `direction_code` | string | — | 그 결론의 오차 방향. **이 규칙의 모든 분기가 `not_applicable`이다** — 현재 입력만으로 완전히 판정되므로 오차가 없다 |
+| `requirement_met` | boolean | — | 요건을 갖췄는가. `false`면 **두 연금계좌의 세액공제액이 0이고, 그 0은 한도에 잘린 것이 아니다** |
+| `is_exact` | boolean | — | 그 결론이 추정이 아니라 **조문에서 나오는 등식**인가. 요건 미충족 분기에서 `true`다 — 합산되는 소득이 하나도 없으면 §59조의3①의 요건이 서지 않고, 그것은 근사가 아니다 |
+| `basis_rule_ids` | string[] | — | |
+
+**`requirement_met: false`일 때 응답의 다른 자리가 어떻게 되는가.** 조문이 두 단계이고 **순서가 있다** — 1단계는 요건, 2단계는 산출세액 한도(5.10절)다. 1단계가 서지 않으면 2단계는 돌지 않는다. 그래서 그 사용자에게는
+
+- `deterministic_benefit.pension_credit_total_krw`가 0이고 **`pension_credit_total_before_cap_krw`도 0**이다(자를 것이 없다),
+- `deterministic_benefit.credit_eligible_contribution_krw`가 0이다(인정된 납입액이 없다),
+- **`tax_liability_cap.applied`가 `false`이고 `binding_code`가 `binding_not_determined`다.**
+
+**화면이 적으면 안 되는 문장.** 「낼 세금이 적어 공제가 잘렸습니다」 — 그 문장은 **「소득이 늘면 그만큼 더 공제받는다」를 함의**하고, 이 사용자에게는 그 함의가 참일 수도 거짓일 수도 있다(요건이 서는 것과 세금을 내는 것은 다른 조건이다). 적을 수 있는 것은 **그 과세기간에 대한 사실의 진술**이다 — 「그 해에 종합소득이 없어 연금계좌 세액공제의 요건이 서지 않습니다」.
+
+**그리고 「그러니 넣지 마십시오」는 이 값에서 나오지 않는다.** 납입 자체를 막는 조문이 없고, 그 납입액은 미공제 원금이 되어 인출 시 과세되지 않는다(`pension.withdrawal.non_deducted_principal`). 5.12절이 한도 0에 대해 적은 것과 같은 이유다.
+
 ---
 
 ## 6. 순서와 결정성
@@ -1499,6 +1562,8 @@ accounts.isa               : IsaAccountState
 | `allocations` | `retirement_pension` → `annuity_savings` → `isa` |
 | `account_eligibility`, `limits.by_account` | `allocations`와 같은 순서 |
 | `legal_basis` | 확정 → 개정예고, 그 안에서는 `rule_id` 사전순 |
+
+**「사전순」은 코드 단위 비교다**(`10.0.0`). `Array.prototype.sort()`의 기본 순서이고 응답의 다른 모든 정렬(`basis_rule_ids`·`reason_codes`·`unapplied_proposed_rules` 등)이 쓰는 것과 같다. **`localeCompare`가 아니다** — 그 함수의 순서는 실행 환경의 ICU 데이터에 달려 있어 결정성 보장과 어긋나고, 무엇보다 기본 순서와 다르다(`.`가 `_`보다 앞이냐 뒤냐가 반대다). `9.0.0`까지 `legal_basis`만 `localeCompare`를 쓰고 있었고 두 순서가 갈리는 rule_id가 없어 드러나지 않았다.
 
 ### 6.2 배분안 합치기
 
@@ -1608,7 +1673,10 @@ accounts.isa               : IsaAccountState
 | `financial_income_status_unknown` | info | 금융소득종합과세 대상 여부 미입력으로 배제 규칙 미적용 |
 | `isa_excluded_financial_income_taxpayer` | warning | 금융소득종합과세 대상자로 ISA 배제 |
 | `isa_excluded_age` | warning | 연령 요건 미달로 ISA 배제 |
-| `pension_age_not_evaluated` | info | 연금계좌 최소 가입 연령 규칙이 룰셋에 없어 판정하지 않음 |
+| `pension_age_not_evaluated` | info | 연금계좌 최소 가입 연령 규칙이 룰셋에 없어 판정하지 않음. **`pension_savings.eligibility`가 생긴 뒤에도 참이다** — 그 규칙은 연령 규칙을 만든 것이 아니라 **없다는 것을 확정**했다 |
+| `irp_excluded_no_qualifying_status` | warning | `account_eligibility[retirement_pension].determination_code`가 `irp_not_eligible`. 근퇴법 §24② + 시행령 §17의 **여섯 갈래 한정 열거** 어디에도 들 수 있는 입력이 없어 IRP를 배분에서 제외했다. **사유 코드로도 같은 자리에 실린다**(5.2절). `params.account` · `params.branch` · `params.error_direction`(`understated_or_equal` — 잘못 막으면 절세액이 작아진다) · **`params.closing_input_ids`**(이 배제를 닫을 수 있는 요청 필드의 id 목록. 화면은 **이 안내가 있을 때만** 그 물음을 띄운다) |
+| `irp_eligibility_not_determined` | warning | 같은 값이 `irp_eligibility_undetermined`. **배제하지 않았다.** 총급여가 0인데 합산되는 다른 소득이 있어, 그것이 사업소득이면 자격이 있고 이자·배당뿐이면 없는데 현재 입력이 그 둘을 가르지 못한다. `params`는 위와 같은 넷이고 `error_direction`이 `direction_indeterminate`다. **이 안내는 「불가」가 아니라 「확인이 필요하다」이며, 화면이 그 둘을 바꿔 적으면 조문상 자격이 있는 사람을 스스로 드러나지 않는 방식으로 막는다**(0.18절·D44) |
+| `pension_credit_zero_no_global_income` | info | `pension_credit_taxpayer_eligibility.requirement_met`가 `false`. 그 과세기간에 종합소득이 없어 소득세법 §59조의3①의 요건이 서지 않는다. **오류가 아니라 그 해에 대한 사실이다** — 오류·경고 색을 쓰지 않는다. `params.branch` · `params.is_exact`(`true`면 추정이 아니라 조문에서 나오는 등식이다). **이 안내가 있을 때 「낼 세금이 적어 잘렸습니다」를 적으면 안 된다**(5.18절) |
 | `youth_status_not_declared` | info | 청년 자기신고 없음으로 개정안 청년 우대 미적용 |
 | `youth_age_range_undetermined` | warning | 청년 우대를 적용했으나 연령 범위가 시행령 미공개 |
 | `proposed_transfer_cap_period_input_missing` | warning | 개정안의 넓어진 차감 기간에 대응하는 입력이 없어 직전 1개 과세기간 값으로 대신함 |
@@ -1730,6 +1798,36 @@ accounts.isa               : IsaAccountState
 - 「한도에 걸리지 않았습니다」 · 「한도에 여유가 있습니다」 · 「전액 공제받을 수 있습니다」 — 실제 한도는 이 상한보다 작을 수 있으므로 거짓이 될 수 있다. **`applied: false`도, `binding_not_determined`도, `cap_at_or_above_ceiling`도 이 문장의 근거가 되지 못한다.**
 - **문장의 부재가 「안 걸림」을 뜻하지 않는다.** 아무 문장도 쓰지 않는 것은 허용되지만, 그 침묵을 「걸리지 않았다」로 번역해 적으면 안 된다.
 - 「최대 이만큼」과 「적어도 이만큼」을 같은 문장 틀로 쓰지 않는다. 세액 한도 쪽은 **상한**이고 `credit_rate_bracket.fallback_applied` 쪽은 **하한**이라 방향이 반대다. 미정 분기에서는 **둘 다 쓸 수 없다.**
+
+---
+
+### 8.8 자격 판정이 쓰는 코드 문자열의 정의 자리 (`10.0.0`, D44)
+
+**표를 두지 않는다.** 8.0절이 코드 조건 표를 8.1~8.5절에만 두라고 정했고 `scripts/org/validate-code-definitions.mjs`가 그것을 기계로 강제한다. 아래 값들은 안내·경고·가정 어느 목록에도 속하지 않는 **필드 전용 열거형**이므로 8.6·8.7절과 같은 형태로 산문에 적는다.
+
+**규약은 8.7절과 같다 — 룰셋이 값으로 적어 둔 코드는 룰셋이 정의 자리다.**
+
+- **`AccountEligibility.determination_code`의 세 값** — 정의 자리는 **룰셋**이다(`irp.eligibility.value.engine_evaluation.allowed_outcome_codes`). 계약과 엔진은 **전사**하며, 두 목록이 갈라지면 `ruleset-driven.test.mjs`가 실패하고 **런타임에서도 계산이 멈춘다**(`rule_missing`).
+
+  | 값 | 뜻 | `eligible` |
+  |---|---|---|
+  | `irp_eligible` | 여섯 갈래 중 하나에 든다 | `true` |
+  | `irp_not_eligible` | 열거 밖이고, 그 밖을 허용하는 문언이 없다 | `false` |
+  | `irp_eligibility_undetermined` | **현재 입력으로 갈리지 않는다** | **`true`** |
+
+  **전사가 필요한 이유를 적어 둔다** — 룰셋이 「어느 결론이 배제이고 어느 것이 미정인가」를 코드 칸으로 적어 두지 않았다. 그 대응을 룰셋이 값으로 적게 되면 이 전사는 사라져야 한다.
+
+- **`PensionCreditTaxpayerEligibility.outcome_code`의 두 값**(`pension_credit_available` / `pension_credit_zero_no_global_income`) — 정의 자리는 **룰셋**이다(`pension.credit.taxpayer_eligibility`의 같은 키). **어느 결론이 「0」인지도 엔진이 알지 않는다** — 같은 규칙의 `requested_notice_code`가 그 문자열을 가리키고 엔진은 견주기만 한다.
+
+- **`determination_direction_code`의 값들** — 정의 자리는 **8.7절과 같은 문자열 집합**이고, 여기서는 같은 뜻으로 쓴다. 엔진은 분기의 `direction_code` 칸을 그대로 읽어 싣는다.
+
+- **안내·사유 코드 이름 셋**(`irp_excluded_no_qualifying_status`·`irp_eligibility_not_determined`·`pension_credit_zero_no_global_income`) — 정의 자리는 **계약(8.2절)**이다. 룰셋이 이름만 요청했고 스스로 그렇게 적었다(`code_ownership_note`). **엔진은 계약 상수를 내보내고, 룰셋이 요청한 이름과 갈라지면 다른 코드를 조용히 내보내지 않고 멈춘다.**
+
+**엔진이 결론을 읽는 규약 — 코드 칸만 본다** (D41 1번과 같다).
+
+**엔진은 분기의 `when` · `outcome_code` · `direction_code` 셋만 읽는다.** 산문 칸(`basis`)은 읽지 않는다 — 두 규칙의 `branches_reading_rule`이 `engine_must_not_read: "basis"`로 그것을 명시로 금지한다. **그 칸이 없으면 결론을 지어내지 않고 `rule_missing`으로 멈춘다.**
+
+**분기 조건도 계약이나 코드에 다시 적지 않는다.** `when`은 `{field, op, value}` 꼴의 값이고 엔진이 그것을 일반적으로 평가한다. 그래서 **룰셋이 분기를 늘리거나 조건을 바꾸면 엔진을 고치지 않고도 판정이 따라 움직인다** — 3.1절의 새 입력 둘이 그 자리에서 기다리고 있다. `fault-injection.test.mjs`가 두 방향으로 이 자리를 잠갔다: **코드 칸을 바꾸면 결론이 따라 움직이고, 산문을 바꾸면 아무것도 움직이지 않는다.** `ruleset-driven.test.mjs`는 금지된 칸을 읽는 문장이 `statutory-eligibility.mjs`에 없다는 것을 파일 내용으로 본다.
 
 ---
 

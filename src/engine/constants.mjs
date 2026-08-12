@@ -2,8 +2,8 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '9.0.0';
-export const SUPPORTED_MAJOR = 9;
+export const SCHEMA_VERSION = '10.0.0';
+export const SUPPORTED_MAJOR = 10;
 
 export const ACCOUNT = {
   ANNUITY: 'annuity_savings',
@@ -111,6 +111,52 @@ export const CAP_BRANCH = {
 };
 
 export const CAP_BRANCHES = Object.values(CAP_BRANCH);
+
+/**
+ * 분기를 고르는 순서. **룰셋이 값으로 적는다**(`engine_evaluation.evaluation_order`).
+ * 엔진이 아는 순서가 아니면 임의로 돌리지 않고 멈춘다 — 순서를 정하는 것은 룰셋이다.
+ */
+export const EVALUATION_ORDER_FIRST_MATCH = 'first_match_wins';
+
+/**
+ * IRP **가입 자격** 판정의 결론 코드 (D44).
+ *
+ * 정의 자리는 룰셋이다 — `irp.eligibility.value.engine_evaluation.allowed_outcome_codes`.
+ * 여기 있는 것은 **전사**이고, 두 목록이 갈라지면 `statutory-eligibility.mjs`가 계산을
+ * 멈춘다(집합으로 대조한다). 전사가 필요한 이유는 하나뿐이다 — **어느 결론이 배제이고
+ * 어느 것이 미정인지**를 룰셋이 코드 칸으로 적어 두지 않았기 때문이다. 룰셋이 그 대응을
+ * 값으로 적게 되면 이 상수는 사라져야 한다.
+ *
+ * **`irp_eligibility_undetermined`는 배제가 아니다.** 막았는데 자격이 있었던 오류는
+ * 스스로 드러나지 않고, 안 막았는데 자격이 없었던 오류는 계좌를 열러 간 자리에서
+ * 드러난다. D44가 드러나지 않는 쪽을 피하기로 정했다.
+ */
+export const IRP_OUTCOME = {
+  ELIGIBLE: 'irp_eligible',
+  NOT_ELIGIBLE: 'irp_not_eligible',
+  UNDETERMINED: 'irp_eligibility_undetermined',
+};
+
+export const IRP_OUTCOMES = Object.values(IRP_OUTCOME);
+
+/**
+ * 미정 분기에서 룰셋이 적어 둔 처리 방침(`branches[].default_treatment`).
+ * 다른 값이 오면 배제/비배제를 엔진이 고르지 않고 멈춘다.
+ */
+export const IRP_UNDETERMINED_TREATMENT = { DO_NOT_EXCLUDE: 'do_not_exclude' };
+
+/**
+ * 연금계좌 **세액공제 요건** 판정의 결론 코드 (소득세법 §59조의3①).
+ *
+ * 정의 자리는 룰셋이다 — `pension.credit.taxpayer_eligibility`의
+ * `allowed_outcome_codes`. **어느 결론이 「0」인지도 엔진이 알지 않는다** — 같은 규칙의
+ * `requested_notice_code`가 그 문자열을 가리키고, 엔진은 그것과 견주기만 한다.
+ * 그래서 이 상수에는 「공제를 받을 수 있다」 쪽만 있고, 그것도 계약 표면에 싣는
+ * 용도가 아니라 시험이 두 목록을 견줄 때 쓰는 이름이다.
+ */
+export const CREDIT_ELIGIBILITY_OUTCOME = {
+  AVAILABLE: 'pension_credit_available',
+};
 
 /**
  * **오차 방향 코드는 이 파일에 없다** — 상한 쪽도 미정 쪽도 룰셋에서 온다 (D41 1번·D42 5절 (나)).
@@ -427,6 +473,13 @@ export const RULE = {
   PENSION_BEYOND_CREDIT_LIMIT: 'pension.contribution.beyond_credit_limit',
   PENSION_NON_DEDUCTED_PRINCIPAL: 'pension.withdrawal.non_deducted_principal',
 
+  // 19차 조사(D44). **사람 쪽 자격** 규칙 셋. 계좌를 열 수 있는가와 그 납입액으로
+  // 공제를 받을 수 있는가는 다른 물음이고 다른 법이 정한다 — 두 자격이 어긋나는
+  // 자리가 넷이라 화면이 둘을 섞으면 한쪽이 거짓이 된다.
+  IRP_ELIGIBILITY: 'irp.eligibility',
+  PENSION_SAVINGS_ELIGIBILITY: 'pension_savings.eligibility',
+  CREDIT_TAXPAYER_ELIGIBILITY: 'pension.credit.taxpayer_eligibility',
+
   CREDIT_EXCLUDED_CONTRIBUTIONS: 'pension.credit.excluded_contributions',
   CONTRIBUTION_AFTER_ANNUITY_START: 'pension.contribution.after_annuity_start',
   PENSION_EARLIEST_START: 'pension.withdrawal.earliest_start',
@@ -553,6 +606,16 @@ export const NOTICE = {
   ISA_EXCLUDED_FINANCIAL: 'isa_excluded_financial_income_taxpayer',
   ISA_EXCLUDED_AGE: 'isa_excluded_age',
   PENSION_AGE_NOT_EVALUATED: 'pension_age_not_evaluated',
+
+  // ── 사람 쪽 자격 (D44) ──
+  // **두 코드가 다른 말을 한다.** 앞은 「열거 밖이라 설정할 수 없다」이고 뒤는
+  // 「우리 입력으로는 갈리지 않는다」다. 뒤엣것을 「불가」로 옮겨 적으면 조문상 자격이
+  // 있는 사업소득자를 스스로 드러나지 않는 방식으로 막게 된다.
+  IRP_EXCLUDED_NO_QUALIFYING_STATUS: 'irp_excluded_no_qualifying_status',
+  IRP_ELIGIBILITY_NOT_DETERMINED: 'irp_eligibility_not_determined',
+  // 공제액 0의 **경로**를 가른다. 「산출세액이 0이라 잘렸다」가 아니라
+  // 「종합소득이 없어 요건이 서지 않는다」다. 금액은 같고 문장이 다르다.
+  PENSION_CREDIT_ZERO_NO_GLOBAL_INCOME: 'pension_credit_zero_no_global_income',
   YOUTH_NOT_DECLARED: 'youth_status_not_declared',
   YOUTH_AGE_UNDETERMINED: 'youth_age_range_undetermined',
   PROPOSED_TRANSFER_PERIOD_MISSING: 'proposed_transfer_cap_period_input_missing',

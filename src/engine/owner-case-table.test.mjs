@@ -17,8 +17,13 @@
 //
 // **표가 모델링하고 우리가 모델링하지 않는 것**(D43 셋째 갈래) — 노란우산 소득공제, 주택청약
 // 종합저축 소득공제, 청년도약계좌 정부기여금, 해외주식 양도소득 기본공제, 증여재산공제,
-// IRP 가입자격(근로자퇴직급여보장법), 이미 수령 중인 연금액의 종합과세 한도 잠식. **룰셋에
-// 규칙이 없으면 없는 것이므로 「틀렸다」가 아니라 「우리 축이 아니다」다.**
+// 이미 수령 중인 연금액의 종합과세 한도 잠식. **룰셋에 규칙이 없으면 없는 것이므로
+// 「틀렸다」가 아니라 「우리 축이 아니다」다.**
+//
+// **이 목록에서 하나가 빠졌다 — IRP 가입자격이다**(D44). 그것은 「우리 축이 아닌 것」이
+// 아니라 **룰셋에 있어야 했는데 없던 것**이었고, 소유자 표가 그 구멍을 찾아냈다.
+// 지금은 `irp.eligibility`가 룰셋에 있고 케이스 7·13의 기본안이 표와 같아진다.
+// **표가 바깥에서 왔기 때문에 우리 눈먼 자리를 비춘다는 이 파일의 전제가 실증된 자리다.**
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -154,9 +159,22 @@ const CASES = [
     capacityMan: 1500,
     horizon: 'unknown',
     owner: { annuity: 0, pension: 0, isa: 1500, other: 0 },
-    // 표는 두 근거로 연금계좌를 비운다 — IRP 가입자격(근퇴법, **룰셋에 없다**)과 결정세액 0.
-    // 뒤엣것에 대한 엔진의 처리는 계약 5.12절이 정한다. 표의 배분은 `isa_first`로 나온다.
-    verdict: VERDICT.MATCH_OTHER_PLAN,
+    // **이 케이스가 룰셋의 구멍을 찾아냈고, D44가 그것을 조문으로 메웠다.**
+    //
+    // 전에는 갈래가 `MATCH_OTHER_PLAN`이었다 — 표의 배분이 `isa_first`로만 나오고
+    // 기본안은 IRP에 300만을 권했다. 근거는 「IRP 가입자격 규칙이 룰셋에 없다」였는데,
+    // 그것이 사실이 아니라 **3차 조사가 「우리 타깃은 근로소득자뿐」이라고 보아 규칙을
+    // 넣지 않은 것**이었다(리포트 25.1절). 규칙이 들어오면서 두 가지가 함께 움직였다.
+    //
+    //   · 근퇴법 §24②의 한정 열거 밖이라 **IRP가 배분에서 빠진다**(`irp.eligibility`).
+    //   · 종합소득이 없어 §59조의3①의 요건이 서지 않으므로 **공제를 낳는 여력이 0**이다
+    //     (`pension.credit.taxpayer_eligibility`). 연금저축은 그대로 열려 있지만,
+    //     공제를 낳지 않는 납입을 「세액공제 최대」라는 이름으로 앞세우지 않는다.
+    //
+    // **잠금을 푼 것이 아니라 옮겼다.** 「기본안은 표와 다르다」를 잠그던 자리가
+    // 「기본안이 표와 같다」로 바뀌었고, 우연히 같아지는 것이 아니라 소유자 표가 옳았다는
+    // 것이 이번 변경의 요지다. 아래 별도 시험이 IRP 0의 **경로**까지 못 박는다.
+    verdict: VERDICT.MATCH_BASELINE,
   },
   {
     n: 8,
@@ -206,8 +224,15 @@ const CASES = [
     capacityMan: 2000,
     horizon: 'at_or_after_pension_age',
     owner: { annuity: 0, pension: 0, isa: 0, other: 2000 },
-    // ISA 쪽은 엔진도 같은 결론을 낸다(연령 배제). 연금계좌 쪽은 갈린다 — 룰셋에 연금계좌
-    // **가입** 연령 규칙이 없고, 한도 0이 배분을 줄이지도 않는다(계약 5.12절).
+    // ISA 쪽은 엔진도 같은 결론을 낸다(연령 배제). IRP도 이제 같은 결론이다 — 열거 밖이라
+    // 0이다. **연금저축 쪽은 여전히 갈린다**: 세법에 연금저축 가입 연령 하한이 **없다는
+    // 것이 판정**이고(`pension_savings.eligibility`), 요건이 서지 않아 공제가 0이어도
+    // 납입 자체를 막는 조문은 없다(계약 5.12절). 예산이 ISA 없이 남으므로 연금저축이
+    // 납입 한도까지 받는다.
+    //
+    // **공제 0의 경로가 이번에 바뀌었다.** 소유자는 「결정세액 0이라 잘렸다」로 적었고
+    // 조문상 경로는 「종합소득이 없어 요건이 서지 않는다」다 — 금액은 같고 화면이 쓸
+    // 문장이 다르다(D44). 아래 별도 시험이 그 구분을 못 박는다.
     verdict: VERDICT.DIVERGES_BY_DESIGN,
   },
   {
@@ -228,7 +253,10 @@ const CASES = [
     capacityMan: 2000,
     horizon: 'unknown',
     owner: { annuity: 0, pension: 0, isa: 2000, other: 0 },
-    verdict: VERDICT.MATCH_OTHER_PLAN,
+    // 케이스 7과 같은 자리다. 육아휴직으로 그 해 총급여가 0이고 합산되는 다른 소득이
+    // 없으므로 IRP는 열거 밖이고 연금 세액공제의 요건도 서지 않는다. **소유자가 이
+    // 케이스에 대해서도 옳았고, D44 이후 기본안이 표와 같아진다.**
+    verdict: VERDICT.MATCH_BASELINE,
   },
   {
     n: 14,
@@ -416,6 +444,166 @@ test('소유자 표 / 케이스 11 — 미성년자는 ISA 연령 요건에서 �
   assert.equal(allocationOf(scenario.plans[0], 'isa').annual_krw, 0);
 });
 
+// ── D44 — IRP 가입 자격이 룰셋에 들어온 자리 ─────────────────────
+
+test('소유자 표 / 케이스 7 — 무소득자에게 IRP를 권하지 않는다. 그리고 그 이유가 조문의 이유다', () => {
+  // **이 회차의 요지다.** 엔진이 이 사람에게 IRP 300만을 권하고 있었고 소유자 표는 0을
+  // 적고 있었다. 표가 옳았다.
+  const scenario = scenarioOf(compute(requestFor(CASES[6]), rulesets));
+  const entry = scenario.account_eligibility.find((e) => e.account === 'retirement_pension');
+
+  assert.equal(entry.eligible, false, 'IRP가 여전히 배분 대상이다');
+  // **결론이 「소득이 없어서」가 아니다.** 근퇴법 §24②이 여섯 갈래를 한정 열거하고
+  // 열거 밖을 허용하는 문언이 없다는 것이 이유이며, 그 구분이 결론 코드로 나간다.
+  assert.equal(entry.determination_code, 'irp_not_eligible');
+  assert.deepStrictEqual(entry.reason_codes, ['irp_excluded_no_qualifying_status']);
+  assert.deepStrictEqual(entry.basis_rule_ids, ['irp.eligibility']);
+  // 이 배제가 잘못될 수 있는 방향까지 룰셋이 코드로 정해 두었다 — 과거에 퇴직급여
+  // 일시금을 받은 사실이 입력에 남지 않은 사람을 잘못 막을 수 있고, 그것은 과소 방향이다.
+  assert.equal(entry.determination_direction_code, 'understated_or_equal');
+
+  const irpNotice = scenario.notices.find((n) => n.code === 'irp_excluded_no_qualifying_status');
+  assert.ok(irpNotice !== undefined, '배제 사실이 안내로 나가지 않는다');
+  assert.equal(irpNotice.severity, 'warning');
+  // 이 배제를 닫을 수 있는 입력이 무엇인지까지 값으로 나간다. 화면이 **이 분기에서만**
+  // 그 물음을 띄우게 하는 값이고, 대다수 사용자에게는 분기 자체가 걸리지 않는다.
+  assert.deepStrictEqual(irpNotice.params.closing_input_ids, ['received_retirement_lumpsum_ever']);
+
+  // 어느 배분안도 IRP에 한 원도 넣지 않는다. 「기본안만」이 아니다.
+  for (const plan of scenario.plans) {
+    assert.equal(allocationOf(plan, 'retirement_pension').annual_krw, 0, plan.plan_id);
+    assert.equal(allocationOf(plan, 'retirement_pension').limited_by, 'not_eligible', plan.plan_id);
+  }
+});
+
+test('소유자 표 / 케이스 8 — 프리랜서는 여전히 IRP를 받는다. 다만 「자격 있음」이라고 말하지 않는다', () => {
+  // **막지 않는 것이 판정이다**(D44 판정 1). 사업소득이면 시행령 §17조 제1호로 자격이
+  // 있고 이자·배당뿐이면 없는데, 우리 입력이 그 둘을 가르지 못한다. 막았는데 자격이
+  // 있었던 오류는 스스로 드러나지 않으므로 막지 않는다.
+  const scenario = scenarioOf(compute(requestFor(CASES[7]), rulesets));
+  const entry = scenario.account_eligibility.find((e) => e.account === 'retirement_pension');
+
+  assert.equal(entry.eligible, true, '미정을 배제로 옮겼다 — D44가 금지한 방향이다');
+  // **그러나 「자격 있음」도 아니다.** 셋째 상태가 값으로 나가지 않으면 화면은 미정을
+  // 확정으로 읽는다.
+  assert.equal(entry.determination_code, 'irp_eligibility_undetermined');
+  assert.equal(entry.determination_direction_code, 'direction_indeterminate');
+  assert.deepStrictEqual(entry.reason_codes, [], '배제가 아닌데 사유 코드가 붙었다');
+
+  const undetermined = scenario.notices.find((n) => n.code === 'irp_eligibility_not_determined');
+  assert.ok(undetermined !== undefined, '**침묵했다.** 빼지 않는 것과 아무 말도 하지 않는 것은 다르다');
+  assert.deepStrictEqual(undetermined.params.closing_input_ids, ['has_business_income_current_year']);
+  // 배제 코드는 나가지 않는다. 화면이 「불가」를 적을 근거가 응답 어디에도 없어야 한다.
+  assert.equal(noticeCodes(scenario).includes('irp_excluded_no_qualifying_status'), false);
+
+  // 그리고 실제로 IRP를 받는다 — 케이스 8의 기본안은 D44 전과 같은 수다.
+  const baseline = scenario.plans.find((plan) => plan.is_baseline);
+  assert.ok(allocationOf(baseline, 'retirement_pension').annual_krw > 0, '미정 분기에서 IRP가 비었다');
+});
+
+test('세 상태가 실제로 갈린다 — 같은 요청에서 소득 답만 바꾸면 결론이 셋으로 나뉜다', () => {
+  // 한 좌표만 보면 「어느 분기든 늘 같은 답」인 코드도 통과한다. 셋이 갈리는 것을 본다.
+  const outcomeFor = (patch) => {
+    const scenario = scenarioOf(compute(baseRequest({ profile: patch }), rulesets));
+    return scenario.account_eligibility.find((e) => e.account === 'retirement_pension')
+      .determination_code;
+  };
+
+  assert.equal(
+    outcomeFor({ current_year_total_salary_krw: 50_000_000 }),
+    'irp_eligible',
+    '근로소득이 있으면 여섯 갈래 중 하나에 반드시 든다(닫힘 논증)',
+  );
+  assert.equal(
+    outcomeFor({
+      current_year_total_salary_krw: 0,
+      has_non_wage_global_income_current_year: false,
+    }),
+    'irp_not_eligible',
+  );
+  assert.equal(
+    outcomeFor({
+      current_year_total_salary_krw: 0,
+      has_non_wage_global_income_current_year: true,
+      current_year_global_income_krw: 80_000_000,
+    }),
+    'irp_eligibility_undetermined',
+  );
+});
+
+test('가입 자격과 세액공제 자격은 다른 축이다 — 한쪽이 다른 쪽을 따라가지 않는다', () => {
+  // **D44가 화면에 요구한 구분이 이것이다.** 이자·배당소득만 있는 사람은 IRP를 못 열
+  // 수도 있지만 연금저축으로는 공제를 받는다. 두 값이 같은 요청에서 갈리는 것을 본다.
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: {
+          current_year_total_salary_krw: 0,
+          has_non_wage_global_income_current_year: true,
+          current_year_global_income_krw: 80_000_000,
+        },
+      }),
+      rulesets,
+    ),
+  );
+
+  const irp = scenario.account_eligibility.find((e) => e.account === 'retirement_pension');
+  const credit = scenario.pension_credit_taxpayer_eligibility;
+
+  // 가입 자격은 미정인데 공제 자격은 **확정**이다. 두 축이 붙어 있으면 낼 수 없는 조합이다.
+  assert.equal(irp.determination_code, 'irp_eligibility_undetermined');
+  assert.equal(credit.outcome_code, 'pension_credit_available');
+  assert.equal(credit.requirement_met, true);
+  assert.equal(noticeCodes(scenario).includes('pension_credit_zero_no_global_income'), false);
+});
+
+test('소유자 표 / 케이스 11 — 공제 0의 경로가 「잘렸다」가 아니라 「요건이 서지 않는다」다', () => {
+  // **금액은 같고 화면이 쓸 문장이 다르다**(D44). 「소득이 늘면 그만큼 공제받는다」를
+  // 함의하는 앞엣것과, 그 과세기간에 대한 사실의 진술인 뒤엣것을 코드가 갈라야 한다.
+  const scenario = scenarioOf(compute(requestFor(CASES[10]), rulesets));
+  const credit = scenario.pension_credit_taxpayer_eligibility;
+
+  assert.equal(credit.outcome_code, 'pension_credit_zero_no_global_income');
+  assert.equal(credit.requirement_met, false);
+  // 추정이 아니라 조문에서 나오는 등식이다. 룰셋이 그 사실을 값으로 적어 두었다.
+  assert.equal(credit.is_exact, true);
+  assert.deepStrictEqual(credit.basis_rule_ids, ['pension.credit.taxpayer_eligibility']);
+  assert.ok(noticeCodes(scenario).includes('pension_credit_zero_no_global_income'));
+
+  for (const plan of scenario.plans) {
+    const benefit = plan.deterministic_benefit;
+    assert.equal(benefit.pension_credit_total_krw, 0, plan.plan_id);
+    // **1단계가 서지 않으면 2단계는 돌지 않는다**(룰셋의 `two_stages_and_why_the_order_matters`).
+    // 자르기 **전** 금액도 0이고, 그래서 한도가 자른 것이 아니다 — 화면이 「낼 세금이 적어
+    // 잘렸습니다」를 적을 근거가 응답에 없다.
+    assert.equal(benefit.pension_credit_total_before_cap_krw, 0, plan.plan_id);
+    assert.equal(benefit.tax_liability_cap.applied, false, plan.plan_id);
+    assert.equal(benefit.tax_liability_cap.binding_code, 'binding_not_determined', plan.plan_id);
+    assert.equal(benefit.credit_eligible_contribution_krw, 0, plan.plan_id);
+  }
+});
+
+test('요건이 서지 않는 분기에서는 세액 한도도 0이다 — 룰셋이 그 겹침을 스스로 적었다', () => {
+  // 룰셋의 `no_global_income.edge_case_note`가 「그 경우에도 산출세액이 0이라 공제액은
+  // 같은 0이고 결과가 갈리지 않는다」고 적는다. **그 겹침이 실제로 성립하는지 잰다** —
+  // 성립하지 않으면 두 경로가 서로 다른 금액을 내고 있다는 뜻이다.
+  const scenario = scenarioOf(
+    compute(
+      baseRequest({
+        profile: {
+          current_year_total_salary_krw: 0,
+          has_non_wage_global_income_current_year: false,
+          monthly_capacity_krw: 1_000_000,
+        },
+      }),
+      rulesets,
+    ),
+  );
+
+  assert.equal(scenario.pension_credit_taxpayer_eligibility.requirement_met, false);
+  assert.equal(scenario.pension_credit_tax_liability_cap.cap_krw, 0);
+});
+
 test('소유자 표 / 케이스 7·11·13 — 결정세액 0이 「등식으로」 나오고 세액 축이 무너진 사실이 값으로 나간다', () => {
   // 표는 이 셋에서 「연금계좌 무의미」를 결론으로 적었다. **엔진은 그 결론을 내지 않는다**
   // (계약 5.12절). 대신 결론을 낼 재료를 값으로 전부 내고, 그것이 여기서 확인된다.
@@ -438,16 +626,45 @@ test('소유자 표 / 케이스 7·11·13 — 결정세액 0이 「등식으로�
   }
 });
 
-test('소유자 표 / 케이스 7·11·13 — 그런데도 연금계좌 배분을 0으로 만들지는 않는다 (계약 5.12절)', () => {
-  // **이것이 표와 갈리는 자리이고, 갈리는 것이 판정이다.** §61③이 초과분을 「받지 아니한
-  // 것으로」 의제하고 시행령 §118의3이 그 납입액의 전환 신청을 예정하므로, 「한도가 0이면 넣을
-  // 이유가 없다」는 세법의 결론이 아니다. 엔진이 그것을 결론으로 내면 조문에 없는 선호를
-  // 지어내는 것이 된다.
+test('소유자 표 / 케이스 7·11·13 — 한도 0을 이유로 연금저축을 배분에서 빼지는 않는다 (계약 5.12절)', () => {
+  // **이 시험이 무엇을 잠그는지가 D44로 정밀해졌다.**
+  //
+  // 전에는 「기본안의 연금계좌 배분액 > 0」을 보았다. 그 형태는 이제 성립하지 않는다 —
+  // 세액공제 요건이 서지 않는 사용자에게는 공제를 낳는 여력이 0이라 기본안이 ISA부터
+  // 채우고, 예산이 ISA 한도 안에서 끝나면 연금계좌가 0이 된다. **그것은 「빼는 것」이
+  // 아니라 「앞세우지 않는 것」이다.**
+  //
+  // 잠가야 하는 진술은 그대로다 — §61③이 초과분을 「받지 아니한 것으로」 의제하고 시행령
+  // §118의3이 그 납입액의 전환 신청을 예정하므로, 「한도가 0이면 넣을 이유가 없다」는
+  // 세법의 결론이 아니다. 그래서 **연금저축은 여전히 배분 대상이고**, 예산이 남으면
+  // 실제로 돈이 들어간다. 그 둘을 따로 확인한다.
   for (const testCase of [CASES[6], CASES[10], CASES[12]]) {
-    const plan = planOf(scenarioOf(compute(requestFor(testCase), rulesets)), 'max_tax_credit');
-    const pensionTotal =
-      allocationOf(plan, 'annuity_savings').annual_krw + allocationOf(plan, 'retirement_pension').annual_krw;
-    assert.ok(pensionTotal > 0, `케이스 ${testCase.n}: 한도 0을 이유로 연금계좌를 비웠다`);
+    const scenario = scenarioOf(compute(requestFor(testCase), rulesets));
+    const label = `케이스 ${testCase.n}`;
+
+    // (가) 자격 자체를 빼앗지 않았다. 연금저축에는 세법상 연령·소득 요건이 없다.
+    const annuity = scenario.account_eligibility.find((e) => e.account === 'annuity_savings');
+    assert.equal(annuity.eligible, true, `${label}: 연금저축을 배분 대상에서 뺐다`);
+    assert.equal(annuity.determination_code, null, `${label}: 없는 가입 자격 규칙을 지어냈다`);
+    assert.ok(
+      annuity.basis_rule_ids.includes('pension_savings.eligibility'),
+      `${label}: 「요건이 없다」는 판정의 근거가 근거 목록에 없다`,
+    );
+
+    // (나) 어느 배분안에서도 `not_eligible`로 막히지 않는다.
+    for (const plan of scenario.plans) {
+      assert.notEqual(
+        allocationOf(plan, 'annuity_savings').limited_by,
+        'not_eligible',
+        `${label}: ${plan.plan_id}에서 연금저축이 자격으로 막혔다`,
+      );
+    }
+
+    // (다) 그리고 실제로 돈이 들어가는 배분안이 있다 — 「넣을 수 없다」가 아니다.
+    assert.ok(
+      scenario.plans.some((plan) => allocationOf(plan, 'annuity_savings').annual_krw > 0),
+      `${label}: 어느 배분안도 연금저축에 한 원도 넣지 않는다`,
+    );
   }
 });
 

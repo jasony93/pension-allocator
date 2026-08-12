@@ -25,7 +25,12 @@ import { resolveTaxLiabilityCap } from './liability-cap.mjs';
 import { resolveHeadlineRule } from './headline.mjs';
 import { resolveIsaReturn } from './isa-return.mjs';
 import { resolvePensionWithdrawalTaxReference } from './pension-reference.mjs';
-import { buildLegalBasis, createAccess, selectRulesets } from './ruleset.mjs';
+import { buildLegalBasis, byCodeUnit, createAccess, selectRulesets } from './ruleset.mjs';
+import {
+  resolveAnnuitySavingsEligibility,
+  resolveIrpEligibility,
+  resolvePensionCreditEligibility,
+} from './statutory-eligibility.mjs';
 import { effectiveRate } from './ratio.mjs';
 import {
   notice,
@@ -156,11 +161,30 @@ function computeScenario(scenarioId, request, rulesets) {
   const { rates, notices: rateNotices } = resolveRates(access, { profile: request.profile, scenarioId });
   notices.push(...rateNotices);
 
+  // 3.5. 사람 쪽 자격 둘 (D44). **계좌 자격보다 앞에 온다** — IRP 가입 자격이 계좌
+  //      자격의 한 축이고, 세액공제 요건은 배분 단계의 목적함수가 서는 자리이기 때문이다.
+  //      **두 물음을 섞지 않는다**: 이자·배당소득만 있는 사람은 IRP를 못 열지만
+  //      연금저축으로는 공제를 받는다.
+  const irpEligibility = resolveIrpEligibility(access, {
+    profile: request.profile,
+    accounts: request.accounts,
+  });
+  const annuitySavingsEligibility = resolveAnnuitySavingsEligibility(access);
+  const creditEligibilityResult = resolvePensionCreditEligibility(access, { profile: request.profile });
+
+  if (irpEligibility === null || annuitySavingsEligibility === null || creditEligibilityResult === null) {
+    return { errors: dedupeErrors(access.missing().length > 0 ? access.missing() : [ruleMissingFallback()]) };
+  }
+  notices.push(...irpEligibility.notices);
+  notices.push(...creditEligibilityResult.notices);
+
   // 4. 계좌 자격
   const eligibilityResult = resolveEligibility(access, {
     profile: request.profile,
     accounts: request.accounts,
     taxYear: request.tax_year,
+    irp: irpEligibility,
+    annuitySavings: annuitySavingsEligibility,
   });
   notices.push(...eligibilityResult.notices);
   const isaEligible = eligibilityResult.eligibility.find((e) => e.account === ACCOUNT.ISA).eligible;
@@ -277,6 +301,9 @@ function computeScenario(scenarioId, request, rulesets) {
     state: limitResult.state,
     rates,
     eligible,
+    // **요건이 서지 않으면 어떤 배분도 공제를 낳지 않는다**(소득세법 §59조의3① 1단계).
+    // 그 사실이 배분 단계에 들어가야 「세액공제 최대」라는 이름이 거짓말을 하지 않는다.
+    creditEligibility: creditEligibilityResult.eligibility,
     boundaries,
     cap: capResult.cap,
     startDates: startDateResult.entries,
@@ -360,6 +387,10 @@ function computeScenario(scenarioId, request, rulesets) {
       // 룰셋 값을 그대로 읽는다. 엔진도 화면도 이 문자열을 코드에 박지 않는다.
       bill_stages: collectBillStages(access),
       account_eligibility: eligibilityResult.eligibility,
+      // **가입 자격과 다른 축이다**(D44). 공제액 0의 경로가 「산출세액이 0이라 잘렸다」인지
+      // 「종합소득이 없어 요건이 서지 않는다」인지를 화면이 여기서 읽는다 — 금액은 같고
+      // 쓸 수 있는 문장이 다르다. 요건 미충족 쪽은 추정이 아니라 조문에서 나오는 등식이다.
+      pension_credit_taxpayer_eligibility: creditEligibilityResult.eligibility,
       limits: limitResult.limits,
       pension_credit_tax_liability_cap: capResult.cap,
       // D36 — 확정 축의 눈금 끝. 배분안이 아니라 시나리오에 둔다: 축은 배분안을 바꿔도
@@ -486,7 +517,7 @@ function collectUnapplied(access, selection, request) {
       title: rule.title,
       reason_code: unappliedReason(rule.id, request),
     }))
-    .sort((a, b) => a.rule_id.localeCompare(b.rule_id));
+    .sort((a, b) => byCodeUnit(a.rule_id, b.rule_id));
 }
 
 function unappliedReason(ruleId, request) {

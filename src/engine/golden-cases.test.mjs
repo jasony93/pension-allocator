@@ -403,6 +403,13 @@ const UNASSERTED_UNCERTAINTY_RULES = [
   'isa.benefit.axis_ceiling',
   'isa.early_termination.clawback',
   'isa.tax_free_limit',
+  // **이번 회차에 근거 목록에 처음 실렸다**(D44). IRP 가입 자격 규칙이고, 남아 있는
+  // 표시는 두 갈래다 — `confidence: "corroborated"`(국가법령정보센터 원문을 직접 열지
+  // 못했다)와 「자영업자」의 범위에 유권해석을 찾지 못했다는 것이다. 뒤엣것은 미정 분기의
+  // 존재 이유 그 자체이고, 응답에서는 `irp_eligibility_not_determined`가 그 사실을 낸다.
+  // **건수의 저자는 `tax-domain`이다** — 이 유닛이 골든 블록에 수를 적으면 정답지가
+  // 엔진에서 나온 값을 되받게 된다.
+  'irp.eligibility',
   'pension.contribution.after_annuity_start',
   'pension.contribution.beyond_credit_limit',
   'pension.credit.rate.basis_determination',

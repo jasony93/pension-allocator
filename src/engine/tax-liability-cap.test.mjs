@@ -456,7 +456,21 @@ test('연금수령을 개시한 계좌에는 배분하지 않는다 — 두 계�
     const entry = scenario.account_eligibility.find((e) => e.account === account);
     assert.equal(entry.eligible, false, `${account}: 개시한 계좌에 자격이 남아 있다`);
     assert.deepStrictEqual(entry.reason_codes, ['pension_contribution_blocked_annuity_started']);
-    assert.deepStrictEqual(entry.basis_rule_ids, ['pension.contribution.after_annuity_start']);
+    // **자격의 축이 계좌마다 다르다**(D44). 개시 여부는 두 계좌에 대칭으로 걸리지만,
+    // 가입 자격 규칙은 IRP에만 있고 연금저축 쪽 규칙이 기록하는 것은 **요건의 부재**다.
+    // 근거 목록이 그 비대칭을 그대로 비춘다 — 대칭인 것은 결론이지 근거가 아니다.
+    assert.deepStrictEqual(
+      entry.basis_rule_ids,
+      account === 'retirement_pension'
+        ? ['irp.eligibility', 'pension.contribution.after_annuity_start']
+        : ['pension.contribution.after_annuity_start', 'pension_savings.eligibility'],
+    );
+    // 이 사용자는 근로소득이 있어 가입 자격 축에서는 걸리지 않는다. 배분에서 빠진 이유는
+    // 개시 하나뿐이고, 두 축이 값으로 갈려 있다.
+    assert.equal(
+      entry.determination_code,
+      account === 'retirement_pension' ? 'irp_eligible' : null,
+    );
 
     for (const plan of scenario.plans) {
       assert.equal(allocationOf(plan, account).annual_krw, 0);
@@ -737,5 +751,11 @@ test('새 필수 입력이 없는 옛 요청은 조용히 통과하지 않는다
   // 보장을 거둔다** — `cap_krw`가 그 사람의 실제 한도와 일치한다는 등식 보장이 사라지고
   // 상한이 되며, `applied: false`의 뜻이 「잘리지 않았다」에서 **「잘리는지 알 수 없다」**로
   // 바뀐다. 규약과 0.1절이 「계약이 보장하던 성질을 거두는 것」을 major로 정한다.
-  assert.equal(SCHEMA_VERSION.split('.')[0], '9');
+  //
+  // **10으로 올린 것은 같은 요청이 다른 금액을 내기 때문이다**(계약 0.18절, D44).
+  // 무소득자에게 IRP를 권하던 배분이 사라진다 — 새 입력이 늘어서가 아니라(둘 다 선택이다)
+  // **응답의 금액이 실제로 움직이기** 때문이고, 그것이 `6.0.0`을 major로 만든 것과 같은
+  // 근거다. `AccountEligibility`에 필드 둘이 늘고 `reason_codes`에 값이 하나 늘며
+  // 시나리오에 `pension_credit_taxpayer_eligibility`가 붙는다.
+  assert.equal(SCHEMA_VERSION.split('.')[0], '10');
 });

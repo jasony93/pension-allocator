@@ -225,6 +225,25 @@ function validateProfile(c, profile) {
       'profile.financial_income_taxpayer_last_3_years',
     ),
     declared_youth: c.optionalBoolean(profile.declared_youth, 'profile.declared_youth'),
+    // **IRP 가입 자격의 미정 분기를 닫기 위해 `tax-domain`이 요청한 입력 둘**(D44).
+    //
+    // 둘 다 선택이고 기본값은 `null`이다. 묻는 자리는 `irp.eligibility`의 두 분기
+    // 하나씩이며(`requested_inputs[].ask_only_when`), 그 분기에 들어오지 않는 사용자
+    // ― 즉 총급여가 0보다 큰 대다수 ― 에게는 화면에 나타날 일이 없다. 어느 분기에서
+    // 물어야 하는지는 응답의 `closing_input_ids`가 값으로 말한다.
+    //
+    // **엔진은 이 값의 뜻을 스스로 정하지 않는다.** 두 값은 분기 평가 문맥에 그대로
+    // 실리고, 판정을 바꾸는 것은 룰셋의 `when`이 그 필드를 가리킬 때뿐이다. 오늘의
+    // 확정 룰셋은 아직 가리키지 않으므로 **결과가 바뀌지 않는다** — 그 사실을 계약
+    // 3.1절과 open_questions에 적었다. 여기서 대신 판정하면 그것이 세법 해석이다.
+    has_business_income_current_year: c.optionalBoolean(
+      profile.has_business_income_current_year,
+      'profile.has_business_income_current_year',
+    ),
+    received_retirement_lumpsum_ever: c.optionalBoolean(
+      profile.received_retirement_lumpsum_ever,
+      'profile.received_retirement_lumpsum_ever',
+    ),
     fund_use_horizon: c.enumValue(profile.fund_use_horizon, 'profile.fund_use_horizon', HORIZONS, {
       required: true,
     }),

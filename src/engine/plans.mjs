@@ -176,6 +176,16 @@ function allocate(planId, ctx) {
   const pensionRateIsHigher = !creditRatesAreTied(rates);
 
   const creditCapacity = (account) => {
+    // **1단계가 서지 않으면 공제를 낳는 여력이 한 원도 없다**(소득세법 §59조의3① —
+    // 「종합소득이 있는 거주자가」). 종합소득이 없는 사람에게는 어느 계좌에 얼마를 넣든
+    // 공제가 성립하지 않으므로, 공제 여력을 한도에서 읽어 오면 그것이 거짓이 된다.
+    //
+    // **배분을 막는 것이 아니다.** 계좌는 그대로 열려 있고 3단계(납입 한도 몫)가 여전히
+    // 채운다 — 룰셋이 「납입은 할 수 있고 미공제 원금이 될 뿐이다」라고 적은 그대로다.
+    // 달라지는 것은 **순서**뿐이고, 공제를 낳지 않는 납입을 공제를 이유로 앞세우지
+    // 않는다는 것이 그 순서의 뜻이다.
+    if (!ctx.creditEligibility.requirement_met) return 0;
+
     const combinedRoom = clampToZero(state.combinedLimit - (annuityCounted + pensionCounted));
     if (account === ACCOUNT.PENSION) {
       // 두 율이 같으면 치환해도 세액이 그대로다. 공제를 늘리지 못하는 납입을

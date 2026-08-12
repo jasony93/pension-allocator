@@ -740,3 +740,249 @@ test('주입 / 분기에 방향 코드가 없으면 방향을 지어내지 않�
   assert.equal(response.ok, false, '방향 코드가 없는데도 값을 냈다 — 어딘가에서 방향을 만들었다');
   assert.ok(errorCodes(response).includes('rule_missing'));
 });
+
+// ── IRP 가입 자격 — 코드 칸만 읽는지, 그리고 미정을 배제로 옮기지 않는지 (D44) ──
+//
+// **같은 형태의 결함을 새 파일에서 되풀이하지 않기 위한 자리다.** 지난 회차에
+// `liability-cap.mjs`가 산문 칸을 읽고 있었고, 산문 앞에 한 단어가 붙는 것만으로 판정이
+// 뒤집히는데 **금액을 보는 어떤 검사도 그것을 잡지 못했다.** 두 규칙이 이번에도
+// `engine_must_not_read: "basis"`를 적었으므로 같은 축을 두 방향으로 세운다 —
+// **코드 칸을 바꾸면 결론이 따라 움직이고, 산문을 바꾸면 아무것도 움직이지 않는다.**
+
+/** 총급여 0 · 합산소득 없음. 배제 분기가 걸리는 좌표다. */
+const NO_INCOME = baseRequest({
+  profile: {
+    current_year_total_salary_krw: 0,
+    has_non_wage_global_income_current_year: false,
+    monthly_capacity_krw: 1_000_000,
+  },
+});
+
+/** 총급여 0 · 합산소득 있음. 미정 분기가 걸리는 좌표다(소유자 케이스 8이 여기다). */
+const UNDETERMINED_INCOME = baseRequest({
+  profile: {
+    current_year_total_salary_krw: 0,
+    has_non_wage_global_income_current_year: true,
+    current_year_global_income_krw: 80_000_000,
+    monthly_capacity_krw: 1_000_000,
+  },
+});
+
+const irpEntryOf = (request, bundle) => {
+  const response = compute(request, bundle);
+  assert.equal(response.ok, true, JSON.stringify(response.errors));
+  return response.scenarios[0].account_eligibility.find((e) => e.account === 'retirement_pension');
+};
+
+const irpBranch = (clone, id) =>
+  findRule(clone, CONFIRMED_FILE, 'irp.eligibility').value.engine_evaluation.branches.find(
+    (branch) => branch.id === id,
+  );
+
+test('주입 / 분기의 산문을 뒤집어도 IRP 자격 판정이 흔들리지 않는다', () => {
+  const before = irpEntryOf(NO_INCOME, rulesets);
+  assert.equal(before.determination_code, 'irp_not_eligible');
+
+  const mutated = withMutation((clone) => {
+    // 코드 칸은 그대로 두고 **산문만** 반대 결론으로 바꾼다. 산문을 읽는 엔진이라면
+    // 여기서 결론이 뒤집히거나 값이 깨진다.
+    for (const branch of findRule(clone, CONFIRMED_FILE, 'irp.eligibility').value.engine_evaluation
+      .branches) {
+      branch.basis = `irp_eligible. 이 사람은 언제나 설정할 수 있다. ${branch.basis}`;
+    }
+  });
+
+  const after = irpEntryOf(NO_INCOME, mutated);
+  assert.equal(
+    after.determination_code,
+    'irp_not_eligible',
+    '산문을 바꿨더니 결론이 따라 움직였다 — 엔진이 코드 칸이 아니라 산문을 읽고 있다',
+  );
+  assert.equal(after.eligible, false);
+});
+
+test('주입 / 결론 코드를 바꾸면 배분 자격이 따라 움직인다 — 판정이 그 칸에 매여 있다', () => {
+  // 위 시험만 있으면 "엔진이 룰셋을 아예 안 읽는다"로도 통과한다. 반대 방향을 함께 본다.
+  const mutated = withMutation((clone) => {
+    irpBranch(clone, 'no_qualifying_status_evidenced').outcome_code = 'irp_eligible';
+  });
+
+  const after = irpEntryOf(NO_INCOME, mutated);
+  assert.equal(after.determination_code, 'irp_eligible');
+  assert.equal(after.eligible, true, '결론 코드를 바꿨는데 배분 자격이 따라오지 않는다');
+});
+
+test('주입 / 미정 분기의 결론 코드를 배제로 바꾸면 그때는 배제된다 — 미정이 코드로 갈린다', () => {
+  // **미정과 배제가 엔진 안에서 실제로 다른 갈래인지**를 본다. 둘을 같게 다루는 구현은
+  // 이 주입 전후로 답이 같아 여기서 걸린다.
+  const before = irpEntryOf(UNDETERMINED_INCOME, rulesets);
+  assert.equal(before.determination_code, 'irp_eligibility_undetermined');
+  assert.equal(before.eligible, true, '미정을 배제로 다루고 있다 — D44가 금지한 방향이다');
+
+  const mutated = withMutation((clone) => {
+    const branch = irpBranch(clone, 'non_wage_income_of_unknown_character');
+    branch.outcome_code = 'irp_not_eligible';
+    // 처리 방침 칸도 함께 지운다. 남겨 두면 「빼지 않는다」와 결론이 어긋난 룰셋이 된다.
+    delete branch.default_treatment;
+  });
+
+  const after = irpEntryOf(UNDETERMINED_INCOME, mutated);
+  assert.equal(after.eligible, false, '결론을 배제로 바꿨는데 배분에 그대로 남았다');
+  assert.deepStrictEqual(after.reason_codes, ['irp_excluded_no_qualifying_status']);
+});
+
+test('주입 / 미정 분기의 처리 방침을 모르는 값으로 바꾸면 배제·비배제를 고르지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    irpBranch(clone, 'non_wage_income_of_unknown_character').default_treatment = 'exclude';
+  });
+
+  const response = compute(UNDETERMINED_INCOME, mutated);
+  assert.equal(response.ok, false, '모르는 처리 방침인데 엔진이 하나를 골랐다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+test('주입 / 결론 코드가 없으면 산문에서 만들어 내지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    // 산문은 남겨 둔다. 산문이 남아 있다고 그것으로 대신 읽으면 안 된다.
+    delete irpBranch(clone, 'no_qualifying_status_evidenced').outcome_code;
+  });
+
+  const response = compute(NO_INCOME, mutated);
+  assert.equal(response.ok, false);
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+test('주입 / 오차 방향 코드를 바꾸면 응답의 방향이 따라 움직인다', () => {
+  const mutated = withMutation((clone) => {
+    irpBranch(clone, 'no_qualifying_status_evidenced').direction_code = 'direction_indeterminate';
+  });
+
+  assert.equal(irpEntryOf(NO_INCOME, mutated).determination_direction_code, 'direction_indeterminate');
+});
+
+test('주입 / 결론 어휘가 갈라지면 옛 뜻으로 계속 돌지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    const evaluation = findRule(clone, CONFIRMED_FILE, 'irp.eligibility').value.engine_evaluation;
+    evaluation.allowed_outcome_codes = [...evaluation.allowed_outcome_codes, 'irp_eligible_with_proof'];
+  });
+
+  const response = compute(NO_INCOME, mutated);
+  assert.equal(response.ok, false, '룰셋이 어휘를 늘렸는데 엔진이 옛 대응으로 계속 돌았다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+test('주입 / 분기 순서 규약이 바뀌면 임의로 돌리지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'irp.eligibility').value.engine_evaluation.evaluation_order =
+      'all_must_agree';
+  });
+
+  assert.equal(compute(NO_INCOME, mutated).ok, false);
+});
+
+test('주입 / 요청한 코드 이름이 계약과 갈라지면 다른 코드를 조용히 내보내지 않는다', () => {
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'irp.eligibility').value.engine_evaluation.requested_reason_code =
+      'irp_blocked';
+  });
+
+  const response = compute(NO_INCOME, mutated);
+  assert.equal(response.ok, false, '이름이 갈렸는데 옛 코드를 그대로 내보냈다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+// ── 요청한 입력 둘이 **배선되어 있는지** (D44 `requested_inputs`) ──────────
+//
+// **이것이 계약을 정직하게 만드는 시험이다.** 오늘의 확정 룰셋은 두 입력을 `when`에서
+// 가리키지 않으므로 답이 판정을 바꾸지 않는다. 그 상태를 「입력만 늘고 아무것도 하지
+// 않는다」로 두지 않으려면, **룰셋이 가리키는 순간 값이 실제로 흐른다**는 것이 확인되어야
+// 한다. 엔진이 그 입력의 뜻을 스스로 정하는 것과는 정반대의 성질이다.
+
+test('주입 / 룰셋이 새 입력을 when에 넣으면 그 답이 판정을 바꾼다 — 엔진을 고치지 않고도', () => {
+  const answered = baseRequest({
+    profile: {
+      current_year_total_salary_krw: 0,
+      has_non_wage_global_income_current_year: false,
+      received_retirement_lumpsum_ever: true,
+      monthly_capacity_krw: 1_000_000,
+    },
+  });
+
+  // 오늘의 룰셋에서는 답이 판정을 바꾸지 않는다. 엔진이 뜻을 지어내지 않는다는 뜻이다.
+  assert.equal(irpEntryOf(answered, rulesets).determination_code, 'irp_not_eligible');
+
+  const mutated = withMutation((clone) => {
+    // 퇴직급여 수령 분기의 `when`에 그 필드를 더한다. **룰셋만 바꾼다.**
+    irpBranch(clone, 'retirement_benefit_received').when.any_of.push({
+      field: 'profile.received_retirement_lumpsum_ever',
+      op: 'eq',
+      value: true,
+    });
+  });
+
+  assert.equal(
+    irpEntryOf(answered, mutated).determination_code,
+    'irp_eligible',
+    '룰셋이 그 필드를 가리키는데도 값이 흐르지 않는다 — 입력이 배선되어 있지 않다',
+  );
+  // 답하지 않은 사람은 그대로다. 없는 답을 참으로 읽지 않는다.
+  assert.equal(irpEntryOf(NO_INCOME, mutated).determination_code, 'irp_not_eligible');
+});
+
+test('주입 / 룰셋이 계약에 없는 필드를 가리키면 조용히 넘어가지 않고 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    irpBranch(clone, 'no_qualifying_status_evidenced').when.all_of[0].field =
+      'profile.has_business_registration';
+  });
+
+  const response = compute(NO_INCOME, mutated);
+  assert.equal(response.ok, false, '없는 필드를 undefined로 읽고 판정을 계속했다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+// ── 세액공제 요건 — 다른 축이고, 그 축도 룰셋이 정한다 ──────────────────
+
+test('주입 / 요건 분기의 조건을 바꾸면 근로소득자에게도 요건 미충족이 붙는다', () => {
+  const wageEarner = baseRequest({ profile: { monthly_capacity_krw: 1_000_000 } });
+  const before = compute(wageEarner, rulesets).scenarios[0];
+  assert.equal(before.pension_credit_taxpayer_eligibility.requirement_met, true);
+  assert.ok(before.plans[0].deterministic_benefit.pension_credit_total_krw > 0);
+
+  const mutated = withMutation((clone) => {
+    const evaluation = findRule(clone, CONFIRMED_FILE, 'pension.credit.taxpayer_eligibility').value
+      .engine_evaluation;
+    // 첫 분기(근로소득 있음)의 문턱을 이 사람보다 위로 올리고, 마지막 분기가 이 사람을
+    // 받게 한다. 그러면 근로소득자가 「합산되는 소득이 하나도 없다」 쪽으로 떨어진다.
+    evaluation.branches[0].when.all_of[0].value = 999_000_000_000;
+    evaluation.branches[2].when.all_of[0].op = 'eq';
+    evaluation.branches[2].when.all_of[0].value = wageEarner.profile.current_year_total_salary_krw;
+  });
+
+  const after = compute(wageEarner, mutated).scenarios[0];
+  assert.equal(after.pension_credit_taxpayer_eligibility.requirement_met, false);
+  // **1단계가 서지 않으면 2단계는 돌지 않는다.** 자르기 전 금액까지 0이어야 한다.
+  assert.equal(after.plans[0].deterministic_benefit.pension_credit_total_before_cap_krw, 0);
+  assert.equal(after.plans[0].deterministic_benefit.tax_liability_cap.applied, false);
+});
+
+test('주입 / 어느 결론이 「0」인지를 룰셋이 가리킨다 — 그 칸이 어긋나면 멈춘다', () => {
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'pension.credit.taxpayer_eligibility').value.engine_evaluation
+      .requested_notice_code = 'pension_credit_unavailable';
+  });
+
+  const response = compute(baseRequest(), mutated);
+  assert.equal(response.ok, false);
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
+
+test('주입 / 연금저축을 빼라고 적힌 룰셋에서는 무엇으로 빼는지 없이 빼지 않는다', () => {
+  const mutated = withMutation((clone) => {
+    findRule(clone, CONFIRMED_FILE, 'pension_savings.eligibility').value.engine_evaluation.excludes_account =
+      true;
+  });
+
+  const response = compute(baseRequest(), mutated);
+  assert.equal(response.ok, false, '빼라고만 적혀 있는데 엔진이 사유를 지어냈다');
+  assert.ok(errorCodes(response).includes('rule_missing'));
+});
