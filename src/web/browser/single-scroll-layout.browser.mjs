@@ -146,11 +146,13 @@ test('산문 텍스트 블록이 --prose-max-width(640px)를 넘지 않는다 �
   // "찾지 못했다"로 실패하는데, 그것은 이 검사가 재는 회귀(폭 초과)가 아니다.
   // D60(관리자 판정) — 같은 이유로 `.disclosure-banner-body`(성격·자격 배너의
   // 본문)도 뺐다. 그 배너 자체가 화면에서 없어졌다.
+  // D61(관리자 판정, 소유자 지시) — 같은 이유로 `.limit-note`(`LimitNote`,
+  // 고지 ⑤)도 뺐다. 그 칸 자체가 화면에서 없어졌다 — 부재는 아래 D61
+  // 검사(`theme.browser.mjs`)가 직접 확인한다.
   const widths = await app.page.evaluate(`(() => {
     const w = (sel) => { const el = document.querySelector(sel); return el ? el.getBoundingClientRect().width : null; };
     return {
       assumptionBlock: w('.assumption-block'),
-      limitNote: w('.limit-note'),
     };
   })()`);
   for (const [name, width] of Object.entries(widths)) {

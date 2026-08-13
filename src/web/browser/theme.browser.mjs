@@ -52,18 +52,22 @@ const READ_TOKENS = `(() => {
 })()`;
 
 /**
- * 고지 요소 14종 — design-system 8.4절의 실측표를 그대로 다시 잰다.
+ * 고지 요소 13종 — design-system 8.4절의 실측표를 그대로 다시 잰다.
  *
  * D60(관리자 판정, 소유자 지시) — `DisclosureBanner 본문 (고지 ①②)` 행을
  * 뺐다(15종 → 14종). 그 배너와 두 문장(성격·자격)이 화면에서 완전히
  * 없어졌으므로 잴 대상이 없다 — 남기면 존재하지 않는 토큰 조합의 대비를
  * 재는 죽은 검사가 된다.
+ *
+ * D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 같은 이유로
+ * `LimitNote`(고지 ⑤)도 행에서 뺐다(14종 → 13종). `.limit-note` 칸 자체가
+ * 화면에서 없어졌다.
  */
 const DISCLOSURE_ROWS = [
   ['LawChip 텍스트 (고지 ③)', '--text-secondary', '--surface-sunken', 4.5],
   ['LawChip 호버', '--text-secondary', '--accent-subtle', 4.5],
   ['BasisBlock 원문 링크 (고지 ③)', '--text-link', '--surface-raised', 4.5],
-  ['AssumptionBlock · LimitNote (고지 ④⑤)', '--text-secondary', '--surface-raised', 4.5],
+  ['AssumptionBlock (고지 ④)', '--text-secondary', '--surface-raised', 4.5],
   ['ProposedBadge (고지 ⑥)', '--state-info', '--state-info-subtle', 4.5],
   ['AmountCard 조건 캡션 (P1)', '--text-secondary', '--surface-raised', 4.5],
   ['WarningNote 본문', '--text-secondary', '--state-warning-subtle', 4.5],
@@ -107,9 +111,10 @@ const MEASURE_LIVE_ELEMENTS = `(() => {
   // 이 목록에서 뺐다. 그 요소 자체가 화면에서 완전히 없어졌으므로 여기
   // 남기면 언제나 missing: true로 실패하는 죽은 검사가 된다. 부재는 아래
   // D60 검사가 직접 확인한다.
+  // D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 같은 이유로
+  // LimitNote(.limit-note p)도 뺐다. 부재는 아래 D61 검사가 직접 확인한다.
   const rows = [
     ['AssumptionBlock 항목', '.assumption-block li'],
-    ['LimitNote', '.limit-note p'],
     ['AmountCard 조건 캡션', '.amount-card-caption'],
   ];
   return rows.map(([label, sel]) => {
@@ -195,7 +200,7 @@ test('어느 조합에서도 값이 빈 색 토큰이 하나도 없다 — 미�
 // ---------------------------------------------------------------------------
 
 for (const theme of ['light', 'dark']) {
-  test(`[${theme}] 고지 요소 14종이 전부 기준을 넘는다 (화면에서 잰 값)`, { skip: skipWithoutChrome }, async () => {
+  test(`[${theme}] 고지 요소 13종이 전부 기준을 넘는다 (화면에서 잰 값)`, { skip: skipWithoutChrome }, async () => {
     const { page } = app;
     await emulate(page, { scheme: theme === 'dark' ? 'dark' : 'light' });
     await page.evaluate(`document.documentElement.setAttribute('data-theme', '${theme}')`);
@@ -229,11 +234,14 @@ test('결과 화면의 고지 요소가 두 테마 모두에서 4.5:1을 넘고 
 
 test('고지 요소에 다크 전용 처리가 없다 — 접히거나 흐려지지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
+  // D61(관리자 판정, 소유자 지시) — `limitOpacity`(`.limit-note`)를 뺐다.
+  // 그 요소 자체가 화면에서 없어졌으므로 `getComputedStyle(null)`이 던진다 —
+  // 남기면 죽은 검사가 아니라 깨지는 검사가 된다. 부재는 아래 D61 검사가
+  // 직접 확인한다.
   const read = `(() => {
     const assumption = document.querySelector('.assumption-block');
     return {
       assumptionOpen: assumption.open,
-      limitOpacity: getComputedStyle(document.querySelector('.limit-note')).opacity,
     };
   })()`;
   await emulate(page, { scheme: 'light' });
@@ -293,23 +301,27 @@ test('D60(관리자 판정, 소유자 지시) — 성격·자격 배너가 두 �
   }
 });
 
-test('D46 2·3번 → D59(관리자 판정) — 「법령 조항」 나열 disclosure는 없고, 조항 칩은 배제 사유·법정 순서 두 자리에만 있다', { skip: skipWithoutChrome }, async () => {
+test('D46 2·3번 → D59 → D61(관리자 판정) — 「법령 조항」 나열 disclosure는 없고, 조항 칩은 배제 사유 한 자리에만 있다', { skip: skipWithoutChrome }, async () => {
   // 낡은 검사를 뒤집었다 — 옛 버전은 `.basis-block`이 있고 열리는 것을
   // 요구했다. 지금은 그 블록 자체가 회귀 대상이다.
   //
   // **D59로 범위가 좁혀졌다.** `.law-chip` 자체가 화면에서 완전히 사라진
   // 것은 아니다 — `tax-domain`이 재서 "차단·배제 사유"(`.eligibility-note`·
   // `.table-row-excluded`)와 "법령이 정한 것" 태그(`.fill-order-note`) 두
-  // 자리는 나열이 아니라 개별 주장의 근거이므로 남기기로 했다(D59). 이 검사는
-  // 그 두 자리 **밖에서** `.law-chip`이 나타나면 잡는다 — 나열형 조항 표기가
-  // 되돌아왔다는 뜻이기 때문이다.
+  // 자리는 나열이 아니라 개별 주장의 근거이므로 남기기로 했다(D59).
+  //
+  // **D61(관리자 판정, 소유자 지시, 세 번째 같은 방향)로 다시 좁혀졌다.**
+  // 「법령이 정한 것」·「이 계산기가 정한 것」 태그를 쌍으로 지우며 그 태그가
+  // 붙어 있던 `LawChip`도 함께 나갔다 — 이제 `.fill-order-note`는 "허용된
+  // 자리"가 아니라 다른 자리와 똑같이 **회귀 대상**이다. 남는 자리는
+  // 배제 사유(`.eligibility-note`·`.table-row-excluded`) 하나뿐이다.
   const { page } = app;
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
   await sleep(300);
 
   const found = await page.evaluate(`(() => {
-    const allowed = '.fill-order-note, .table-row-excluded, .eligibility-note';
+    const allowed = '.table-row-excluded, .eligibility-note';
     const stray = [...document.querySelectorAll('.law-chip')].filter((el) => !el.closest(allowed));
     return {
       basisBlock: !!document.querySelector('.basis-block'),
@@ -323,9 +335,36 @@ test('D46 2·3번 → D59(관리자 판정) — 「법령 조항」 나열 discl
   assert.equal(
     found.strayLawChipCount,
     0,
-    '배제 사유·법정 순서 태그 밖에서 .law-chip이 발견됐습니다 — 나열형 조항 표기가 되돌아왔을 수 있습니다',
+    '배제 사유 밖에서 .law-chip이 발견됐습니다 — 나열형 조항 표기가 되돌아왔거나, D61로 없앤 「법령이 정한 것」 태그의 근거 칩이 되살아났을 수 있습니다',
   );
   assert.ok(!/법령 조항 \d+건/.test(found.resultSlotText), `"법령 조항 N건" 문구가 여전히 화면에 있습니다: ${found.resultSlotText}`);
+});
+
+test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — LimitNote도 두 이름표도 어디에도 없다', { skip: skipWithoutChrome }, async () => {
+  // 낡은 검사를 뒤집었다 — D48이 세운 옛 버전은 `.limit-note`가 항상 보이는
+  // 것을 요구했다(고지 ⑤, 산문 캡 대상). 지금은 그 반대가 참이어야 한다.
+  // 「법령이 정한 것」·「이 계산기가 정한 것」 태그도 같은 회차에 지워졌다 —
+  // 문구 자체가 되살아나는 회귀를 이 검사가 잡는다(실제로 문자열을 되돌려
+  // 붉어지는지 확인했다 — 수동 변이, `src/`에는 반영하지 않음).
+  const { page } = app;
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
+  await sleep(300);
+
+  const state = await page.evaluate(`(() => ({
+    limitNoteExists: !!document.querySelector('.limit-note'),
+    factTagExists: !!document.querySelector('.note-tag-fact'),
+    productTagExists: !!document.querySelector('.note-tag-product'),
+    resultSlotText: document.querySelector('.result-slot').innerText,
+  }))()`);
+  assert.equal(state.limitNoteExists, false, '.limit-note가 있습니다');
+  assert.equal(state.factTagExists, false, '.note-tag-fact가 있습니다');
+  assert.equal(state.productTagExists, false, '.note-tag-product가 있습니다');
+  assert.ok(!state.resultSlotText.includes('실제 신고·납부는'), '한계 고지 2번 문장이 화면에 있습니다');
+  assert.ok(!state.resultSlotText.includes('개별 사정(다른 소득'), '한계 고지 1번 문장이 화면에 있습니다');
+  assert.ok(!state.resultSlotText.includes('현재 제휴·광고'), '한계 고지 3번 문장이 화면에 있습니다');
+  assert.ok(!state.resultSlotText.includes('법령이 정한 것'), '「법령이 정한 것」 태그 문구가 화면에 있습니다');
+  assert.ok(!state.resultSlotText.includes('이 계산기가 정한 것'), '「이 계산기가 정한 것」 태그 문구가 화면에 있습니다');
 });
 
 test('D25 — 접힌 가정 블록도 제목과 건수가 읽히고, 펼치면 나머지 전부에 닿는다', { skip: skipWithoutChrome }, async () => {

@@ -755,7 +755,8 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    `docs/org/gate-decisions.md` D43·design-system 5.31.4절 5번에 기록으로만
    남는다. */
 .benefit-meter-fill-solid { border: none; }
-/* `가정 기반` 칩 — ProvisionalStatusNote·note-tag-product와 같은 state-info 색 규약.
+/* `가정 기반` 칩 — ProvisionalStatusNote와 같은 state-info 색 규약(D61로
+   `.note-tag-product`는 사라졌다).
    **`align-self: flex-start`가 필수다.** 이 칩의 부모(`.benefit-row-body`)가
    `flex-direction: column`인데 `align-items`의 기본값이 `stretch`라, 이 값이
    없으면 `display: inline-block`이어도 flex 아이템으로서 가로축(행 전체 폭)
@@ -888,14 +889,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 /* 왜 이 순서로 채웠는가 (계약 0.4·5.6절).
    **주의 색을 쓰지 않는다** — 사용자가 무언가를 잘못한 상태가 아니라 계산의
    근거를 밝히는 자리다. EligibilityNote와 같은 이유로 info 계열을 쓴다.
-   사실 절과 제품 판단 절의 이름표는 색이 아니라 글자로 구분한다(색각 제약). */
+   D61(관리자 판정, 소유자 지시) — 「법령이 정한 것」·「이 계산기가 정한 것」
+   이름표(`.note-tag`·`.note-tag-fact`·`.note-tag-product`)와 그 자리의
+   `LawChip`(`.note-laws`)이 함께 빠졌다. 두 문장(`p`)만 남는다. */
 .fill-order-note { margin-top: var(--space-2); padding: var(--space-3); border-left: 3px solid var(--border-strong); background: var(--surface-sunken); border-radius: var(--radius-m); display: flex; flex-direction: column; gap: var(--space-2); }
 .fill-order-note h4 { margin: 0; }
 .fill-order-note p { margin: 0; }
-.fill-order-note .note-laws { margin-top: 0; }
-.note-tag { display: inline-block; margin-right: var(--space-1); padding: 1px 6px; border-radius: var(--radius-s); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
-.note-tag-fact { background: var(--surface-raised); border: 1px solid var(--border-strong); color: var(--text-primary); }
-.note-tag-product { background: var(--state-info-subtle); border: 1px solid var(--state-info); color: var(--state-info); }
 
 .stackbar { display: flex; flex-direction: column; gap: var(--space-2); }
 /* 배분안이 하나뿐일 때 — 자리를 없애지 않고 캡션 한 줄만 남긴다(screens.md 4.4절).
@@ -984,9 +983,8 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .more-items-trigger::-webkit-details-marker { display: none; }
 .more-items ul { margin: var(--space-2) 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--space-2); }
 
-/* D48 — 산문 캡 대상(고지 ⑤). */
-.limit-note { font-size: 12.5px; color: var(--text-secondary); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); max-width: var(--prose-max-width); }
-.limit-note p { margin: 0 0 var(--space-1); }
+/* D61(관리자 판정, 소유자 지시) — `.limit-note`(고지 ⑤, `[4-G]` `LimitNote`)가
+   화면에서 완전히 없어져 이 규칙도 걷었다. `docs/org/gate-decisions.md` D61. */
 
 .save-share { display: flex; justify-content: flex-end; }
 
@@ -1054,4 +1052,36 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   /* 페이지 경계에서 카드·행이 반으로 잘리는 것을 완화한다 — 완벽히 막을 수는
      없지만(브라우저마다 지원 폭이 다르다), 낼 수 있는 만큼은 낸다. */
   .amount-card, .chart-area, .account-table, details, .allocation-bar-row { break-inside: avoid; }
+
+  /* 관리자 지시(2026-08-13, D51 통과 조건 재확인) — `designer`가 `Page.printToPDF`를
+     `printBackground: false`(인쇄 대화상자의 "배경 그래픽" 체크가 기본으로 꺼진
+     상태와 같다 — 대다수 사용자가 이 상태로 인쇄한다)로 뽑아 값을 나르는 색이
+     인쇄에서 통째로 사라지는 것을 실측으로 찾았다. `print-color-adjust`의
+     기본값 `economy`가 배경색(인라인 `background`, CSS `background`)을 인쇄에서
+     지우기 때문이다 — **텍스트 색(foreground)은 지워지지 않는다**(실측 확인,
+     아래 목록 밖의 요소는 손대지 않는다).
+
+     **"값을 나르는 것"과 "장식"을 가른 기준** — 이 조직이 이미 쓰는 `data-*`
+     토큰(계좌를 가리키는 색: 도넛 조각·트랙 채움·미터 채움·스택바 조각·범례
+     스와치) 더하기, **`.account-benefit-strip`** 하나. 후자는 표면 토큰
+     (`surface-overlay`)을 쓰지만 장식이 아니다 — design-system 5.31.2절이
+     이 표면을 "이미 검증된 마크 표면"이라 부르고, D35·D36이 "폭이 아니라
+     컨테이너(배경·테두리)가 오독을 막는다"고 판정한 그 컨테이너다. 배경이
+     사라지면 테두리 대비가 1.265까지 떨어져(실측) 컨테이너의 구분 기능
+     자체가 무너진다 — 색이 값을 나르지 않아도 **컨테이너의 존재가 값의
+     올바른 해석을 나른다.** `.input-panel`·헤더·카드 그림자 같은 순수
+     장식 표면은 여기 넣지 않는다 — 전부 넣으면 인쇄가 무거워지고 이 규칙의
+     의미가 없어진다.
+
+     **도넛(SVG `path`의 `fill`)은 여기 없다** — 실측으로 `economy`에서도
+     살아남는 것을 확인했다(`Page.printToPDF({ printBackground: false })`로
+     뽑아 렌더링). SVG `fill`은 CSS `background`가 아니라 별도 실측이 필요했다. */
+  .account-benefit-strip,
+  .benefit-dot, .benefit-dot-excluded,
+  .benefit-meter-track, .benefit-meter-fill,
+  .alloc-bar-track, .alloc-bar-fill, .alloc-bar-track-unavailable,
+  .stackbar-row-fill, .stackbar-seg,
+  .donut-legend-swatch {
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
 }

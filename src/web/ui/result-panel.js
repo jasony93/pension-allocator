@@ -1,16 +1,17 @@
 /**
  * 결과 패널 — `screens.md` 4·5·8절. 다섯 상태(입력 부족·빈·로딩·오류·정상)를
  * 전부 이 모듈이 담당한다. 고지 요소의 배치는 `screens.md` 4.2절 표를 그대로
- * 따른다 — 요소 ⑤는 접기 불가, ③④는 기본 펼침. **요소 ①②(성격·자격
- * 배너)는 D60(관리자 판정, 소유자 지시)으로 삭제됐다** — 게시 의무가 없는
- * 자체 방어 문구였고, 소유자가 위험의 크기를 확인한 뒤 지웠다.
+ * 따른다 — 요소 ③④는 기본 펼침. **요소 ①②(성격·자격 배너)는 D60(관리자
+ * 판정, 소유자 지시)으로 삭제됐고, 요소 ⑤(`LimitNote`)는 D61(관리자 판정,
+ * 소유자 지시, 세 번째 같은 방향)로 삭제됐다** — 어느 것도 게시 의무가 있는
+ * 문구가 아니라 이 서비스가 스스로 세운 방어였고, 소유자가 위험의 크기를
+ * 확인한 뒤 지웠다.
  */
 
 import { el } from './dom.js';
 import {
   ACCOUNT_LABEL,
   PLAN_LABEL,
-  DISCLOSURE,
   ENTRY_COPY,
   EXPECTATION_COPY,
   noticeMessage,
@@ -36,8 +37,6 @@ import {
   EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER,
   PROPOSED_BADGE_LABEL,
   FILL_ORDER_NOTE_HEADING,
-  FILL_ORDER_TAG_FACT,
-  FILL_ORDER_TAG_PRODUCT,
   fillOrderFactMessage,
   fillOrderDecisionMessage,
   AMOUNT_CARD_LABEL_CREDIT_ONLY,
@@ -510,32 +509,23 @@ function eligibilityNote(view, scenario) {
  * 않으므로 설명할 대상도 없다 — 그때는 그리지 않는다.
  *
  * **D59(관리자 판정) — 근거 조항(`tie_break.basis_rule_ids`)의 `LawChip`을
- * 남긴다.** D46 2·3번으로 한 차례 뗐으나 `tax-domain`이 다시 재서 되돌렸다 —
- * 이 자리는 「법령이 정한 것」 태그(`FILL_ORDER_TAG_FACT`)가 붙는 자리이고,
- * 조항을 떼면 "법이 정했다"면서 어느 법인지 안 적는 꼴이 되어
- * design-system 5.28절("조항 없는 세법 서술을 화면에 두지 않는다")이 지키던
- * 상태가 뒤집힌다. **아래 「이 계산기가 정한 것」 태그(제품 판단)에는 여전히
- * 조항을 붙이지 않는다** — 그건 법이 아니라 이 계산기의 배분 기준이다.
+ * 남긴다** 했으나(D46 2·3번으로 한 차례 뗐다가 `tax-domain`이 다시 재서
+ * 되돌린 자리), **D61(관리자 판정, 소유자 지시, 세 번째 같은 방향)로
+ * 「법령이 정한 것」·「이 계산기가 정한 것」 태그를 쌍으로 지우며 이 칩도
+ * 함께 나갔다** — 태그가 붙어 있던 근거였고, 태그가 없으면 칩만 남아도 무엇의
+ * 근거인지 붙일 자리가 없다. 사실·제품 판단 두 문장(`fillOrderFactMessage`·
+ * `fillOrderDecisionMessage`)은 그대로 남는다 — 소유자가 초기 회차에 물은
+ * "왜 IRP를 먼저 채우나"에 답하는 것은 설명이지 배지가 아니다.
  */
 function fillOrderNote(plan, scenario) {
   const tieBreak = fillOrderTieBreak(plan);
   if (!tieBreak) return null;
   const { flexible, restricted } = tieBreak;
-  const laws = lawEntriesFor(scenario, tieBreak.basisRuleIds);
 
   return el('div', { class: 'fill-order-note' }, [
     el('h4', { class: 'type-title-s' }, [FILL_ORDER_NOTE_HEADING]),
-    el('p', { class: 'type-body-s' }, [
-      el('span', { class: 'note-tag note-tag-fact' }, [FILL_ORDER_TAG_FACT]),
-      ' ',
-      fillOrderFactMessage(flexible, restricted),
-    ]),
-    lawChipRow(laws, 'note-laws'),
-    el('p', { class: 'type-body-s' }, [
-      el('span', { class: 'note-tag note-tag-product' }, [FILL_ORDER_TAG_PRODUCT]),
-      ' ',
-      fillOrderDecisionMessage(flexible),
-    ]),
+    el('p', { class: 'type-body-s' }, [fillOrderFactMessage(flexible, restricted)]),
+    el('p', { class: 'type-body-s' }, [fillOrderDecisionMessage(flexible)]),
   ]);
 }
 
@@ -1420,13 +1410,12 @@ function assumptionBlock(response, scenario, form) {
 // 그것을 검사한다. 화면이 안 보이는 것과 우리가 근거 없이 계산하는 것은
 // 다르다.
 
-function limitNote() {
-  return el(
-    'div',
-    { class: 'limit-note' },
-    DISCLOSURE.limit.map((line) => el('p', {}, [line])),
-  );
-}
+// D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — `[4-G]` `LimitNote`
+// (`limitNote()`, 옛 `<div class="limit-note">`, 고지 ⑤)를 화면에서 걷어냈다.
+// D60에서 「소유자가 인용하지 않았다」며 남겼던 것을 이번에 소유자가 직접
+// 지목했다("실제 신고·납부는 세무사 등 자격자 확인이 필요합니다 … 다
+// 지워줘"). 세 문장 전부와 그것을 담던 칸이 함께 나갔다 — `DISCLOSURE.limit`이
+// `copy.js`에서 없어졌으니 여기 남기면 `undefined` 참조가 된다.
 
 /**
  * `[4-H]` — 2026-08-10 소유자 지시로 "공유용 이미지 만들기"(캔버스 PNG)를
@@ -1584,7 +1573,6 @@ function resultPanelForScenario(
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),
     assumptionBlock(response, scenario, form),
-    limitNote(),
     saveShareBlock(store),
   ]);
 }

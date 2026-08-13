@@ -117,8 +117,13 @@ export function mountApp(root, { engineClient, analytics }) {
   const resultSlot = el('div', { class: 'result-slot' });
   mainEl.append(inputSlot, resultSlot);
 
-  // 12.2(b) — "현재 제휴·광고 없음"은 `LimitNote`가 같은 스크롤에서 이미
-  // 말한다. 푸터에서 뗀다.
+  // 12.2(b) — "현재 제휴·광고 없음"을 푸터에서 뗀 것은 원래 `LimitNote`가
+  // 같은 스크롤에서 이미 그 사실을 말하고 있었기 때문이다. **D61(관리자
+  // 판정, 소유자 지시)로 `LimitNote` 자체가 화면에서 없어져 그 전제가
+  // 사라졌지만, 되돌리지 않는다** — 소유자가 그 문장을 포함해 지우라고
+  // 지목한 세 문장 중 하나였고("이 계산기는 특정 금융상품·금융회사를
+  // 다루지 않고, 현재 제휴·광고도 없습니다"), 지시 범위를 넘어 이 자리에
+  // 다시 넣는 것은 소유자의 결정을 되돌리는 것이다.
   const footer = el('footer', { class: 'app-footer' }, ['제공자 표기 · 룰셋 기준일 2026-08-08']);
 
   layout.append(header, mainEl, footer);

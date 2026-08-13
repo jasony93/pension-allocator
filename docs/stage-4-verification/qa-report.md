@@ -1561,3 +1561,698 @@ test('네 배분안이 전부 다른 배분으로 나온다 — 넷째 안이 �
 ---
 
 **개정 이력.** 1~10절은 게이트 4·게이트 5 재소집에서 각각 승인·기록된 내용을 이번 회차에서 고치지 않았다(대상 커밋·수치는 그 시점 기준으로 남긴다). **11절이 이번 재소집(2026-08-12, 대상 커밋 `1a3ab98`)에서 새로 추가한 전부다.** 새 검사 넷(11.2~11.5절)은 스크래치패드에서 작성·실행했고 저장소에는 커밋되지 않았다 — 이 문서가 유일한 기록이자 재현 절차다. 관리자가 R2·R3을 포함한 이번 회차 지적을 판정한 뒤 `status`를 다시 판단한다.
+
+---
+
+## 12. 게이트 4 재소집 종결 — 미결 1·2·3 (2026-08-13)
+
+**대상 판정:** `gate-decisions.md` D51(게이트 4 통과, 조건 하나·미결 넷)· D61(유보 문구 삭제, 게이트 4를 닫고 5로 감). D61이 **미결 1·2·3은 `qa`가 닫는다**고 명시했다. **조건(위젯 박스 대비)은 `designer` 소관, 미결 4(결정 피로)는 게이트 5로 넘어간다 — 둘 다 이 절의 범위가 아니다.**
+
+**이 절이 하지 않은 것.** `src/` · `docs/stage-2-design/engine-*.md` · `docs/org/gate-decisions.md` 어디도 고치지 않았다. 세 미결 모두 **다른 유닛의 writeScope**(`calc-engine-dev`: `engine-design.md`·`engine-interface.md`·`src/engine/`, `web-dev`: `src/web/`, 관리자: `gate-decisions.md`)에 있고, QA는 발견·검사 장치·정확한 위치를 낸다. 아래 두 스크립트는 전부 스크래치패드(`...\scratchpad\`)에서 작성·실행했고 저장소에는 커밋하지 않았다 — 11절의 선례와 같은 방식이다. **관리자가 이 중 상시 검사로 남길 것을 판단해 `scripts/org/` 또는 해당 유닛의 `.test.mjs`로 이관하도록 지시할 것을 권고한다.**
+
+**세션 상태에 대한 사실 확인.** 검사 시작 시점 `git status`에 `docs/org/gate-decisions.md`·`requirements.md`·`design-system.md`·`screens.md`·`src/engine/index.mjs`·`src/web/*` 열두 개 파일이 이미 수정 상태였다 — `designer`(조건 대응)·`web-dev`(다른 미결)가 동시에 작업 중이라는 D61 지시 문구와 일치한다. 이 절의 모든 실행·판단은 이 파일들을 **읽기만** 했다.
+
+### 12.1 미결 1 — 폐기규칙 스캔이 파일 목록 밖을 못 본다 (구조적으로 닫음)
+
+**D51의 지적을 그대로 인용한다.** "`qa`가 그것을 잡으려고 만든 폐기규칙 스캔이 **엔진 계약 문서 둘을 목록에 넣지 않아 여섯 건을 하나도 못 잡았다.**" 이 문장의 출처를 이력에서 확인했다 — 커밋 `6e711f1`(2026-08-12, "Lead the contract with what it is now, and find the stale-scan blind to both files")의 커밋 메시지가 정확히 같은 수치를 남겼다: *"Eight stale passages came out of checking every ruling from D33 on. … the automated stale-scan built for exactly this job caught none of the six. Its registry does not list these two files."*
+
+**"파일 하나를 목록에 추가하는 것으로 닫지 마라"는 지시를 그대로 따랐다.** 대신 REGISTRY 각 항목에서 `files: [...]`(사람이 손으로 적는 대상 목록)를 통째로 없애고, 실행 시점에 `docs/**/*.md`와 `src/**/*.{js,mjs}`를 걷는(walk) 함수로 바꿨다. 이제 새 문서가 생기면 아무도 등록하지 않아도 스캔 대상에 자동으로 들어온다. 제외해야 하는 파일은 **경로와 이유**를 짧은 목록(`DOC_EXCLUDES`/`SRC_EXCLUDES`)에 적고, 스캔이 실행될 때마다 그 제외 목록 자체를 화면에 출력한다 — 조용히 빠지는 파일이 없게 하기 위해서다.
+
+**제외 목록을 정할 때 추측하지 않았다.** `docs/` 전체를 예외 없이 한 번 돌려 실제로 어디서 노이즈가 나는지 먼저 쟀다(첫 실행에서 `gate-decisions.md` 3건, `qa-report.md` 8건, `golden-cases.md` 6건 — 전부 "이 문서의 존재 이유가 과거 서술이다"에 해당하는 오탐이었다). 그 실측을 근거로 세 파일만 뺐다. `verification-report.md`는 같은 실측에서 0건이라 빼지 않았다 — 뺄 이유가 없는 파일을 목록에 올리지 않았다.
+
+**스크립트 전문** (`check-stale-decisions-v2.mjs`):
+
+```js
+// QA 게이트4 재소집 — 미결 1: 폐기규칙 스캔이 파일 목록 밖을 못 보던 결함을 닫는다.
+//
+// D51의 지적: "qa가 그것을 잡으려고 만든 폐기규칙 스캔이 엔진 계약 문서 둘을
+// 목록에 넣지 않아 여섯 건을 하나도 못 잡았다." (커밋 6e711f1, 2026-08-12)
+// 원인은 각 REGISTRY 항목이 어떤 문서를 볼지 사람이 손으로 `files: [...]`에
+// 적어 넣는 구조였다는 것 — 새 문서(engine-design.md·engine-interface.md)가
+// 생겨도 그 목록에 아무도 추가하지 않으면 스캔은 그 문서를 존재하지 않는 것처럼
+// 지나간다. "통과하지만 재는 자리가 없는 검사"의 이번 세션 마지막 사례였다.
+//
+// 고친 것: 파일 목록을 **선언**이 아니라 **발견**으로 만든다. 대상은
+// `docs/**/*.md` 전부와 `src/**/*.{js,mjs}` 전부를 실행 시점에 걷는다(walk).
+// REGISTRY 각 항목은 더 이상 "어느 파일을 볼지"를 적지 않는다 — 걷어서 찾은
+// 모든 문서/코드 파일에 모든 항목의 패턴을 적용한다. 파일을 빼려면 아래
+// EXCLUDES에 **경로와 이유**를 함께 적어야 하고, 스캔은 그 제외 목록을
+// 실행할 때마다 화면에 그대로 찍는다 — 조용히 빠지는 파일이 없게 하기 위해서다.
+//
+// 실행: node check-stale-decisions-v2.mjs <repo-root>
+
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
+const repoRoot = process.argv[2];
+if (!repoRoot) {
+  console.error('usage: node check-stale-decisions-v2.mjs <repo-root>');
+  process.exit(2);
+}
+
+const HISTORICAL_MARKER = /폐기|취소|없앴|지웠|삭제|당시 기록|~~|D[3-9][0-9]|D2[0-9]|재개정|다시 열었다|기각|종결|판정 — |재확인|승인한다|승인\.|이유가 있다|근거가 있다/;
+
+// ---------------------------------------------------------------------------
+// 1. 대상 파일 발견 (선언이 아니라 walk)
+// ---------------------------------------------------------------------------
+
+// 짧고, 이유가 붙는 제외 목록만 허용한다. 파일 하나하나가 아니라 "이 카테고리
+// 전체가 왜 구조적으로 노이즈인가"를 적는다 — 실제로 docs/ 전체를 예외 없이
+// 돌려 본 결과를 근거로 골랐다.
+const DOC_EXCLUDES = [
+  {
+    path: 'docs/org/gate-decisions.md',
+    reason:
+      '이 조직의 결정 이력 원장 그 자체다. "한때 이렇게 정했었다"를 현재 시제로 ' +
+      '서술하는 문장이 태생적으로 가득하고, 그것이 이 문서의 존재 이유다. ' +
+      '실측(전수 스캔)에서 3건이 걸렸고 전부 오탐이었다(D35 관련 회고 서술).',
+  },
+  {
+    path: 'docs/stage-4-verification/qa-report.md',
+    reason:
+      '이 스캔 자신을 포함한 과거 스캔 스크립트 전문과 그 실행 로그를 문서 안에 ' +
+      '통째로 인용한다 — 정규식 리터럴 문자열 자체가 옛 문구를 담고 있어 자기 ' +
+      '참조 오탐을 낸다. 실측에서 8건, 전부 스크립트 소스 인용 또는 위반 실행 ' +
+      '로그의 재인용이었다.',
+  },
+  {
+    path: 'docs/stage-4-verification/golden-cases.md',
+    reason:
+      '9,213줄짜리 골든 케이스 변경 이력 — "몇 차까지는 이 상태였다"는 서술이 ' +
+      '설계상 본문이다. 이미 SOURCE_REGISTRY(코드 쪽)에서는 예전부터 이 파일을 ' +
+      '빼고 있었다(파일명 문자열 검사); 이번에 DOC_REGISTRY 쪽도 같은 이유로 ' +
+      '뺀다. 실측에서 6건, 전부 "몇 차까지 …이었다" 형태의 회고였다.',
+  },
+];
+
+const SRC_EXCLUDES = [
+  {
+    pattern: /\.test\.mjs$/,
+    reason:
+      '결함 주입·회귀 재현을 위해 옛 코드/값을 문자열로 일부러 들고 있는 자리다 ' +
+      '(예: fault-injection 스타일 테스트). 이미 옛 스크립트도 이 규칙을 썼다.',
+  },
+];
+
+function walk(dir, exts, out = []) {
+  if (!existsSync(dir)) return out;
+  const st = statSync(dir);
+  if (st.isFile()) {
+    if (exts.some((e) => dir.endsWith(e))) out.push(dir);
+    return out;
+  }
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.git')) continue;
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(p, exts, out);
+    else if (exts.some((e) => entry.name.endsWith(e))) out.push(p);
+  }
+  return out;
+}
+
+function relOf(full) {
+  return path.relative(repoRoot, full).split(path.sep).join('/');
+}
+
+const allDocFiles = walk(path.join(repoRoot, 'docs'), ['.md']).map(relOf);
+const excludedDocPaths = new Set(DOC_EXCLUDES.map((e) => e.path));
+const docFiles = allDocFiles.filter((f) => !excludedDocPaths.has(f));
+
+const allSrcFiles = walk(path.join(repoRoot, 'src'), ['.js', '.mjs']).map(relOf);
+const srcFiles = allSrcFiles.filter((f) => !SRC_EXCLUDES.some((e) => e.pattern.test(f)));
+
+console.log('=== 대상 파일 발견 (선언이 아니라 walk) ===');
+console.log(`docs/ 에서 발견한 .md 파일: ${allDocFiles.length}개`);
+console.log(`제외(문서, 이유와 함께 출력):`);
+for (const e of DOC_EXCLUDES) console.log(`  - ${e.path} — ${e.reason}`);
+console.log(`실제로 훑는 문서 파일: ${docFiles.length}개`);
+for (const f of docFiles) console.log(`  · ${f}`);
+console.log(`\nsrc/ 에서 발견한 .js/.mjs 파일: ${allSrcFiles.length}개`);
+console.log(`제외(소스, 이유와 함께 출력):`);
+for (const e of SRC_EXCLUDES) console.log(`  - 패턴 ${e.pattern} — ${e.reason}`);
+console.log(`실제로 훑는 소스 파일: ${srcFiles.length}개`);
+
+// ---------------------------------------------------------------------------
+// 2. 폐기 규칙 레지스트리 — 옛 7건(파일 목록만 없앰) + 이번에 실제 커밋
+//    이력에서 확인한 새 6건(engine-design.md·engine-interface.md, 커밋
+//    6e711f1의 부모 0a3f5fb ↔ 6e711f1 대조로 검증). 새 항목은 "정확히 이
+//    문구"를 겨눈다 — 필드명만 등장하는 것으로는 안 잡는다. 그렇게 넓히면
+//    D20-필드처럼 무관한 문맥에서 오탐이 난다는 것을 이번 조사에서 직접
+//    겪었다(12.1절 실행 기록 참고).
+// ---------------------------------------------------------------------------
+
+const DOC_REGISTRY = [
+  { name: 'D35 — 「반 사이즈」(도넛 외경 50%·최소 240px) 폭 규칙', decision: 'D35', pattern: /도넛 외경의 50%|최소 240px|반 정도 되는 사이즈/ },
+  { name: 'D43 — 가정 축이 「윤곽만」이라는 등급 서술', decision: 'D43', pattern: /윤곽만/ },
+  { name: 'D39 — 「가정 기반」 칩이 렌더된다는 서술', decision: 'D39', pattern: /가정 기반.{0,4}칩(?!.{0,20}(지웠|없앴|폐기|삭제))/ },
+  { name: 'D45 — 「최적」을 예외 없이 금지한다는 서술', decision: 'D45', pattern: /「?최적」?\s*(을|를)?\s*(쓰지 않는다|금지|쓸 수 없다)/ },
+  { name: 'D39 — 「직전 과세연도 결정세액」 입력이 화면에 있다는 서술', decision: 'D39', pattern: /직전 과세연도 결정세액(?!.{0,40}(걷어|없애|폐기|전면 개정|당시 기록))/ },
+  { name: 'D20 이후 — 「1차 출시에서 묻지 않는 선택 입력」 목록에 실제 노출 필드가 남음', decision: 'D20/D46', pattern: /청년 자기신고 여부|ISA 가입경과연수/ },
+  { name: 'D32(4번째 배분안) 이후 — 대안 개수 상한이 여전히 0~2(총 1~3)로 적혀 있음', decision: 'D32', pattern: /대안 0~2개|plans.{0,4}1~3개|나머지 1~2개가 대안/ },
+
+  // --- 새 항목 (이번 회차, 0a3f5fb → 6e711f1 diff에서 실제로 지워진 문장만 겨눔) ---
+  {
+    name: 'D32 이전 — 6.3절 "공제 한도까지만 채우는 세 안은 하나로 합쳐진다"',
+    decision: 'D32 (engine-design.md 6.3절, 커밋 6e711f1에서 정정)',
+    pattern: /공제 한도까지만 채우는 세 안은 하나로 합쳐지지만/,
+  },
+  {
+    name: 'D26 이전 — 6.5절 "배분안을 셋까지 나란히 비교할 수 있다"(엔진이 셋만 낸다는 근거로 서술)',
+    decision: 'D26 (engine-design.md 6.5절, 커밋 6e711f1에서 정정)',
+    pattern: /배분안을 셋까지 나란히 비교할 수 있다/,
+  },
+  {
+    name: 'D32 이전 — 7.1절 I30 행이 공허해진 옛 검사 조건을 그대로 적음',
+    decision: 'D32 (engine-design.md 7.1절, 커밋 6e711f1에서 정정)',
+    pattern: /공제 한도까지만 채우는 안에서는 나오지 않고/,
+  },
+  {
+    name: 'D26 이전 — engine-interface.md 10절 "배분안이 여전히 셋"',
+    decision: 'D26 (engine-interface.md 10절, 커밋 6e711f1에서 정정)',
+    pattern: /배분안이 여전히 셋이지만/,
+  },
+  {
+    name: '4.0.0 이전 — engine-interface.md 3.0절 schema_version 예시가 "4.0.0"',
+    decision: '버전 이력이 11.0.0까지 간 뒤에도 예시가 안 따라감 (커밋 6e711f1에서 정정)',
+    pattern: /`schema_version`.*`"4\.0\.0"`\. major가 다르면/,
+  },
+  {
+    name: '4.0.0 이전 — engine-interface.md 5.9절 산식이 사라진 profile.age_years를 그대로 씀',
+    decision: 'D21 (engine-interface.md 5.9절, 커밋 6e711f1에서 정정)',
+    pattern: /위에서 `profile\.age_years`를 뺀 잔여/,
+  },
+];
+
+const SOURCE_REGISTRY = [
+  { name: 'D39/D40 — 폐기된 NOTICE 코드 tax_liability_cap_unknown', decision: 'D39·D40', pattern: /tax_liability_cap_unknown/ },
+  { name: 'D39 — 폐기된 ASSUMPTION 코드 prior_pension_credit_zero_assumed', decision: 'D39', pattern: /prior_pension_credit_zero_assumed/ },
+  { name: 'D39 — 폐기된 화면 가정 코드 isa_not_held_excluded', decision: '2026-08-10', pattern: /isa_not_held_excluded(?!['"]?\s*\)\s*—)/ },
+  { name: 'D32 — 폐기된 LIMITED_BY 값 credit_limit(6.0.0에서 사라짐)', decision: 'D32', pattern: /['"]credit_limit['"]/ },
+];
+
+let totalViolations = 0;
+
+console.log('\n=== 문서 레지스트리 (발견된 문서 전부에 전부 적용) ===\n');
+for (const entry of DOC_REGISTRY) {
+  const violations = [];
+  for (const rel of docFiles) {
+    const full = path.join(repoRoot, rel);
+    const lines = readFileSync(full, 'utf8').split('\n');
+    lines.forEach((line, idx) => {
+      if (entry.pattern.test(line) && !HISTORICAL_MARKER.test(line)) {
+        violations.push({ file: rel, lineNo: idx + 1, text: line.trim().slice(0, 160) });
+      }
+    });
+  }
+  console.log(`[${entry.name}]  근거: ${entry.decision}`);
+  if (violations.length === 0) console.log('  위반 없음');
+  else { totalViolations += violations.length; for (const v of violations) console.log(`  ${v.file}:${v.lineNo}: ${v.text}`); }
+  console.log('');
+}
+
+console.log('=== 소스코드 레지스트리 (발견된 src 파일 전부에 전부 적용) ===\n');
+for (const entry of SOURCE_REGISTRY) {
+  const violations = [];
+  for (const rel of srcFiles) {
+    if (rel.includes('golden-cases.md')) continue;
+    const full = path.join(repoRoot, rel);
+    const lines = readFileSync(full, 'utf8').split('\n');
+    lines.forEach((line, idx) => {
+      if (entry.pattern.test(line) && !HISTORICAL_MARKER.test(line)) {
+        violations.push({ file: rel, lineNo: idx + 1, text: line.trim().slice(0, 160) });
+      }
+    });
+  }
+  console.log(`[${entry.name}]  근거: ${entry.decision}`);
+  if (violations.length === 0) console.log('  위반 없음');
+  else { totalViolations += violations.length; for (const v of violations) console.log(`  ${v.file}:${v.lineNo}: ${v.text}`); }
+  console.log('');
+}
+
+console.log(`총 위반: ${totalViolations}`);
+process.exit(totalViolations > 0 ? 1 : 0);
+```
+
+#### 12.1.1 실행 1 — 지금 저장소를 상대로 (파일 발견이 실제로 넓어졌는지 확인)
+
+```
+$ node check-stale-decisions-v2.mjs "D:\personal\Claude 프로젝트\Account optimization"
+=== 대상 파일 발견 (선언이 아니라 walk) ===
+docs/ 에서 발견한 .md 파일: 24개
+제외(문서, 이유와 함께 출력):
+  - docs/org/gate-decisions.md — (이유 생략, 위 전문 참고)
+  - docs/stage-4-verification/qa-report.md — (이유 생략)
+  - docs/stage-4-verification/golden-cases.md — (이유 생략)
+실제로 훑는 문서 파일: 21개
+  · docs/org/charter.md
+  · docs/stage-1-discovery/channel-research.md
+  · docs/stage-1-discovery/demand-validation-plan.md
+  · docs/stage-1-discovery/README.md
+  · docs/stage-1-discovery/requirements.md
+  · docs/stage-1-discovery/tax-rules-report.md
+  · docs/stage-2-design/analytics-plan.md
+  · docs/stage-2-design/design-system.md
+  · docs/stage-2-design/engine-design.md          ← D51이 지적한 문서, 이제 대상에 들어온다
+  · docs/stage-2-design/engine-interface.md        ← D51이 지적한 문서, 이제 대상에 들어온다
+  · docs/stage-2-design/README.md
+  · docs/stage-2-design/screens.md
+  · docs/stage-4-verification/README.md
+  · docs/stage-4-verification/verification-report.md
+  · docs/stage-5-launch/landing-copy.md
+  · docs/stage-5-launch/promo-playbook.md
+  · docs/stage-5-launch/README.md
+  · docs/stage-5-launch/seo-plan.md
+  · docs/stage-6-operations/README.md
+  · docs/superpowers/plans/2026-08-07-agent-org-bootstrap.md
+  · docs/superpowers/specs/2026-08-07-agent-org-design.md
+
+src/ 에서 발견한 .js/.mjs 파일: 102개
+실제로 훑는 소스 파일: 57개
+
+=== 문서 레지스트리 (발견된 문서 전부에 전부 적용) ===
+(옛 7항목 — 3항목에서 히트, 전부 이미 알려진 오탐 성격. 아래 12.1.3 참고)
+(새 6항목 — 전부 "위반 없음")
+
+=== 소스코드 레지스트리 ===
+(옛 4항목 — 3건, `result-panel.js`의 죽은 키 2건 + `eligibility.js`의 `credit_limit` 1건.
+ 전부 이미 이전 회차 R5로 인계된 항목과 같은 자리다. 새 항목 없음.)
+
+총 위반: 21
+$ echo $?
+1
+```
+
+**새 6항목이 지금 저장소에서 전부 "위반 없음"인 것은 결함이 아니라 참(true negative) 증거다.** 6e711f1이 이미 그 여섯 문구를 고쳤으므로 지금 붉어지면 오히려 이 스캔이 틀린 것이다. **판별력은 "고쳐진 것을 고쳐졌다고 아는가"와 "안 고쳐진 것을 잡는가" 둘 다로 잰다 — 아래 12.1.2가 후자를 증명한다.**
+
+#### 12.1.2 실행 2 — 판별력 파괴 테스트: 실제로 있었던 결함이 재현되는가, 새 파일이 자동으로 잡히는가
+
+**(a) 진짜 "고치기 전" 상태를 만들어 대조했다.** `git show 0a3f5fb:docs/stage-2-design/engine-design.md`·`git show 0a3f5fb:docs/stage-2-design/engine-interface.md`(6e711f1의 부모 커밋, 즉 여덟 개 낡은 문장이 아직 살아 있던 실제 과거 상태)를 스크래치패드에 `docs/stage-2-design/`라는 이름으로 복원해 미러 저장소를 만들고, 같은 스크립트를 그 미러에 실행했다. **가짜로 지어낸 결함이 아니라 이 저장소가 실제로 겪은 커밋 이력이다.**
+
+```
+$ node check-stale-decisions-v2.mjs "<mirror-repo>"
+=== 대상 파일 발견 ===
+실제로 훑는 문서 파일: 2개
+  · docs/stage-2-design/engine-design.md
+  · docs/stage-2-design/engine-interface.md
+
+=== 문서 레지스트리 ===
+
+[D39 — 「직전 과세연도 결정세액」 입력이 화면에 있다는 서술]  근거: D39
+  docs/stage-2-design/engine-interface.md:600: (오탐 — "묻던 자리를 이 값이 대체한다"는 과거시제의 정확한 서술. 사람이 최종 확인)
+
+[D20 이후 — 「1차 출시에서 묻지 않는 선택 입력」 목록에 실제 노출 필드가 남음]  근거: D20/D46
+  docs/stage-2-design/engine-design.md:608: (오탐 — 필드명만 등장, 아래 12.1.4 참고)
+  docs/stage-2-design/engine-interface.md:57, :1693: (오탐, 동일 사유)
+
+[D32 이전 — 7.1절 I30 행이 공허해진 옛 검사 조건을 그대로 적음]  근거: D32
+  docs/stage-2-design/engine-design.md:706: | I30 | 공제 없는 연금 납입 효과는 **공제 한도까지만 채우는 안에서는 나오지 않고**, ...
+  ↑ 실제 결함 재현 — 6e711f1이 고치기 전 문장이 정확히 잡혔다
+
+[D26 이전 — engine-interface.md 10절 "배분안이 여전히 셋"]  근거: D26
+  docs/stage-2-design/engine-interface.md:1929: - **한도가 0일 때 …** 배분안이 여전히 셋이지만 세액공제액으로는 갈리지 않는다. …
+  ↑ 실제 결함 재현
+
+[4.0.0 이전 — engine-interface.md 3.0절 schema_version 예시가 "4.0.0"]  근거: (버전 상승 후 예시 미갱신)
+  docs/stage-2-design/engine-interface.md:587: | `schema_version` | string | — | 필수 | `"4.0.0"`. major가 다르면 …
+  ↑ 실제 결함 재현
+
+[4.0.0 이전 — engine-interface.md 5.9절 산식이 사라진 profile.age_years를 그대로 씀]  근거: D21
+  docs/stage-2-design/engine-interface.md:1465: | `pension_years_remaining` | … | 위에서 `profile.age_years`를 뺀 잔여. …
+  ↑ 실제 결함 재현
+
+총 위반: 8
+$ echo $?
+1
+```
+
+**결과 — 여섯 항목 중 넷을 정확히 재현했다. 나머지 둘은 이 검사의 실제 한계로 남는다(정직하게 적는다):**
+
+| 항목 | 미러 실행 결과 | 원인 |
+|---|---|---|
+| I30 (7.1절) | **잡힘** | — |
+| 「여전히 셋」(10절) | **잡힘** | — |
+| schema_version 예시 | **잡힘** | — |
+| profile.age_years (5.9절) | **잡힘** | — |
+| 6.3절 "하나로 합쳐진다" | **못 잡음** | 옛 문장 자체가 "그 사실이 화면에 나가는 것이 **D26**의 요지다"로 끝나 `HISTORICAL_MARKER`의 `D2[0-9]` 규칙이 이 줄을 "이미 정정 표시가 붙은 줄"로 오인하고 건너뛴다. **정정하는 문장이 아니라 정정 대상 문장 자체가 다른 D-번호를 정당한 이유로 인용하는 경우, 이 휴리스틱이 역효과를 낸다.** |
+| 6.5절 "셋까지 나란히 비교" | **못 잡음** | 원문이 `배분안을 **셋까지** 나란히`처럼 마크다운 굵게 표시가 문구 중간에 끼어 있어, 리터럴 문자열 패턴이 연속성을 요구하는 한 못 잡는다. |
+
+**이 둘을 고치지 않고 그대로 보고한다.** 고칠 수 있는 결함(정규식을 마크다운 허용형으로 넓히거나, `D26` 자기인용 예외를 추가)이지만, 그렇게 하나씩 넓히기 시작하면 이번에 D20-필드 항목에서 이미 겪은 "넓히면 무관한 문맥에서 오탐이 는다"는 트레이드오프가 다시 열린다. **부분 자동화라는 것을 스크립트 머리말에 이미 적어 뒀고, 이 표가 그 한계의 구체적 실물이다.**
+
+**(b) 등록된 적 없는 새 파일이 자동으로 잡히는지.** 위 미러에 `docs/stage-2-design/brand-new-doc-never-in-registry.md`라는, 어떤 REGISTRY의 `files` 목록에도(애초에 그런 목록이 이제 없으므로) 오른 적 없는 파일을 새로 만들고 이미 알려진 폐기 문구(「가정 기반」 칩) 하나를 심었다.
+
+```
+$ node check-stale-decisions-v2.mjs "<mirror-repo>"
+[D39 — 「가정 기반」 칩이 렌더된다는 서술]  근거: D39
+  docs/stage-2-design/brand-new-doc-never-in-registry.md:10: `BenefitMeter`의 가정 등급 행에는 「가정 기반」 칩이 렌더링된다. 사용자는 이 칩을 보고
+```
+
+**등록 없이 잡혔다.** 이것이 D51이 요구한 "다시 나면 붉어진다"의 실물 증거다 — 파일 이름을 아무도 몰라도, 그 파일이 `docs/` 아래 있고 `.md`이기만 하면 스캔이 자동으로 훑는다.
+
+**(c) 현재 저장소가 이미 고쳐 놓은 상태를 다시 확인 — 참음성(true negative) 재확인.** 12.1.1의 결과가 "새 6항목 전부 위반 없음"이었던 것은 우연이 아니라 (a)에서 같은 문구가 실제로 잡히는 것을 보였으므로 **검사기가 무디어서가 아니라 대상이 실제로 고쳐져 있어서** 나온 결과임이 대조로 확정된다.
+
+#### 12.1.3 옛 7항목의 잔존 히트 — 판정을 다시 확인했다
+
+지금 저장소에서 옛 7항목 중 3항목(D35·D43·D39-칩)이 여전히 히트하지만, 실제 문장을 다시 읽은 결과 **전부 12.1.1 이전 회차에서 이미 "오탐"으로 사람이 확인한 자리와 같다** — 소유자 인용문·회고 서술·타 컴포넌트(`AllocationBar`)의 정당한 사용 문구다. 새로 발견된 위반은 없다. `D39-결정세액`·`D20-필드` 두 항목은 여전히 필드명만 걸리는 구조적 약점을 갖고 있다(아래 12.1.4).
+
+#### 12.1.4 이 장치가 못 잡는 것 (정직하게 적는다)
+
+- **레지스트리에 없는, 아직 아무도 모르는 새 폐기 사례는 여전히 못 잡는다.** 발견은 파일 단위로 자동화됐지만 "이 문구가 폐기됐다"는 지식 자체는 사람이 D-번호와 함께 레지스트리에 심어야 한다. **이 한계는 구조를 어떻게 바꿔도 남는다** — 세법 규칙이 아니라 조직의 의사결정 이력이 근거이기 때문이다.
+- **필드명만 등장하는 것과 "이 필드를 안 묻는다"는 주장을 구별하지 못하는 항목이 둘 있다**(`D39-결정세액`, `D20-필드`). 12.1.2(a)의 미러 실행에서 실측했다 — engine-interface.md에 `ISA 가입경과연수`가 등장하는 자리 셋 전부가 필드 정의·경계값 설명이지 "안 묻는다"는 주장이 아닌데도 히트한다. **넓은 패턴(용어 매칭)과 좁은 패턴(정확한 문구 매칭)의 트레이드오프**이고, 이번 세션에 새로 넓힐수록 이 문제가 커진다는 것을 직접 확인했으므로 **넓히지 않았다.**
+- **마크다운 서식이 문구 중간에 끼면 놓친다**(12.1.2 표의 6.5절 사례). 정규식이 리터럴 인접성을 요구하기 때문이다.
+- **`HISTORICAL_MARKER`가 "정정하는 문장"과 "정정 대상 문장이 다른 이유로 D-번호를 인용하는 경우"를 구별 못 한다**(12.1.2 표의 6.3절 사례) — 옛 스크립트에서 물려받은 휴리스틱의 알려진 약점이고, 이번에 처음으로 구체적인 놓친 사례로 실증됐다.
+- **`docs/org/gate-decisions.md`·`qa-report.md`·`golden-cases.md` 세 파일은 구조적으로 스캔 밖이다.** 이 셋에서 실제로 새 폐기 규칙 주장이 생기면(이론적으로는 있을 수 있다 — 예컨대 `gate-decisions.md`가 스스로 모순되는 두 판정을 남기는 경우) 이 스캔은 그것을 보지 않는다. **다만 그런 사례는 이 스캔이 아니라 12.2절의 중복 번호 검사가 다른 각도에서 잡을 가능성이 있다** — 실제로 이번 회차에 `gate-decisions.md`의 D18~D33 중복을 12.2절이 잡았다.
+
+**결론: 미결 1을 구조적으로 닫는다.** "파일 하나를 추가한다"가 아니라 "파일 목록을 없앤다"로 답했고, 실제 역사적 결함 재현(4/6)과 신규 파일 자동 포착으로 검사기가 진짜로 다르게 동작함을 증명했다. 두 항목의 미포착과 두 필드명 항목의 넓은 오탐 소지는 한계로 남겨 인계한다.
+
+---
+
+### 12.2 미결 2·3 — 번호가 겹치는 것을 기계가 잡게 한다 (I30·소절 0.11, 그리고 같은 장치로 발견한 새 사례)
+
+**두 미결의 성질이 같다는 admin의 지시를 그대로 따라 하나의 장치로 묶었다.** "번호를 정의하는 자리가 둘 이상이고 그 정의들이 서로 다른 것을 말한다"만 잡는다 — 본문 중 그 번호를 인용만 하는 자리(예: "이 값은 0.11절 참고")는 대상이 아니다.
+
+#### 12.2.1 어느 쪽이 먼저 그 번호를 썼는가 — 이력에서 확인했다
+
+**I30.** `git log -1 -L <line>:src/engine/invariants.test.mjs`로 두 정의의 도입 커밋을 각각 확인했다.
+
+| 정의 | 내용 | 도입 커밋 | 일시 |
+|---|---|---|---|
+| I30 (첫 사용) | `NonQuantifiedEffect.facts` 여섯 키 검사 (D26) | `3ed3807` | 2026-08-10 15:54 |
+| I30 (재사용) | 과세표준 절사 검사 (D46 1번) | `878ffe8` | 2026-08-12 12:21 |
+
+**`facts` 검사가 먼저다. 과세표준 절사 검사(D46 1번, 나중)가 이미 쓰이던 번호를 다시 썼다 — 새 번호를 받아야 하는 쪽이다.** `engine-design.md` 7.1절·840행의 표는 이미 (더 나중에 도입된) 과세표준 쪽 정의만 담고 있고, `facts` 쪽 정의는 13.6절이 별도로 참조만 한다 — 즉 **문서 쪽에서는 이미 "과세표준 검사가 I30"으로 굳어져 있어, 실제로 새 번호를 받아야 하는 것은 오히려 나중에 들어온 과세표준 쪽이 아니라 그 반대로 보일 위험이 있다는 것도 함께 적는다.** 이력상 사실(먼저 쓴 쪽)과 문서상 현재 상태(더 자세히 기술된 쪽)가 어긋나므로, **최종 판단은 `calc-engine-dev`·관리자가 하되 이 표를 근거로 쓰라고 넘긴다.**
+
+**소절 0.11.** 같은 방법으로 확인했다.
+
+| 정의 | 내용 | 도입 커밋 | 일시 |
+|---|---|---|---|
+| 0.11 (첫 사용) | "되돌리는 길"(D31, 표시만 끄는 길) | `6f0854b` | 2026-08-10 19:16 |
+| 0.11 (재사용) | "왜 `6.0.0`(major)인가"(D32) | `e32d8cd` | 2026-08-10 20:51 |
+
+**`git show e32d8cd:docs/stage-2-design/engine-interface.md`로 그 커밋 시점의 파일을 직접 열어 확인했다** — "0.11 되돌리는 길"이 195행이 아니라 226행에 **이미 존재하는 상태에서** "0.11 왜 6.0.0인가"가 195행에 **끼어 들어갔다**(그리고 그 사이에 있어야 할 "0.10"이 214행으로 밀려 순서 자체도 어그러졌다). **"왜 6.0.0인가"(D32) 쪽이 새 번호를 받아야 하는 쪽이다.**
+
+**현재 `src/web`의 인용 아홉 곳을 두 갈래로 분류했다** ("자리만 지목해 보고하라"는 지시를 따라 `src/web`은 고치지 않았다):
+
+| 파일:줄 | 가리키는 실제 절 | 번호를 바꿔야 하는가 |
+|---|---|---|
+| `src/web/copy.js:55` | "왜 6.0.0인가"(D32, `plan_id` 개명) | **그렇다** — 새 번호로 |
+| `src/web/copy.js:521` | "왜 6.0.0인가"(D32, `credit_limit` 제거) | **그렇다** |
+| `src/web/engine/mock-engine.js:169` | "왜 6.0.0인가"(D32, 넷째 안 공용화) | **그렇다** |
+| `src/web/engine/mock-engine.js:192` | "왜 6.0.0인가"(D32, `PLAN_ORDER` 주석) | **그렇다** |
+| `src/web/engine/mock-engine.js:3084` | "왜 6.0.0인가"(D32, 이름이 근거를 말해야 함) | **그렇다** |
+| `src/web/engine/mock-engine.js:3212` | "왜 6.0.0인가"(D32, 명시) | **그렇다** |
+| `src/web/engine/mock-engine.js:223` | "되돌리는 길"(D31, 표시만 끔) | 아니다 — 그대로 0.11 |
+| `src/web/engine/mock-engine.test.mjs:912` | "되돌리는 길"(D31, 표시 여부와 무관) | 아니다 |
+| `src/web/state/store.js:85` | "되돌리는 길"(D31, 계산·입력은 두고 표시만 끔) | 아니다 |
+| `src/web/state/store.js:254` | "되돌리는 길"(D31, 동일) | 아니다 |
+
+`engine-interface.md`의 소절 최댓값이 현재 `0.22`이므로(0.1~0.22 전수 확인), **다음 빈 번호는 `0.23`이다.** "왜 6.0.0인가" 절과 위 여섯 인용 자리를 `0.23`으로 옮기는 것을 제안하되, **번호를 실제로 바꾸는 것은 `engine-interface.md`·`src/engine/`·`src/web/`을 쓸 수 있는 `calc-engine-dev`·`web-dev`의 몫이다.**
+
+#### 12.2.2 스크립트 전문 (`check-duplicate-numbering.mjs`)
+
+```js
+// QA 게이트4 재소집 — 미결 2·3: 번호가 겹치는 것을 기계가 잡게 한다.
+//
+// 이 조직에서 실제로 겪은 두 사고를 기계화한다:
+//   - 불변식 I30이 src/engine/invariants.test.mjs 안에서 두 개의 서로 다른 검사를
+//     가리킨다(과세표준 절사 vs NonQuantifiedEffect.facts). D46 1번이 나중에 들어와
+//     이미 D26이 쓰고 있던 번호를 다시 썼다.
+//   - 계약 소절 번호 0.11이 docs/stage-2-design/engine-interface.md 안에서 두 개의
+//     서로 다른 절(D31 "되돌리는 길" vs D32 "왜 6.0.0인가")을 가리킨다.
+//
+// 접근: "번호가 나온다"가 아니라 "그 번호를 **정의하는** 자리가 둘 이상이고 그
+// 정의들이 서로 다른 것을 말한다"를 잡는다. 본문 중 그 번호를 인용만 하는 자리
+// (예: "이 값은 0.11절 참고")는 정의가 아니므로 대상이 아니다 — 정의 자리만 본다.
+// 같은 번호를 다시 다루는 "후속" 절(예: "### D46 후속", "### D35 2번 수정")도
+// 정의가 아니라 그 번호가 가리키는 **같은** 결정을 이어 쓰는 것이므로 새 정의로
+// 세지 않는다 — gate-decisions.md의 관례가 "## D<N> — 제목"(최초 정의, 이중 해시)과
+// "### D<N>. 제목"(옛 스타일 최초 정의, 삼중 해시+마침표) 두 형태만 최초 정의로 쓰고,
+// "### D<N> <추가 단어> — ..."(마침표 없이 단어가 낀 삼중 해시)는 전부 후속/수정
+// 절이라는 것을 gate-decisions.md 전체를 읽어 확인했다.
+//
+// 이 검사가 못 잡는 것(정직하게 적는다):
+//   - 정의 형식이 아래 SCHEMES에 없는 새로운 번호 체계로 시작하면 스킴을 추가해야
+//     잡힌다(예: 세 번째 문서가 "규칙 R7" 같은 새 번호를 매기기 시작하는 경우).
+//   - 두 정의가 "우연히 같은 말"이면(설명 문구가 실제로 같으면) 진짜 중복 정의라도
+//     못 잡는다 — 지금까지 실제로 겪은 사고들은 전부 설명이 달랐으므로 이 한계이
+//     당장 문제는 아니었지만, 구조적으로는 존재하는 사각지대다.
+//   - "후속/수정" 계열 절을 구분하는 규칙은 이 문서 하나를 읽고 사람이 확인한
+//     휴리스틱이다. 다음에 새로운 서식(예: "### D60 다시 본다")이 등장하면 이
+//     스킴이 그것을 후속으로 인식 못 하고 오탐을 낼 수 있다 — 그래서 이 스킴은
+//     '부분 자동화'다. 결과는 사람이 최종 확인한다.
+//   - 정의가 한 파일 안에서만 겹치는지 보는 스킴(0.NN, D숫자)과 저장소 전체에서
+//     겹치는지 보는 스킴(I-번호)이 섞여 있다 — 스킴마다 범위(scope)를 스스로
+//     선언하고, 그 선언이 틀리면(예: 같은 D-번호 체계를 쓰는 두 번째 문서가 생기면)
+//     이 스킴은 그 문서를 보지 않는다.
+//
+// 실행: node check-duplicate-numbering.mjs <repo-root>
+
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+
+const repoRoot = process.argv[2];
+if (!repoRoot) {
+  console.error('usage: node check-duplicate-numbering.mjs <repo-root>');
+  process.exit(2);
+}
+
+function normalize(text) {
+  return text
+    .replace(/[`*_「」()（）]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function readLines(relPath) {
+  const full = path.join(repoRoot, relPath);
+  if (!existsSync(full)) return null;
+  return readFileSync(full, 'utf8').split('\n');
+}
+
+function extractInvariantComment(line) {
+  const m = /^\s*\/\/\s*(I\d+)\s*[—-]\s*(.+)$/.exec(line);
+  if (!m) return null;
+  return { number: m[1], desc: m[2] };
+}
+
+function extractInvariantTableRow(line) {
+  const m = /^\|\s*(I\d+)\s*\|\s*(.+?)\s*\|/.exec(line);
+  if (!m) return null;
+  return { number: m[1], desc: m[2] };
+}
+
+function extractSubsectionHeading(line) {
+  const m = /^#{2,4}\s+(0\.\d+)\s+(.+)$/.exec(line);
+  if (!m) return null;
+  return { number: m[1], desc: m[2] };
+}
+
+function extractGateDecisionHeading(line) {
+  // 최초 정의 형태만 잡는다. "### D46 후속 —"·"### D35 2번 수정 —"처럼
+  // 번호와 구분자 사이에 다른 단어가 낀 것은 후속/수정 절이므로 여기서 뺀다.
+  let m = /^## (D\d+) — (.+)$/.exec(line);
+  if (m) return { number: m[1], desc: m[2] };
+  m = /^### (D\d+)\. (.+)$/.exec(line);
+  if (m) return { number: m[1], desc: m[2] };
+  return null;
+}
+
+const SCHEMES = [
+  {
+    id: '불변식 번호 (I숫자) — invariants.test.mjs 주석 정의',
+    scope: 'repo',
+    files: ['src/engine/invariants.test.mjs'],
+    extract: extractInvariantComment,
+  },
+  {
+    id: '불변식 번호 (I숫자) — engine-design.md 7.1절 표 정의',
+    scope: 'repo',
+    files: ['docs/stage-2-design/engine-design.md'],
+    extract: extractInvariantTableRow,
+  },
+  {
+    id: '계약 소절 번호 (0.NN) — 문서 내부 헤딩',
+    scope: 'file',
+    files: [
+      'docs/stage-2-design/engine-interface.md',
+      'docs/stage-2-design/engine-design.md',
+    ],
+    extract: extractSubsectionHeading,
+  },
+  {
+    id: '게이트 판정 번호 (D숫자) — gate-decisions.md 최초 정의 헤딩(후속/수정 절 제외)',
+    scope: 'file',
+    files: ['docs/org/gate-decisions.md'],
+    extract: extractGateDecisionHeading,
+  },
+];
+
+let totalDuplicates = 0;
+
+for (const scheme of SCHEMES) {
+  console.log(`\n=== ${scheme.id} (scope: ${scheme.scope}) ===`);
+  const defs = new Map();
+  for (const relPath of scheme.files) {
+    const lines = readLines(relPath);
+    if (lines === null) {
+      console.log(`  (파일 없음, 건너뜀: ${relPath})`);
+      continue;
+    }
+    lines.forEach((line, idx) => {
+      const hit = scheme.extract(line);
+      if (!hit) return;
+      const key = scheme.scope === 'repo' ? hit.number : `${relPath}::${hit.number}`;
+      if (!defs.has(key)) defs.set(key, []);
+      defs.get(key).push({
+        file: relPath,
+        line: idx + 1,
+        desc: normalize(hit.desc),
+        raw: hit.desc.trim().slice(0, 100),
+      });
+    });
+  }
+
+  let foundAny = false;
+  for (const [key, occurrences] of defs) {
+    const distinctDescs = new Set(occurrences.map((o) => o.desc));
+    if (distinctDescs.size <= 1) continue; // 같은 설명이 여러 번 나온 것(재선언)은 중복이 아니다
+    foundAny = true;
+    totalDuplicates += 1;
+    const number = key.includes('::') ? key.split('::')[1] : key;
+    console.log(`  [중복] 번호 ${number} — 서로 다른 정의 ${distinctDescs.size}건`);
+    for (const o of occurrences) {
+      console.log(`    ${o.file}:${o.line}: ${o.raw}`);
+    }
+  }
+  if (!foundAny) console.log('  중복 없음');
+}
+
+console.log(`\n총 중복 번호: ${totalDuplicates}`);
+process.exit(totalDuplicates > 0 ? 1 : 0);
+```
+
+#### 12.2.3 실행 결과 — 지금 저장소
+
+```
+$ node check-duplicate-numbering.mjs "D:\personal\Claude 프로젝트\Account optimization"
+
+=== 불변식 번호 (I숫자) — invariants.test.mjs 주석 정의 (scope: repo) ===
+  [중복] 번호 I30 — 서로 다른 정의 2건
+    src/engine/invariants.test.mjs:795: 과세표준은 조문이 지목한 단계에서 한 번만 버려진다 (D46 1번).
+    src/engine/invariants.test.mjs:1155: 공제를 낳지 않는 연금 납입에는 세 사실이 반드시 함께 붙는다.
+  [중복] 번호 I42 — 서로 다른 정의 2건 (아래 12.2.4 — 사람 확인 결과 오탐)
+    src/engine/invariants.test.mjs:1317: 헤드라인 합계(D38). 배분안마다 성분이 다르므로 안마다 본다.
+    src/engine/invariants.test.mjs:1944: 헤드라인 합계(D38). 본 행렬에는 수익률 가정이 없어 확정 성분 단독 갈래만
+
+=== 불변식 번호 (I숫자) — engine-design.md 7.1절 표 정의 (scope: repo) ===
+  중복 없음
+
+=== 계약 소절 번호 (0.NN) — 문서 내부 헤딩 (scope: file) ===
+  [중복] 번호 0.11 — 서로 다른 정의 2건
+    docs/stage-2-design/engine-interface.md:1995: 왜 `6.0.0`(major)인가 — 이번에는 조용히 틀릴 길이 셋이다
+    docs/stage-2-design/engine-interface.md:2014: 되돌리는 길 — 계산과 입력은 두고 표시만 끈다 (D31)
+
+=== 게이트 판정 번호 (D숫자) — gate-decisions.md 최초 정의 헤딩(후속/수정 절 제외) (scope: file) ===
+  [중복] 번호 D18 — 서로 다른 정의 2건
+    docs/org/gate-decisions.md:284: 계측 수집기 — 자체 호스팅 Umami (소유자 결정)
+    docs/org/gate-decisions.md:486: `isa_lock_in_already_elapsed`의 조건이 계약 두 곳에서 어긋난다
+  [중복] 번호 D19 — 서로 다른 정의 2건
+    docs/org/gate-decisions.md:305: 미설정 상태는 조용하면 안 된다
+    docs/org/gate-decisions.md:508: 승인된 문서를 고쳤을 때 `status`를 어떻게 두는가
+  [중복] 번호 D20 — 서로 다른 정의 2건
+    docs/org/gate-decisions.md:313: `qa` 판정에 "해당없음"을 추가한다
+    docs/org/gate-decisions.md:523: 계측 신호 재판정, 그리고 세 발견의 원인이 하나라는 것
+  [중복] 번호 D21 — 서로 다른 정의 2건
+    docs/org/gate-decisions.md:377: FAQ 답변에 성격 고지를 심는다 (소유자 결정)
+    docs/org/gate-decisions.md:549: 생년월일은 엔진에 넘긴다. 만 나이 환산은 화면이 하지 않는다
+  [중복] 번호 D32 — 서로 다른 정의 2건
+    docs/org/gate-decisions.md:898: GC-61: 정답지가 맞고 엔진이 틀렸다
+    docs/org/gate-decisions.md:962: 소유자가 기본안을 바꾸기로 했다. D26의 "배분을 바꾸지 않는다"를 대체한다
+  [중복] 번호 D33 — 서로 다른 정의 2건
+    docs/org/gate-decisions.md:928: 조문이 구간만 정하는 자리에서, 그 사실이 화면에 안 나간다
+    docs/org/gate-decisions.md:1002: 소유자가 두 번 말했다. 「반 정도 되는 사이즈」의 해석을 바꾼다
+
+총 중복 번호: 9
+$ echo $?
+1
+```
+
+**요청받은 두 건(I30·소절 0.11)이 정확히 잡혔다.** 그리고 **같은 장치가 요청받지 않은 진짜 사고 둘을 추가로 찾았다.**
+
+**새로 찾은 것 (1) — `gate-decisions.md`의 D18·D19·D20·D21·D32·D33이 전부 두 번씩 정의돼 있다.** 문서를 직접 읽어 확인했다 — 이 문서에는 **두 개의 서로 다른 D-번호 계열**이 섞여 있다. 한쪽은 게이트 1·2·5(2026-08-09 이전) 흐름에서 `### D<N>.` 형식으로 붙었고(예: `### D18. 계측 수집기 — 자체 호스팅 Umami`, 284행), 다른 쪽은 이후 재소집 흐름(2026-08-11~12 무렵)에서 `## D<N> —` 형식으로 **처음부터 다시 D18부터** 붙었다(예: `## D18 — isa_lock_in_already_elapsed의 조건이 계약 두 곳에서 어긋난다`, 486행). **두 계열이 어디서도 서로를 참조하지 않고, 번호가 이어지지 않고 겹친다.** 이것은 D51·D61이 참조하는 "D51"·"D61" 같은 두 자리 이상 번호 자체는 겹치지 않지만(그쪽은 재소집 계열에서만 나옴), **한 자리대 초반(D18~D33)에서 실제로 두 결정이 같은 이름을 쓰고 있다** — admin이 예로 든 "게이트 판정 번호"가 이미 이 형태로 실재한다는 뜻이다. **이 문서는 관리자 소관이라 QA가 고치지 않는다.** 발견만 보고한다.
+
+**새로 찾은 것 (2) — 불변식 I42도 두 자리에서 정의된다.** 사람이 직접 읽어 확인한 결과, 이것은 **진짜 충돌이 아니라 이 검사의 알려진 한계(설명 문구 정규화의 한계)의 실물이다** — 아래 12.2.4에서 다룬다.
+
+#### 12.2.4 판별력 파괴 테스트
+
+**(a) 고치면 초록이 되는가.** `I30` 재현 스니펫에서 두 번째 정의를 `I45`(현재 최댓값 `I44` 다음 빈 번호, `engine-design.md`·`invariants.test.mjs` 전수 확인으로 산출)로 옮기고 다시 돌렸다.
+
+```
+수정 전: [중복] 번호 I30 — 서로 다른 정의 2건
+수정 후: 중복 없음
+```
+
+**(b) 등록된 적 없는 새 중복이 잡히는가.** 미러의 `engine-interface.md`를 "0.30 완전히 새로운 항목 하나" / "0.30 전혀 다른 두 번째 항목"이라는, 이 스킴이 지금까지 한 번도 본 적 없는 번호·문구로 통째로 갈아 끼우고 다시 돌렸다.
+
+```
+[중복] 번호 0.30 — 서로 다른 정의 2건
+  docs/stage-2-design/engine-interface.md:1: 완전히 새로운 항목 하나
+  docs/stage-2-design/engine-interface.md:5: 전혀 다른 두 번째 항목
+```
+
+**둘 다 통과했다** — 이 검사가 특정 번호·문구를 외워서 맞히는 것이 아니라 구조(같은 번호에 서로 다른 정의)를 보고 있다는 증거다.
+
+#### 12.2.5 이 장치가 못 잡는 것 (정직하게 적는다, I42 사례로 실증)
+
+`I42`가 두 자리에서 다른 문구로 "정의"돼 잡혔으나, 직접 읽은 결과 **진짜 충돌이 아니다** — 둘 다 "헤드라인 합계(D38)" 불변식을 가리키는 같은 개념이고, 한쪽(1317행)은 루프 안에서 `checkHeadline`을 호출하는 지점의 짧은 주석, 다른 쪽(1944행)은 "네 갈래를 전부 밟는가"까지 검증하는 전용 테스트의 긴 설명이다. **같은 불변식이 두 시행 지점에서 서로 다른 상세도로 설명된 것이지, I30·0.11처럼 서로 다른 두 개념이 한 번호를 다투는 것이 아니다.**
+
+이것이 이 스크립트의 머리말이 미리 적어 둔 한계("두 정의가 우연히 같은 말이 아니면 진짜 중복 정의라도 놓치지 않지만, 반대로 **같은 개념을 다른 상세도로 설명한 것도 다른 정의로 오인**한다")의 첫 실물 사례다. **사람이 최종 확인해야 하는 이유가 이것이다 — 자동으로 "I42도 갈라라"라고 결론 내렸다면 틀렸을 것이다.** 판정은 넘기지 않는다: I30·0.11·D18~D33(6건)은 실제 조치가 필요한 후보로, I42는 확인 결과 오탐으로 분류해 인계한다.
+
+#### 12.2.6 인계
+
+| 번호 | 실제 조치 필요 여부 | 담당 | 근거 |
+|---|---|---|---|
+| `I30` | **그렇다** — `facts` 검사(먼저)는 유지, 과세표준 검사(나중, D46 1번)에 새 번호(예: `I45`) | `calc-engine-dev` | 12.2.1 |
+| 소절 `0.11` | **그렇다** — "되돌리는 길"(D31, 먼저)은 유지, "왜 6.0.0인가"(D32, 나중)와 그 절 안 인용 및 `src/web` 여섯 자리(12.2.1 표)에 새 번호(예: `0.23`) | `calc-engine-dev`(문서·엔진 주석), `web-dev`(표에 자리만 지목한 여섯 줄) | 12.2.1 |
+| `D18`·`D19`·`D20`·`D21`·`D32`·`D33` (`gate-decisions.md`) | **확인 필요** — 두 계열이 같은 번호를 씀. 소급 재번호를 매길지, 계열을 구분하는 접두사를 둘지는 기록의 성격을 바꾸는 결정이라 QA가 판단하지 않는다 | 관리자 | 12.2.3 |
+| `I42` | **불필요** — 확인 결과 같은 개념의 서로 다른 시행 지점 | — | 12.2.5 |
+
+**두 장치 모두 `scripts/org/`로 이관해 `node scripts/org/validate.mjs`에 여섯째 검사로 상시 편입할 것을 권고한다.** 그러면 다음에 같은 형태(새 문서가 스캔 밖에 있거나, 새 번호가 이미 쓰인 번호와 겹치는 것)가 또 나와도 **사람이 다시 눈으로 찾기 전에 기계가 먼저 붉어진다.**
+
+### 12.3 회귀·규약 재확인
+
+이 절의 작업은 어떤 저장소 파일도 쓰지 않았으므로 회귀 위험이 없다. 그래도 완료 기준에 따라 실행해 확인했다.
+
+```
+$ node scripts/org/validate.mjs
+OK   에이전트 정의
+OK   조직 헌장
+OK   세법 룰셋
+OK   산출물 머리말
+OK   엔진 코드 정의 자리
+
+모든 조직 규약 검사를 통과했습니다.
+$ echo $?
+0
+
+$ node --test "src/engine/*.test.mjs"
+ℹ tests 672
+ℹ pass 672
+ℹ fail 0
+
+$ node --test "tests/org/*.test.mjs"
+ℹ tests 53
+ℹ pass 53
+ℹ fail 0
+
+$ node --test "src/web/*.test.mjs" "src/web/**/*.test.mjs"
+ℹ tests 402
+ℹ pass 400
+ℹ fail 1   ← src/web/engine/mock-engine.test.mjs, mock-engine.js가 실제 엔진과 13자리 드리프트
+```
+
+**웹 1건 실패는 이 절이 만든 것이 아니다.** 검사 시작 시점부터 `src/web/*`가 이미 수정 상태였고(위 "세션 상태에 대한 사실 확인" 참고), D61이 "`web-dev`가 다른 미결을 지금 고치고 있다"고 명시했다 — `src/web/`은 이 절의 금지사항이라 손대지 않았다. **이 실패를 새 차단 사유로 세지 않는다** — 원인이 이 절의 범위 밖에 있고, 진행 중인 작업의 중간 상태이기 때문이다. 다음 QA 소집 시 `web-dev`의 완료 여부와 함께 재확인이 필요하다.
+
+### 12.4 차단 사유
+
+**없음.** 미결 1은 구조적으로 닫혔고(4/6 역사적 재현 + 신규 파일 자동 포착으로 판별력 증명, 미포착 2건과 필드명 오탐 소지는 한계로 명시), 미결 2·3은 정확한 위치·순서·제안 번호와 함께 인계됐으며 상시 검사 후보 코드를 완성해 넘겼다. 조건(위젯 대비)과 미결 4(결정 피로)는 이 절의 범위가 아니다 — 각각 `designer`, 게이트 5로 이미 지정돼 있다(D61).

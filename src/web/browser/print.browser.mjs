@@ -151,6 +151,8 @@ test('인쇄 미디어에서 남은 고지 요소가 모두 실제로 렌더된�
   // D60(관리자 판정, 소유자 지시) 이전에는 `.disclosure-banner`(고지 ①②)도
   // 이 목록에 있었다. 배너 자체가 화면에서 없어졌으므로 뺐다 — 남기면
   // 언제나 `box === null`로 실패하는 죽은 검사가 된다.
+  // D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 같은 이유로
+  // `.limit-note`(고지 ⑤)도 뺐다. 부재는 아래 D61 검사가 직접 확인한다.
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
@@ -163,7 +165,6 @@ test('인쇄 미디어에서 남은 고지 요소가 모두 실제로 렌더된�
       };
       return {
         amountCard: box('.amount-card'),
-        limitNote: box('.limit-note'),
       };
     })()`);
     for (const [name, box] of Object.entries(disclosure)) {
@@ -190,6 +191,132 @@ test('D60 — 인쇄 레이아웃에도 `.disclosure-banner`도 그 두 문장�
     assert.ok(!state.resultText.includes('세무사법 제6조'), '자격 문장이 인쇄 레이아웃에 있습니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+});
+
+test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 인쇄 레이아웃에도 `.limit-note`도 두 이름표도 없다', { skip: skipWithoutChrome }, async () => {
+  // 낡은 검사를 뒤집었다 — D48이 세운 옛 버전은 `.limit-note`가 인쇄에서도
+  // 보이는 것을 요구했다. 지금은 그 반대가 참이어야 한다.
+  const { page } = app;
+  await page.send('Emulation.setEmulatedMedia', { media: 'print' });
+  try {
+    const state = await page.evaluate(`(() => ({
+      limitNoteExists: !!document.querySelector('.limit-note'),
+      factTagExists: !!document.querySelector('.note-tag-fact'),
+      productTagExists: !!document.querySelector('.note-tag-product'),
+      resultText: document.querySelector('.result-slot').innerText,
+    }))()`);
+    assert.equal(state.limitNoteExists, false, '.limit-note가 인쇄 레이아웃에 남아 있습니다');
+    assert.equal(state.factTagExists, false, '.note-tag-fact가 인쇄 레이아웃에 남아 있습니다');
+    assert.equal(state.productTagExists, false, '.note-tag-product가 인쇄 레이아웃에 남아 있습니다');
+    assert.ok(!state.resultText.includes('실제 신고·납부는'), '한계 고지 2번 문장이 인쇄 레이아웃에 있습니다');
+    assert.ok(!state.resultText.includes('법령이 정한 것'), '「법령이 정한 것」 태그 문구가 인쇄 레이아웃에 있습니다');
+    assert.ok(!state.resultText.includes('이 계산기가 정한 것'), '「이 계산기가 정한 것」 태그 문구가 인쇄 레이아웃에 있습니다');
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+});
+
+test('관리자 지시(2026-08-13) — 값을 나르는 배경이 printBackground:false에서도 실제로 살아남는다', { skip: skipWithoutChrome }, async () => {
+  // designer가 Page.printToPDF({ printBackground: false })(인쇄 대화상자의
+  // "배경 그래픽" 체크가 기본으로 꺼진 상태와 같다 — 대다수 사용자가 이
+  // 상태로 인쇄한다)로 실제 PDF를 뽑아, .account-benefit-strip 위젯 박스의
+  // 배경이 완전히 사라지고 1px 테두리만 남는 것을 찾았다(대비 실측 1.265 —
+  // 사실상 안 보인다). 원인은 print-color-adjust의 기본값 economy가
+  // 배경색(인라인 background 포함)을 인쇄에서 지우는 것이었다.
+  //
+  // **getComputedStyle만으로는 부족하다.** 스타일 선언이 있는지는
+  // computed style로 재지만, "실제로 인쇄됐는지"는 이 파일 머리말이 이미
+  // 경고한 대로 별도로 확인해야 한다 — 그래서 이 검사는 (a) 값을 나르는
+  // 요소마다 print-color-adjust: exact가 실제로 계산됐는지, 그리고 (b)
+  // Page.printToPDF(printBackground:false)로 뽑은 실제 PDF를 페이지
+  // 스크린샷으로 렌더해 위젯 박스 배경이 화소로 실제로 나타나는지 둘 다 잰다.
+  const { page } = app;
+
+  // (a) print-color-adjust 계산값 — 값을 나르는 자리만 겨눈다. 장식
+  // 표면(.input-panel 등)은 이 목록에 없다 — 전부 넣으면 인쇄가 무거워진다.
+  await page.send('Emulation.setEmulatedMedia', { media: 'print' });
+  try {
+    const rows = await page.evaluate(`(() => {
+      const sel = (s) => {
+        const el = document.querySelector(s);
+        if (!el) return { missing: true };
+        const v = getComputedStyle(el).printColorAdjust || getComputedStyle(el).webkitPrintColorAdjust;
+        return { missing: false, value: v };
+      };
+      return {
+        accountBenefitStrip: sel('.account-benefit-strip'),
+        benefitDot: sel('.benefit-dot'),
+        benefitMeterTrack: sel('.benefit-meter-track'),
+        allocBarTrack: sel('.alloc-bar-track'),
+        allocBarFill: sel('.alloc-bar-fill'),
+      };
+    })()`);
+    for (const [name, row] of Object.entries(rows)) {
+      assert.ok(!row.missing, `${name}을 찾지 못했습니다 — 검사 전제가 깨졌습니다`);
+      assert.equal(row.value, 'exact', `${name}의 print-color-adjust가 "${row.value}"입니다 — economy면 인쇄에서 배경이 사라집니다`);
+    }
+
+    // 장식 표면은 그대로 economy다 — 전부에 걸지 않았다는 것을 값으로 못박는다.
+    const decorative = await page.evaluate(`(() => {
+      const el = document.querySelector('.input-panel') || document.querySelector('.amount-card');
+      if (!el) return null;
+      return getComputedStyle(el).printColorAdjust;
+    })()`);
+    if (decorative) assert.notEqual(decorative, 'exact', '장식 표면까지 exact가 번졌습니다 — 인쇄가 무거워집니다');
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+
+  // (b) 실제 PDF 렌더 — computed style이 실제 인쇄 산출물과 같은지 화소로 확인한다.
+  const { data: pdfB64 } = await page.send('Page.printToPDF', {
+    printBackground: false,
+    landscape: false,
+    paperWidth: 8.27,
+    paperHeight: 11.7,
+  });
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmpPdf = path.join(os.tmpdir(), `print-color-adjust-check-${Date.now()}.pdf`);
+  await fs.writeFile(tmpPdf, Buffer.from(pdfB64, 'base64'));
+  try {
+    const { launchChrome, openPage } = await import('./harness.mjs');
+    const chrome = await launchChrome();
+    try {
+      let found = false;
+      // 몇 페이지에 위젯이 떨어질지는 콘텐츠 길이에 따라 달라진다 —
+      // 여러 페이지를 스캔한다(가정한 한 페이지만 보면 페이지 나눔이
+      // 바뀔 때 이 검사가 조용히 무의미해진다).
+      for (let pageNo = 1; pageNo <= 3 && !found; pageNo += 1) {
+        const fileUrl = `file:///${tmpPdf.replace(/\\/g, '/')}#page=${pageNo}&zoom=150`;
+        const pdfPage = await openPage(chrome.browserWsUrl, fileUrl);
+        await sleep(1200);
+        // 위젯 박스 배경 rgb(244,246,248)(--surface-overlay 라이트)이 화소에
+        // 실제로 있는지 — PDF.js 캔버스를 직접 읽는다.
+        found = await pdfPage.evaluate(`(() => {
+          const canvases = [...document.querySelectorAll('canvas')];
+          for (const c of canvases) {
+            const ctx = c.getContext('2d');
+            if (!ctx) continue;
+            const w = c.width, h = c.height;
+            if (w === 0 || h === 0) continue;
+            const data = ctx.getImageData(0, 0, w, h).data;
+            for (let i = 0; i < data.length; i += 4 * 17) {
+              const r = data[i], g = data[i + 1], b = data[i + 2];
+              if (Math.abs(r - 244) <= 3 && Math.abs(g - 246) <= 3 && Math.abs(b - 248) <= 3) return true;
+            }
+          }
+          return false;
+        })()`);
+        pdfPage.close();
+      }
+      assert.ok(found, '실제 PDF 화소(1~3페이지)에서 위젯 박스 배경색(rgb(244,246,248))을 찾지 못했습니다 — printBackground:false에서 배경이 사라집니다');
+    } finally {
+      await chrome.close();
+    }
+  } finally {
+    await fs.rm(tmpPdf, { force: true });
   }
 });
 

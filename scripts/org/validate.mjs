@@ -5,6 +5,7 @@ import { validateCharter } from './validate-charter.mjs';
 import { validateRulesDir } from './validate-rules.mjs';
 import { validateArtifactDirs } from './validate-artifact.mjs';
 import { validateCodeDefinitions } from './validate-code-definitions.mjs';
+import { validateDecisionNumbers } from './validate-decision-numbers.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -14,6 +15,7 @@ const checks = [
   ['세법 룰셋', () => validateRulesDir(join(ROOT, 'data', 'tax-rules'))],
   ['산출물 머리말', () => validateArtifactDirs(ROOT)],
   ['엔진 코드 정의 자리', () => validateCodeDefinitions(ROOT)],
+  ['게이트 판정 번호', () => validateDecisionNumbers(join(ROOT, 'docs', 'org', 'gate-decisions.md'))],
 ];
 
 let failed = 0;
