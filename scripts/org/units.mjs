@@ -59,7 +59,14 @@ export const UNITS = [
     name: 'qa',
     model: 'sonnet',
     tools: ['Read', 'Glob', 'Grep', 'Bash', 'Write'],
-    writeScope: ['docs/stage-4-verification/qa-report.md', 'docs/stage-6-operations/'],
+    // `scripts/qa/`는 D62로 열었다. `qa`가 게이트 4에서 검사 둘을 만들었는데
+    // **저장소에 넣을 자리가 없어 보고서 본문에만 남았다** — 다음 회차에
+    // 아무것도 돌지 않는다. 검사를 만드는 것이 이 유닛의 일인데 그것을 둘 곳이
+    // 없었던 것이므로, 범위가 산출물의 모양을 바꾸고 있었다.
+    //
+    // `scripts/org/`는 열지 않는다 — 검증기 자체는 관리자 것이고, 유닛이
+    // 자기를 검사하는 장치를 자기가 고치면 그 검사가 무엇을 지키는지 흐려진다.
+    writeScope: ['docs/stage-4-verification/qa-report.md', 'docs/stage-6-operations/', 'scripts/qa/'],
   },
   // `qa`·`growth`·`biz-model`은 `docs/stage-6-operations/`를 디렉터리 단위로 공유한다.
   // 검증기는 디렉터리까지만 강제하므로, 한 파일에 한 저자라는 원칙은
