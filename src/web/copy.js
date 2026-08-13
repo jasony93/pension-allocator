@@ -382,10 +382,15 @@ export function assumptionMessage(code, params) {
 // ---------------------------------------------------------------------------
 
 const WARNING_BODY = {
-  early_withdrawal_penalty_pension: (params) =>
-    `이 계좌에서 연금 수령 개시 연령 전에 인출하면 연금외수령으로 기타소득세가 적용되는 규칙이 있습니다.${
-      params.pension_years_remaining != null ? ` 그 나이까지 ${formatYears(params.pension_years_remaining)}.` : ''
-    }`,
+  // **소유자가 이 경고를 지목해 지웠다(2026-08-13).** 엔진은 계속
+  // `early_withdrawal_penalty_pension`을 낸다 — 계약도, `src/engine/`도 이
+  // 지시로 손대지 않는다(범위는 화면 렌더뿐이다). 그래서 이 자리를 **비워
+  // 두지 않는다** — 키를 통째로 지우면 아래 알 수 없는 코드 처리로 흘러
+  // 들어가 "왜 없는지"가 사라진다. 값을 명시적으로 `null`로 두어 "이 코드는
+  // 알고 있고, 의도적으로 아무것도 그리지 않는다"는 사실을 코드 자체가
+  // 말하게 한다. `warningMessage`가 `null`을 그대로 돌려주면 호출부
+  // (`result-panel.js`)가 그 경고 블록 자체를 그리지 않는다.
+  early_withdrawal_penalty_pension: null,
   early_termination_clawback_isa: (params) =>
     `이 계좌를 의무가입기간 안에 해지하면 감면받은 세액을 추징하는 규칙이 있습니다.${
       params.isa_lock_in_years_remaining != null ? ` 남은 의무가입기간 ${formatYears(params.isa_lock_in_years_remaining)}.` : ''
@@ -394,9 +399,23 @@ const WARNING_BODY = {
 
 const INFO_PREFIX = '자금 사용 시점을 밝히지 않아 판정하지 않았습니다 — ';
 
+/**
+ * **`warning.code`를 그대로 화면에 흘려보내는 fallback을 없앤다.** 예전에는
+ * `WARNING_BODY[warning.code]`가 없으면 영문 코드 문자열이 그대로
+ * `body`가 되어 화면에 떴다(D47 후속이 우려한 바로 그 자리). 이제 사전에
+ * 없는 코드는 **아무것도 그리지 않는다** — `null`을 돌려주면 `result-panel.js`가
+ * 그 경고 블록을 아예 만들지 않는다. 소리 없이 조용해지는 대신, `wording.test.mjs`의
+ * "every code the contract can send has a sentence" 검사가
+ * `src/engine/constants.mjs`의 `WARNING` 레지스트리를 돌며 새 코드가 문구
+ * 없이 늘어나는 것을 자동으로 잡는다 — 화면이 사용자에게 영문 코드를 보여주는
+ * 대신, 검사가 개발자에게 붉게 보여준다.
+ */
 export function warningMessage(warning, boundaries) {
+  if (!(warning.code in WARNING_BODY)) return null;
+  const bodyFn = WARNING_BODY[warning.code];
+  if (bodyFn == null) return null;
   const params = { ...warning.params, ...boundaries };
-  const body = WARNING_BODY[warning.code] ? WARNING_BODY[warning.code](params) : warning.code;
+  const body = bodyFn(params);
   return warning.trigger === 'horizon_unknown' ? `${INFO_PREFIX}${body}` : body;
 }
 

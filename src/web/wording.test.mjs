@@ -309,6 +309,63 @@ test('every code the contract can send has a sentence — no raw code reaches th
   }
 });
 
+// ---------------------------------------------------------------------------
+// **소유자가 지목해 지운 경고** — `early_withdrawal_penalty_pension`
+// (2026-08-13). **이 절이 예전에는 반대 방향을 요구했다** — "이 경고가 렌더
+// 된다"는 검사였다. 지금은 뒤집는다: "렌더되지 않는다"를 요구한다. 지우지
+// 않고 뒤집은 이유는 `wording.test.mjs` 자체의 규약(11.2절 재소집 결함이
+// 반복된 자리 — 검사를 지우면 회귀를 잡을 사람이 없다) 때문이다. 엔진은
+// 계약대로 이 코드를 계속 낸다(`src/engine/constants.mjs`의 `WARNING`
+// 레지스트리, `mock-engine.js`) — 여기서 잠그는 것은 **화면이 그것을
+// 그리지 않는다**는 사실이다.
+// ---------------------------------------------------------------------------
+
+test('early_withdrawal_penalty_pension renders nothing — neither the declared warning nor the horizon_unknown info variant', () => {
+  const declared = warningMessage(
+    { code: 'early_withdrawal_penalty_pension', params: { pension_years_remaining: 19 }, trigger: 'declared_horizon' },
+    {},
+  );
+  assert.equal(declared, null, `지운 경고가 다시 렌더된다: ${declared}`);
+
+  const infoVariant = warningMessage(
+    { code: 'early_withdrawal_penalty_pension', params: {}, trigger: 'horizon_unknown' },
+    { pension_years_remaining: 19 },
+  );
+  assert.equal(infoVariant, null, `info 접두사가 붙은 채로 되살아났다: ${infoVariant}`);
+});
+
+test('early_termination_clawback_isa is untouched — the owner named only one warning, not the other', () => {
+  // 지시 범위를 넓히지 않는다(이 세션의 규약). ISA 추징 경고는 그대로 뜬다.
+  const text = warningMessage(
+    { code: 'early_termination_clawback_isa', params: { isa_lock_in_years_remaining: 2 }, trigger: 'declared_horizon' },
+    {},
+  );
+  assert.match(text, /의무가입기간 안에 해지하면 감면받은 세액을 추징하는 규칙이 있습니다/);
+  assert.match(text, /남은 의무가입기간/);
+});
+
+test('an unrecognized WARNING code never leaks its raw code string to the screen', () => {
+  // `WARNING_BODY[code] ? ... : warning.code`이던 옛 fallback이 위험한
+  // 자리였다 — 새 코드가 문구 없이 늘어나면 영문 코드가 그대로 화면에 떴다
+  // (D47 후속이 우려한 것과 같은 결). 지금은 사전에 없는 코드도 `null`을
+  // 돌려준다 — 아무것도 그리지 않는 쪽이, 사용자에게 영문 코드를 보여주는
+  // 쪽보다 안전하다.
+  const text = warningMessage({ code: 'made_up_code_that_will_never_exist', params: {}, trigger: 'declared_horizon' }, {});
+  assert.equal(text, null);
+});
+
+test('reviving the removed sentence in copy.js would turn this test red', () => {
+  // "문자열을 되살려 붉어지는지 확인하라"는 지시의 실측 — copy.js 소스에
+  // 그 문장의 핵심 어구가 남아 있지 않은지 직접 스캔한다. `WARNING_BODY`
+  // 안에서 다시 함수로 바뀌면(=화면에 다시 그려지면) 위 렌더 검사가 이미
+  // 잡지만, 이 검사는 소유자가 지목한 **문장 자체**가 소스에서 지워졌는지를
+  // 한 번 더 확인한다.
+  const source = stripComments(readFileSync(path.join(here, 'copy.js'), 'utf8'));
+  const body = source.slice(source.indexOf('const WARNING_BODY'), source.indexOf('const INFO_PREFIX'));
+  assert.ok(!body.includes('연금 수령 개시 연령 전에 인출하면'), '지운 경고 문장이 WARNING_BODY에 되살아났다');
+  assert.ok(!body.includes('그 나이까지'), '지운 경고 문장의 꼬리가 WARNING_BODY에 되살아났다');
+});
+
 test('the return-rate assumption sentence echoes the user\'s own number and disclaims that the service does not propose one — D28/D31', () => {
   // 0.10절 — "이 서비스는 수익률을 제시하지 않는다"가 남은 방어선 전부다.
   // 문구가 사용자 값을 그대로 되비추는지(하드코딩된 숫자가 아닌지)를 본다.

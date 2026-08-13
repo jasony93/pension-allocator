@@ -628,6 +628,12 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
       const percentOfLimit = remaining > 0 ? alloc.annual_krw / remaining : alloc.annual_krw > 0 ? 1 : 0;
       const trackScalePercent = computeTrackScalePercent(remaining, maxRemaining);
       const warning = plan.warnings.find((w) => w.account === account);
+      // **소유자가 지목해 지운 경고**(`early_withdrawal_penalty_pension`,
+      // 2026-08-13)는 `warningMessage()`가 `null`을 돌려준다 — 여기서 그
+      // `null`을 문구 없는 빈 상자로 그리지 않고, 경고 자체가 없었던 것처럼
+      // 아예 만들지 않는다. `warning.code`가 그대로 화면에 새는 것도 같은
+      // 이유로 막는다(`copy.js`의 `warningMessage` 주석 참고).
+      const warningText = warning ? warningMessage(warning, scenario.fund_use_horizon_boundaries) : null;
       return el('div', { class: 'allocation-bar-row' }, [
         el('div', { class: 'allocation-bar-labels' }, [
           el('span', { class: 'type-body-strong' }, [ACCOUNT_LABEL[account]]),
@@ -652,7 +658,7 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
         // ISA 비과세 한도 (5.11절). 배제된 계좌는 위 분기에서 이미 빠졌고,
         // 유형 미확정이면 값이 null이라 줄 자체를 그리지 않는다.
         account === 'isa' ? isaTaxFreeBlock(scenario, view) : null,
-        warning ? el('div', { class: `warning-note warning-note-${warning.severity}` }, [el('p', {}, [warningMessage(warning, scenario.fund_use_horizon_boundaries)])]) : null,
+        warningText ? el('div', { class: `warning-note warning-note-${warning.severity}` }, [el('p', {}, [warningText])]) : null,
       ]);
     }),
   );
