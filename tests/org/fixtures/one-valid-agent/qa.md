@@ -14,6 +14,7 @@ model: sonnet
 ## 산출물
 docs/stage-4-verification/qa-report.md
 docs/stage-6-operations/<YYYY-MM>-qa.md
+scripts/qa/
 
 ## 금지사항
 픽스처.
