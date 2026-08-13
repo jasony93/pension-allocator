@@ -269,43 +269,53 @@ test('관리자 지시(2026-08-13) — 값을 나르는 배경이 printBackgroun
   }
 
   // (b) 실제 PDF 렌더 — computed style이 실제 인쇄 산출물과 같은지 화소로 확인한다.
+  //
+  // **`document.querySelectorAll('canvas')`로 PDF.js 캔버스를 직접 읽으려 했으나
+  // 캔버스가 하나도 안 잡혔다** — 헤드리스 Chrome이 PDF를 자체 뷰어(별도
+  // 렌더러로 떨어지는 내장 확장 페이지)로 여는 것으로 보인다. `harness.mjs`가
+  // 이미 경계하는 것과 같은 부류의 문제다(불투명 출처 iframe이 OOPIF로
+  // 떨어져 부모 세션의 `Runtime.evaluate`로 안이 안 보이는 것). 우회 —
+  // **`Page.captureScreenshot`로 실제로 화면에 그려진 화소를 PNG로 받고,
+  // 그 PNG를 우리 앱 페이지 안에서 `<img>` → `<canvas>`로 그려 다시 읽는다.**
+  // Node 쪽에 PNG 디코더를 새로 두지 않고 브라우저의 디코더를 그대로 쓴다.
   const { data: pdfB64 } = await page.send('Page.printToPDF', {
     printBackground: false,
     landscape: false,
     paperWidth: 8.27,
     paperHeight: 11.7,
   });
+  const { launchChrome, openPage } = await import('./harness.mjs');
   const fs = await import('node:fs/promises');
   const os = await import('node:os');
   const path = await import('node:path');
   const tmpPdf = path.join(os.tmpdir(), `print-color-adjust-check-${Date.now()}.pdf`);
   await fs.writeFile(tmpPdf, Buffer.from(pdfB64, 'base64'));
   try {
-    const { launchChrome, openPage } = await import('./harness.mjs');
     const chrome = await launchChrome();
     try {
       let found = false;
-      // 몇 페이지에 위젯이 떨어질지는 콘텐츠 길이에 따라 달라진다 —
-      // 여러 페이지를 스캔한다(가정한 한 페이지만 보면 페이지 나눔이
-      // 바뀔 때 이 검사가 조용히 무의미해진다).
+      // 몇 페이지에 위젯이 떨어질지는 콘텐츠 길이에 따라 달라진다 — 여러
+      // 페이지를 스캔한다(한 페이지만 가정하면 페이지 나눔이 바뀔 때 이
+      // 검사가 조용히 무의미해진다).
       for (let pageNo = 1; pageNo <= 3 && !found; pageNo += 1) {
         const fileUrl = `file:///${tmpPdf.replace(/\\/g, '/')}#page=${pageNo}&zoom=150`;
         const pdfPage = await openPage(chrome.browserWsUrl, fileUrl);
         await sleep(1200);
-        // 위젯 박스 배경 rgb(244,246,248)(--surface-overlay 라이트)이 화소에
-        // 실제로 있는지 — PDF.js 캔버스를 직접 읽는다.
-        found = await pdfPage.evaluate(`(() => {
-          const canvases = [...document.querySelectorAll('canvas')];
-          for (const c of canvases) {
-            const ctx = c.getContext('2d');
-            if (!ctx) continue;
-            const w = c.width, h = c.height;
-            if (w === 0 || h === 0) continue;
-            const data = ctx.getImageData(0, 0, w, h).data;
-            for (let i = 0; i < data.length; i += 4 * 17) {
-              const r = data[i], g = data[i + 1], b = data[i + 2];
-              if (Math.abs(r - 244) <= 3 && Math.abs(g - 246) <= 3 && Math.abs(b - 248) <= 3) return true;
-            }
+        const { data: shotB64 } = await pdfPage.send('Page.captureScreenshot', { format: 'png' });
+        found = await pdfPage.evaluate(`(async () => {
+          const img = new Image();
+          const loaded = new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+          img.src = 'data:image/png;base64,${shotB64}';
+          await loaded;
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          // --surface-overlay(라이트) = rgb(244,246,248) — 위젯 박스 배경.
+          for (let i = 0; i < data.length; i += 4 * 11) {
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            if (Math.abs(r - 244) <= 3 && Math.abs(g - 246) <= 3 && Math.abs(b - 248) <= 3) return true;
           }
           return false;
         })()`);
