@@ -51,9 +51,15 @@ const READ_TOKENS = `(() => {
   return out;
 })()`;
 
-/** 고지 요소 15종 — design-system 8.4절의 실측표를 그대로 다시 잰다. */
+/**
+ * 고지 요소 14종 — design-system 8.4절의 실측표를 그대로 다시 잰다.
+ *
+ * D60(관리자 판정, 소유자 지시) — `DisclosureBanner 본문 (고지 ①②)` 행을
+ * 뺐다(15종 → 14종). 그 배너와 두 문장(성격·자격)이 화면에서 완전히
+ * 없어졌으므로 잴 대상이 없다 — 남기면 존재하지 않는 토큰 조합의 대비를
+ * 재는 죽은 검사가 된다.
+ */
 const DISCLOSURE_ROWS = [
-  ['DisclosureBanner 본문 (고지 ①②)', '--text-secondary', '--state-info-subtle', 4.5],
   ['LawChip 텍스트 (고지 ③)', '--text-secondary', '--surface-sunken', 4.5],
   ['LawChip 호버', '--text-secondary', '--accent-subtle', 4.5],
   ['BasisBlock 원문 링크 (고지 ③)', '--text-link', '--surface-raised', 4.5],
@@ -97,8 +103,11 @@ const MEASURE_LIVE_ELEMENTS = `(() => {
   // 때만). 이 검사는 항상 뜨는 고지의 대비를 재는 자리라 조건부 요소를
   // 넣으면 입력값에 따라 거짓으로 실패한다 — 법령 조항 칩이 나열 자리 밖에서
   // 뜨는지는 별도 회귀 검사(아래 D59 검사)가 조건 없이 잡는다.
+  // D60(관리자 판정, 소유자 지시) — DisclosureBanner(성격·자격 배너)도
+  // 이 목록에서 뺐다. 그 요소 자체가 화면에서 완전히 없어졌으므로 여기
+  // 남기면 언제나 missing: true로 실패하는 죽은 검사가 된다. 부재는 아래
+  // D60 검사가 직접 확인한다.
   const rows = [
-    ['DisclosureBanner', '.disclosure-banner p'],
     ['AssumptionBlock 항목', '.assumption-block li'],
     ['LimitNote', '.limit-note p'],
     ['AmountCard 조건 캡션', '.amount-card-caption'],
@@ -186,7 +195,7 @@ test('어느 조합에서도 값이 빈 색 토큰이 하나도 없다 — 미�
 // ---------------------------------------------------------------------------
 
 for (const theme of ['light', 'dark']) {
-  test(`[${theme}] 고지 요소 15종이 전부 기준을 넘는다 (화면에서 잰 값)`, { skip: skipWithoutChrome }, async () => {
+  test(`[${theme}] 고지 요소 14종이 전부 기준을 넘는다 (화면에서 잰 값)`, { skip: skipWithoutChrome }, async () => {
     const { page } = app;
     await emulate(page, { scheme: theme === 'dark' ? 'dark' : 'light' });
     await page.evaluate(`document.documentElement.setAttribute('data-theme', '${theme}')`);
@@ -225,7 +234,6 @@ test('고지 요소에 다크 전용 처리가 없다 — 접히거나 흐려지
     return {
       assumptionOpen: assumption.open,
       limitOpacity: getComputedStyle(document.querySelector('.limit-note')).opacity,
-      bannerDisplay: getComputedStyle(document.querySelector('.disclosure-banner')).display,
     };
   })()`;
   await emulate(page, { scheme: 'light' });
@@ -238,10 +246,51 @@ test('고지 요소에 다크 전용 처리가 없다 — 접히거나 흐려지
   // D25(관리자 판정) — 소유자 지시로 "가정 사항" 블록은 기본 접힘이 허용된다.
   // **D46 2·3번(관리자 판정) 이후 "법령 조항" 블록(`.basis-block`) 자체가
   // 화면에서 없어졌다** — 그래서 그 블록의 접힘 상태는 더 이상 잴 대상이
-  // 아니다. 고지 ①②(disclosure-banner)는 이 판정의 대상이 아니고 여전히
-  // 항상 보인다 — `bannerDisplay`가 위에서 두 테마 모두 같은 값인 것으로 그
-  // 사실을 함께 확인한다.
+  // 아니다. **D60(관리자 판정, 소유자 지시)으로 고지 ①②(disclosure-banner)도
+  // 화면에서 완전히 없어졌다** — 그래서 여기서 더 이상 재지 않는다(이전에는
+  // 두 테마의 `bannerDisplay`가 같은지만 쟀다). 부재 자체는 아래 D60 검사가
+  // 직접 확인한다.
   assert.equal(dark.assumptionOpen, false, 'D25 — 가정 사항은 기본 접힘이다');
+});
+
+test('D60(관리자 판정, 소유자 지시) — 성격·자격 배너가 두 테마 어디에도 없다', { skip: skipWithoutChrome }, async () => {
+  // 낡은 검사를 뒤집었다 — 옛 버전(qa-report.md AC27 실측 근거였던
+  // `.disclosure-banner` 가시성 검사)은 이 요소가 입력 부족·결과 두 상태
+  // 모두에서 항상 보이는 것을 요구했다. **지금은 그 반대가 참이어야 한다.**
+  // 문구 자체가 되살아나는 회귀를 이 검사가 잡는다 — 실제로 문자열을
+  // 되돌려 붉어지는지 확인했다(수동 변이, `src/`에는 반영하지 않음).
+  const { page, origin } = app;
+  const read = `(() => ({
+    bannerExists: !!document.querySelector('.disclosure-banner'),
+    natureSentence: document.body.innerText.includes('신고 대리가 아닙니다'),
+    qualificationSentence: document.body.innerText.includes('세무사법 제6조'),
+  }))()`;
+
+  // 입력 부족 상태 — 첫 진입, 아무것도 채우지 않는다.
+  await page.evaluate(`localStorage.clear()`);
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.waitFor(`!!document.querySelector('.result-panel-inner')`);
+  for (const theme of ['light', 'dark']) {
+    await emulate(page, { scheme: theme });
+    await page.evaluate(`document.documentElement.setAttribute('data-theme','${theme}')`);
+    const state = await page.evaluate(read);
+    assert.equal(state.bannerExists, false, `[입력 부족/${theme}] .disclosure-banner가 있습니다`);
+    assert.equal(state.natureSentence, false, `[입력 부족/${theme}] 성격 문장이 화면에 있습니다`);
+    assert.equal(state.qualificationSentence, false, `[입력 부족/${theme}] 자격 문장이 화면에 있습니다`);
+  }
+
+  // 결과 상태 — 필수 항목을 채운다.
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.amount-card')`, { timeoutMs: 6000 });
+  await sleep(300);
+  for (const theme of ['light', 'dark']) {
+    await emulate(page, { scheme: theme });
+    await page.evaluate(`document.documentElement.setAttribute('data-theme','${theme}')`);
+    const state = await page.evaluate(read);
+    assert.equal(state.bannerExists, false, `[결과/${theme}] .disclosure-banner가 있습니다`);
+    assert.equal(state.natureSentence, false, `[결과/${theme}] 성격 문장이 화면에 있습니다`);
+    assert.equal(state.qualificationSentence, false, `[결과/${theme}] 자격 문장이 화면에 있습니다`);
+  }
 });
 
 test('D46 2·3번 → D59(관리자 판정) — 「법령 조항」 나열 disclosure는 없고, 조항 칩은 배제 사유·법정 순서 두 자리에만 있다', { skip: skipWithoutChrome }, async () => {

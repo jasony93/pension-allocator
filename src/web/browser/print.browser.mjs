@@ -147,7 +147,10 @@ test('인쇄 미디어에서도 `AccountBenefitStrip`이 카드 내용 폭 그�
   }
 });
 
-test('인쇄 미디어에서 고지 여섯 요소가 모두 실제로 렌더된다', { skip: skipWithoutChrome }, async () => {
+test('인쇄 미디어에서 남은 고지 요소가 모두 실제로 렌더된다', { skip: skipWithoutChrome }, async () => {
+  // D60(관리자 판정, 소유자 지시) 이전에는 `.disclosure-banner`(고지 ①②)도
+  // 이 목록에 있었다. 배너 자체가 화면에서 없어졌으므로 뺐다 — 남기면
+  // 언제나 `box === null`로 실패하는 죽은 검사가 된다.
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
@@ -159,7 +162,6 @@ test('인쇄 미디어에서 고지 여섯 요소가 모두 실제로 렌더된�
         return { display: getComputedStyle(el).display, width: r.width, height: r.height };
       };
       return {
-        banner: box('.disclosure-banner'),
         amountCard: box('.amount-card'),
         limitNote: box('.limit-note'),
       };
@@ -168,6 +170,24 @@ test('인쇄 미디어에서 고지 여섯 요소가 모두 실제로 렌더된�
       assert.ok(box, `${name}이 인쇄 레이아웃에 없습니다`);
       assert.notEqual(box.display, 'none', `${name}이 인쇄에서 숨어 있습니다`);
     }
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+});
+
+test('D60 — 인쇄 레이아웃에도 `.disclosure-banner`도 그 두 문장도 없다', { skip: skipWithoutChrome }, async () => {
+  // 낡은 검사를 뒤집었다 — 바로 위 검사의 옛 버전은 이 배너가 인쇄에서도
+  // 보이는 것을 요구했다. 지금은 그 반대가 참이어야 한다.
+  const { page } = app;
+  await page.send('Emulation.setEmulatedMedia', { media: 'print' });
+  try {
+    const state = await page.evaluate(`(() => ({
+      bannerExists: !!document.querySelector('.disclosure-banner'),
+      resultText: document.querySelector('.result-slot').innerText,
+    }))()`);
+    assert.equal(state.bannerExists, false, '.disclosure-banner가 인쇄 레이아웃에 남아 있습니다');
+    assert.ok(!state.resultText.includes('신고 대리가 아닙니다'), '성격 문장이 인쇄 레이아웃에 있습니다');
+    assert.ok(!state.resultText.includes('세무사법 제6조'), '자격 문장이 인쇄 레이아웃에 있습니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }

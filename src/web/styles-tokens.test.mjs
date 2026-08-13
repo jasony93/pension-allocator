@@ -193,9 +193,10 @@ for (const [themeName, tokens] of Object.entries(THEMES)) {
   });
 
   test(`[${themeName}] 고지 요소가 전부 4.5:1 이상이다 (8.4절 실측표를 다시 잰다)`, () => {
+    // D60(관리자 판정, 소유자 지시) — `DisclosureBanner 본문 (고지 ①②)` 행을
+    // 뺐다. 그 배너와 성격·자격 문장이 화면에서 완전히 없어졌다.
     const t = (n) => tokens.get(n);
     const rows = [
-      ['DisclosureBanner 본문 (고지 ①②)', '--text-secondary', '--state-info-subtle', 4.5],
       ['LawChip 텍스트 (고지 ③)', '--text-secondary', '--surface-sunken', 4.5],
       ['LawChip 호버', '--text-secondary', '--accent-subtle', 4.5],
       ['BasisBlock 원문 링크 (고지 ③)', '--text-link', '--surface-raised', 4.5],

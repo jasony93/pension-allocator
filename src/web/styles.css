@@ -469,45 +469,21 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .btn-danger:hover { background: var(--state-error-subtle); }
 
 /* ---- 결과 패널 ---- */
-/* 결과 패널 카드 — `shadow-2`(design-system 4.3절: "스티키 패널·드롭다운";
-   이 카드 자체는 D48로 더 이상 sticky가 아니지만 그림자 등급은 카드 안의
-   `[4-A]` `DisclosureBanner`가 여전히 sticky라 그대로 둔다).
+/* 결과 패널 카드 — `shadow-2`(design-system 4.3절: "스티키 패널·드롭다운").
+   이 등급은 원래 카드 안의 `[4-A]` `DisclosureBanner`가 sticky였던 데서
+   왔다. **D60(관리자 판정, 소유자 지시)으로 그 배너 자체가 지워졌고**, 카드
+   안에 sticky 자식이 더 이상 없다. 등급 자체를 낮추는 것은 D60이 지시한
+   범위(성격·자격 문구와 그 칸)를 넘는 시각 변경이라 손대지 않았다 — 필요하면
+   별도 판정으로 다룬다.
 
-   [2026-08-12, D48] `overflow: hidden`을 없앴다 — **기존 결함**이었다
-   (design-system 5.12.1절). 아래 `.disclosure-banner`의 `position: sticky`가
-   기준으로 삼아야 할 스크롤 조상이 문서인데, 이 `overflow: hidden`이 그
-   기준 컨테이너를 가로채 배너가 "고정되려 하는데 그 상자 자신은 스크롤하지
-   않아 결과적으로 전혀 고정되지 않는" 상태를 만들고 있었다 — **지금까지
-   배포된 코드에서도 이 배너는 실제로 스크롤에 고정된 적이 없었다**(내부
-   스크롤량만큼 그대로 밀려 올라갔다, 브라우저 실측으로 확인). 카드 모서리를
-   둥글게 자르는 역할은 그 아래 `.disclosure-banner`의 위쪽 두 모서리에
-   같은 반경을 직접 줘서 대신한다 — 배경색이 있는 배너가 부모 없이도 카드
-   윤곽과 이가 맞는다. */
+   [2026-08-12, D48] `overflow: hidden`을 없앴다 — 당시 `.disclosure-banner`의
+   `position: sticky` 기준 스크롤 조상을 이 속성이 가로채 배너가 실제로는
+   고정되지 않던 기존 결함을 함께 고쳤다(design-system 5.12.1절). 배너는
+   D60으로 사라졌지만 `overflow: hidden`을 없앤 상태 자체는 카드 모서리를
+   자식 요소가 각자 반경으로 처리하는 현재 구조와 맞으므로 되돌리지 않는다. */
 .result-panel-inner { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-2); }
 .result-loading-overlay .result-body { opacity: 0.92; }
 .result-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); }
-
-/* `[4-A]` — 헌장 D11·고지 ①②. **접히지 않고, 스크롤로 밀려나도 결과 영역을
-   벗어날 수 없다.** D48 이후 유일하게 sticky를 유지하는 결과 패널 요소다
-   (screens.md 13.2절). `top`은 `0`이 아니라 헤더 실측 높이다 — `.app-header`도
-   `position: sticky; top: 0; z-index: 10`이라, `top: 0`으로 두면 헤더 밑에
-   깔려 가려진다. **56px로 하드코딩하지 않는다** — 문서가 그렇게 적었지만
-   실측은 77px이었다(design-system 4.1.1절). 헤더 자신이 실제 렌더 높이를
-   `--layout-header-height`로 공개하고(`ui/app.js`, `ResizeObserver`로 계속
-   갱신) 여기서는 그 값을 읽기만 한다. 값이 아직 없는 극초기 프레임을 위한
-   방어값 `0px`을 `var()` 두 번째 인자로 둔다. */
-.disclosure-banner {
-  display: flex; gap: var(--space-2); padding: var(--space-4);
-  background: var(--state-info-subtle); border-left: 3px solid var(--state-info);
-  border-top-left-radius: var(--radius-l); border-top-right-radius: var(--radius-l);
-  font-size: 12.5px; color: var(--text-secondary);
-  position: sticky; top: var(--layout-header-height, 0px); z-index: 2;
-}
-.disclosure-banner p { margin: 0 0 var(--space-1); }
-.disclosure-icon { font-size: 16px; line-height: 1.4; flex-shrink: 0; }
-/* D48 — 산문 캡 대상(design-system 4.4.1절). 아이콘은 캡을 받지 않는다 —
-   전체 배너 폭이 아니라 **본문 텍스트**만 68자 규칙 대상이다. */
-.disclosure-banner-body { max-width: var(--prose-max-width); }
 
 .requirement-checklist { display: flex; flex-direction: column; gap: var(--space-3); }
 .req-progress-row { display: flex; justify-content: space-between; align-items: baseline; }
@@ -1049,8 +1025,9 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      기본 CSS에서 이 셋을 이미 없앴으므로(위 `@media (min-width: 1024px)`),
      아래 재선언은 더 이상 무언가를 "풀지" 않는다. 그래도 지운다면 다음에
      누가 데스크톱 sticky를 되살릴 때(그러지 말라고 D48이 적어 뒀지만) 인쇄가
-     조용히 함께 깨지는 것을 막는 방어선으로 남겨 둔다. `.disclosure-banner`는
-     여전히 sticky이므로(D48 이후에도 유일한 예외) 아래에서 따로 푼다.
+     조용히 함께 깨지는 것을 막는 방어선으로 남겨 둔다. **`.disclosure-banner`는
+     D60으로 화면에서 완전히 없어졌다** — 인쇄에서 따로 풀어 줄 sticky 예외가
+     더 이상 없다.
    - `<details>`(가정 사항·법령 조항·"더 보기")는 **CSS로** 펼친다. 두 번 틀렸던
      자리다. ① 처음엔 `ui/print.js`가 `beforeprint`에서 `open` 속성을 직접
      켜는 JS로 구현했는데, `Page.printToPDF`로 실제 PDF를 뽑아 확인하니 접힌
@@ -1073,7 +1050,6 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   .result-slot {
     position: static; max-height: none; overflow: visible; width: 100%;
   }
-  .disclosure-banner { position: static; }
   .result-panel-inner { box-shadow: none; border: none; }
   /* 페이지 경계에서 카드·행이 반으로 잘리는 것을 완화한다 — 완벽히 막을 수는
      없지만(브라우저마다 지원 폭이 다르다), 낼 수 있는 만큼은 낸다. */

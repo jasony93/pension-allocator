@@ -1,7 +1,9 @@
 /**
  * 결과 패널 — `screens.md` 4·5·8절. 다섯 상태(입력 부족·빈·로딩·오류·정상)를
- * 전부 이 모듈이 담당한다. 고지 여섯 요소의 배치는 `screens.md` 4.2절 표를
- * 그대로 따른다 — 요소 ①②⑤는 접기 불가, ③④는 기본 펼침.
+ * 전부 이 모듈이 담당한다. 고지 요소의 배치는 `screens.md` 4.2절 표를 그대로
+ * 따른다 — 요소 ⑤는 접기 불가, ③④는 기본 펼침. **요소 ①②(성격·자격
+ * 배너)는 D60(관리자 판정, 소유자 지시)으로 삭제됐다** — 게시 의무가 없는
+ * 자체 방어 문구였고, 소유자가 위험의 크기를 확인한 뒤 지웠다.
  */
 
 import { el } from './dom.js';
@@ -125,17 +127,6 @@ import { scenarioDisplaysEqual } from './scenario-compare.js';
 // 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
 
 // ---------------------------------------------------------------------------
-// 고지 ①② — 항상 표시, 접기 불가
-// ---------------------------------------------------------------------------
-
-function disclosureBanner() {
-  return el('div', { class: 'disclosure-banner', role: 'note' }, [
-    el('span', { class: 'disclosure-icon', 'aria-hidden': 'true' }, ['ⓘ']),
-    el('div', { class: 'disclosure-banner-body' }, [el('p', {}, [DISCLOSURE.nature]), el('p', {}, [DISCLOSURE.qualification])]),
-  ]);
-}
-
-// ---------------------------------------------------------------------------
 // 입력 부족 / 빈 상태 (8.1 / 8.2)
 // ---------------------------------------------------------------------------
 
@@ -241,7 +232,6 @@ function leavingPlaceholderRing() {
 
 function inputIncompletePanel(state) {
   return el('div', { class: 'result-panel-inner' }, [
-    disclosureBanner(),
     el('div', { class: 'result-body' }, [
       requirementChecklist(state),
       resultPlaceholder(),
@@ -286,7 +276,6 @@ function fieldErrorBanner(store) {
 function fatalErrorPanel(fatalError) {
   const errors = fatalError?.errors ?? [];
   return el('div', { class: 'result-panel-inner' }, [
-    disclosureBanner(),
     el('div', { class: 'inline-alert inline-alert-error', role: 'alert' }, [
       el('p', { class: 'type-body-strong' }, ['계산에 필요한 세법 규칙을 불러오지 못했습니다. 결과를 표시하지 않습니다.']),
       errors.length ? el('p', { class: 'type-body-s' }, [errors.map(errorMessage).join(' ')]) : null,
@@ -298,7 +287,6 @@ function fatalErrorPanel(fatalError) {
 function blockedPanel(fatalError, store) {
   const notices = fatalError?.reasonNotices ?? [];
   return el('div', { class: 'result-panel-inner' }, [
-    disclosureBanner(),
     el('div', { class: 'inline-alert inline-alert-error', role: 'alert' }, [
       el('p', { class: 'type-body-strong' }, ['입력한 조건에서는 배분을 계산할 수 없습니다']),
       notices.length
@@ -1303,8 +1291,8 @@ function accountTable(plan, scenario) {
 // 1. 접힌 상태에서도 제목과 건수가 읽힌다(아래 `summaryLabel`류 함수).
 // 2. 펼치면 "중요한 5개"를 먼저 보이되, 나머지 전부에 도달할 경로가 **같은
 //    블록 안**에 남는다 — 잘라내지 않는다(`splitTopFive` + 중첩 `<details>`).
-// 3. 고지 배너(요소 ①②)는 이 절의 대상이 아니다 — `disclosureBanner()`는
-//    별도 함수로 항상 렌더된다.
+// 3. D60(관리자 판정) — 성격·자격 배너(옛 요소 ①②, `disclosureBanner()`)는
+//    소유자 지시로 지웠다. 이 절이 다루는 가정·근거·한계 블록과는 별개였다.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1681,7 +1669,6 @@ export function renderResultPanel({ state, store }) {
     // 두 끝이 붙어 있지 않게 되어 5.29절의 전환 자체가 성립하지 않는다.
     planSeat('placeholder');
     return el('div', { class: `result-panel-inner ${loadingOverlayClass(false)}` }, [
-      disclosureBanner(),
       el('div', { class: 'result-body' }, [
         resultPlaceholder(),
         el('p', { class: 'type-body-s chart-note' }, ['계산 중입니다…']),
@@ -1720,7 +1707,6 @@ export function renderResultPanel({ state, store }) {
     status === 'loading' ? 'result-panel-inner result-loading-overlay' : status === 'field_error' ? 'result-panel-inner' : 'result-panel-inner';
 
   return el('div', { class: wrapperClass }, [
-    disclosureBanner(),
     status === 'field_error' ? fieldErrorBanner(store) : null,
     conditionalPending ? conditionalPendingAlert() : null,
     scenarioTabs(result, scenarioId, onSelectScenario),

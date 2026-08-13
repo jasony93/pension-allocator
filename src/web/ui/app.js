@@ -176,11 +176,16 @@ export function mountApp(root, { engineClient, analytics }) {
     }
   }
 
-  // [2026-08-12, D48] `[4-A]` `DisclosureBanner`가 문서 기준 sticky로
-  // `top: var(--layout-header-height)`를 쓴다(styles.css). 헤더 높이를
-  // **하드코딩하지 않는다** — 설계 문서가 적은 56px과 실측 77px가 이미
-  // 어긋나 있었다(design-system 4.1.1절). 헤더 자신이 실제 렌더 높이를
-  // 재서 커스텀 프로퍼티로 공개하고, sticky 오프셋은 그 값을 읽기만 한다.
+  // [2026-08-12, D48, 2026-08-13 주석 정정 D60] 원래는 `[4-A]` `DisclosureBanner`가
+  // 문서 기준 sticky로 `top: var(--layout-header-height)`를 썼다. **그 배너는
+  // D60(관리자 판정, 소유자 지시)으로 삭제됐고, 지금은 이 값을 읽는 CSS가
+  // `styles.css`에 없다.** 그래도 `--layout-header-height`는 지우지 않는다 —
+  // design-system 5.19.1절이 `LiveSummaryStrip`(미구현, 데스크톱용 결과 요약
+  // 바)의 위치로 같은 토큰을 이미 지정해 뒀다(`position: sticky; top:
+  // var(--layout-header-height)`). 헤더 높이를 **하드코딩하지 않는다** —
+  // 설계 문서가 적은 56px과 실측 77px가 이미 어긋나 있었다(design-system
+  // 4.1.1절). 헤더 자신이 실제 렌더 높이를 재서 커스텀 프로퍼티로 공개하고,
+  // 다음에 이 값을 쓸 sticky 요소는 그 값을 읽기만 하면 된다.
   // `ResizeObserver`로 계속 갱신한다 — 모바일에서 가명칭이 두 줄로 접히는
   // 등 헤더 높이가 폭에 따라 바뀌는 경우를 폭 경계 하나로 특정하지 않고
   // 실제 크기 변화 자체를 본다.

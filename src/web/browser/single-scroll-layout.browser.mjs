@@ -62,37 +62,39 @@ test('문서를 끝까지 스크롤하면 푸터가 실제로 뷰포트 안에 �
   assert.ok(rect.top >= 0, `푸터 위쪽(${rect.top})이 이미 뷰포트 위로 올라갔다 — 문서 길이 측정이 잘못됐을 수 있다`);
 });
 
-test('`[4-A]` DisclosureBanner가 스크롤 후에도 실제로 헤더 바로 아래에 붙어 있다 — 속성이 아니라 위치로 잰다', { skip: skipWithoutChrome }, async () => {
+// D60(관리자 판정, 소유자 지시) — 이 자리에는 `[4-A]` `DisclosureBanner`(성격·
+// 자격 문구, 옛 요소 ①②)가 스크롤 후에도 헤더 아래 붙어 있는지 재는 검사가
+// 있었다. **지우지 않고 뒤집는다** — 배너 자체가 화면에서 없어졌으므로 이제
+// "그 배너가 어디에도 없다"가 이 자리에서 지켜야 할 사실이다. 되살아나는
+// 회귀(문구 재도입)를 여기서 잡는다.
+test('D60 — `.disclosure-banner`도 그 두 문장도 스크롤 전후 어디에도 없다', { skip: skipWithoutChrome }, async () => {
   await setViewport(1440, 900);
+  const read = () =>
+    app.page.evaluate(`(() => ({
+      bannerExists: !!document.querySelector('.disclosure-banner'),
+      bodyText: document.body.innerText,
+    }))()`);
+
   await app.page.evaluate('window.scrollTo(0, 0)');
   await sleep(100);
-  const before = await app.page.evaluate(`(() => {
-    const header = document.querySelector('.app-header').getBoundingClientRect();
-    const banner = document.querySelector('.disclosure-banner').getBoundingClientRect();
-    return { headerBottom: header.bottom, bannerTop: banner.top };
-  })()`);
-  // 스크롤 전에는 배너가 문서 흐름상 헤더 아래(카드 패딩만큼 떨어져)에 있다
-  // — 정확히 붙어 있을 필요는 없다. sticky는 스크롤이 그 위치를 넘어설 때만
-  // 작동을 시작한다. 여기서는 "헤더보다 아래에 있다"만 확인해 둔다.
-  assert.ok(before.bannerTop >= before.headerBottom, `스크롤 전 배너가 헤더보다 위에 있다 — 초기 배치 자체가 이상하다`);
+  const before = await read();
 
   await app.page.evaluate('window.scrollTo(0, 600)');
   await sleep(150);
-  const after = await app.page.evaluate(`(() => {
-    const header = document.querySelector('.app-header').getBoundingClientRect();
-    const banner = document.querySelector('.disclosure-banner').getBoundingClientRect();
-    return { headerBottom: header.bottom, bannerTop: banner.top };
-  })()`);
-  // **핵심 단언** — 600px 스크롤한 뒤에도 배너가 헤더 바로 밑에 그대로 있어야
-  // 한다. `overflow: hidden` 결함이 있으면 배너가 스크롤량만큼 함께 밀려
-  // 올라가 `bannerTop`이 크게 음수가 된다(문서 밖으로 나간다).
-  assert.ok(
-    Math.abs(after.bannerTop - after.headerBottom) < 4,
-    `스크롤 후 배너가 헤더 아래에 붙어 있지 않다 — gap ${after.bannerTop - after.headerBottom}px (기존 overflow:hidden 결함이 재발했을 수 있다)`,
-  );
-  assert.ok(after.bannerTop >= 0, '배너가 뷰포트 위로 올라가 있다 — sticky가 실제로 작동하지 않는다');
+  const after = await read();
+
+  for (const [label, snapshot] of [['스크롤 전', before], ['스크롤 후', after]]) {
+    assert.equal(snapshot.bannerExists, false, `${label}: .disclosure-banner가 다시 렌더됩니다`);
+    assert.ok(!snapshot.bodyText.includes('세무사법 제6조'), `${label}: 자격 문장이 화면에 남아 있습니다`);
+    assert.ok(!snapshot.bodyText.includes('신고 대리가 아닙니다'), `${label}: 성격 문장이 화면에 남아 있습니다`);
+  }
 });
 
+// D60(관리자 판정, 소유자 지시) — 이 값의 원래 유일한 소비자였던
+// `.disclosure-banner`(고지 ①②)가 삭제되어, 지금은 이 CSS 변수를 읽는 규칙이
+// `styles.css`에 없다. 그래도 이 검사는 유지한다 — `ui/app.js`가 여전히 값을
+// 채우고, design-system 5.19.1절이 같은 토큰을 `LiveSummaryStrip`(미구현)의
+// 위치로 이미 지정해 뒀다. 값을 채우는 쪽이 살아 있는 한 정확성은 계속 잰다.
 test('헤더 높이가 하드코딩된 56px이 아니라 실측값으로 CSS 변수에 실린다', { skip: skipWithoutChrome }, async () => {
   const heights = await app.page.evaluate(`(() => {
     const header = document.querySelector('.app-header').getBoundingClientRect();
@@ -142,12 +144,13 @@ test('산문 텍스트 블록이 --prose-max-width(640px)를 넘지 않는다 �
   // D46 2·3번(관리자 판정) — 「법령 조항」 disclosure(`.basis-block`)를 화면에서
   // 걷어냈다. 이 검사에서도 뺀다 — 존재하지 않는 요소를 찾으면 아래 루프가
   // "찾지 못했다"로 실패하는데, 그것은 이 검사가 재는 회귀(폭 초과)가 아니다.
+  // D60(관리자 판정) — 같은 이유로 `.disclosure-banner-body`(성격·자격 배너의
+  // 본문)도 뺐다. 그 배너 자체가 화면에서 없어졌다.
   const widths = await app.page.evaluate(`(() => {
     const w = (sel) => { const el = document.querySelector(sel); return el ? el.getBoundingClientRect().width : null; };
     return {
       assumptionBlock: w('.assumption-block'),
       limitNote: w('.limit-note'),
-      disclosureBody: w('.disclosure-banner-body'),
     };
   })()`);
   for (const [name, width] of Object.entries(widths)) {
