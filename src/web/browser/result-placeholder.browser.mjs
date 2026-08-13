@@ -181,7 +181,9 @@ test('강조 문구 두 줄이 링 아래에 있고 크기·굵기·색으로만
   })()`);
   measurements.copy = copy;
   assert.equal(copy.leadText, '값을 모두 넣으면 여기에 결과가 표시됩니다');
-  assert.equal(copy.subText, '계좌별 배분 · 계산된 절세액 · 적용한 법령 조항');
+  // D46 2·3번(관리자 판정) — 결과 화면에서 조항 표기를 뗀 것과 짝을 맞춰 문구를
+  // 바꿨다("적용한 법령 조항" → "가정 사항").
+  assert.equal(copy.subText, '계좌별 배분 · 계산된 절세액 · 가정 사항');
   assert.equal(copy.belowRing, true, '문구는 링 아래에 있다');
   assert.equal(copy.leadSize, '17px', 'type-title-s');
   assert.equal(copy.leadWeight, '600');

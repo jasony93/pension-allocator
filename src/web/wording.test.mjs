@@ -348,21 +348,28 @@ test('no assumption sentence claims a rule is missing from the ruleset when it i
   assert.ok(!/규칙이 없/.test(text), text);
   assert.match(text, /하나로 정해져 있지 않습니다/, '단일 기준일이 없다는 것이 이 규칙의 결론이다');
   assert.match(text, /2026-12-31/, '어느 날짜로 환산했는지가 사라지면 사용자가 대조할 수 없다');
-  // 규칙 id를 사용자에게 그대로 보이지 않는다 — 조항은 `LawChip`이 담는다.
+  // 규칙 id를 사용자에게 그대로 보이지 않는다 — 근거 조항은 화면에 인쇄하지
+  // 않는다(D46 2·3번, 관리자 판정). 근거 자체는 여전히 룰셋의 `source`에 있다.
   assert.ok(!text.includes('isa.eligibility'), text);
 });
 
 test('the affected-requirement clause appears only when the engine names one', () => {
+  // D46 2·3번(관리자 판정) 이후 이 문장은 더 이상 "아래 조항"(=LawChip)을
+  // 가리키지 않는다 — 그 칩이 화면에서 없어졌기 때문이다. 대신 "이 판정에
+  // 걸리는 요건"이라는 사실 자체를 가리키고, 그 사실은 여전히 엔진이 특정
+  // 요건을 지목했을 때만 나온다.
   const withNone = assumptionMessage('age_reference_date_not_in_ruleset', {
     reference_date: '2026-12-31',
     requires_reference_date_rule_ids: [],
   });
-  assert.ok(!/아래 조항/.test(withNone), '가리킬 조항이 없는데 "아래 조항"이라고 말하면 빈 곳을 가리킨다');
+  assert.ok(!/아래 조항/.test(withNone), '이제 어디서도 가리키지 않는 문구다 — "아래 조항"이 남아 있으면 안 된다');
+  assert.ok(!/이 판정에 걸리는 요건/.test(withNone), '가리킬 요건이 없는데 "이 판정에 걸리는 요건"이라고 말하면 빈 곳을 가리킨다');
   const withSome = assumptionMessage('age_reference_date_not_in_ruleset', {
     reference_date: '2026-12-31',
     requires_reference_date_rule_ids: ['isa.eligibility'],
   });
-  assert.match(withSome, /아래 조항/);
+  assert.ok(!/아래 조항/.test(withSome), '"아래 조항"이라는 문구 자체가 이제 없어야 한다 — 가리킬 LawChip이 없다');
+  assert.match(withSome, /이 판정에 걸리는 요건/);
 });
 
 test('a sentence never opens with a hole where a missing param used to be', () => {

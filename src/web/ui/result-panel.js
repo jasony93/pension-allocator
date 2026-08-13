@@ -88,6 +88,9 @@ import {
   PDF_EXPORT_NOTE,
   PDF_EXPORT_BLOCKED_NOTE,
   ISA_CARRYOVER_REPEAL_DIVERGENCE_NOTE,
+  CURRENT_SCENARIO_TAB_LABEL,
+  PROPOSED_SCENARIO_TAB_LABEL,
+  proposedSameAsCurrentNotice,
 } from '../copy.js';
 import { formatKrw, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
@@ -111,12 +114,12 @@ import {
   excludedAccounts,
   fillOrderTieBreak,
   lawEntriesFor,
-  lawEntriesForPath,
   pensionCreditHeadroomView,
   unallocatedBlockers,
   PENSION_ACCOUNTS,
 } from './eligibility.js';
 import { exportToPdf } from './print.js';
+import { scenarioDisplaysEqual } from './scenario-compare.js';
 
 // 필수 항목의 라벨·초점 대상·충족 판정은 `validation.js`의 `CORE_REQUIREMENTS`
 // 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
@@ -380,7 +383,6 @@ function amountCard(plan, scenario, annualReturnRate = null) {
 
   const view = taxCreditHeadlineView(plan);
   const headline = plan.headline_composite_total;
-  const laws = lawEntriesFor(scenario, view.basisRuleIds);
 
   // **합계에 가정 성분이 들어 있는가**(headline.includes_assumption_component)가
   // 이 카드의 모든 다른 판정보다 먼저 온다 — 「절세액」이라는 낱말을 쓸 수
@@ -420,7 +422,6 @@ function amountCard(plan, scenario, annualReturnRate = null) {
         // 잘못됐다고 읽는다. 실제로는 배분이 아니라 **세액이 한도였다**.
         el('p', { class: 'type-body-s' }, [capReducedNote(view.beforeCapKrw, view.reducedTotalKrw)]),
         view.contributionCarryoverAvailable ? el('p', { class: 'type-body-s' }, [CAP_CARRYOVER_NOTE]) : null,
-        lawChipRow(laws, 'note-laws'),
       ]),
       compositionBlock,
     ]);
@@ -455,6 +456,13 @@ function creditRateFallbackBanner(creditRateBracket) {
   ]);
 }
 
+/**
+ * D59(관리자 판정) — 조항 표기는 한 덩어리가 아니라 셋이었다. 지운 것은 (a)
+ * 접힌 「법령 조항 N건」 나열 블록(`basisBlock`, 통째로 삭제)뿐이고, 이
+ * 헬퍼는 (b) 배제 사유(`eligibilityNote`)와 (c) 「법령이 정한 것」 태그
+ * (`fillOrderNote`) 두 자리에서 다시 쓴다 — 그 둘은 나열이 아니라 개별 주장에
+ * 붙는 근거다.
+ */
 function lawChipRow(laws, className = 'note-laws') {
   if (!laws.length) return null;
   return el(
@@ -479,6 +487,14 @@ function exclusionReasonText(view) {
  * 영향을 준다"는 뜻이지 사용자에게 주의하라는 뜻이 아니다. 자격 미달은 사용자가
  * 잘못해서 생긴 상태가 아니고 대개 바꿀 수도 없다 — 주의 색을 칠하면 사용자가
  * 자기 상황을 결함으로 읽는다. **화면의 색은 화면이 정한다.**
+ *
+ * **D59(관리자 판정) — `LawChip`을 남긴다.** D46 2·3번으로 조항 표기를 걷어낼 때
+ * 이 자리도 함께 지웠으나, `tax-domain`이 다시 재서 이 자리는 「나열」이
+ * 아니라고 판정했다. `screens.md` 8.4(b)가 "차단 사유에 반드시 `LawChip`을
+ * 붙인다"고 못박은 자리이고, 지우면 "이 계산기가 당신의 계좌를 뺐다"만 남아
+ * 서비스가 임의로 막는 것처럼 읽힌다 — 법령 조건이라는 근거가 사라진다.
+ * 배제가 없는 대다수 사용자에게는 이 칩이 아예 나타나지 않으므로 소유자가
+ * 신고한 "나열"과도 부딪치지 않는다.
  */
 function eligibilityNote(view, scenario) {
   return el('div', { class: 'eligibility-note' }, [
@@ -504,15 +520,19 @@ function eligibilityNote(view, scenario) {
  * 세액공제 최대화이므로(계약 0.4절 지킨 선 1), 이 문장은 사실이 아니게 된다.
  * 더해서, 먼저 채운 계좌에 실제로 들어간 금액이 0이면 순서가 화면에 나타나지
  * 않으므로 설명할 대상도 없다 — 그때는 그리지 않는다.
+ *
+ * **D59(관리자 판정) — 근거 조항(`tie_break.basis_rule_ids`)의 `LawChip`을
+ * 남긴다.** D46 2·3번으로 한 차례 뗐으나 `tax-domain`이 다시 재서 되돌렸다 —
+ * 이 자리는 「법령이 정한 것」 태그(`FILL_ORDER_TAG_FACT`)가 붙는 자리이고,
+ * 조항을 떼면 "법이 정했다"면서 어느 법인지 안 적는 꼴이 되어
+ * design-system 5.28절("조항 없는 세법 서술을 화면에 두지 않는다")이 지키던
+ * 상태가 뒤집힌다. **아래 「이 계산기가 정한 것」 태그(제품 판단)에는 여전히
+ * 조항을 붙이지 않는다** — 그건 법이 아니라 이 계산기의 배분 기준이다.
  */
 function fillOrderNote(plan, scenario) {
   const tieBreak = fillOrderTieBreak(plan);
   if (!tieBreak) return null;
   const { flexible, restricted } = tieBreak;
-
-  // 헌장 고지 요소 3 — 사실 절 바로 옆에 근거 조항을 붙인다. 근거는 엔진이
-  // `tie_break.basis_rule_ids`로 지목한 규칙이고, 그 조문은 `legal_basis`에서
-  // 한 글자도 바꾸지 않고 가져온다.
   const laws = lawEntriesFor(scenario, tieBreak.basisRuleIds);
 
   return el('div', { class: 'fill-order-note' }, [
@@ -719,17 +739,17 @@ function donutSingleSliceAccount(plan, excluded) {
  * 5.3절 — 상한이 아니므로 넘을 수 있다). 그때는 크기와 이유를 한 문장에 담아
  * 적는다(5.10절 (3)). 넘는 현상은 개정안 시나리오에서만 나타나므로 그때
  * `ProposedBadge`가 붙는다.
+ *
+ * D46 2·3번(관리자 판정) — 근거 조항(`LawChip`)을 뗐다. 배지는 남는다 —
+ * "개정안에서만 나타나는 현상"이라는 사실은 조항 표기가 아니라 시나리오
+ * 구분 표시다.
  */
 function creditHeadroomBlock(scenario, plan) {
   const view = pensionCreditHeadroomView(scenario, plan);
   if (!view.exceeded) return null;
-  const laws = lawEntriesForPath(scenario, 'limits.pension_combined_credit_limit_krw');
   return el('div', { class: 'headroom-note' }, [
     el('p', { class: 'type-body-s' }, [creditHeadroomExceededMessage(view.remainingKrw)]),
-    el('p', { class: 'note-laws' }, [
-      !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
-      ...laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])),
-    ]),
+    !scenario.is_enacted ? el('p', { class: 'note-laws' }, [el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL])]) : null,
   ]);
 }
 
@@ -738,7 +758,8 @@ function creditHeadroomBlock(scenario, plan) {
  *
  * **12.2(a) — 전문은 `[4-D]` 표에만 남긴다.** 이 자리(C-2)는 짧은 문구로
  * 줄인다 — 같은 문장이 글자 그대로 두 번 있던 자리였다. `LawChip`도 함께
- * 뗀다(근거는 `[4-D]`가 이미 낸다).
+ * 뗀다(D46 2·3번 이후로는 `[4-D]`도 조항을 내지 않는다 — 근거는 룰셋의
+ * `source`에 그대로 있다).
  */
 function isaTaxFreeBlock(scenario, view) {
   if (view.taxFreeLimitKrw === null) return null;
@@ -1027,11 +1048,22 @@ function assumptionAxisSection(i, isaReturnAssumption) {
  * 보인다**(D37 3번) — 넷만 보이면 표의 모든 행에 확정된 부호가 붙어 있어
  * "그럼 계산되잖아"로 읽히고, 못 낸다고 판정한 바로 그 사실이 화면에서
  * 사라진다. 기본 접힘은 허용된다(D25) — 접는 것과 자르는 것은 다르다.
+ *
+ * **D46 2·3번(관리자 판정) — 표 밑의 `LawChip` 행을 뗀다. 표 안의 세율차·부호는
+ * 남긴다.** 이 표가 "조문 그대로"인 것은 값의 출처가 조문이라는 뜻이지, 조항
+ * 번호가 화면에 인쇄돼야 한다는 뜻이 아니다(D36 판정문: "세율표(새 입력
+ * 0개·가정 0개, 조문 그대로)"라고 말한 것은 **엔진이 값을 지어내지 않고
+ * 조문에서 그대로 가져온다**는 산출 방식이지 화면의 조항 표기 여부가 아니다).
+ * 값 자체(세율차 %p·부호)는 계속 낸다 — 그건 조항 인용이 아니라 이 표의
+ * 본문이다. 근거는 룰셋의 `source`에 그대로 있고 검증기가 계속 검사한다.
+ *
+ * **D59(관리자 판정)로 재확인됐다.** 이 표는 (a) 나열형 조항 표기에 가깝다고
+ * 판정했다 — 표의 뜻(조문 그대로)이 깨지지 않았으므로 조항 번호 열만 뺀 이
+ * 처리를 그대로 유지한다.
  */
 function pensionReferenceSection(scenario) {
   const ref = scenario.pension_withdrawal_tax_reference;
   if (!ref) return null;
-  const laws = lawEntriesFor(scenario, ref.basis_rule_ids);
 
   const rows = ref.rate_gap_cases.map((c) =>
     el('tr', {}, [
@@ -1057,7 +1089,6 @@ function pensionReferenceSection(scenario) {
         el('thead', {}, [el('tr', {}, PENSION_REFERENCE_TABLE_HEADERS.map((h) => el('th', {}, [h])))]),
         el('tbody', {}, rows),
       ]),
-      lawChipRow(laws, 'note-laws'),
     ]),
   ]);
 }
@@ -1128,6 +1159,18 @@ function stackBarComparison(scenario, activePlanId, onSelect) {
   ]);
 }
 
+/**
+ * D46 2·3번(관리자 판정) — 「적용 조항」 열을 표에서 뗐다. 배분된(정상) 행의
+ * 개별 적용 조항 표시는 소유자가 "칸마다 세법 항을 나열한다"고 지목한 바로
+ * 그 형태였다. 열이 넷으로 줄어 `colspan`도 5 → 4로 함께 줄었다.
+ *
+ * **D59(관리자 판정) — 배제된 행에는 근거를 되돌린다.** `tax-domain`이 재서
+ * "정상 행마다 붙는 조항 나열"과 "배제 사유의 근거"를 구분했다 — 후자는
+ * `screens.md` 8.4(b)가 필수로 못박은 자리다. 열로는 되돌리지 않는다(정상
+ * 행에는 빈 칸이 되어 표 구조가 다시 비대칭이 아니게 유지된다) — 대신 사유
+ * 문장이 있는 아래 줄에 `LawChip`을 짝지어 붙인다(`eligibilityNote`와 같은
+ * 패턴, design-system 5.24절).
+ */
 function accountTable(plan, scenario) {
   const rows = [];
   // 세액공제 인정 여지의 보조 줄은 연금계좌 묶음 아래 **한 번만** 붙는다(5.10절 (4)).
@@ -1140,10 +1183,9 @@ function accountTable(plan, scenario) {
     const view = accountLimitView(scenario, a.account);
 
     // 배제된 계좌 — 금액 칸을 비우고(0원도 쓰지 않는다: 배분하지 않았다는 뜻이
-    // 아니라 배분 대상이 아니라는 뜻이다) 바로 아래 줄에 사유와 근거 조항을
-    // 붙인다. 납입 잔여 한도 대비 비율도 한도에서 나온 값이므로 표시하지 않는다.
+    // 아니라 배분 대상이 아니라는 뜻이다) 바로 아래 줄에 사유를 붙인다. 납입
+    // 잔여 한도 대비 비율도 한도에서 나온 값이므로 표시하지 않는다.
     if (view.excluded) {
-      const laws = lawEntriesFor(scenario, view.basisRuleIds);
       rows.push(
         // id — `AccountBenefitStrip`의 행을 눌렀을 때 스크롤 + 하이라이트할
         // 대상이다(design-system 5.31절: "근거가 없는 것이 아니라 한 단계
@@ -1153,26 +1195,24 @@ function accountTable(plan, scenario) {
           el('td', {}, [EXCLUDED_ACCOUNT_AMOUNT_PLACEHOLDER]),
           el('td', {}, ['—']),
           el('td', {}, ['—']),
-          el('td', {}, laws.length ? laws.map((entry) => el('span', { class: 'law-chip' }, [entry.law])) : ['—']),
         ]),
       );
       rows.push(
-        el('tr', { class: 'table-row-excluded' }, [el('td', { colspan: 5 }, [exclusionReasonText(view)])]),
+        el('tr', { class: 'table-row-excluded' }, [
+          el('td', { colspan: 4 }, [exclusionReasonText(view), lawChipRow(lawEntriesFor(scenario, view.basisRuleIds), 'note-laws')]),
+        ]),
       );
       continue;
     }
 
     const remaining = view.remainingLimitKrw;
     const pct = remaining > 0 ? a.annual_krw / remaining : 0;
-    const lawIds = a.basis_rule_ids;
-    const lawEntry = scenario.legal_basis.find((l) => lawIds.includes(l.rule_id));
     rows.push(
       el('tr', { id: `account-row-${a.account}` }, [
         el('td', {}, [ACCOUNT_LABEL[a.account]]),
         el('td', { class: 'type-num' }, [formatKrw(a.monthly_krw)]),
         el('td', { class: 'type-num' }, [formatKrw(a.annual_krw)]),
         el('td', {}, [formatPercent(Math.min(1, pct))]),
-        el('td', {}, [lawEntry ? el('span', { class: 'law-chip' }, [lawEntry.law]) : '']),
       ]),
     );
 
@@ -1185,7 +1225,7 @@ function accountTable(plan, scenario) {
       if (headroom.exceeded) {
         rows.push(
           el('tr', { class: 'table-row-note' }, [
-            el('td', { colspan: 5 }, [
+            el('td', { colspan: 4 }, [
               creditHeadroomExceededMessage(headroom.remainingKrw),
               !scenario.is_enacted ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
             ]),
@@ -1195,15 +1235,7 @@ function accountTable(plan, scenario) {
     }
     if (a.account === 'isa' && view.taxFreeLimitKrw !== null) {
       rows.push(
-        el('tr', { class: 'table-row-note' }, [
-          el('td', { colspan: 5 }, [
-            isaTaxFreeCaption(view.taxFreeLimitKrw),
-            ...lawEntriesForPath(scenario, 'limits.by_account[isa].tax_free_limit_krw').flatMap((entry) => [
-              ' ',
-              el('span', { class: 'law-chip' }, [entry.law]),
-            ]),
-          ]),
-        ]),
+        el('tr', { class: 'table-row-note' }, [el('td', { colspan: 4 }, [isaTaxFreeCaption(view.taxFreeLimitKrw)])]),
       );
     }
 
@@ -1219,15 +1251,7 @@ function accountTable(plan, scenario) {
     );
     if (withoutCreditEffect) {
       rows.push(
-        el('tr', { class: 'table-row-note' }, [
-          el('td', { colspan: 5 }, [
-            pensionWithoutCreditMessage(withoutCreditEffect),
-            ...lawEntriesFor(scenario, withoutCreditEffect.basis_rule_ids).flatMap((entry) => [
-              ' ',
-              el('span', { class: 'law-chip' }, [entry.law]),
-            ]),
-          ]),
-        ]),
+        el('tr', { class: 'table-row-note' }, [el('td', { colspan: 4 }, [pensionWithoutCreditMessage(withoutCreditEffect)])]),
       );
     }
   }
@@ -1237,7 +1261,6 @@ function accountTable(plan, scenario) {
         el('td', {}, ['미배분']),
         el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_monthly_krw)]),
         el('td', { class: 'type-num' }, [formatKrw(plan.unallocated_annual_krw)]),
-        el('td', {}, ['—']),
         // Q1 — 문장을 고정하지 않고 엔진의 `limited_by`를 읽어 사유별로 가른다.
         // 납입 한도를 다 채워 멈춘 것과 세액공제가 더 붙지 않아 멈춘 것은
         // 사용자에게 전혀 다른 사실이다.
@@ -1249,7 +1272,7 @@ function accountTable(plan, scenario) {
     const breakdownMessage = unallocatedBreakdownMessage(plan.unallocated_breakdown);
     if (breakdownMessage) {
       rows.push(
-        el('tr', { class: 'table-row-note' }, [el('td', { colspan: 5 }, [breakdownMessage])]),
+        el('tr', { class: 'table-row-note' }, [el('td', { colspan: 4 }, [breakdownMessage])]),
       );
     }
   }
@@ -1257,18 +1280,17 @@ function accountTable(plan, scenario) {
   if (transferLimit) {
     rows.push(
       el('tr', {}, [
-        el('td', { colspan: 5 }, [
+        el('td', { colspan: 4 }, [
           `ISA 전환에 따른 추가 공제 한도 ${formatKrw(transferLimit.extra_credit_limit_krw)} — 위 연금저축·IRP 배분에 반영됨`,
         ]),
       ]),
     );
   }
-  // 좁은 화면에서 다섯 칸을 욱여넣으면 헤더 글자가 한 자씩 세로로 쪼개진다
-  // (실측). 열을 지우지 않고 가로 스크롤로 옮긴다 — 근거 조항 열을 지우면
-  // 헌장 고지 요소 3이 그 표에서 사라진다.
+  // 좁은 화면에서 네 칸도 헤더 글자가 세로로 쪼개질 수 있다(실측). 열을 지우지
+  // 않고 가로 스크롤로 옮긴다.
   return el('div', { class: 'account-table-scroll' }, [
     el('table', { class: 'account-table' }, [
-      el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '납입 잔여 한도 대비', '적용 조항'].map((h) => el('th', {}, [h])))]),
+      el('thead', {}, [el('tr', {}, ['계좌', '월 배분', '연 환산', '납입 잔여 한도 대비'].map((h) => el('th', {}, [h])))]),
       el('tbody', {}, rows),
     ]),
   ]);
@@ -1357,20 +1379,16 @@ function moreItemsDisclosure(restNodes, label) {
 function assumptionBlock(response, scenario, form) {
   const entries = [];
   for (const a of response.assumptions) {
-    // 이 가정이 **어느 요건에 걸리는지**를 엔진이 규칙 id로 지목하면, 그 요건의
-    // 조항을 항목 옆에 붙인다(헌장 고지 요소 3 · 계약 5.7절의 두 방향 연결).
-    // **화면이 요건 이름을 지어내지 않는다** — `legal_basis`에 실린 것만 그린다.
-    // 지목이 없거나 그 규칙이 이 시나리오의 근거 목록에 없으면 아무것도 그리지
-    // 않는다(값이 없으면 그 줄을 그리지 않는 규약).
-    const affected = lawEntriesFor(scenario, a.params?.requires_reference_date_rule_ids ?? []);
     // 기준 과세연도는 엔진이 `echo`로 이미 되돌려 준 값이다. 문구가 그것을 쓰고
     // 싶을 때 쓸 수 있게 넘기되, **엔진이 실은 `params`가 언제나 이긴다** —
     // 화면이 엔진의 값을 덮어쓰는 경로를 만들지 않는다.
+    //
+    // D46 2·3번(관리자 판정) — 이 가정이 걸리는 요건의 근거 조항을 옆에 붙이던
+    // `LawChip`을 뗐다. 가정 사항 블록 자체와 문구는 그대로 남는다 — D25가
+    // 지키는 것은 한계·가정이 화면에서 사라지지 않는 것이지 조항 인용이
+    // 아니다. 근거는 여전히 엔진 응답(`basis_rule_ids`)과 룰셋의 `source`에 있다.
     const params = { tax_year: response.echo?.tax_year, ...a.params };
-    entries.push({
-      code: a.code,
-      node: affected.length ? [assumptionMessage(a.code, params), lawChipRow(affected, 'note-laws')] : assumptionMessage(a.code, params),
-    });
+    entries.push({ code: a.code, node: assumptionMessage(a.code, params) });
   }
   // 화면 파생 항목(screens.md 4.5절) — 엔진 notice가 아니라 폼 상태에서 나온다.
   // 이 넷이 빠져 있어서 입력 부족 화면의 "그 사실을 아래 가정에 적습니다"가
@@ -1402,41 +1420,17 @@ function assumptionBlock(response, scenario, form) {
   ]);
 }
 
-/**
- * 법령 조항의 "중요한 5개" — 이 배분안의 헤드라인 세액공제액(`deterministic_
- * benefit`)을 뒷받침하는 조항을 최우선으로, 그다음 계좌별 납입 한도를 뒷받침
- * 하는 조항, 나머지는 원래 순서를 지킨다. 판정하지 않는다 — 엔진이 이미 실어
- *보낸 `basis_rule_ids` 지목을 읽어 정렬만 한다.
- */
-function lawEntryTier(entry, headlineRuleIds, limitRuleIds) {
-  if (headlineRuleIds.has(entry.rule_id)) return 0;
-  if (limitRuleIds.has(entry.rule_id)) return 1;
-  return 2;
-}
-
-function basisBlock(scenario, plan) {
-  const headlineRuleIds = new Set(plan?.deterministic_benefit?.basis_rule_ids ?? []);
-  const limitRuleIds = new Set((scenario?.limits?.by_account ?? []).flatMap((l) => l.basis_rule_ids ?? []));
-  const { primary, rest } = splitTopFive(scenario.legal_basis, (entry) => lawEntryTier(entry, headlineRuleIds, limitRuleIds));
-
-  const row = (entry) =>
-    el('li', {}, [
-      el('span', { class: 'law-chip' }, [entry.law]),
-      ` ${entry.title} · ${entry.effective_from} 시행`,
-      entry.bill_stage ? el('span', { class: 'proposed-badge' }, [`정부안 · 국회 통과 전`]) : null,
-      el('a', { href: entry.url, target: '_blank', rel: 'noopener', class: 'law-link' }, ['원문']),
-    ]);
-
-  return el('details', { class: 'basis-block' }, [
-    el('summary', { class: 'block-summary type-title-m' }, [
-      el('span', { class: 'block-summary-chevron', 'aria-hidden': 'true' }, ['▸']),
-      // 12.2(b) — 헤더(상시 노출)에 이미 "2026 과세연도 기준"이 있다. 트리거에서 뗀다.
-      `법령 조항 ${scenario.legal_basis.length}건`,
-    ]),
-    el('ul', {}, primary.map(row)),
-    moreItemsDisclosure(rest.map(row), '이 배분안의 세액공제액·납입 한도를 직접 뒷받침하지 않는 조항 위주'),
-  ]);
-}
+// D46 2·3번(관리자 판정) — 「법령 조항」 disclosure(`basisBlock`, 옛 `<details
+// class="basis-block">`)를 화면에서 걷어냈다. 소유자가 세 번째로 같은 항목을
+// 줄여 달라고 했다("결과 화면에 소득세법 각 항이 너무 많이 나열되어 있다" ·
+// "그 외의 밑에 칸들에도 세법 항을 나열한 구간들이 있는데 다 없애 달라").
+// 이 블록은 처음부터 끝까지 조항 나열(`LawChip` + 조문 제목 + 원문 링크)이라
+// 부분 축소가 아니라 전체 제거가 맞다. **헌장 D25("접는 것은 되고 자르는 것은
+// 안 된다")에 걸리지 않는다** — D25가 지키는 것은 한계·가정이 화면에서
+// 사라지지 않는 것이지 조항 인용의 존재가 아니다. **`scenario.legal_basis`는
+// 엔진 응답에서 지우지 않았고 룰셋의 `source`도 그대로다** — 검증기가 계속
+// 그것을 검사한다. 화면이 안 보이는 것과 우리가 근거 없이 계산하는 것은
+// 다르다.
 
 function limitNote() {
   return el(
@@ -1520,6 +1514,48 @@ function isaCarryoverRepealDivergenceNote(response, scenario) {
   return el('div', { class: 'warning-note warning-note-banner' }, [el('p', {}, [ISA_CARRYOVER_REPEAL_DIVERGENCE_NOTE])]);
 }
 
+/**
+ * D46 4번(관리자 판정) — 개정안 탭이 확정 탭과 **화면에 보이는 결과**에서
+ * 같으면 결과 패널을 통째로 다시 그리지 않고 한 줄만 낸다. 소유자가 본
+ * 중복("개정안 탭 안이 현 세법 기준과 똑같이 나온다")이 바로 이것이고, 그
+ * 관찰이 참인 경우에만 이 판정을 적용한다 — 개정예고 규칙 12건 중 어느 것에도
+ * 걸리지 않은 입력에서만 참이다(청년 퇴직연금 공제율 15%·ISA 이월 폐지·계약
+ * 5년 상한·생산적금융 ISA 등 여럿이 실제로 결과를 바꾼다).
+ *
+ * **비교는 `scenarioDisplaysEqual`(순수 함수, `scenario-compare.js`)이 진다.**
+ * 새 세법 판단이 아니다 — 엔진이 이미 두 시나리오를 각각 계산했고, 여기서는
+ * 그 두 응답을 대조할 뿐이다. 무엇을 비교하는지(배분액만이 아니라 한도·자격·
+ * 세율표·안내 코드까지)와 무엇을 뺐는지(정체성 필드·조항 인용)는 그 모듈의
+ * 주석에 근거와 함께 있다.
+ */
+function proposedScenarioMatchesCurrent(response, scenario) {
+  if (scenario.is_enacted) return false;
+  const current = response.scenarios.find((s) => s.is_enacted);
+  return scenarioDisplaysEqual(current, scenario);
+}
+
+/**
+ * **`scenario.ruleset.tax_year`를 쓰지 않는다.** 그 값은 두 시나리오 모두
+ * 요청한 과세연도(예: 2026)를 그대로 되비추는 값이다(`src/engine/compute.mjs`
+ * `tax_year: selection.base.doc.tax_year` — 확정 룰셋의 연도이고 개정안
+ * 시나리오에서도 바뀌지 않는다). "2027년 반영 예정"이 말하려는 것은 **개정안이
+ * 시행되는 해**이므로 `ruleset.effective_from`(개정예고 룰셋 파일의 시행일,
+ * 예: `2027-01-01`)에서 연도를 읽는다 — `tax-rules-report.md`가 낸 그 문서의
+ * 값 그대로다.
+ */
+function proposedEffectiveYear(scenario) {
+  const match = /^(\d{4})/.exec(scenario.ruleset.effective_from ?? '');
+  return match ? match[1] : null;
+}
+
+function proposedSameAsCurrentBody(scenario) {
+  return el('div', { class: 'result-body' }, [
+    el('div', { class: 'inline-alert inline-alert-info', role: 'status' }, [
+      el('p', { class: 'type-body-strong' }, [proposedSameAsCurrentNotice(proposedEffectiveYear(scenario))]),
+    ]),
+  ]);
+}
+
 function resultPanelForScenario(
   response,
   scenario,
@@ -1528,6 +1564,10 @@ function resultPanelForScenario(
   onSelectPlan,
   { conditionalPending = false, form = {}, seatDraw = 'donut' } = {},
 ) {
+  if (proposedScenarioMatchesCurrent(response, scenario)) {
+    return proposedSameAsCurrentBody(scenario);
+  }
+
   const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
   const showAllExitBanner = scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty');
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
@@ -1556,7 +1596,6 @@ function resultPanelForScenario(
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),
     assumptionBlock(response, scenario, form),
-    basisBlock(scenario, plan),
     limitNote(),
     saveShareBlock(store),
   ]);
@@ -1577,7 +1616,11 @@ function scenarioTabs(response, activeScenarioId, onSelect) {
           'aria-selected': s.scenario_id === activeScenarioId,
           onclick: () => onSelect(s.scenario_id),
         },
-        [s.scenario_id === 'current' ? '확정 세법 기준' : el('span', {}, ['개정안(정부안) 반영', el('span', { class: 'proposed-badge' }, ['정부안 · 국회 통과 전'])])],
+        [
+          s.scenario_id === 'current'
+            ? CURRENT_SCENARIO_TAB_LABEL
+            : el('span', {}, [PROPOSED_SCENARIO_TAB_LABEL, el('span', { class: 'proposed-badge' }, ['정부안 · 국회 통과 전'])]),
+        ],
       ),
     ),
   );

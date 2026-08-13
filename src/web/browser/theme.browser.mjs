@@ -90,10 +90,15 @@ const MEASURE_LIVE_ELEMENTS = `(() => {
     }
     return getComputedStyle(document.body).backgroundColor;
   };
+  // D46 2·3번 → D59(관리자 판정) — BasisBlock 원문 링크는 결과 화면에서 완전히
+  // 없어졌으므로 뺀다. LawChip도 이 고정 목록에서는 뺀다 — D59로 배제
+  // 사유·법정 순서 태그 두 자리는 되돌아왔지만 조건부로만 렌더된다(법정
+  // 순서 태그는 동점 조건이 실제로 걸릴 때만, 배제 사유는 배제된 계좌가 있을
+  // 때만). 이 검사는 항상 뜨는 고지의 대비를 재는 자리라 조건부 요소를
+  // 넣으면 입력값에 따라 거짓으로 실패한다 — 법령 조항 칩이 나열 자리 밖에서
+  // 뜨는지는 별도 회귀 검사(아래 D59 검사)가 조건 없이 잡는다.
   const rows = [
     ['DisclosureBanner', '.disclosure-banner p'],
-    ['LawChip', '.law-chip'],
-    ['BasisBlock 원문 링크', '.law-link'],
     ['AssumptionBlock 항목', '.assumption-block li'],
     ['LimitNote', '.limit-note p'],
     ['AmountCard 조건 캡션', '.amount-card-caption'],
@@ -216,11 +221,9 @@ test('결과 화면의 고지 요소가 두 테마 모두에서 4.5:1을 넘고 
 test('고지 요소에 다크 전용 처리가 없다 — 접히거나 흐려지지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const read = `(() => {
-    const basis = document.querySelector('.basis-block');
     const assumption = document.querySelector('.assumption-block');
     return {
-      basisOpen: basis.open, assumptionOpen: assumption.open,
-      basisOpacity: getComputedStyle(basis).opacity,
+      assumptionOpen: assumption.open,
       limitOpacity: getComputedStyle(document.querySelector('.limit-note')).opacity,
       bannerDisplay: getComputedStyle(document.querySelector('.disclosure-banner')).display,
     };
@@ -232,64 +235,92 @@ test('고지 요소에 다크 전용 처리가 없다 — 접히거나 흐려지
   await page.evaluate(`document.documentElement.setAttribute('data-theme','dark')`);
   const dark = await page.evaluate(read);
   assert.deepEqual(dark, light, '다크에서만 달라지는 고지 처리가 있습니다 — 헌장 D11은 테마와 무관하다');
-  // D25(관리자 판정) — 소유자 지시로 "가정 사항"·"법령 조항" 두 블록은 이제
-  // 기본 접힘이 허용된다. 고지 ①②(disclosure-banner)는 이 판정의 대상이
-  // 아니고 여전히 항상 보인다 — `bannerDisplay`가 위에서 두 테마 모두 같은 값인
-  // 것으로 그 사실을 함께 확인한다.
-  assert.equal(dark.basisOpen, false, 'D25 — 법령 조항은 기본 접힘이다');
+  // D25(관리자 판정) — 소유자 지시로 "가정 사항" 블록은 기본 접힘이 허용된다.
+  // **D46 2·3번(관리자 판정) 이후 "법령 조항" 블록(`.basis-block`) 자체가
+  // 화면에서 없어졌다** — 그래서 그 블록의 접힘 상태는 더 이상 잴 대상이
+  // 아니다. 고지 ①②(disclosure-banner)는 이 판정의 대상이 아니고 여전히
+  // 항상 보인다 — `bannerDisplay`가 위에서 두 테마 모두 같은 값인 것으로 그
+  // 사실을 함께 확인한다.
   assert.equal(dark.assumptionOpen, false, 'D25 — 가정 사항은 기본 접힘이다');
 });
 
-test('D25 — 접힌 가정·법령 블록도 제목과 건수가 읽히고, 펼치면 나머지 전부에 닿는다', { skip: skipWithoutChrome }, async () => {
+test('D46 2·3번 → D59(관리자 판정) — 「법령 조항」 나열 disclosure는 없고, 조항 칩은 배제 사유·법정 순서 두 자리에만 있다', { skip: skipWithoutChrome }, async () => {
+  // 낡은 검사를 뒤집었다 — 옛 버전은 `.basis-block`이 있고 열리는 것을
+  // 요구했다. 지금은 그 블록 자체가 회귀 대상이다.
+  //
+  // **D59로 범위가 좁혀졌다.** `.law-chip` 자체가 화면에서 완전히 사라진
+  // 것은 아니다 — `tax-domain`이 재서 "차단·배제 사유"(`.eligibility-note`·
+  // `.table-row-excluded`)와 "법령이 정한 것" 태그(`.fill-order-note`) 두
+  // 자리는 나열이 아니라 개별 주장의 근거이므로 남기기로 했다(D59). 이 검사는
+  // 그 두 자리 **밖에서** `.law-chip`이 나타나면 잡는다 — 나열형 조항 표기가
+  // 되돌아왔다는 뜻이기 때문이다.
   const { page } = app;
   await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.basis-block')`, { timeoutMs: 6000 });
+  await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
+  await sleep(300);
+
+  const found = await page.evaluate(`(() => {
+    const allowed = '.fill-order-note, .table-row-excluded, .eligibility-note';
+    const stray = [...document.querySelectorAll('.law-chip')].filter((el) => !el.closest(allowed));
+    return {
+      basisBlock: !!document.querySelector('.basis-block'),
+      lawLink: !!document.querySelector('.law-link'),
+      strayLawChipCount: stray.length,
+      resultSlotText: document.querySelector('.result-slot').innerText,
+    };
+  })()`);
+  assert.equal(found.basisBlock, false, '.basis-block이 남아 있습니다 — 법령 조항 disclosure가 다시 렌더됩니다');
+  assert.equal(found.lawLink, false, '.law-link(조문 원문 링크)이 남아 있습니다 — basis-block과 함께 뗀 자리다');
+  assert.equal(
+    found.strayLawChipCount,
+    0,
+    '배제 사유·법정 순서 태그 밖에서 .law-chip이 발견됐습니다 — 나열형 조항 표기가 되돌아왔을 수 있습니다',
+  );
+  assert.ok(!/법령 조항 \d+건/.test(found.resultSlotText), `"법령 조항 N건" 문구가 여전히 화면에 있습니다: ${found.resultSlotText}`);
+});
+
+test('D25 — 접힌 가정 블록도 제목과 건수가 읽히고, 펼치면 나머지 전부에 닿는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
   await sleep(300);
 
   const collapsed = await page.evaluate(`(() => {
-    const basis = document.querySelector('.basis-block');
     const assumption = document.querySelector('.assumption-block');
     return {
-      basisOpen: basis.open,
       assumptionOpen: assumption.open,
       // 접힌 상태에서도 요약 텍스트(제목+건수)가 실제로 보인다 — display:none이
       // 아니라 <details> 기본 동작대로 summary만 남고 나머지가 숨는다.
-      basisSummary: basis.querySelector('.block-summary').textContent.trim(),
       assumptionSummary: assumption.querySelector('.block-summary').textContent.trim(),
-      basisSummaryVisible: basis.querySelector('.block-summary').offsetHeight > 0,
+      assumptionSummaryVisible: assumption.querySelector('.block-summary').offsetHeight > 0,
     };
   })()`);
-  assert.equal(collapsed.basisOpen, false);
   assert.equal(collapsed.assumptionOpen, false);
-  assert.ok(/법령 조항 \d+건/.test(collapsed.basisSummary), `건수가 안 읽힙니다: ${collapsed.basisSummary}`);
   assert.ok(/가정 사항 \d+건/.test(collapsed.assumptionSummary), `건수가 안 읽힙니다: ${collapsed.assumptionSummary}`);
-  assert.equal(collapsed.basisSummaryVisible, true);
+  assert.equal(collapsed.assumptionSummaryVisible, true);
 
   // 펼친다 — 클릭 한 번으로 열리는지, 그리고 잘라내지 않고 나머지에 도달하는
   // 경로(중첩 <details>)가 같은 블록 안에 있는지를 잰다.
-  await page.clickElement(`document.querySelector('.basis-block .block-summary')`);
   await page.clickElement(`document.querySelector('.assumption-block .block-summary')`);
   await sleep(150);
   const opened = await page.evaluate(`(() => {
-    const basis = document.querySelector('.basis-block');
-    const totalLawItems = basis.querySelectorAll('ul li').length;
-    const moreTrigger = basis.querySelector('.more-items-trigger');
+    const assumption = document.querySelector('.assumption-block');
+    const totalItems = assumption.querySelectorAll('ul li').length;
+    const moreTrigger = assumption.querySelector('.more-items-trigger');
     return {
-      basisOpen: basis.open,
-      assumptionOpen: document.querySelector('.assumption-block').open,
-      totalLawItemsReachable: totalLawItems,
+      assumptionOpen: assumption.open,
+      totalItemsReachable: totalItems,
       hasMoreTrigger: !!moreTrigger,
-      declaredCount: Number((basis.querySelector('.block-summary').textContent.match(/(\\d+)건/) || [])[1]),
+      declaredCount: Number((assumption.querySelector('.block-summary').textContent.match(/(\\d+)건/) || [])[1]),
     };
   })()`);
-  assert.equal(opened.basisOpen, true);
   assert.equal(opened.assumptionOpen, true);
   // 잘라내지 않는다 — 중첩 <details>가 열리지 않은 상태에서도 DOM에는 나머지
   // 항목이 이미 존재해야 "같은 화면에서 도달 가능"이 성립한다.
   if (opened.declaredCount > 5) {
     assert.equal(opened.hasMoreTrigger, true, '5건을 넘는데 나머지로 가는 장치가 없습니다');
   }
-  assert.equal(opened.totalLawItemsReachable, opened.declaredCount, '건수와 실제로 DOM에 있는 항목 수가 어긋납니다');
+  assert.equal(opened.totalItemsReachable, opened.declaredCount, '건수와 실제로 DOM에 있는 항목 수가 어긋납니다');
 });
 
 // ---------------------------------------------------------------------------

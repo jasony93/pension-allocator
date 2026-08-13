@@ -173,17 +173,20 @@ test('인쇄 미디어에서 고지 여섯 요소가 모두 실제로 렌더된�
   }
 });
 
-test('인쇄 미디어에서 접힌 가정 사항·법령 조항의 본문이 실제 레이아웃 높이를 갖는다', { skip: skipWithoutChrome }, async () => {
+test('인쇄 미디어에서 접힌 가정 사항의 본문이 실제 레이아웃 높이를 갖는다', { skip: skipWithoutChrome }, async () => {
   // `open` 속성 자체는 건드리지 않는다(화면에서는 여전히 접힌 채여야 정상 —
   // "접기 상태가 화면과 인쇄에서 갈린다"는 이 검사의 핵심이다). CSS가
   // `::details-content`를 직접 펼치는지만 잰다.
+  //
+  // D46 2·3번(관리자 판정)으로 「법령 조항」 블록(`.basis-block`)이 결과
+  // 화면에서 없어졌다 — 이 검사에서도 뺀다. 가정 사항만 남는다.
   const { page } = app;
   const screenState = await page.evaluate(`(() => ({
     assumptionOpen: document.querySelector('.assumption-block').open,
-    basisOpen: document.querySelector('.basis-block').open,
+    basisBlockExists: !!document.querySelector('.basis-block'),
   }))()`);
   assert.equal(screenState.assumptionOpen, false, '화면에서는 기본으로 접혀 있어야 한다(D25)');
-  assert.equal(screenState.basisOpen, false);
+  assert.equal(screenState.basisBlockExists, false, 'D46 2·3번 — 법령 조항 블록이 다시 렌더됩니다');
 
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
@@ -191,11 +194,9 @@ test('인쇄 미디어에서 접힌 가정 사항·법령 조항의 본문이 �
       const rectOf = (sel) => document.querySelector(sel).getBoundingClientRect();
       return {
         assumptionListHeight: rectOf('.assumption-block ul').height,
-        basisListHeight: rectOf('.basis-block ul').height,
       };
     })()`);
     assert.ok(printState.assumptionListHeight > 0, '가정 사항 목록이 인쇄에서 0px 높이입니다 — 접힌 채로 나갑니다');
-    assert.ok(printState.basisListHeight > 0, '법령 조항 목록이 인쇄에서 0px 높이입니다 — 접힌 채로 나갑니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }

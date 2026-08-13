@@ -139,11 +139,13 @@ test('.input-slot 실측 폭이 1024~1439px 사이에서 440~640px 범위 안에
 test('산문 텍스트 블록이 --prose-max-width(640px)를 넘지 않는다 — 넓은 뷰포트에서도', { skip: skipWithoutChrome }, async () => {
   await setViewport(1920, 1080);
   // 접힌 <details>도 max-width는 유지한다(레이아웃 폭은 열림 여부와 무관하다).
+  // D46 2·3번(관리자 판정) — 「법령 조항」 disclosure(`.basis-block`)를 화면에서
+  // 걷어냈다. 이 검사에서도 뺀다 — 존재하지 않는 요소를 찾으면 아래 루프가
+  // "찾지 못했다"로 실패하는데, 그것은 이 검사가 재는 회귀(폭 초과)가 아니다.
   const widths = await app.page.evaluate(`(() => {
     const w = (sel) => { const el = document.querySelector(sel); return el ? el.getBoundingClientRect().width : null; };
     return {
       assumptionBlock: w('.assumption-block'),
-      basisBlock: w('.basis-block'),
       limitNote: w('.limit-note'),
       disclosureBody: w('.disclosure-banner-body'),
     };

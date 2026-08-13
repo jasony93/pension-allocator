@@ -332,8 +332,11 @@ let youthBlockOpen = false;
  * **펼치면 안의 내용은 그대로다** — 바뀌는 것은 기본 상태(펼침 → 접힘)뿐이다.
  */
 function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
-  // 규칙을 못 읽으면 그리지 않는다 — `LawChip` 없는 세법 서술을 화면에 두지
-  // 않는다(design-system 5.28절).
+  // 규칙을 못 읽으면 그리지 않는다 — 룰셋에 근거가 없는 세법 서술을 화면에
+  // 두지 않는다는 원칙은 그대로다(design-system 5.28절). **D46 2·3번(관리자
+  // 판정) 이후로는 그 근거를 `LawChip`으로 화면에 인쇄하지 않는다** — 게이트
+  // 조건(`if (!provisionalYouth) return null`)은 근거의 유무를 계속 지키고,
+  // 근거 자체(`provisionalYouth.law`)는 여전히 룰셋의 `source`에서 온 값이다.
   if (!provisionalYouth) return null;
 
   const showRangeNote = isWithinYouthAgeRange(provisionalYouth.ageRange, derivedAgeYears);
@@ -353,10 +356,9 @@ function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
         el('h4', { class: 'provisional-note-title' }, [YOUTH_BLOCK_TITLE]),
         showRangeNote ? el('p', { class: 'type-body-s' }, [YOUTH_DECLARED_RANGE_NOTE]) : null,
         el('p', { class: 'type-body-s' }, [YOUTH_AGE_UNDETERMINED_LINE]),
-        el('p', { class: 'note-laws' }, [
-          provisionalYouth.billStage ? el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL]) : null,
-          el('span', { class: 'law-chip' }, [provisionalYouth.law]),
-        ]),
+        provisionalYouth.billStage
+          ? el('p', { class: 'note-laws' }, [el('span', { class: 'proposed-badge' }, [PROPOSED_BADGE_LABEL])])
+          : null,
         el('label', { class: 'checkbox-row' }, [
           el('input', {
             type: 'checkbox',
