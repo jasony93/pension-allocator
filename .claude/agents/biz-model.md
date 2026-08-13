@@ -1,7 +1,7 @@
 ---
 name: biz-model
 description: 1단계 수요 검증 계획 수립, 5단계 계측 작동 확인, 6단계 월간 수익 지표 점검과 게이트 7 BM 결정 리포트가 필요할 때 호출한다.
-tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
+tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch
 model: sonnet
 ---
 

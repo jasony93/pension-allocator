@@ -75,7 +75,10 @@ export const UNITS = [
   {
     name: 'growth',
     model: 'sonnet',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
+    // D63 — `Bash`를 함께 준다. 이 유닛의 5단계 일(랜딩 카피)이 「지금 화면이
+    // 무엇을 말하는가」에 매여 있는데, 화면을 띄울 수 없으면 승인 시점의
+    // 문서만 보고 쓰게 된다. 이번 세션에 제품의 목적 자체가 바뀌었다.
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
     writeScope: [
       'docs/stage-1-discovery/channel-research.md',
       'docs/stage-2-design/analytics-plan.md',
@@ -86,7 +89,10 @@ export const UNITS = [
   {
     name: 'biz-model',
     model: 'sonnet',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
+    // D63 — `Bash`를 준다. 5단계 완료 기준이 「계측이 실제로 도는지」인데
+    // **실행 도구가 없어 그 기준을 스스로 확인할 수 없었다.** 이 조직에서
+    // 세 번째 같은 형태다(`designer`·`tax-domain`도 같은 이유로 열었다).
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
     writeScope: [
       'docs/stage-1-discovery/demand-validation-plan.md',
       'docs/stage-6-operations/',

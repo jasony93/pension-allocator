@@ -1,7 +1,7 @@
 ---
 name: growth
 description: 1단계 홍보 채널 조사, 2단계 계측 설계, 5단계 랜딩 카피·SEO, 6단계 월간 채널 성과 점검이 필요할 때 호출한다.
-tools: Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
+tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch
 model: sonnet
 ---
 
