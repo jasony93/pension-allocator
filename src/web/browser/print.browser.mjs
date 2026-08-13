@@ -361,7 +361,7 @@ test('인쇄 미디어에서 접힌 가정 사항의 본문이 실제 레이아�
 
 test('버튼을 누르면 save_share_action(method: pdf)이 나간다', { skip: skipWithoutChrome }, async () => {
   // 개발·검사 환경은 `analytics-config.js`의 수집기 주소가 비어 있어 실제
-  // 전송(sendBeacon)까지는 가지 않는다 — 그 상태에서 `analytics.js`는
+  // 전송(fetch)까지는 가지 않는다 — 그 상태에서 `analytics.js`는
   // `console.warn(문구, eventName)`으로 대신 알린다(코드 경로가 여전히
   // `track()`까지 도달했다는 증거로 충분하다).
   const { page } = app;

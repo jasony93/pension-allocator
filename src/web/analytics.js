@@ -179,16 +179,27 @@ function pathOnly(locationLike) {
  * 그대로 싣는다 — 여기서 속성을 새로 붙이지 않는다. 페이지 URL은 쿼리스트링·해시를
  * 제거한 경로만 보낸다(요구사항 5).
  *
- * `sendBeacon`을 우선 쓰고(결과 화면 이탈 시점에도 유실 없이 전송), 없으면
- * `fetch(..., { keepalive: true })`로 폴백한다. 실패해도 호출자에게 예외를
- * 올리지 않는다(fire-and-forget, 6-5절) — `createAnalytics().track()`의 바깥쪽
- * try/catch와 별개로 이 함수 자체도 스스로 안전하게 막는다.
+ * **`sendBeacon`을 쓰지 않는다(관리자 결정 D63).** `navigator.sendBeacon()`의
+ * 반환값은 "브라우저 큐에 넣었다"만 뜻하고 **수집기 도착을 보장하지 않는다.**
+ * 우리가 보내는 JSON body는 CORS 안전 목록 밖(`Content-Type: application/json`)이라
+ * 교차 오리진 수집기에서는 preflight(OPTIONS)가 필요한데, `sendBeacon`은 그 뒤를
+ * 조용히 버린다 — 그런데도 `true`를 돌려준다. 이전 코드가 그 `true`를 보고 실제로
+ * 도착하는 `fetch` 경로를 건너뛰어, **교차 오리진 수집기에서는 모든 이벤트가 소리
+ * 없이 사라졌다.** (`text/plain` Blob으로 우회하면 preflight를 피할 수 있지만, Umami
+ * 수집 API가 그 content-type의 본문을 실제로 JSON으로 파싱하는지 확인할 수단이
+ * 없었다 — 확인 못 한 우회로를 코드에 남기지 않는다.)
+ *
+ * 그래서 `fetch(..., { keepalive: true })` 하나만 쓴다. 응답까지 기다리지 않고
+ * `.catch()`로 실패를 흡수하므로 페이지 이탈을 막지 않으며, `keepalive`는 스펙상
+ * 문서가 사라진 뒤에도(unload) 요청이 살아남도록 설계되어 있다 — 실제 헤드리스
+ * 브라우저로 "요청 직후 즉시 navigate", "요청 직후 즉시 탭을 닫는다" 두 경우 모두
+ * 수집기가 본문을 받는 것을 확인했다(`src/web/browser/analytics-delivery.browser.mjs`).
+ * 실패해도 호출자에게 예외를 올리지 않는다(fire-and-forget, 6-5절) —
+ * `createAnalytics().track()`의 바깥쪽 try/catch와 별개로 이 함수 자체도 스스로
+ * 안전하게 막는다.
  */
 export function createUmamiTransport({
   config = ANALYTICS_CONFIG,
-  sendBeaconImpl = typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function'
-    ? navigator.sendBeacon.bind(navigator)
-    : undefined,
   fetchImpl = typeof fetch !== 'undefined' ? fetch : undefined,
   locationLike = typeof window !== 'undefined' ? window.location : undefined,
   warn = typeof console !== 'undefined' ? console.warn.bind(console) : () => {},
@@ -202,6 +213,7 @@ export function createUmamiTransport({
         );
         return;
       }
+      if (!fetchImpl) return;
 
       const body = JSON.stringify({
         type: 'event',
@@ -213,22 +225,14 @@ export function createUmamiTransport({
         },
       });
 
-      if (sendBeaconImpl) {
-        const blob = typeof Blob !== 'undefined' ? new Blob([body], { type: 'application/json' }) : body;
-        const ok = sendBeaconImpl(config.collectUrl, blob);
-        if (ok) return;
-      }
-
-      if (fetchImpl) {
-        fetchImpl(config.collectUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-          keepalive: true,
-        }).catch(() => {
-          /* fire-and-forget: 네트워크 실패가 계산 기능에 영향을 주지 않는다 */
-        });
-      }
+      fetchImpl(config.collectUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => {
+        /* fire-and-forget: 네트워크 실패가 계산 기능에 영향을 주지 않는다 */
+      });
     } catch {
       /* fire-and-forget: 전송 계층 자체의 예외도 호출자에게 올리지 않는다 */
     }

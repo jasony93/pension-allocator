@@ -23,32 +23,17 @@ test('isAnalyticsConfigured() is false when either value is missing, true when b
   );
 });
 
-test('configured: sends via sendBeacon to the configured collectUrl', () => {
+// D63(관리자 판정) — `sendBeacon`을 더 이상 쓰지 않는다. `navigator.sendBeacon()`의
+// 반환값은 "브라우저 큐에 넣었다"만 뜻하고 수집기 도착을 보장하지 않는다 —
+// 여기서 그 함수에 목을 세워 `true`를 돌려주면, 도착 여부와 무관하게 통과하는
+// 검사가 되어 결함과 같은 모양을 만든다(그래서 D63이 실제로 놓쳤다). 도착 자체는
+// 목으로 잴 수 없으므로 `analytics-delivery.browser.mjs`가 실제 Chrome +
+// 실제 교차 오리진 수집기로 잰다. 여기서는 `fetch(..., { keepalive: true })`
+// 하나만 쓰는 계약(호출 인자·once-per-session과 무관한 전송 계층의 모양)만 본다.
+test('configured: sends via fetch(..., { keepalive: true }) to the configured collectUrl', async () => {
   const calls = [];
   const transport = createUmamiTransport({
     config: { collectUrl: 'https://umami.example.com/api/send', websiteId: 'site-1' },
-    sendBeaconImpl: (url, blob) => {
-      calls.push({ url, blob });
-      return true;
-    },
-    fetchImpl: () => {
-      throw new Error('fetch should not be used when sendBeacon is available');
-    },
-    locationLike: { pathname: '/result', search: '', hash: '' },
-    warn: () => {},
-  });
-
-  transport('save_share_action', SAMPLE_PAYLOAD);
-
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://umami.example.com/api/send');
-});
-
-test('configured: falls back to fetch(..., { keepalive: true }) when sendBeacon is unavailable', async () => {
-  const calls = [];
-  const transport = createUmamiTransport({
-    config: { collectUrl: 'https://umami.example.com/api/send', websiteId: 'site-1' },
-    sendBeaconImpl: undefined,
     fetchImpl: (url, init) => {
       calls.push({ url, init });
       return Promise.resolve({ ok: true });
@@ -62,21 +47,17 @@ test('configured: falls back to fetch(..., { keepalive: true }) when sendBeacon 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'https://umami.example.com/api/send');
   assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.headers['Content-Type'], 'application/json');
   assert.equal(calls[0].init.keepalive, true);
   const body = JSON.parse(calls[0].init.body);
   assert.equal(body.payload.name, 'save_share_action');
 });
 
-test('unconfigured: does not call sendBeacon or fetch, and warns clearly', () => {
-  let beaconCalled = false;
+test('unconfigured: does not call fetch, and warns clearly', () => {
   let fetchCalled = false;
   const warnings = [];
   const transport = createUmamiTransport({
     config: { collectUrl: '', websiteId: '' },
-    sendBeaconImpl: () => {
-      beaconCalled = true;
-      return true;
-    },
     fetchImpl: () => {
       fetchCalled = true;
       return Promise.resolve();
@@ -87,19 +68,15 @@ test('unconfigured: does not call sendBeacon or fetch, and warns clearly', () =>
 
   transport('save_share_action', SAMPLE_PAYLOAD);
 
-  assert.equal(beaconCalled, false);
   assert.equal(fetchCalled, false);
   assert.equal(warnings.length, 1);
 });
 
-test('a transport failure (sendBeacon throws) never throws back to the caller', () => {
+test('a transport failure (fetchImpl throws synchronously) never throws back to the caller', () => {
   const transport = createUmamiTransport({
     config: { collectUrl: 'https://umami.example.com/api/send', websiteId: 'site-1' },
-    sendBeaconImpl: () => {
-      throw new Error('sendBeacon exploded');
-    },
     fetchImpl: () => {
-      throw new Error('fetch exploded too');
+      throw new Error('fetch exploded');
     },
     locationLike: { pathname: '/result', search: '', hash: '' },
     warn: () => {},
@@ -108,38 +85,47 @@ test('a transport failure (sendBeacon throws) never throws back to the caller', 
   assert.doesNotThrow(() => transport('save_share_action', SAMPLE_PAYLOAD));
 });
 
+test('a rejected fetch promise is swallowed (fire-and-forget)', async () => {
+  const transport = createUmamiTransport({
+    config: { collectUrl: 'https://umami.example.com/api/send', websiteId: 'site-1' },
+    fetchImpl: () => Promise.reject(new Error('network down')),
+    locationLike: { pathname: '/result', search: '', hash: '' },
+    warn: () => {},
+  });
+
+  assert.doesNotThrow(() => transport('save_share_action', SAMPLE_PAYLOAD));
+  // 마이크로태스크 큐가 돌 시간을 준다 — 여기서 unhandled rejection이 나면 안 된다.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+});
+
 test('the query string and hash are stripped — only the path is sent as url', () => {
   const calls = [];
   const transport = createUmamiTransport({
     config: { collectUrl: 'https://umami.example.com/api/send', websiteId: 'site-1' },
-    sendBeaconImpl: (url, blob) => {
-      calls.push(blob);
-      return true;
+    fetchImpl: (url, init) => {
+      calls.push(init.body);
+      return Promise.resolve({ ok: true });
     },
-    fetchImpl: undefined,
     locationLike: { pathname: '/index.html', search: '?age=40&income=60000000', hash: '#anything' },
     warn: () => {},
   });
 
   transport('page_view', SAMPLE_PAYLOAD);
 
-  return calls[0].text().then((text) => {
-    const body = JSON.parse(text);
-    assert.equal(body.payload.url, '/index.html');
-    assert.ok(!body.payload.url.includes('?'));
-    assert.ok(!body.payload.url.includes('age'));
-    assert.ok(!body.payload.url.includes('60000000'));
-  });
+  const body = JSON.parse(calls[0]);
+  assert.equal(body.payload.url, '/index.html');
+  assert.ok(!body.payload.url.includes('?'));
+  assert.ok(!body.payload.url.includes('age'));
+  assert.ok(!body.payload.url.includes('60000000'));
 });
 
 test('the sent data is exactly the payload track() produced — the transport adds no new properties', () => {
   const calls = [];
   const transport = createUmamiTransport({
     config: { collectUrl: 'https://umami.example.com/api/send', websiteId: 'site-1' },
-    sendBeaconImpl: undefined,
     fetchImpl: (url, init) => {
       calls.push(init.body);
-      return Promise.resolve();
+      return Promise.resolve({ ok: true });
     },
     locationLike: { pathname: '/result', search: '', hash: '' },
     warn: () => {},
