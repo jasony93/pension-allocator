@@ -52,7 +52,7 @@ node --test "tests/org/*.test.mjs"   # 검증기 자체의 테스트
 node scripts/dev-server.mjs           # http://127.0.0.1:5173/src/web/index.html
 ```
 
-## 배포 — 단일 HTML 빌드 (D66)
+## 배포 — 단일 HTML 빌드 (D66·D67)
 
 `src/web/`는 여러 ESM 모듈과 `data/tax-rules/`의 룰셋 JSON을 `fetch`로 읽는 구조라 정적 호스팅 서버가 필요하다. GitHub Pages에 그대로 올리려면 이 전부를 **자기완결적인 단일 HTML 파일**로 묶어야 한다.
 
@@ -68,18 +68,27 @@ node scripts/build.mjs out/other.html  # 출력 경로를 바꾼다
 
 **아티팩트 안내문(`--with-note`).** 기본 빌드에는 소유자 미리보기용 배너("동작하는 프로토타입 — 마지막 커밋 기준" 등)가 **빠져 있다.** 공개 배포본은 불특정 방문자를 향하는데 그 배너는 내부 진행 상황을 설명하는 문구이고 화면이 바뀔 때마다 다시 낡는다(실제로 이 저장소에서 두 번 낡았다 — 이미 사라진 입력을 설명하고 있었다). 소유자에게 다시 미리보기를 보여줘야 하면 `--with-note`로 켠다.
 
-**계측(analytics-config.js).** `src/web/analytics-config.js`의 `collectUrl`·`websiteId`가 비어 있으면(기본 상태) 빌드가 그 사실을 콘솔에 경고로 출력한다. 계산 기능 자체는 그대로 동작하지만 계측 이벤트는 어디로도 나가지 않는다. 방문자 통계를 수집하려면 자체 호스팅 Umami(D18) 인스턴스 정보를 이 파일에 채우고 다시 빌드해야 한다.
+**계측(analytics-config.js) — 사람이 값을 채우는 두 지점.** 둘 다 비어 있으면(기본 상태) 빌드가 콘솔에 각각 경고를 출력한다. 계산 기능 자체는 두 값과 무관하게 정상 동작한다.
 
-**검사.** `node --test src/web/browser/artifact-build.browser.mjs`가 빌드를 새로 돌리고 실제 Chrome으로 `dist/index.html`을 열어 입력을 채우고 결과가 그려지는지까지 확인한다. `src/`의 나머지 테스트가 전부 통과해도 이름 충돌이나 빠진 모듈로 번들 자체가 깨질 수 있어서(Node 테스트는 이걸 원리상 못 본다) 배포 전 마지막 안전망이다. Chrome을 찾지 못하면 건너뛴다(`CHROME_PATH`로 지정 가능).
+- **`collectUrl`·`websiteId`** — 커스텀 이벤트(`analytics-plan.md`의 `page_view`·`result_shown` 등)를 자체 호스팅 Umami(D18)로 보내는 설정이다. 아직 서버를 세우지 않았다면 비워 둔다.
+- **`EXTERNAL_VISITOR_SNIPPET`** — 서버 없이 방문자수만 얻는 외부 스니펫(D67, 예: Cloudflare Web Analytics)을 **가공 없이 그대로** 붙여넣는 자리다. 채우면 빌드가 그 문자열을 산출물의 `</body>` 직전에 그대로 삽입한다. **받는 곳과 넣는 곳:**
+  1. https://dash.cloudflare.com 의 **Web Analytics**에서 이 사이트를 등록하고, **Manage site**에서 **JS 스니펫을 그대로 복사**한다(대시보드 문구가 안내하는 방식 그대로 — 스니펫의 정확한 형태는 이 저장소가 기억해 재구성하지 않는다).
+  2. `src/web/analytics-config.js`의 `EXTERNAL_VISITOR_SNIPPET` 백틱 사이에 **한 글자도 고치지 말고** 붙여넣는다.
+  3. `node scripts/build.mjs`를 다시 돌린다.
+  - **내부 미리보기(`--with-note`) 빌드에는 채워져 있어도 삽입되지 않는다** — 그 환경이 외부 스크립트를 CSP로 막기 때문이다. 공개 배포 기본 빌드에는 그대로 들어간다.
 
-### `dist/`는 이 저장소에 커밋하지 않는다
+**검사.** `node --test src/web/browser/artifact-build.browser.mjs`가 빌드를 새로 돌리고 실제 Chrome으로 `dist/index.html`을 열어 입력을 채우고 결과가 그려지는지까지 확인한다. `src/`의 나머지 테스트가 전부 통과해도 이름 충돌이나 빠진 모듈로 번들 자체가 깨질 수 있어서(Node 테스트는 이걸 원리상 못 본다) 배포 전 마지막 안전망이다. Chrome을 찾지 못하면 건너뛴다(`CHROME_PATH`로 지정 가능). `EXTERNAL_VISITOR_SNIPPET`을 채운 뒤에는 자동 검사가 없다 — `dist/index.html`을 직접 열어 개발자 도구 Network 탭에서 그 스니펫이 부른 요청 하나만 나가는지 눈으로 확인한다(정확한 스니펫 형태를 이 저장소가 가정하지 않으므로, 자동 검사도 그 형태를 가정할 수 없다).
 
-`.gitignore`에 있다. D66 판정으로 이 저장소는 공개하지 않고(내부 판정·세무사법 노출 분석·사업 계획이 함께 있다), **`dist/index.html` 하나만 별도 공개 저장소로 옮겨 GitHub Pages로 띄운다.** 소스에서 언제든 다시 만들 수 있는 산출물을 이 저장소에 커밋하면 두 파일이 갈라질 뿐이라 판단했다.
+### 배포 — `gh-pages` 브랜치에 단일 파일 (D67)
+
+이 저장소는 소유자 판정(D67)으로 **전부 공개한다.** D66이 세워 둔 "저장소를 둘로 나눈다"는 대비는 필요 없어졌다. `dist/`는 그래도 이 저장소에 커밋하지 않는다(`.gitignore`) — 소스에서 언제든 다시 만들 수 있는 산출물을 커밋하면 두 파일이 갈라질 뿐이다.
+
+GitHub Pages는 서빙 위치를 저장소 루트(`/`) 또는 `/docs`로만 고를 수 있고, 이 저장소의 `docs/`는 문서라 쓸 수 없다 — 그래서 빌드 산출물은 **작업 브랜치가 아니라 `gh-pages` 브랜치**에 둔다.
 
 **GitHub Pages에 올리는 절차** (다음 사람이 이 세션 대화 없이도 할 수 있게):
 
-1. `node scripts/build.mjs` → `dist/index.html` 생성
-2. `node --test src/web/browser/artifact-build.browser.mjs` → 실제로 뜨는지 확인
-3. 공개 저장소(이 저장소와 별개)에 `dist/index.html`을 `index.html`로 복사해 커밋·푸시
-4. 그 공개 저장소의 GitHub Pages를 켠다(Settings → Pages → 브랜치 지정)
-5. 계측을 켜려면 1번 전에 `src/web/analytics-config.js`를 채운다
+1. 방문자수를 재려면 위 "계측" 절의 순서대로 `EXTERNAL_VISITOR_SNIPPET`을 먼저 채운다(자체 호스팅 Umami를 이미 세웠다면 `collectUrl`·`websiteId`도 함께).
+2. `node scripts/build.mjs` → `dist/index.html` 생성
+3. `node --test src/web/browser/artifact-build.browser.mjs` → 실제로 뜨는지 확인
+4. `gh-pages` 브랜치에 `dist/index.html`을 `index.html`로, 빈 `.nojekyll` 파일을 함께 올린다(`.nojekyll`이 없으면 GitHub이 Jekyll로 처리하려 들고 밑줄로 시작하는 이름을 건너뛴다)
+5. 그 브랜치를 GitHub Pages 소스로 켠다(Settings → Pages → Branch: `gh-pages`)

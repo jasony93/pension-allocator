@@ -28,7 +28,7 @@
 // 안전망이다.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -223,6 +223,18 @@ const rulesets = {
   '2027-proposed.json': JSON.parse(readFileSync(join(ROOT, 'data/tax-rules/2027-proposed.json'), 'utf8')),
 };
 
+// ── 외부 방문자수 스니펫(D67) ────────────────────────────────────────────
+// `analytics-config.js`의 `EXTERNAL_VISITOR_SNIPPET`을 **실제 ESM import로**
+// 읽는다 — 정규식으로 문자열을 잘라내지 않는다. 이 값은 소유자가 외부
+// 대시보드에서 그대로 복사해 붙여넣는 임의의 HTML이라, 정규식이 "닫는 백틱"을
+// 찾는 방식으로는 스니펫 안에 같은 문자가 다시 나오면 조용히 잘릴 수 있다.
+// 파일을 실제로 실행해 얻은 값이면 그 위험이 없고, 붙여넣은 내용이 파일
+// 자체의 문법을 깨뜨렸다면(예: 스니펫에 백틱이 섞여 들어간 경우) 여기서
+// 곧바로 예외로 멈춘다 — 조용히 잘못된 산출물을 내지 않는다는 이 빌드의
+// 원칙과 같다.
+const { EXTERNAL_VISITOR_SNIPPET } = await import(pathToFileURL(join(ROOT, 'src/web/analytics-config.js')).href);
+const externalSnippet = (EXTERNAL_VISITOR_SNIPPET ?? '').trim();
+
 // ── 껍데기 조립 ──────────────────────────────────────────────────────────
 const css = readFileSync(join(ROOT, 'src/web/styles.css'), 'utf8');
 const html = readFileSync(join(ROOT, 'src/web/index.html'), 'utf8');
@@ -314,7 +326,14 @@ ${chunks.join('\n')}
   globalThis.__SHOW_FAIL__((e && (e.stack || e.message)) || e);
 }
 </script>
-</body>
+${
+  // 내부 미리보기(`--with-note`)에는 채워져 있어도 넣지 않는다 — 그 빌드를
+  // 여는 스크래치패드 미리보기 환경이 외부 스크립트를 CSP로 막아 콘솔 오류만
+  // 남기고(D67), 애초에 내부 미리보기는 공개 방문자를 향하지 않으므로
+  // 방문자수를 잴 이유가 없다. 소유자가 실제로 보는 공개 배포본(기본 빌드)에는
+  // 그대로 들어간다.
+  externalSnippet && !INCLUDE_NOTE ? `${externalSnippet}\n` : ''
+}</body>
 </html>
 `;
 
@@ -345,4 +364,24 @@ if (!collectUrl || !websiteId) {
   );
 } else {
   console.log(`[build] 계측 수집기 설정됨 — websiteId: ${websiteId}`);
+}
+
+// ── 외부 방문자수 스니펫 확인(D67) ──────────────────────────────────────
+// 위 Umami 경고와 별개다 — 서버(자체 호스팅 Umami)를 세우지 않아도 방문자수만은
+// 이 스니펫으로 얻을 수 있으므로, 두 경고를 하나로 합치면 "Umami가 없으니 아직
+// 아무것도 못 잰다"는 잘못된 인상을 남긴다.
+if (!externalSnippet) {
+  console.warn(
+    '[build] 경고: src/web/analytics-config.js의 EXTERNAL_VISITOR_SNIPPET이 비어 있다 — ' +
+      '이 산출물은 방문자수 스니펫을 삽입하지 않는다(계산 기능은 정상 동작한다). ' +
+      '방문자수를 재려면 외부 서비스(예: Cloudflare Web Analytics) 대시보드의 Manage site에서' +
+      ' 받은 스니펫 전체를 그 파일에 그대로 붙여넣고 다시 빌드해야 한다.',
+  );
+} else if (INCLUDE_NOTE) {
+  console.log(
+    '[build] 방문자수 스니펫: 설정되어 있지만 --with-note 빌드라 제외됨' +
+      ' (내부 미리보기 환경이 외부 스크립트를 CSP로 막는다 — 공개 배포 기본 빌드에는 포함된다)',
+  );
+} else {
+  console.log('[build] 방문자수 스니펫: 삽입됨 — </body> 직전');
 }
