@@ -21,9 +21,17 @@
  * 만기 자금 전환"과는 별개의 질문이다), 억지로 끼워 넣는 쪽이 3.11.4(b)가 막으려던
  * "사용자가 그룹의 성격을 못 읽는" 상태를 오히려 만든다고 판단했다. `designer`
  * 확인이 필요한 이탈로 최종 보고에 남긴다.
+ *
+ * **[2026-08-17, 관리자 지시(2차) 8번] 번호가 다시 바뀌었다 — 지우지 않고
+ * 덧적는다.** 「④ ISA 만기 자금 전환」에서 번호를 뗐고(제목만 남는다),
+ * 「⑤ ISA 예상 수익률」이 그 자리를 물려받아 「④ ISA 예상 수익률」이 됐다
+ * (`copy.js`의 `ISA_RETURN_SECTION_TITLE`). 위 문단이 인용한 "④ ISA 만기
+ * 자금 전환"은 **그 시점의 사실**이었고, 지금은 무번호다 —
+ * `groupTitleNode(iconTransfer, 'ISA 만기 자금 전환')`(아래) 참고.
  */
 
 import { el } from './dom.js';
+import { iconEdit, iconProfile, iconWallet, iconBank, iconTransfer, iconTrend } from './icons.js';
 import {
   FUND_USE_HORIZON_LABEL,
   fundUseHorizonLabel,
@@ -240,6 +248,16 @@ function segmentToggle({ id, label, value, options, onChange, help }) {
     ),
     help ? el('p', { class: 'field-help' }, [help]) : null,
   ]);
+}
+
+/**
+ * [2026-08-17, 관리자 지시(2차) 9번] 섹션 제목 앞의 인라인 SVG 아이콘. 모든
+ * 그룹 제목(`h3.input-group-title`)이 이 헬퍼를 지나 같은 구조(아이콘 +
+ * 텍스트 span)를 갖는다 — 아이콘 유무로 구조가 갈리면 CSS가 자리마다 다시
+ * 정렬을 맞춰야 한다.
+ */
+function groupTitleNode(iconFn, text) {
+  return el('h3', { class: 'input-group-title' }, [iconFn(), el('span', {}, [text])]);
 }
 
 /**
@@ -460,7 +478,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   const groupOne = el('section', { class: 'input-group' }, [
-    el('h3', { class: 'input-group-title' }, ['① 기본정보']),
+    groupTitleNode(iconProfile, '① 기본정보'),
     birthField,
     youthBlock({ form, store, provisionalYouth, derivedAgeYears }),
     // **12.2(d) — 「원천징수영수증에서 오는 값」 구분선을 지웠다.** 낼 세금
@@ -572,7 +590,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   const groupTwo = el('section', { class: 'input-group' }, [
-    el('h3', { class: 'input-group-title' }, ['② 월 납입액']),
+    groupTitleNode(iconWallet, '② 월 납입액'),
     capacityField,
     annuityStartToggle,
     annuityStartedNote,
@@ -653,7 +671,8 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   // 서민형은 소득 요건이지 계좌 보유 여부가 아니다. 이 토글이 `isaBlock`
   // 안(= `isaExists`가 `true`일 때만)에 있으면 ISA가 없는 사람은 유형을
   // 선언할 자리가 없어, 비과세 한도 표시와(계약 3.2·5.3절) 수익률 가정
-  // 기반 정산액(⑤ 그룹)이 유형 미선언으로 항상 계산되지 못했다. **묻는
+  // 기반 정산액(⑤ 그룹, [2026-08-17] 관리자 지시(2차) 8번으로 지금은 ④
+  // 그룹)이 유형 미선언으로 항상 계산되지 못했다. **묻는
   // 말은 보유 여부에 따라 달라진다** — 이미 가진 것처럼 묻지 않는다
   // (`isaAccountTypeLabel`).
   const isaTypeToggle = segmentToggle({
@@ -690,7 +709,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   const groupThree = el('section', { class: 'input-group' }, [
-    el('h3', { class: 'input-group-title' }, ['③ 계좌 현황']),
+    groupTitleNode(iconBank, '③ 계좌 현황'),
     // 12.2(c) — 같은 사실을 더 짧게.
     el('p', { class: 'field-help' }, ['계좌가 없으면 0, 새로 넣은 금액만 적습니다.']),
     annuityField,
@@ -751,8 +770,13 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
       'isaTransferGroup',
     );
 
+    // [2026-08-17, 관리자 지시(2차) 8번] 번호를 뗀다 — 제목만 남긴다. ISA
+    // 보유자에게만 조건부로 나타나는 그룹이라 ①②③처럼 상시 순번을 매기면
+    // "그룹이 늘 넷"이라는 인상을 주는데 실제로는 나타났다 사라진다 —
+    // `input-group-conditional`(accent-subtle 강조)가 이미 "조건부로
+    // 나타난 그룹"이라는 사실을 형태로 말하고 있으므로 번호는 겹말이었다.
     groupFour = el('section', { class: 'input-group input-group-conditional', 'data-key': 'groupFour' }, [
-      el('h3', { class: 'input-group-title' }, ['④ ISA 만기 자금 전환']),
+      groupTitleNode(iconTransfer, 'ISA 만기 자금 전환'),
       transferToggle,
       transferInner,
     ]);
@@ -763,11 +787,12 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   // **소유자 지시(screens.md 3.11.4(b))보다 이 필드군을 우선한다.** 그 규약은
   // 이 계약(5.1.0)이 들어오기 전에 정해졌고, 이 다섯 필드(토글·수익률·소득
   // 성격·정산 기간·손실액)를 기존 그룹 어디에 넣어도 그 그룹의 주제와
-  // 어긋난다 — "④ ISA 만기 자금 전환"과는 별개의 질문이다. 새 그룹을 만드는
+  // 어긋난다 — "ISA 만기 자금 전환"(당시 표기 "④ ISA 만기 자금 전환", 지금은
+  // 무번호 — 관리자 지시(2차) 8번)과는 별개의 질문이다. 새 그룹을 만드는
   // 판단은 `designer` 확인이 필요한 항목으로 최종 보고에 남긴다.
   //
   // **`isaExists` 조건을 걷어냈다(2026-08-10 — 소유자 신고 대응).** 초판은
-  // 이 그룹 전체를 "④ ISA 만기 자금 전환"과 나란히 `if (form.isaExists)`로
+  // 이 그룹 전체를 "ISA 만기 자금 전환"과 나란히 `if (form.isaExists)`로
   // 묶었다. 그런데 엔진은 ISA 미보유자에게도 **신규 가입을 전제로** ISA에
   // 배분한다(`isa_new_account_assumed`, `accounts.isa.exists: false`) — 배분은
   // 받는데 그 배분에 얹을 수익률은 넣을 자리가 없는 상태가 됐다. 수익률
@@ -841,10 +866,11 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   // **`input-group-conditional`(accent-subtle 강조)을 쓰지 않는다.** 그 표시는
-  // "앞선 답 때문에 나타난 그룹"(예: ④)에 쓰는 것이고, 이 그룹은 이제 앞선
-  // 답과 무관하게 항상 있다 — ①②③과 같은 성격의 그룹이다.
+  // "앞선 답 때문에 나타난 그룹"(예: ISA 만기 자금 전환 — ISA 보유를 답해야
+  // 나타난다)에 쓰는 것이고, 이 그룹은 이제 앞선 답과 무관하게 항상 있다 —
+  // ①②③과 같은 성격의 그룹이다.
   const groupFive = el('section', { class: 'input-group', 'data-key': 'groupFive' }, [
-    el('h3', { class: 'input-group-title' }, [ISA_RETURN_SECTION_TITLE]),
+    groupTitleNode(iconTrend, ISA_RETURN_SECTION_TITLE),
     returnToggle,
     returnInner,
   ]);
@@ -870,7 +896,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
   );
 
   return el('div', { class: 'input-panel' }, [
-    el('div', { class: 'input-panel-header' }, [el('h2', { class: 'panel-title' }, ['입력']), resetButton]),
+    el('div', { class: 'input-panel-header' }, [el('h2', { class: 'panel-title' }, [iconEdit(), el('span', {}, ['입력'])]), resetButton]),
     groupOne,
     groupTwo,
     groupThree,

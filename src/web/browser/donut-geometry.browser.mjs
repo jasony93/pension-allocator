@@ -47,6 +47,12 @@ const MEASURE_SLICES = `(() => {
  */
 const HIT_TEST_MIDPOINTS = `(() => {
   const svg = document.querySelector('.result-slot .chart-donut');
+  // 뷰포트 안으로 스크롤한 뒤 좌표를 잰다 — \`elementFromPoint\`는 뷰포트 밖
+  // 좌표에서 항상 null을 낸다(관리자 지시 2026-08-14 4번으로 헤더 위에 예시
+  // 구역이 생기면서 페이지가 길어졌고, 기본 스크롤 위치에서는 도넛이 뷰포트
+  // 아래로 밀릴 수 있다는 것을 실측으로 확인했다). 이 상자는 이 검사가 재려는
+  // 것(조각의 실제 기하)과 무관하므로, 스크롤 위치에 좌우되지 않게 먼저 맞춘다.
+  svg.scrollIntoView({ block: 'center' });
   const tops = [...svg.querySelectorAll('path[role="img"]')];
   const rect = svg.getBoundingClientRect();
   const vb = svg.viewBox.baseVal;
@@ -159,4 +165,75 @@ test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도
   measurements.interruptedEntrance = m;
   assert.ok(m.count > 0);
   for (const b of m.boxes) assert.ok(b.width > 1 && b.height > 1, `끊긴 뒤 조각이 비어 있습니다: ${JSON.stringify(b)}`);
+});
+
+/**
+ * 관리자 지시(2026-08-14, 예시 도넛 회귀 뒤 3번) — **실제 결과 화면의 도넛도
+ * 같은 문제(DOM에는 있지만 `w:0, h:0`으로 안 보이는 조각 식별 수단)가 있는지
+ * 확인한다.** "라벨이 보였으니 예시만의 문제로 보인다"는 짐작에서 멈추지
+ * 않고 `getBoundingClientRect()`로 잰다.
+ *
+ * 결과 패널의 도넛은 `preferredDonutSizeMode()`(뷰포트를 실제로 재는 함수)로
+ * `labelMode`를 고르고, `.donut-legend`·`.donut-labels`의 CSS 표시 규칙은
+ * **같은 767px 경계**로 갈린다(`styles.css` `@media (max-width: 767px)`) —
+ * SVG가 어떤 모드로 그려졌는지와 CSS가 무엇을 보이게 하는지가 같은 축을
+ * 탄다. 이것이 예시(뷰포트와 무관하게 항상 legend 모드로 고정)에서 깨졌던
+ * 짝이다 — 실제 결과는 이 짝이 유지되는지를 데스크톱·모바일 양쪽에서
+ * 실측한다.
+ *
+ * **[2026-08-17, D72]** ①②③ 배지(`.donut-slice-index-badge`)는 없어졌다 —
+ * 아래 두 검사는 그 자리를 `.donut-slice-label-group`(조각 안 이름+비율
+ * 라벨, `charts.js`의 `applyDonutSliceInlineLabels`가 실제 결과 패널
+ * (모바일)에도 적용한다)로 대신한다.
+ */
+test('실제 결과 도넛 — 데스크톱에서는 도넛 옆 직접 라벨이 실제로 보인다(범례가 아니라)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
+  await sleep(400);
+  const m = await page.evaluate(`(() => {
+    const scope = document.querySelector('.result-slot');
+    const rect = (sel) => { const el = scope.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; };
+    const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+    return { labels: rect('.donut-labels'), sliceLabelGroup: !!scope.querySelector('.donut-slice-label-group'), legendItems };
+  })()`);
+  measurements.desktopLabelVisibility = m;
+  assert.ok(m.labels, '데스크톱에서 .donut-labels 노드 자체가 없다');
+  assert.ok(m.labels.width > 1 && m.labels.height > 1, `데스크톱 직접 라벨이 0크기다(안 보인다): ${JSON.stringify(m.labels)}`);
+  // 데스크톱(labelled 모드)의 도넛 svg는 `data-label-mode="legend"`가 아니므로
+  // `applyDonutSliceInlineLabels`가 조용히 아무것도 하지 않는다 — 조각 안
+  // 이름+비율 라벨 그룹 자체가 생기지 않아야 한다(직접 라벨과 중복되면 안 된다).
+  assert.equal(m.sliceLabelGroup, false, '데스크톱에서도 조각 안 이름+비율 라벨 그룹이 생겼다 — 직접 라벨과 중복이다');
+  // 범례는 이 폭에서 DOM에 있어도 됨(범례는 `chartArea`가 언제나 만든다) —
+  // 하지만 **보이면 안 된다**(라벨과 범례가 동시에 보이면 중복이다).
+  for (const item of m.legendItems) {
+    assert.ok(item.width === 0 || item.height === 0, `데스크톱에서 범례 항목이 보인다(라벨과 중복): ${JSON.stringify(item)}`);
+  }
+});
+
+test('실제 결과 도넛 — 모바일(375px)에서는 범례·조각 안 이름+비율 라벨이 실제로 보인다(0크기가 아니다)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 900, deviceScaleFactor: 1, mobile: true });
+  await sleep(150);
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
+  await sleep(400);
+  const m = await page.evaluate(`(() => {
+    const scope = document.querySelector('.result-slot');
+    const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+    const sliceLabels = [...scope.querySelectorAll('.donut-slice-label')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+    return { legendItems, sliceLabels };
+  })()`);
+  measurements.mobileLegendVisibility = m;
+  assert.ok(m.legendItems.length > 0, '모바일에서 범례 항목이 하나도 없다');
+  for (const item of m.legendItems) {
+    assert.ok(item.width > 1 && item.height > 1, `모바일 범례 항목이 0크기다(관리자가 예시에서 잡은 것과 같은 결함): ${JSON.stringify(item)}`);
+  }
+  assert.ok(m.sliceLabels.length > 0, '모바일에서 조각 안 이름+비율 라벨이 하나도 없다');
+  for (const b of m.sliceLabels) {
+    assert.ok(b.width > 1 && b.height > 1, `모바일 조각 안 이름+비율 라벨이 0크기다: ${JSON.stringify(b)}`);
+  }
+  await page.send('Emulation.clearDeviceMetricsOverride');
 });

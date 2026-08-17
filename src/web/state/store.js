@@ -27,8 +27,13 @@ import { SCHEMA_VERSION } from '../engine/engine-client.js';
 
 const DEBOUNCE_MS = 400;
 
-/** 계약이 정한 기준 과세연도. 세법 수치가 아니라 어느 룰셋을 읽을지 고르는 값이다. */
-const TAX_YEAR = 2026;
+/**
+ * 계약이 정한 기준 과세연도. 세법 수치가 아니라 어느 룰셋을 읽을지 고르는 값이다.
+ * **내보낸다** — `ui/example-showcase.js`(관리자 지시 2026-08-14 4번)가 예시
+ * 생년월일을 이 값에서 역산한다(`taxYear - 30`년 1월 1일생). 그 값을 별도로
+ * 다시 적으면 이 상수가 바뀔 때 예시만 낡은 연도를 계속 쓰게 된다.
+ */
+export const TAX_YEAR = 2026;
 
 export function initialForm() {
   return {

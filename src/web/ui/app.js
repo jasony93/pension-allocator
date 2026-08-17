@@ -40,10 +40,65 @@
 import { el, mount, patch, significantCount, indexAfterSignificant } from './dom.js';
 import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
+import { mountExampleShowcase } from './example-showcase.js';
 import { SERVICE_NAME } from '../copy.js';
 import { createStore } from '../state/store.js';
-import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance } from './charts.js';
+import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
+import { LOGO_LIGHT_DATA_URI, LOGO_DARK_DATA_URI, LOGO_INTRINSIC_WIDTH, LOGO_INTRINSIC_HEIGHT } from '../assets/logo.js';
+
+/**
+ * 상단 탭 바 — [2026-08-17, 관리자 지시(2차) 1번] `snowball72.com/pension-calculator`
+ * 방식(왼쪽 로고 + 그 옆 탭 행)을 참조해 다시 만든다. **탭은 지금 하나뿐**이지만
+ * 배열로 둔다 — 나중에 탭이 늘어도 이 목록에 항목만 추가하면 된다(렌더 로직은
+ * 손대지 않는다). `active`인 탭에 `aria-current="page"`를 준다 — 실제 하위
+ * 페이지 전환이 없는 단일 화면 앱이므로 ARIA `tablist`/`tab`/`tabpanel` 삼종
+ * 세트(연결된 tabpanel이 있어야 성립하는 역할)를 억지로 붙이지 않는다. 사이트
+ * 내비게이션에 흔한 "현재 위치 표시" 패턴(`aria-current`)이 이 자리의 실제
+ * 성질과 맞는다.
+ */
+const HEADER_TABS = [{ id: 'account-optimizer', label: SERVICE_NAME, active: true }];
+
+/**
+ * [2026-08-17, 관리자 지시(3차) 1번] **로고 둘을 함께 심고 CSS로 표시를
+ * 가른다.** `.app-logo-light`/`.app-logo-dark`(styles.css)가 `data-theme`
+ * 스탬프 경로와 `prefers-color-scheme` 경로 둘 다에서 정확히 하나만
+ * `display: block`으로 남긴다 — 옛 흰 알약 배경(`--logo-plate`)으로 다크에서
+ * 로고를 읽히게 하던 처리는 다크 전용 원본이 생기며 이유가 사라져 없앴다.
+ */
+function headerBrand() {
+  return el('div', { class: 'app-header-brand' }, [
+    el('img', {
+      class: 'app-logo app-logo-light',
+      src: LOGO_LIGHT_DATA_URI,
+      alt: '돈길',
+      width: LOGO_INTRINSIC_WIDTH,
+      height: LOGO_INTRINSIC_HEIGHT,
+    }),
+    el('img', {
+      class: 'app-logo app-logo-dark',
+      src: LOGO_DARK_DATA_URI,
+      alt: '돈길',
+      width: LOGO_INTRINSIC_WIDTH,
+      height: LOGO_INTRINSIC_HEIGHT,
+    }),
+    el(
+      'nav',
+      { class: 'app-tabs', 'aria-label': '주요 기능' },
+      HEADER_TABS.map((tab) =>
+        el(
+          'button',
+          {
+            type: 'button',
+            class: `app-tab${tab.active ? ' app-tab-active' : ''}`,
+            'aria-current': tab.active ? 'page' : null,
+          },
+          [tab.label],
+        ),
+      ),
+    ),
+  ]);
+}
 
 function captureFocus(container) {
   const active = document.activeElement;
@@ -100,18 +155,26 @@ export function mountApp(root, { engineClient, analytics }) {
   // 때마다 결과 패널이 다시 그려져 도넛의 각도 애니메이션이 발동한다 — 값이
   // 바뀐 것이 아니므로 조각은 그 자리에 있어야 한다. 색은 CSS 변수가 나른다.
   //
-  // 가명칭과 과세연도 표기는 한 묶음이다. **묶지 않으면 모바일에서 밀린다** —
-  // 헤더가 셋이 되면서 좁은 폭에서 가명칭이 두 줄로 접히는 것을 실측으로 봤고
-  // (`browser/theme.browser.mjs`), screens.md 2.1절은 `ThemeControl`이 그 둘을
-  // 밀어내지 않을 것을 요구한다. 묶어 두면 좁은 폭에서 둘이 세로로 쌓이고
-  // 밝기 버튼은 44px 자리를 그대로 지킨다.
+  // **[2026-08-17, 관리자 지시(2차) 1·2번] 헤더 구조를 다시 짰다.** 옛
+  // `.app-header-titles`(가명칭 텍스트 + 과세연도, 왼쪽)는 없어졌다 — 가명칭
+  // 자리를 이제 `headerBrand()`(로고 + 탭)가 진다. 과세연도 표기는 사라지지
+  // 않는다 — `ThemeControl`과 함께 오른쪽 묶음(`app-header-meta`)으로 옮긴다.
+  // 왼쪽(브랜드+탭)·오른쪽(과세연도+밝기) 두 묶음으로 나눈 것은 옛 구조와
+  // 같은 이유다: **묶지 않으면 모바일에서 밀린다**(`browser/theme.browser.mjs`
+  // 가 좁은 폭에서 실측한다) — 밝기 버튼은 44px 자리를 그대로 지킨다.
   const header = el('header', { class: 'app-header' }, [
-    el('div', { class: 'app-header-titles' }, [
-      el('span', { class: 'app-title' }, [SERVICE_NAME]),
+    headerBrand(),
+    el('div', { class: 'app-header-meta' }, [
       el('span', { class: 'app-tax-year' }, ['2026 과세연도 기준']),
+      themeControl(createThemeController()),
     ]),
-    themeControl(createThemeController()),
   ]);
+  // 관리자 지시(2026-08-14) 4번 — 헤더와 입력/결과 사이의 간략한 예시. **store를
+  // 거치지 않는다** — 고정 입력 넷(만 30세·소득 4,000만원·월 150만원·연 5.5%)은
+  // 이 화면의 재계산 대상이 아니라 한 번 계산해 두는 정적 예시다. Shadow DOM
+  // 안에 그려진다(`example-showcase.js` 머리말 — `.amount-card`·`.chart-donut`
+  // 재사용이 결과 패널을 겨눈 문서 전체 질의와 충돌하지 않게 하는 경계).
+  const exampleSlot = el('div', { class: 'example-showcase-slot' });
   const mainEl = el('div', { class: 'app-main' });
   const inputSlot = el('div', { class: 'input-slot' });
   const resultSlot = el('div', { class: 'result-slot' });
@@ -126,8 +189,9 @@ export function mountApp(root, { engineClient, analytics }) {
   // 다시 넣는 것은 소유자의 결정을 되돌리는 것이다.
   const footer = el('footer', { class: 'app-footer' }, ['제공자 표기 · 룰셋 기준일 2026-08-08']);
 
-  layout.append(header, mainEl, footer);
+  layout.append(header, exampleSlot, mainEl, footer);
   mount(root, layout);
+  mountExampleShowcase(exampleSlot, { engineClient });
 
   renderNow = function renderImpl() {
     const state = store.getState();
@@ -160,9 +224,22 @@ export function mountApp(root, { engineClient, analytics }) {
     // 애니메이션을 걸면 아무도 보지 않는 사본 위에서 돈다 — 화면에 남는
     // 조각은 첫 프레임(0°)에서 멈춘다(charts.js `runDonutEntrance` 머리말).
     runDonutEntrance(resultSlot);
+    // [2026-08-17, D72] 모바일(legend 모드) 도넛의 조각 이름+비율 라벨.
+    // `donutChart`가 만드는 노드가 아니라, 위 `runDonutEntrance`와 같은 이유로
+    // **실제로 화면에 붙은 뒤**의 노드를 잰다(`patch`가 노드를 재사용하므로
+    // `render` 시점에 재면 버려질 사본을 잰다) — 데스크톱(labelled) 도넛에는
+    // `data-label-mode="legend"`가 없어 이 함수가 조용히 아무것도 하지 않는다.
+    applyDonutSliceInlineLabels(resultSlot);
   };
 
   setRerenderHook(scheduleRender);
+
+  // [2026-08-17, D72] 조각 라벨의 흰/검 대비 승자는 테마마다 뒤집힐 수 있다
+  // (`charts.js` `bestTextColorOn` 머리말) — 값이 바뀌지 않아도 테마가 바뀌면
+  // 다시 그려야 한다. `ThemeControl`은 store를 거치지 않으므로(위 주석) 테마
+  // 전환은 `renderNow`를 다시 부르지 않는다 — 그래서 이 감시를 한 번, 여기서
+  // 따로 건다(예시 쪽과 같은 두 경로를 듣는 `watchDonutThemeChange`, `charts.js`).
+  watchDonutThemeChange(() => applyDonutSliceInlineLabels(resultSlot));
 
   // 도넛은 라벨을 옆에 붙이는지 아래 리스트로 내리는지에 따라 **상자 크기 자체가
   // 다르다**(charts.js `donutGeometry`). CSS는 `viewBox`를 바꿀 수 없으므로 그
@@ -181,19 +258,25 @@ export function mountApp(root, { engineClient, analytics }) {
     }
   }
 
-  // [2026-08-12, D48, 2026-08-13 주석 정정 D60] 원래는 `[4-A]` `DisclosureBanner`가
-  // 문서 기준 sticky로 `top: var(--layout-header-height)`를 썼다. **그 배너는
-  // D60(관리자 판정, 소유자 지시)으로 삭제됐고, 지금은 이 값을 읽는 CSS가
-  // `styles.css`에 없다.** 그래도 `--layout-header-height`는 지우지 않는다 —
-  // design-system 5.19.1절이 `LiveSummaryStrip`(미구현, 데스크톱용 결과 요약
-  // 바)의 위치로 같은 토큰을 이미 지정해 뒀다(`position: sticky; top:
-  // var(--layout-header-height)`). 헤더 높이를 **하드코딩하지 않는다** —
-  // 설계 문서가 적은 56px과 실측 77px가 이미 어긋나 있었다(design-system
-  // 4.1.1절). 헤더 자신이 실제 렌더 높이를 재서 커스텀 프로퍼티로 공개하고,
-  // 다음에 이 값을 쓸 sticky 요소는 그 값을 읽기만 하면 된다.
-  // `ResizeObserver`로 계속 갱신한다 — 모바일에서 가명칭이 두 줄로 접히는
-  // 등 헤더 높이가 폭에 따라 바뀌는 경우를 폭 경계 하나로 특정하지 않고
-  // 실제 크기 변화 자체를 본다.
+  // [2026-08-12, D48, 2026-08-13 주석 정정 D60, 2026-08-17 다시 소비자가
+  // 생긴다 D72] 원래는 `[4-A]` `DisclosureBanner`가 문서 기준 sticky로
+  // `top: var(--layout-header-height)`를 썼다. 그 배너는 D60(관리자 판정,
+  // 소유자 지시)으로 삭제됐고 한동안 이 값을 읽는 CSS가 `styles.css`에
+  // 없었다 — 그래도 지우지 않았다(design-system 5.19.1절의 `LiveSummaryStrip`,
+  // 미구현, 같은 토큰을 이미 예약해 뒀다는 이유). **D72로 헤더가 다시
+  // `position: sticky`가 되면서 실제 소비자가 하나 더 생겼다** — `.app-main`의
+  // `scroll-margin-top`(`styles.css`)이 이 값을 읽는다. 고정 바가 스크롤
+  // 목적지 위를 가리는 고전 결함(앵커 스크롤 시 상단이 바에 가려짐)을
+  // 막는 자리다(`ui/example-showcase.js`의 `scrollToInputResult`가 부르는
+  // `scrollIntoView({ block: 'start' })`가 이 여백을 자동으로 반영한다 —
+  // 최신 브라우저는 `scroll-margin-top`을 `scrollIntoView`에도 적용한다).
+  // 헤더 높이를 **하드코딩하지 않는다** — 설계 문서가 적은 56px과 실측
+  // 77px가 이미 어긋나 있었다(design-system 4.1.1절, 로고+탭으로 바뀐 지금은
+  // 그 값 자체도 다시 바뀐다). 헤더 자신이 실제 렌더 높이를 재서 커스텀
+  // 프로퍼티로 공개하고, 다음에 이 값을 쓸 요소는 그 값을 읽기만 하면 된다.
+  // `ResizeObserver`로 계속 갱신한다 — 모바일에서 브랜드·탭이 두 줄로
+  // 접히는 등 헤더 높이가 폭에 따라 바뀌는 경우를 폭 경계 하나로 특정하지
+  // 않고 실제 크기 변화 자체를 본다.
   function syncHeaderHeight() {
     if (typeof document === 'undefined') return;
     const height = header.getBoundingClientRect().height;

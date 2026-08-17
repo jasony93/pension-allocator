@@ -11,7 +11,13 @@
 
 import { formatKrw, formatKrwAbbreviated, formatPercent, formatPercentTrimmed, formatYears } from './format.js';
 
-export const SERVICE_NAME = '[가칭] 납입배분 계산기';
+// 관리자 지시(2026-08-14) 3번 — 가칭을 뗀다. `[가칭]`은 이름이 아직 정해지지
+// 않았다는 표시였는데, 소유자가 배포를 마쳤고 이 이름으로 굳혔다. **[2026-08-17,
+// 관리자 지시(2차) 1번, D72]** 헤더 크기·위계는 이제 `styles.css`의
+// `.app-tab`이 진다 — 옛 `.app-title`(가명칭 텍스트)은 로고+탭 바로 바뀌며
+// 없어졌고, 이 상수는 지금 활성 탭(`ui/app.js`의 `HEADER_TABS`)의 라벨로
+// 쓰인다(이 파일은 여전히 문구만 갖는다).
+export const SERVICE_NAME = '절세계좌 계산기';
 
 // ---------------------------------------------------------------------------
 // 계좌 이름 · 배분안 이름
@@ -1507,7 +1513,10 @@ export function pensionGapSignLabel(code) {
 // 전부다(0.10절).
 // ---------------------------------------------------------------------------
 
-export const ISA_RETURN_SECTION_TITLE = '⑤ ISA 예상 수익률 (선택)';
+// [2026-08-17, 관리자 지시(2차) 8번] ⑤ → ④. 「④ ISA 만기 자금 전환」이
+// 번호를 잃으면서(무번호 제목, `ui/input-panel.js`) 다음 번호가 하나씩
+// 당겨졌다 — 이 그룹이 그 새 ④를 받는다.
+export const ISA_RETURN_SECTION_TITLE = '④ ISA 예상 수익률 (선택)';
 export const ISA_RETURN_TOGGLE_LABEL = '예상 수익률로 ISA 정산액을 계산합니다';
 // 12.2(c) — 같은 사실을 더 짧게.
 export const ISA_RETURN_SECTION_HELP = '직접 예상한 수익률을 넣어야 합니다(제시·전망하지 않습니다).';

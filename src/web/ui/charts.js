@@ -39,8 +39,10 @@ const UNALLOCATED_COLOR = 'var(--data-unallocated)';
 /** 미배분 조각의 측면도 전용 토큰이다 — 상단면과 같은 색을 쓰면 깊이가 사라진다. */
 const UNALLOCATED_SIDE_COLOR = 'var(--data-unallocated-side)';
 const PLACEHOLDER_COLOR = 'var(--data-placeholder)';
-/** 모바일에서 조각과 범례를 잇는 번호(screens.md 5.7절 ①②③). */
-const CIRCLED_NUMBERS = ['①', '②', '③', '④'];
+// **[2026-08-17, D72] `CIRCLED_NUMBERS`(모바일 ①②③ 배지)는 여기 있었다 —
+// 삭제됐다.** 조각 위에 계좌 이름을 직접 쓰는 방식으로 바뀌면서(아래
+// `applyDonutSliceInlineLabels`) 조각과 범례를 잇는 번호 자체가 필요 없어졌다
+// (계좌 이름이 조각 위에 이미 있으므로 범례도 이름으로 바로 짝지어진다).
 
 function polar(cx, cy, rx, ry, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
@@ -116,6 +118,17 @@ export function allocationSegments({ allocations, unallocatedAnnualKrw = 0, excl
 }
 
 export const MIN_SLICE_DEG = 2;
+
+/**
+ * gapPx(화면 px)를 반지름 `rMid` 기준 각도(도)로 환산한다. 호의 길이
+ * `≈ rMid × radian`이라는 근사를 쓴다 — 자리표시자 조각 간격
+ * (`PLACEHOLDER_GAP_PX`)이 원래 이 식을 인라인으로 갖고 있었는데,
+ * [2026-08-14, 관리자 지시 2번]로 결과 도넛에도 같은 간격이 필요해지면서
+ * 공유 지점으로 뽑았다.
+ */
+function pxGapToDeg(gapPx, rMid) {
+  return rMid > 0 ? (gapPx / (2 * Math.PI * rMid)) * 360 : 0;
+}
 
 /**
  * 조각의 시작·끝 각도를 낸다. **금액이 0보다 크면 최소 `MIN_SLICE_DEG`를
@@ -338,6 +351,50 @@ export function donutLabelLayout(arcs, { cx, cy, R, ry = RY_RATIO, width, height
  * 비율만으로 보정되지 않고, 사용자가 면적을 눈으로 재지 않아도 값을 읽을 수
  * 있게 하는 것이 이 장치의 목적이기 때문이다(5.3절).
  */
+/**
+ * [2026-08-14, 관리자 지시 2번] "도넛에 검은 점이 보인다" — 원인과 수정.
+ *
+ * **원인.** 압출 측면(`sides`, 아래)은 상단면(`tops`)과 똑같은 조각 경계
+ * (`a.start`/`a.end`)를 **y좌표만 `depth`만큼 내려서** 그린다(`cy + depth`).
+ * 인접한 두 조각(예: 연금저축 0~120°, IRP 120~180°)의 상단면은 120°에서
+ * 정확히 맞닿아 이음매가 깨끗하다 — 실측(`getComputedStyle`·`getBBox`)으로
+ * 확인했다. **문제는 그 아래, 압출이 드러나는 "벽" 구간이다.** 이 구현은
+ * 진짜 3D 회전체가 아니라 상단면을 그대로 아래로 평행이동한 것이라 벽의
+ * 두께가 모든 각도에서 `depth`로 균일하고, 그 결과 두 조각의 벽이 만나는
+ * 자리(정확히 경계각)에서 **뾰족하게 끝나는 쐐기 모양**이 생긴다. 실제
+ * 픽셀을 대조 색(디버그 렌더링)으로 확인하니, 이 쐐기 안쪽 상당 부분을
+ * "옆 조각"이 아니라 **먼저 그려진 조각의 압출 측면색**이 차지하고 있었다
+ * — 조각이 커질수록(관리자 지시 2번 "도넛을 50% 키운다") 이 쐐기도 함께
+ * 커져 눈에 띄는 어두운 반점("검은 점")으로 읽힌다.
+ *
+ * **수정.** design-system 3.5.5절 규약 5가 애초에 "조각 사이 2px 표면색
+ * 간격 — 스택바의 인접 조각, **도넛의 인접 조각 모두**"라고 요구하고
+ * 있었고, 자리표시자 링(`placeholderSliceAngles`)은 이미 그 간격
+ * (`PLACEHOLDER_GAP_PX`)을 구현하고 있었다 — **결과 도넛만 빠져 있었다.**
+ * 이 함수가 상단면·측면·해칭의 **렌더링(`d` 속성)에만** 그 2px 간격을
+ * 적용한다. 인접한 두 조각의 벽이 서로 살짝 물러나면서 그 사이에 빈
+ * 쐐기(배경이 비치는 진짜 여백)가 생기고, 어느 한쪽 색이 다른 쪽 자리를
+ * 침범해 어두운 반점을 만들 여지가 사라진다.
+ *
+ * **`data-arc-start`/`data-arc-end`(계약이 읽는 참값)는 건드리지 않는다.**
+ * 간격은 렌더링에서만 나고, 각도 합(360°)·비율·`aria-label`·`hit-test`
+ * (조각 **중앙** 각도 기준이라 대칭으로 물러난 간격의 영향을 받지 않는다)
+ * 는 전부 참값을 그대로 쓴다 — 그래서 기존 기하 실측 검사가 값을 바꾸지
+ * 않고도 그대로 통과한다. 진입 애니메이션(`runDonutEntrance`)이 최종
+ * 프레임에서 참값으로 되돌려 간격을 지우지 않도록, 렌더링용 각도를
+ * `data-render-start`/`data-render-end`에 별도로 남긴다.
+ */
+export const SLICE_GAP_PX = 2;
+
+/** 조각 하나(`a`)의 렌더링용(시각적) 각도 — 대칭으로 `gapDeg/2`씩 물러난다.
+ * 아주 작은 조각(`MIN_SLICE_DEG`)이 간격 때문에 뒤집히지 않도록 자기 각도의
+ * 40%를 넘게 물러나지 않는다. */
+function visualSliceAngle(a, gapDeg) {
+  if (gapDeg <= 0) return { start: a.start, end: a.end };
+  const inset = Math.min(gapDeg / 2, (a.end - a.start) * 0.4);
+  return { start: a.start + inset, end: a.end - inset };
+}
+
 export function donutChart({
   allocations,
   unallocatedAnnualKrw,
@@ -365,6 +422,11 @@ export function donutChart({
   const total = segments.reduce((s, seg) => s + seg.amount, 0);
   const arcs = sliceAngles(segments);
 
+  // [2026-08-14, 관리자 지시 2번] 조각이 하나뿐이면(원 전체) 물러날 이웃이
+  // 없다 — 간격을 걸면 "이유 없이 한 점에서 잘린 원"이 되어 오히려 결함처럼
+  // 보인다. `donutChart` 머리말 위, `SLICE_GAP_PX`·`visualSliceAngle` 참고.
+  const gapDeg = arcs.length > 1 ? pxGapToDeg(SLICE_GAP_PX, (R + rInner) / 2) : 0;
+
   // 라벨에 쓸 월 금액 — 엔진이 준 값을 그대로 쓴다(화면이 연 금액을 나누지 않는다).
   const monthlyByAccount = Object.fromEntries((allocations ?? []).map((a) => [a.account, a.monthly_krw]));
   const monthlyOf = (arc) => (arc.isUnallocated ? unallocatedMonthlyKrw : (monthlyByAccount[arc.account] ?? 0));
@@ -381,25 +443,37 @@ export function donutChart({
   // 돈다(아래 주석 참고). 이 함수가 만드는 노드가 그대로 화면에 붙는다는
   // 보장이 없기 때문이다 — `patch()`(dom.js)는 구조가 같으면 새 노드를 버리고
   // 기존 노드에 속성만 복사한다.
-  const sides = arcs.map((a) =>
-    svgEl('path', {
-      d: annulusSlicePath(cx, cy + depth, R, rInner, RY_RATIO, a.start, a.end),
+  const sides = arcs.map((a) => {
+    const va = visualSliceAngle(a, gapDeg);
+    return svgEl('path', {
+      d: annulusSlicePath(cx, cy + depth, R, rInner, RY_RATIO, va.start, va.end),
       fill: a.isUnallocated ? UNALLOCATED_SIDE_COLOR : ACCOUNT_SIDE_COLOR[a.account],
       class: 'chart-donut-slice',
       'data-cy': cy + depth,
       'data-arc-start': a.start,
       'data-arc-end': a.end,
-    }),
-  );
+      'data-render-start': va.start,
+      'data-render-end': va.end,
+    });
+  });
 
   const tops = arcs.map((a) => {
+    const va = visualSliceAngle(a, gapDeg);
     const path = svgEl('path', {
-      d: annulusSlicePath(cx, cy, R, rInner, RY_RATIO, a.start, a.end),
+      d: annulusSlicePath(cx, cy, R, rInner, RY_RATIO, va.start, va.end),
       fill: a.isUnallocated ? UNALLOCATED_COLOR : ACCOUNT_COLOR[a.account],
       class: 'chart-donut-slice',
       'data-cy': cy,
       'data-arc-start': a.start,
       'data-arc-end': a.end,
+      'data-render-start': va.start,
+      'data-render-end': va.end,
+      // [2026-08-17, D72] `applyDonutSliceInlineLabels`(아래)가 이름·비율
+      // 라벨을 마운트 뒤 실측으로 그릴 때 이 두 값만 읽는다 — 조각 자체가
+      // 이미 아는 사실(어느 계좌인지·금액이 얼마인지)을 호출부가 다시
+      // 넘길 필요가 없게 하려는 것이다(계약 두 번 구현하면 하나는 낡는다).
+      'data-account': a.isUnallocated ? 'unallocated' : a.account,
+      'data-amount': a.amount,
       tabindex: '0',
       role: 'img',
       'aria-label': `${nameOf(a)}, 월 ${formatKrw(monthlyOf(a))}, 연 ${formatKrw(a.amount)}, 전체의 ${formatPercent(total > 0 ? a.amount / total : 0)}`,
@@ -410,17 +484,20 @@ export function donutChart({
   const hatches = isProposed
     ? arcs
         .filter((a) => !a.isUnallocated)
-        .map((a) =>
-          svgEl('path', {
-            d: annulusSlicePath(cx, cy, R, rInner, RY_RATIO, a.start, a.end),
+        .map((a) => {
+          const va = visualSliceAngle(a, gapDeg);
+          return svgEl('path', {
+            d: annulusSlicePath(cx, cy, R, rInner, RY_RATIO, va.start, va.end),
             fill: 'url(#donut-hatch)',
             opacity: 0.5,
             class: 'chart-donut-slice',
             'data-cy': cy,
             'data-arc-start': a.start,
             'data-arc-end': a.end,
-          }),
-        )
+            'data-render-start': va.start,
+            'data-render-end': va.end,
+          });
+        })
     : [];
 
   const layout = drawLabels ? donutLabelLayout(arcs, { cx, cy, R, width, height }) : [];
@@ -446,27 +523,16 @@ export function donutChart({
     ]);
   });
 
-  // 모바일 — 라벨 블록이 겹치므로 아래 리스트로 내리고 조각과는 색 + 번호로
-  // 잇는다(screens.md 5.7절). 리스트는 SVG 밖에 둔다.
-  //
-  // **번호는 계좌 색 위에 직접 얹지 않는다**(결함 ② 수정, design-system 3.5.5절
-  // 규약 6). 계좌 색은 정의상 표면 대비 3:1 대역에서 뽑혔고 글자는 4.5:1이
-  // 필요해 애초에 자격이 없다 — 초판은 `surface-raised` 글자를 조각 위에 바로
-  // 얹어 라이트 3.46/3.28, 다크 5.02/5.06으로 두 계좌가 미달이었다. **표면 색
-  // 배지를 조각 바깥 테두리에 얹고 그 위에 번호를 놓는다** — 배지 자체가
-  // `surface-raised`(마크 표면, 계좌 색과 무관하게 항상 밝다)이므로 번호는
-  // 언제나 카드 표면 위의 `text-primary`가 되어 대비가 조각 색과 분리된다.
-  const NUMBER_BADGE_RADIUS = 9;
-  const sliceNumbers = arcs.flatMap((a, i) => {
-    const mid = (a.start + a.end) / 2;
-    const [nx, ny] = polar(cx, cy, R, R * RY_RATIO, mid); // 고리 바깥 테두리의 한 점
-    return [
-      svgEl('circle', { class: 'donut-slice-index-badge', cx: nx, cy: ny, r: NUMBER_BADGE_RADIUS }),
-      svgEl('text', { class: 'donut-slice-index', x: nx, y: ny, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, [
-        CIRCLED_NUMBERS[i] ?? String(i + 1),
-      ]),
-    ];
-  });
+  // **[2026-08-17, D72] 모바일(legend 모드)에서 조각과 범례를 잇던 ①②③
+  // 배지·번호(`sliceNumbers`, `donut-slice-indexes`)는 여기 있었다 — 지웠다.**
+  // 소유자가 배지를 지우고 조각 위에 계좌 이름을 직접 쓰라고 지시했다 —
+  // 이름이 조각 위에 있으면 번호로 다시 짝지을 이유가 없다. 실제 텍스트는
+  // `applyDonutSliceInlineLabels`(이 파일 아래)가 **마운트된 뒤** 실측
+  // (`getBBox`·대비)으로 그린다 — 이 함수(`donutChart`)는 아직 DOM에 붙지
+  // 않은 노드를 만들 뿐이라 글자가 실제로 조각 안에 들어가는지 여기서는 알
+  // 수 없다(SVG `<text>`의 렌더 크기는 폰트가 실제로 적용된 뒤에만 잰다).
+  // 대신 이 함수는 그 후처리가 읽을 자리(`data-account`·`data-amount`, 위
+  // `tops`)와 진입점(`data-label-mode`, 아래 `svg` 속성)만 남겨 둔다.
 
   // 중앙 값 — **월 배분 총액**(screens.md 5.8절이 절감세액을 여기 두지 않기로
   // 하면서 확정한 값, 5.12절이 조각 하나일 때도 그대로 둔다고 재확인).
@@ -512,6 +578,11 @@ export function donutChart({
       'data-r-outer': R,
       'data-r-inner': rInner,
       'data-ry': RY_RATIO,
+      // [2026-08-17, D72] `applyDonutSliceInlineLabels`가 "이 도넛이 조각 안
+      // 이름 라벨을 필요로 하는 legend 모드인가"를 판단하는 유일한 신호다 —
+      // `labelled`/`labelledWide`는 라벨을 이미 옆에 그리므로(`drawLabels`)
+      // 후처리가 손댈 일이 없다.
+      'data-label-mode': geom.mode,
     },
     [
       defs,
@@ -519,7 +590,6 @@ export function donutChart({
       ...tops,
       ...hatches,
       drawLabels ? svgEl('g', { class: 'donut-labels' }, [...leaders, ...labels]) : null,
-      drawLabels ? null : svgEl('g', { class: 'donut-slice-indexes' }, sliceNumbers),
       centerText,
     ].filter(Boolean),
   );
@@ -576,11 +646,17 @@ export function runDonutEntrance(root, durationMs = DONUT_SWEEP_MS) {
   const rOuter = Number(svg.dataset.rOuter);
   const rInner = Number(svg.dataset.rInner);
   const ry = Number(svg.dataset.ry);
+  // [2026-08-14, 관리자 지시 2번] **`data-render-*`를 쓴다, `data-arc-*`가
+  // 아니다.** `data-arc-*`는 계약이 읽는 참값(간격 없는 진짜 경계)이고,
+  // `data-render-*`는 조각 사이 2px 표면색 간격이 반영된 **시각적** 경계다
+  // (`donutChart`의 `visualSliceAngle`). 여기서 참값을 쓰면 애니메이션의
+  // 마지막 프레임이 간격을 다시 지워버린다 — 펼쳐지는 도중에는 간격이
+  // 있다가 다 펼쳐진 순간 이음매가 도로 맞붙는 식으로.
   const specs = [...svg.querySelectorAll('.chart-donut-slice')].map((node) => ({
     node,
     cy: Number(node.dataset.cy),
-    start: Number(node.dataset.arcStart),
-    end: Number(node.dataset.arcEnd),
+    start: Number(node.dataset.renderStart ?? node.dataset.arcStart),
+    end: Number(node.dataset.renderEnd ?? node.dataset.arcEnd),
   }));
   if (specs.length === 0) return;
 
@@ -604,34 +680,253 @@ export function runDonutEntrance(root, durationMs = DONUT_SWEEP_MS) {
  * (5.13절), 금액까지 빠지면 값을 읽을 경로가 아예 사라진다.
  *
  * **배분액이 0인 계좌와 배제된 계좌는 여기 들어가지 않는다.** 범례는 도넛 라벨의
- * 대역이므로 조각과 1:1이어야 한다 — 조각이 없는데 번호가 붙은 줄이 있으면
- * ①②③이 어느 조각을 가리키는지가 무너진다. 설계가 두 경우를 각각 정해 두었고
+ * 대역이므로 조각과 1:1이어야 한다. 설계가 두 경우를 각각 정해 두었고
  * (5.9절: 배제 계좌는 "조각을 그리지 않는다. 라벨도 없다", 5.4절: 배분액 0인
  * 계좌는 C-2 캡션 `이 배분에서는 배분하지 않음`이 자리를 맡는다), 두 사실을
  * 말하는 자리는 모바일에서도 그대로 살아 있다(C-2는 폭만 줄고 그대로 성립한다,
  * 5.7절). 그래서 범례에 다시 적지 않는다.
+ *
+ * **[2026-08-17, D72] 번호(①②③)와 비율(%)을 뺐다 — 색 견본 + 이름 + 금액만
+ * 남는다.** 배지를 지우고 조각 위에 계좌 이름을 직접 쓰기로 하면서(위
+ * `applyDonutSliceInlineLabels`), 번호로 조각과 범례를 짝짓던 일 자체가
+ * 없어졌다 — 이름이 조각 위에도, 범례에도 똑같이 적혀 있으므로 그 이름
+ * 하나가 이미 짝을 짓는다. 비율도 조각 쪽(이름과 함께)이 이미 말하므로
+ * 범례에서 중복하지 않는다 — **역할이 갈린다: 조각 라벨 = 이름·비율,
+ * 범례 = 이름·금액.** 범례가 여전히 이름을 갖는 이유는 조각 라벨이 극단적으로
+ * 좁은 조각에서 리더선 폴백으로 밀려날 때도(이 파일 `applyDonutSliceInlineLabels`
+ * 머리말) 범례만으로 "이 색이 어느 계좌인가"가 항상 완결되게 하려는 것이다.
  */
 export function donutLegend({ allocations, unallocatedAnnualKrw, unallocatedMonthlyKrw = 0, excludedAccounts = [] }) {
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
   const arcs = sliceAngles(segments);
-  const total = segments.reduce((s, seg) => s + seg.amount, 0);
   const monthlyByAccount = Object.fromEntries((allocations ?? []).map((a) => [a.account, a.monthly_krw]));
 
   return el(
     'ul',
     { class: 'donut-legend' },
-    arcs.map((a, i) => {
+    arcs.map((a) => {
       const monthly = a.isUnallocated ? unallocatedMonthlyKrw : (monthlyByAccount[a.account] ?? 0);
       const color = a.isUnallocated ? UNALLOCATED_COLOR : ACCOUNT_COLOR[a.account];
       return el('li', { class: 'donut-legend-item' }, [
-        el('span', { class: 'donut-legend-index' }, [CIRCLED_NUMBERS[i] ?? String(i + 1)]),
         el('span', { class: 'donut-legend-swatch', style: { background: color } }),
         el('span', { class: 'donut-legend-name' }, [a.isUnallocated ? UNALLOCATED_LABEL : ACCOUNT_LABEL[a.account]]),
         el('span', { class: 'donut-legend-amount type-num' }, [`${formatKrw(monthly)} / 월`]),
-        el('span', { class: 'donut-legend-pct' }, [formatPercent(total > 0 ? a.amount / total : 0)]),
       ]);
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// [2026-08-17, D72] 도넛 조각 위(안) 이름+비율 라벨 — legend 모드 전용.
+//
+// **옛 위치.** 이 로직은 원래 `ui/example-showcase.js`의
+// `applyDonutSlicePercentLabels`(퍼센티지만, 예시 전용)였다. 예시와 실제
+// 결과 패널의 모바일(legend) 도넛이 **같은 `donutChart` 함수**를 쓰므로,
+// 배지를 지우고 조각에 이름을 쓰는 판정(D72)은 둘 모두에 적용된다 — 여기
+// 하나로 옮겨서 두 호출부(`ui/app.js`의 결과 패널, `ui/example-showcase.js`의
+// 예시)가 같은 함수를 그대로 쓴다.
+// ---------------------------------------------------------------------------
+
+/** sRGB 채널(0~255)을 WCAG 상대 휘도 계산에 쓰는 선형값으로. */
+function srgbChannelToLinear(channel) {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+function relativeLuminance([r, g, b]) {
+  return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
+}
+/** WCAG 대비비 — 밝은 쪽이 항상 분자다(순서 무관 ≥1). */
+function contrastRatio(l1, l2) {
+  const [hi, lo] = l1 >= l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+/** `getComputedStyle(...).fill` 같은 `rgb(r, g, b)` 문자열을 채널 셋으로 판다. */
+function parseRgbComponents(cssColor) {
+  const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(cssColor ?? '');
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [128, 128, 128];
+}
+
+/**
+ * **실측 기반 대비 선택** — 배경(조각의 실제 렌더 색)을 읽어 흰/검 중 대비가
+ * 더 큰 쪽을 고른다. 계좌 색 토큰은 테마마다 다른 값을 가지고(`styles.css`),
+ * 미배분 색(`--data-unallocated`)은 라이트에서 어두운 회색(흰 글자가 이김,
+ * 6.29:3.34)인데 다크에서는 밝은 회색(검은 글자가 압도적으로 이김,
+ * 10.48:2.00)이라 **테마에 따라 승자가 실제로 뒤집힌다.** 그래서 값을 정해
+ * 두지 않고 화면에 실제로 칠해진 색을 매번 다시 잰다(`applyDonutSliceInlineLabels`
+ * 가 테마가 바뀔 때마다 다시 부른다).
+ */
+function bestTextColorOn(cssBackgroundColor) {
+  const bgLuminance = relativeLuminance(parseRgbComponents(cssBackgroundColor));
+  const whiteContrast = contrastRatio(bgLuminance, 1);
+  const blackContrast = contrastRatio(bgLuminance, 0);
+  // hex가 아니라 CSS 색 키워드다 — 흰/검은 WCAG 상대 휘도 스펙 자체가 1과 0으로
+  // 정의하는 절댓값이라 어느 팔레트에도 속하지 않고, 테마가 바뀌어도 따라와야
+  // 할 "토큰"이 애초에 없다(`styles-tokens.test.mjs`가 막는 것은 디자인 토큰을
+  // 코드가 다시 계산하는 것이지 이 절댓값과는 다르다).
+  return whiteContrast >= blackContrast ? 'white' : 'black';
+}
+
+const SLICE_LABEL_NAME_FONT_PX = 15; // `.donut-legend-item`(15px)와 나란한 자리
+const SLICE_LABEL_MIN_FONT_PX = 9; // 더 못 줄이는 바닥값 — 이 아래는 글자가 아니라 얼룩이다
+const SLICE_LABEL_FIT_MARGIN = 0.92; // 조각 안 여유 8% — 테두리에 글자가 닿지 않게
+const SLICE_LABEL_OUTSIDE_GAP = 16; // 리더선 폴백 — 고리(rOuter) 밖으로 이만큼(뷰박스 단위) 뺀다
+const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(em, 이름 글자 크기 기준)
+
+/**
+ * 도넛 조각 위(안)에 **계좌 이름 + 배분 비율(%)**을 두 줄로 그린다(D72).
+ * `donutChart`를 고치지 않는다 — 그 함수는 아직 화면에 붙지 않은 노드를
+ * 만들 뿐이라 `getBBox()`(폰트가 실제로 적용된 뒤에만 정확한 값)를 쓸 수
+ * 없다. 그래서 **마운트된 뒤** 이 함수가 실측 기반으로 후처리한다.
+ *
+ * **자기 완결적이다** — 인자로 조각 데이터를 받지 않는다. 조각 자신이 이미
+ * 아는 사실(`data-account`·`data-amount`, `donutChart`의 `tops`)만 읽어
+ * 이름·비율·총합을 여기서 다시 계산한다. 같은 뷰(예: 예시 vs 결과 패널)가
+ * 서로 다른 도넛에 이 함수를 반복해 불러도, 매번 그 도넛 자신의 데이터만
+ * 본다 — 호출부가 계약을 다시 조립할 필요가 없다.
+ *
+ * **배치 — 고리 반지름의 정확한 중간(0.5).** 옛 퍼센티지 전용 버전은 이제는
+ * 없는 ①②③ 배지와 겹치지 않으려 0.34로 안쪽에 치우쳤었다 — 배지가 사라진
+ * 지금은 그 제약이 없으므로 가장 읽기 좋은 정중앙을 쓴다.
+ *
+ * **겹침/넘침 — 실측.** 글자(이름+비율 두 줄)를 실제로 그린 뒤 `getBBox()`로
+ * 그 조각이 그 반지름에서 낼 수 있는 현(chord) 길이·고리 두께와 비교한다.
+ * 안 들어가면 먼저 두 줄 다 글자 크기를 바닥까지 함께 줄이고, 그래도 안
+ * 들어가면 고리 밖으로 빼고 지시선을 긋는다(`donutLabelLayout`이 이미 쓰는
+ * "조각 밖 라벨 + 지시선"과 같은 발상) — **이 서비스의 실제 조각(예:
+ * 33%·17%·50%, 최소 17% ≈ 61° 스윕)에서는 실측상 이 폴백이 걸리지 않는다**
+ * (`example-showcase.browser.mjs`가 이 사실 자체를 검사로 고정한다).
+ *
+ * **글자 색 — 실측.** 안쪽에 그릴 때는 `bestTextColorOn`이 조각의 실제 렌더
+ * 색과 대조해 고른 흰/검을 쓴다. 고리 밖(폴백)으로 뺄 때는 배경이 더는 조각
+ * 색이 아니라 카드 표면이므로 `var(--text-primary)`(이미 검증된 토큰)를 쓴다.
+ *
+ * @param {Document|ShadowRoot|Element} root 도넛이 그려진 DOM 루트(문서 또는
+ *   shadow root) — 이 안에서 `.chart-donut[data-label-mode="legend"]`를 전부 찾는다.
+ */
+export function applyDonutSliceInlineLabels(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"]')];
+  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg);
+}
+
+function applyDonutSliceInlineLabelsToSvg(svg) {
+  if (!svg || typeof svg.querySelectorAll !== 'function') return;
+  const cx = Number(svg.dataset.cx);
+  const rOuter = Number(svg.dataset.rOuter);
+  const rInner = Number(svg.dataset.rInner);
+  const ry = Number(svg.dataset.ry);
+  if (![cx, rOuter, rInner, ry].every(Number.isFinite)) return;
+
+  const tops = [...svg.querySelectorAll('path.chart-donut-slice[role="img"]')];
+
+  // 이전 호출(리사이즈·테마 전환 재호출)이 남긴 그룹을 지우고 새로 그린다 —
+  // 매번 실측을 다시 하지 않으면 옛 테마·옛 폭 기준 색·위치가 남는다.
+  svg.querySelector('.donut-slice-label-group')?.remove();
+  const group = svgEl('g', { class: 'donut-slice-label-group' }, []);
+  svg.appendChild(group);
+
+  const total = tops.reduce((sum, top) => sum + (Number(top.dataset.amount) || 0), 0);
+  if (total <= 0) return;
+
+  const rLabel = (rInner + rOuter) / 2; // 고리 반지름 정중앙 — 배지가 없으므로 안쪽으로 치우칠 이유가 없다
+  const bandThickness = rOuter - rInner;
+
+  for (const top of tops) {
+    const amount = Number(top.dataset.amount);
+    if (!(amount > 0)) continue; // 0원 조각은 애초에 path 자체가 없다 — 방어적으로만 남긴다
+    const account = top.dataset.account;
+    const name = account === 'unallocated' ? UNALLOCATED_LABEL : (ACCOUNT_LABEL[account] ?? account);
+    const cy = Number(top.dataset.cy);
+    const start = Number(top.dataset.renderStart ?? top.dataset.arcStart);
+    const end = Number(top.dataset.renderEnd ?? top.dataset.arcEnd);
+    if (![cy, start, end].every(Number.isFinite)) continue;
+    const mid = (start + end) / 2;
+    const sweepRad = (Math.max(0, end - start) * Math.PI) / 180;
+    // `Math.min(sweepRad, Math.PI)`로 180°에서 자른다 — 현 길이 `2r·sin(θ/2)`는
+    // θ=180°(π)에서 최댓값(지름)을 찍고 그 뒤로는 다시 줄어든다(원의 시작점과
+    // 끝점이 다시 가까워지기 때문). 조각이 클수록(180°를 넘어도) 글자가 들어갈
+    // 자리는 줄지 않고 늘어나므로, 180°를 넘는 구간은 최댓값(지름)으로 고정한다.
+    const chordAtMid = 2 * rLabel * Math.sin(Math.min(sweepRad, Math.PI) / 2);
+
+    const pctText = formatPercent(amount / total);
+    const insideColor = bestTextColorOn(getComputedStyle(top).fill);
+    const [px, py] = polar(cx, cy, rLabel, rLabel * ry, mid);
+
+    let fontPx = SLICE_LABEL_NAME_FONT_PX;
+    const buildText = () =>
+      svgEl(
+        'text',
+        {
+          class: 'donut-slice-label',
+          x: px, y: py,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          fill: insideColor,
+        },
+        [
+          svgEl('tspan', { class: 'donut-slice-label-name', x: px, dy: '-0.55em', style: `font-size:${fontPx}px` }, [name]),
+          svgEl(
+            'tspan',
+            { class: 'donut-slice-label-pct', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(SLICE_LABEL_MIN_FONT_PX, fontPx - 2)}px` },
+            [pctText],
+          ),
+        ],
+      );
+
+    let text = buildText();
+    group.appendChild(text);
+
+    const fitsInsideSlice = () => {
+      const box = text.getBBox();
+      return box.width <= chordAtMid * SLICE_LABEL_FIT_MARGIN && box.height <= bandThickness * SLICE_LABEL_FIT_MARGIN;
+    };
+    while (!fitsInsideSlice() && fontPx > SLICE_LABEL_MIN_FONT_PX) {
+      fontPx -= 1;
+      const next = buildText();
+      group.replaceChild(next, text);
+      text = next;
+    }
+    if (fitsInsideSlice()) continue;
+
+    // 폴백 — 고리 밖, 지시선과 함께. 배경이 카드 표면이 되므로 대비를 다시
+    // 잴 필요 없이 검증된 토큰(text-primary)을 쓴다.
+    const outerRadius = rOuter + SLICE_LABEL_OUTSIDE_GAP;
+    const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
+    const fallback = svgEl(
+      'text',
+      { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
+      [
+        svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${SLICE_LABEL_NAME_FONT_PX}px` }, [name]),
+        svgEl(
+          'tspan',
+          { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${SLICE_LABEL_NAME_FONT_PX - 2}px` },
+          [pctText],
+        ),
+      ],
+    );
+    group.replaceChild(fallback, text);
+    text = fallback;
+    const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
+    const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
+    group.insertBefore(leader, text);
+  }
+}
+
+/**
+ * 테마가 바뀌면(명시적 라이트/다크 전환 또는 시스템 설정 전환) 조각 라벨의
+ * 흰/검 대비 승자가 뒤집힐 수 있다(`bestTextColorOn` 머리말) — 그래서 값이
+ * 바뀌지 않아도 다시 그려야 한다. `document.documentElement`의 `data-theme`
+ * 속성 변화와 `prefers-color-scheme` 미디어쿼리 변화 둘 다 듣는다(`theme.js`
+ * 머리말 "세 가지 상태" — 화면 색을 실제로 바꾸는 유일한 두 경로).
+ */
+export function watchDonutThemeChange(onThemeChange) {
+  if (typeof onThemeChange !== 'function') return;
+  if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
+    new MutationObserver(onThemeChange).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    const schemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    if (typeof schemeQuery.addEventListener === 'function') schemeQuery.addEventListener('change', onThemeChange);
+  }
 }
 
 // D16 — 트랙 길이의 공통 배율. screens.md 5.4절: "세 막대는 공통 배율을 쓴다.
@@ -834,7 +1129,7 @@ export function placeholderGeometry(labelMode = 'labelled') {
  */
 export function placeholderSliceAngles({ count = PLACEHOLDER_SLICE_COUNT, gapPx = PLACEHOLDER_GAP_PX, rMid = 0 } = {}) {
   const step = 360 / count;
-  const gapDeg = rMid > 0 ? Math.min(step / 2, (gapPx / (2 * Math.PI * rMid)) * 360) : 0;
+  const gapDeg = Math.min(step / 2, pxGapToDeg(gapPx, rMid));
   return Array.from({ length: count }, (_, i) => ({
     start: i * step + gapDeg / 2,
     end: (i + 1) * step - gapDeg / 2,

@@ -132,6 +132,23 @@
      — 차트·미터·표·헤드라인 금액·`AccountBenefitStrip`은 제약을 받지 않는다
      (design-system 4.4.1절, D16·D33 같은 폭 규약이 전체 폭을 요구한다). */
   --prose-max-width: 640px;
+
+  /* [2026-08-17, 관리자 지시(3차) 2번] man-icon(검정 선화) 다크 반전 —
+     색 토큰은 아니지만 `styles-tokens.test.mjs`가 **모든** `--` 커스텀
+     프로퍼티를 대상으로 "미디어 쿼리·[data-theme] 안에만 존재하면 안
+     된다"를 기계로 검사하므로, 이 파일 머리말의 3단 구조(맨바닥/미디어
+     다크/`data-theme` 오버라이드)를 색과 똑같이 따른다. **왜 선택자
+     (`:root[data-theme="dark"] .example-showcase-input-icon`)가 아니라
+     커스텀 프로퍼티로 반전을 켜는가** — man-icon은 `ui/example-showcase.js`가
+     Shadow DOM 안에 그린다. `:root` 선택자는 셀렉터 매칭이 shadow tree
+     경계를 넘지 못해(실측으로 확인 — 셀렉터 방식은 라이트·다크 어디서도
+     걸리지 않았다) shadow 안의 `.example-showcase-input-icon`을 못 잡는다.
+     반면 **커스텀 프로퍼티 값은 상속으로 shadow 경계를 넘는다**(도넛
+     `--data-pension` 등이 이미 같은 방식으로 shadow 안에서 읽힌다) —
+     그래서 반전 여부를 선택자가 아니라 이 프로퍼티 값으로 정하고,
+     `.example-showcase-input-icon`(styles.css 아래)이 테마와 무관하게
+     `filter: var(--man-icon-filter)`로 값만 읽는다. */
+  --man-icon-filter: none;
 }
 
 /* 2) 운영체제가 다크이고 사용자가 라이트를 명시하지 않았을 때. */
@@ -161,6 +178,7 @@
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
     --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
+    --man-icon-filter: invert(1);
   }
 }
 
@@ -187,6 +205,7 @@
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
   --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
+  --man-icon-filter: invert(1);
 }
 
 /* 4) 인쇄는 **항상 라이트**다(design-system 8.5절). 대부분의 프린터 설정에서
@@ -243,17 +262,80 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    손대지 않는다(3.5절 대비표 회귀 위험, 그리고 "크게 하라"가 매번 위계
    문제였던 이번 세션의 전례). */
 .app-layout { max-width: 1680px; margin: 0 auto; }
+/* 헤더 고정(sticky) — **세 번째로 방향이 바뀐 자리다.** D33(게이트 6)이 처음
+   sticky로 세웠고, 관리자 지시(2026-08-14) 3번이 소유자 지시로 풀었고,
+   [2026-08-17, 관리자 지시(2차) 1번, D72]로 소유자가 다시 고정하라고 지시해
+   되돌린다 — **나중 지시가 이긴다.** `browser/single-scroll-layout.browser.mjs`의
+   "헤더가 고정되지 않는다" 검사는 지우지 않고 다시 뒤집었다(이력을 그 파일
+   주석에 남겼다) — 같은 검사가 두 번 방향을 바꾼 것이므로 다음 사람이
+   어리둥절하지 않게 하려는 것이다.
+
+   **`z-index: 25`** — 테마 드롭다운(20, 헤더 자식이라 같은 스택 안에서 이미
+   위에 뜬다)보다는 낮아도 되지만, 결과 패널의 카드·배지 같은 일반 콘텐츠
+   (z-index 없음, auto=0)보다는 위에 있어야 스크롤할 때 콘텐츠가 헤더 위로
+   비쳐 보이지 않는다. 모달 오버레이(100)보다는 한참 아래다.
+
+   **배경이 불투명해야 한다** — sticky 헤더 아래로 콘텐츠가 스크롤되어 지나갈
+   때 배경이 비치면 글자가 겹쳐 읽힌다. `surface-raised`는 이미 불투명하다. */
 .app-header {
+  position: sticky; top: 0; z-index: 25;
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--space-4) var(--space-5);
-  position: sticky; top: 0; background: var(--surface-raised);
-  border-bottom: 1px solid var(--border-subtle); z-index: 10;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
 }
-/* 가명칭 + 과세연도 표기 한 묶음. 데스크톱에서는 한 줄에 좌·우로 벌어지고,
-   모바일에서는 세로로 쌓여 `ThemeControl` 44px에 밀리지 않는다(screens.md 2.1절). */
-.app-header-titles { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.app-title { font-size: 17px; font-weight: 600; }
-.app-tax-year { font-size: 12.5px; color: var(--text-secondary); }
+/* 브랜드(로고+탭) 묶음 — [2026-08-17, 관리자 지시(2차) 1·2번] 옛
+   `.app-header-titles`(가명칭 텍스트 + 과세연도)를 대체한다. 로고가 왼쪽,
+   탭 행이 그 옆(참조: snowball72.com/pension-calculator 방식). */
+.app-header-brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-4); }
+/* 로고 — [2026-08-17, 관리자 지시(3차) 1번] **라이트/다크 두 원본을 함께
+   심고 CSS로 표시를 가른다.** 옛(D72) 처리는 원본이 하나(라이트만, 짙은
+   무채색 워드마크)뿐이라 다크 헤더에서 로고가 묻혔고(실측 대비 1.1:1
+   안팎), 그 대가로 로고 뒤에만 흰 알약 배경(`.app-logo-plate`, `--logo-
+   plate`)을 씌워 눈속임했다. **이번에 다크 전용 원본이 새로 생겼다** —
+   그 원본 자체가 다크 배경에서 읽히도록 그려졌으므로 알약 배경의 존재
+   이유가 사라졌다. `.app-logo-plate`·`--logo-plate`는 지웠다(관련 기록은
+   `docs/org/gate-decisions.md` D72, 이 결정 자체는 되돌리지 않고 다음
+   문단에 새로 남긴다).
+
+   원본은 둘 다 1272×528(가로형) — 높이를 헤더 눈금(바 안쪽 높이)에 맞추고
+   `width: auto`로 비율을 지킨다(래스터 확대가 아니라 원본 그대로를 줄이기만
+   하므로 흐려지지 않는다). **+30%** — 관리자 지시로 표시 높이를 1.3배 한다
+   (`calc(32px * 1.3)`로 관계를 그대로 남긴다 — 리터럴 41.6px을 손으로 다시
+   적지 않는다).
+
+   **테마별 표시는 3단 구조**(이 파일 머리말 "선언 순서가 계약이다"와 같은
+   틀 — 맨바닥 라이트 / 미디어쿼리 다크 / `data-theme` 오버라이드)를 그대로
+   따른다. `data-theme` 스탬프 경로와 `prefers-color-scheme` 경로 둘 다
+   여기서 갈린다. */
+.app-logo { display: block; height: calc(32px * 1.3); width: auto; }
+.app-logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .app-logo-light { display: none; }
+  :root:where(:not([data-theme="light"])) .app-logo-dark { display: block; }
+}
+:root[data-theme="dark"] .app-logo-light { display: none; }
+:root[data-theme="dark"] .app-logo-dark { display: block; }
+/* 탭 행 — 지금은 하나뿐이다(`ui/app.js`의 `HEADER_TABS`). **탭이 늘어도 이
+   구조 그대로 항목만 늘어난다** — `display: flex`가 자동으로 나란히 놓는다. */
+.app-tabs { display: flex; align-items: center; gap: var(--space-4); }
+/* 활성 탭 — 밑줄 + 강조색(design-system이 이미 쓰는 `accent`). 버튼 기본
+   테두리·배경을 지우고 텍스트만 남긴다 — 탭 바는 버튼처럼 눌리는 느낌보다
+   "지금 있는 자리"를 보여주는 내비게이션에 가깝다. */
+.app-tab {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--text-secondary);
+  padding: var(--space-2) 0; border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.app-tab-active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.app-tab:not(.app-tab-active):hover { color: var(--text-primary); }
+
+/* 오른쪽 묶음 — 과세연도 표기 + `ThemeControl`. 옛 `.app-header-titles`가
+   가명칭과 과세연도를 한 묶음으로 묶던 이유(모바일에서 밀리지 않게, 아래
+   미디어쿼리)를 그대로 잇는다 — 지금은 짝이 과세연도+테마로 바뀌었을 뿐이다. */
+.app-header-meta { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-3); }
+.app-tax-year { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; }
 
 /* ThemeControl (design-system 5.30절 · screens.md 2.1절)
 
@@ -288,23 +370,601 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .theme-menu-dot { width: 1.2em; }
 /* 헤더는 인쇄물에 실을 것이 아니다 — 종이에서는 결과와 고지만 남는다. */
 @media print { .theme-control { display: none; } }
-/* 모바일 좌우 여백은 설계 격자대로 16px다(design-system 4.4절). 헤더가 셋이 된
-   지금 이 16px가 `ThemeControl` 44px의 자리를 낸다 — 24px로 두면 좁은 기기에서
-   가명칭이 두 줄로 접힌다. **접혀도 잘리거나 가로 스크롤이 생기지는 않는다**
+/* 모바일 좌우 여백은 설계 격자대로 16px다(design-system 4.4절). **[2026-08-17,
+   관리자 지시(2차) 1·2번] 두 묶음(브랜드+탭 / 과세연도+테마)을 세로로
+   쌓는다** — 옛 구조(가명칭 텍스트를 세로로 접던 것)와 같은 목적이다: 좁은
+   폭에서 `ThemeControl` 44px 자리를 억지로 밀어내지 않으면서도 로고·탭·
+   과세연도가 전부 잘리지 않게 한다. 두 줄 각각은 자기 안에서 좌·우로 벌어져
+   (`justify-content: space-between`), 로고는 왼쪽, 과세연도는 왼쪽/테마는
+   오른쪽에 남는다. **접혀도 잘리거나 가로 스크롤이 생기지는 않는다**
    (`browser/theme.browser.mjs`가 320px와 360px에서 잰다). */
 @media (max-width: 767px) {
-  .app-header { padding: var(--space-3) var(--space-4); gap: var(--space-2); }
-  .app-header-titles { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
-  .app-title, .app-tax-year { white-space: nowrap; }
+  .app-header { padding: var(--space-3) var(--space-4); flex-direction: column; align-items: stretch; gap: var(--space-2); }
+  .app-header-brand, .app-header-meta { justify-content: space-between; }
 }
+/* [2026-08-17, 관리자 지시(2차) 1번] **고정 바가 스크롤 목적지 위쪽을 가리는
+   고전 결함.** 헤더가 다시 sticky가 되면서, 화살표(예시 구역)를 눌러
+   `.app-main`을 뷰포트 위로 스크롤하면(`scrollIntoView({ block: 'start' })`,
+   `ui/example-showcase.js`) 목적지의 맨 위가 정확히 `top: 0`으로 맞춰지고
+   그 자리가 바로 sticky 헤더 아래에 깔린다 — 스크롤은 끝났는데 첫 줄(입력
+   패널 제목)이 헤더에 가려 안 보이는 결함이다. `scroll-margin-top`은 최신
+   브라우저에서 `scrollIntoView`·앵커 이동 양쪽에 자동으로 반영된다(스펙:
+   CSS Scroll Snap의 스크롤 패딩과 짝을 이루는 대상측 여백) — 헤더 실측
+   높이(`--layout-header-height`, `ui/app.js`가 `ResizeObserver`로 채운다)
+   만큼 목적지를 미리 밀어 두면, 스크롤이 끝난 자리가 정확히 헤더 바로
+   아래가 된다. */
 .app-main {
   display: flex; flex-direction: column; gap: var(--space-6);
   padding: var(--space-5);
+  scroll-margin-top: var(--layout-header-height);
 }
 .app-footer {
   padding: var(--space-5); text-align: center; font-size: 12.5px; color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
 }
+
+/* ---- ExampleShowcase — 관리자 지시(2026-08-14) 4번, D70(2026-08-16)으로 --
+   ---- 좌우 2열 배치로 재작업 -----------------------------------------------
+
+   헤더와 입력/결과 사이의 간략한 예시(도넛 + 절세액). 내용은
+   `ui/example-showcase.js`가 Shadow DOM 안에 그린다 — 이 파일 전체가 그
+   shadow root 안으로도 복제되므로, 아래 규칙은 빛 DOM(호스트 위치·인쇄
+   숨김)과 그림자 DOM(카드 내부 모양) 양쪽에서 함께 쓰인다.
+
+   `.example-showcase-slot`은 shadow host(빛 DOM) — 다른 섹션과 가로 여백을
+   맞춘다(`.app-header`·`.app-main`과 같은 값). */
+.example-showcase-slot { padding: var(--space-5) var(--space-5) 0; }
+@media (max-width: 767px) { .example-showcase-slot { padding: var(--space-4) var(--space-4) 0; } }
+/* [2026-08-17, 소유자 지시 5번] 위쪽 여백만 줄인다(좌우는 `.app-main`과 맞춘
+   폭 정렬이라 손대지 않는다) — 화살표가 1440×900 첫 화면 안에 들어오게 하는
+   전체 축소분의 일부다(`.example-showcase` 자체 패딩·행간격과 함께 아래에서
+   더 줄인다). */
+@media (min-width: 1024px) { .example-showcase-slot { padding: var(--space-4) var(--space-6) 0; } }
+/* 인쇄물에는 결과와 고지만 남는다(위 `.app-header` 규칙과 같은 원칙,
+   `@media print` 블록 참고) — 예시는 이 사용자의 결과가 아니므로 종이에도
+   실리지 않는다. */
+
+/* 아래부터는 shadow root 안(카드 내부)에서 쓰이는 규칙.
+
+   [2026-08-16, 관리자 지시 — 세 번째 정정] **점선 테두리 + `surface-sunken`
+   배경을 버리고, 아래 입력·결과 칸과 같은 카드 표면으로 바꾼다.** 소유자가
+   "예시 영역이 다른 칸들이랑 구분이 가게, 입력이나 결과칸처럼 구분해달라"고
+   명시로 요청했다 — 형태 구분의 방향 자체가 "이건 남의 값(점선+가라앉은
+   배경)"에서 "이것도 이 화면의 카드 중 하나(흰 표면+테두리+그림자)"로
+   뒤집혔다. **"이건 실제 결과가 아니다"의 몫은 이제 점선이 지지 않는다** —
+   첫 줄이 이미 "예시)"로 시작하고 그 뒤에 고정 입력값을 그대로 적어
+   보여주므로(`exampleInputsLineText`), 문구가 이미 그 구분을 지고 있다(관리자
+   판정 — 3번 지시 근거). 아래 `.input-panel`(576행)의 값을 **그대로**
+   재사용한다 — `background: var(--surface-raised)` · `border: 1px solid
+   var(--border-subtle)` · `border-radius: var(--radius-l)` · `box-shadow:
+   var(--shadow-1)`. 새 카드 스타일을 만들지 않는다(관리자 지시).
+
+   **좌우 폭 규칙은 손대지 않는다.** `.example-showcase-slot`(위 330행)의
+   좌우 패딩은 이미 `.app-main`과 정확히 같은 값(`--space-5`/`--space-6`)이라,
+   이 카드의 좌우 경계는 이미 입력 칸(`.input-slot`)·결과 칸(`.result-slot`)이
+   합쳐 차지하는 폭과 정확히 같다.
+
+   [2026-08-16, D70] **좌우 2열로 다시 짰다 — 세 번째 배치 변경.** 소유자가
+   (1) 문구 두 줄을 왼쪽·세로 가운데 정렬, (2) 도넛을 오른쪽·+20%, (3) 캡션과
+   구성 두 줄 삭제, (4) 절세액 라벨·범례를 굵고 더 크게, (5) 화살표를
+   3배(약 192px)로 다시 지시했다. **CSS Grid `grid-template-areas`로 "문구
+   영역(text)·시각 영역(visual)"을 나란히, "절세액(amount)"을 그 아래 전폭,
+   "화살표(arrow)"를 맨 아래 전폭에 놓는다** — 열의 시각 순서는 grid 영역
+   이름이 정하고, DOM 순서(`ui/example-showcase.js`의 `exampleShowcaseSection`)
+   는 "문구 → 절세액 → 시각(도넛/범례) → 화살표"를 그대로 유지한다(키보드
+   tab·스크린리더 낭독 순서는 DOM 순서를 따르므로, 시각 배치와 무관하게
+   "물음 → 답 → 근거 → 다음 행동"이라는 논리 순서가 유지된다).
+
+   **모바일(<768px)은 `grid-template-areas`를 다시 정의해 "문구→절세액→
+   시각→화살표" 순서로 한 줄씩 쌓는다** — DOM 순서와 정확히 같으므로 시각
+   순서와 낭독 순서가 다시 일치한다(아래 모바일 미디어쿼리). 이 순서를 고른
+   근거 — 문구가 먼저 물음을 던지고, 절세액이 그 물음의 답(이 계산기가 하는
+   일의 핵심)을 바로 뒤이어 보이며, 도넛/범례가 그 답의 근거(계좌별 배분)를
+   설명하고, 화살표가 마지막으로 "그럼 내 값을 넣어 보자"로 이끈다 — D69가
+   세운 세로 순서(문구→절세액→도넛→범례→화살표)와 같은 논리라 연속성도
+   있다.
+
+   **정렬 실측은 반드시 배포 산출물(`dist/index.html`)로 한다.** 개발 서버
+   (`<link rel="stylesheet">`)와 번들(인라인 `<style>`)은 같은 이 파일에서
+   나오므로 CSS 값 자체는 같지만, 실측 검사가 열도록 지정한 문서가 둘 중
+   무엇인지에 따라 딴 결과를 낼 수 있었던 사례가 이미 있었다(`example-
+   showcase.browser.mjs`의 기본 `openApp()`은 개발 서버를 연다) — 그래서
+   `artifact-build.browser.mjs`에 번들 전용 정렬 검사를 별도로 둔다. */
+/* [2026-08-17, 소유자 지시 5번] **전체 20% 축소 — 목표는 화살표가 1440×900
+   첫 화면 안에 스크롤 없이 들어오는 것이다.** 실측(`example-showcase.
+   browser.mjs` "1440×900에서 화살표 전체가 보인다") 기준으로 예산을 맞췄다 —
+   단순히 모든 값에 ×0.8을 곱한 것이 아니라(그것만으로는 부족했다 — 아래
+   각주 참고), 세로 예산을 가장 많이 먹는 항목(도넛·범례·절세액 카드·화살표
+   자체)을 더 크게 줄이고, 가로 폭에만 영향을 주는 값(칸 사이 column-gap 등)은
+   그대로 뒀다. **행간(3번 지시)과 축소(5번 지시)가 서로 당긴다** — 글자
+   크기는 줄이되 줄간격 배수(line-height)는 오히려 조금 올려서(아래
+   `.example-showcase-input-line`), 절대 줄 높이는 옛값보다 작으면서도 글자
+   사이는 더 넉넉해 보이게 했다. */
+.example-showcase {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "text visual" "amount amount" "arrow arrow";
+  align-items: stretch; /* 행 높이가 그 행에서 가장 큰 칸(대개 visual, 도넛+범례)에 맞춰지고, 텍스트 칸은 그 높이를 그대로 받는다 — 안의 flex justify-content:center가 세로 가운데를 만든다 */
+  column-gap: var(--space-7);
+  row-gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-1);
+}
+.example-showcase-text-col {
+  grid-area: text;
+  display: flex; flex-direction: column; justify-content: center; gap: var(--space-2);
+  text-align: left;
+}
+/* [2026-08-17, 소유자 지시 1·3·4·5번] **입력 한 줄 → 입력 세 줄(나이·소득·
+   여유 자금, 한 줄에 하나) + 물음 줄, DOM 순서가 물음이 먼저.** 「예시)」
+   접두사와 「연 평균 수익률」 줄은 지운다(D71 — 예시가 수익률 없이 계산되므로
+   그 줄이 말하던 가정 자체가 더는 없다). 글자 크기는 40px→28px로 줄이고
+   (5번, 넷으로 늘어난 줄 수를 감당하면서도 전체 축소 예산을 지킨다) 줄간격
+   배수는 1.15→1.35로 오히려 올린다(3번 — "행간을 조금 더 넓게"). 절대 줄
+   높이(28×1.35≈37.8px)는 옛값(40×1.15=46px)보다 여전히 작다 — 5번(축소)이
+   3번(행간 확대)을 무효로 만들지 않으면서도 글자 사이는 더 여유 있어 보인다.
+   `.example-showcase-input-line`(새 이름, 옛 `.example-showcase-inputs-line`을
+   대체)이 세 줄 모두에 붙는다. */
+.example-showcase-input-line, .example-showcase-question {
+  margin: 0; max-width: 44em;
+  font-size: 28px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;
+  /* [2026-08-14, 관리자 지시 — 배포 번들 실측 회귀] 한국어 문장은 기본
+     줄바꿈 규칙이 어절(단어) 경계가 아니라 거의 모든 음절 사이에서 꺾이는
+     것을 허용한다 — "…있을까" / "요?"처럼 조사·어미 한 글자가 혼자 떨어지는
+     원인이다. `keep-all`은 어절(공백·하이픈 경계) 단위로만 꺾이게 강제한다 —
+     "여유 자금" 같은 한글 단어 내부에서 엉뚱하게 안 꺾인다. */
+  word-break: keep-all;
+}
+/* [2026-08-17, 관리자 지시(2차) 5번] 「여유 자금」 등 입력 세 줄의 글자색을
+   `text-secondary`(옅은 회색)에서 `text-primary`(검정)로 올린다 — 물음과
+   나란히 검게 보이되, 물음과의 위계는 이제 색이 아니라 **간격**(아래
+   `:first-of-type` 규칙)이 진다. */
+.example-showcase-input-line { color: var(--text-primary); }
+/* [2026-08-17, 관리자 지시(2차) 3·9번 → 관리자 지시(3차) 3번] 물음 h2가
+   아이콘(`iconQuestion`) + 텍스트 span을 가졌었으나 이번 회차에 아이콘을
+   지웠다 — 지금은 텍스트 span 하나뿐이다. `display: flex`는 남긴다(자식이
+   하나여도 세로 가운데 정렬 성질은 그대로 필요하다 — 해가 없다). */
+.example-showcase-question { color: var(--text-primary); display: flex; align-items: center; gap: var(--space-2); }
+.example-showcase-question-text {}
+/* [2026-08-17, 관리자 지시(3차) 2번] **입력 세 줄이 man-icon과 한 행(row)을
+   이룬다.** `exampleShowcaseSection`의 `inputBlock`(icon + `.example-
+   showcase-input-lines` 두 자식)을 감싸는 칸 — 옛 `:first-of-type`(개별
+   <p>)에 걸었던 "물음과 두 줄 정도 띄운다" 여백(아래 근거는 그대로다)을
+   이 칸 하나로 옮겼다. 개별 <p>가 아니라 **블록 전체**에 거는 이유 —
+   man-icon이 세 줄 전체 높이만큼 늘어나야 하는데(아래 `.example-showcase-
+   input-icon`), 그 여백이 첫 줄(<p>) 안쪽에 남아 있으면 아이콘이 그
+   빈틈까지 포함해 늘어나 첫 줄 텍스트보다 위에서 시작하는 것처럼 보인다
+   (실측으로 확인한 것 — 렌더 크롭에서 아이콘 상단이 "나이" 글자보다 위에
+   떠 보였다). 블록 전체를 밀면 안쪽(아이콘+세 줄) 정렬은 그대로 맞고,
+   물음과의 간격만 밀린다.
+
+   **왼쪽 가장자리에서 띄운다**(`margin-left`) — 소유자 지시 "가운데가 너무
+   비워 보여"를 왼쪽 열 콘텐츠를 안쪽(오른쪽)으로 들이는 것으로 완화한다.
+   들인 양(`--space-7`, 48px)은 렌더 크롭으로 확인해 고른 값이다(최종
+   보고) — 카드를 넘치게 하거나 물음 줄과 어색하게 어긋나 보이지 않는
+   선에서 시각적으로 중앙 여백을 눈에 띄게 줄이는 가장 작은 값을 썼다. */
+.example-showcase-input-block {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  /* 물음과 두 줄 정도 — 물음 글자 자신의 줄높이(`line-height: 1.35`)를
+     기준으로 두 줄 몫(2×1.35em)을 얹는다. 이미 있는 부모(`.example-
+     showcase-text-col`) `gap`(8px)이 그 위에 더해지므로 실제 간격은 이
+     값보다 8px 더 넓다 — "두 줄 **정도**"라는 소유자 표현의 여유를 그대로
+     반영한다. */
+  margin-top: 2.7em;
+  margin-left: var(--space-7);
+}
+/* man-icon — 세 줄 전체 높이만큼(관리자 지시 3차 2번). 폭이 아니라
+   **높이**를 고정해 세로로 정확히 세 줄 몫만큼 늘이고, `width: auto`로
+   원본(정사각형, `assets/man-icon.js`) 비율을 지킨다. 값은 옆 `.example-
+   showcase-input-line`의 실제 렌더 치수(font-size 28px × line-height
+   1.35 = 줄 하나 37.8px, 세 줄 113.4px + 내부 gap(space-2) 두 개 16px =
+   129.4px)를 그대로 계산한 것이다 — 저 값이 바뀌면(글자 크기·줄간격·gap)
+   이 calc도 함께 고쳐야 한다. */
+.example-showcase-input-icon {
+  height: calc(28px * 1.35 * 3 + var(--space-2) * 2);
+  width: auto;
+  display: block;
+  flex: 0 0 auto;
+  /* [2026-08-17, 관리자 지시(3차) 2번] 다크에서 원본(검정 선화)이 다크
+     카드 배경(`--surface-raised` 다크 #1E2226)에 묻힌다(실측, 최종 보고)
+     — 로고와 같은 대비 문제이지만 파일을 추가하는 대신(로고처럼 다크
+     전용 원본을 새로 만들지 않고) `filter: invert(1)`로 반전해 흰 선화로
+     바꾼다. **선택자(`:root[data-theme="dark"] .example-showcase-input-
+     icon`)가 아니라 `--man-icon-filter` 커스텀 프로퍼티로 켠다** — 이
+     아이콘은 Shadow DOM(`ui/example-showcase.js`) 안에 그려지는데,
+     `:root`를 겨눈 선택자는 shadow tree 경계를 넘어 안의 요소를 잡지
+     못한다(실측으로 확인 — 예전에 선택자 방식으로 짰을 때 라이트·다크
+     어디서도 걸리지 않았다). 커스텀 프로퍼티 **값**은 상속으로 shadow
+     경계를 넘으므로(도넛 `--data-pension` 등과 같은 경로), 반전 여부를
+     이 파일 위쪽 `:root`/미디어 다크/`data-theme="dark"` 3단 구조가 정한
+     `--man-icon-filter`(라이트 `none` / 다크 `invert(1)`) 값을 그대로
+     읽는다. */
+  filter: var(--man-icon-filter);
+}
+/* 세 줄 자체 — 아이콘과 나란한 열. 옛 `.example-showcase-text-col`의 균일한
+   `gap`(space-2, 8px)이 세 줄 사이 간격을 주던 것을 그대로 옮겨 왔다(지금은
+   이 열이 직접 그 세 <p>의 부모다). */
+.example-showcase-input-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-2); }
+
+/* 절세액(`.example-showcase-amount`) — 관리자 지시 4번, "3배는 더 크게.
+   절세액을 강조해야 돼". **D69(관리자 판정)로 "결과 헤드라인을 넘지 않는다"는
+   이전 위계 제약이 이 자리에서 풀렸다** — 소유자가 이 구역을 "이 계산기가
+   무엇을 해 주는가"를 보여주는 자리로 쓰려 한다는 것이 그 근거다.
+
+   [2026-08-16, D70] **두 열 아래 전폭에 둔다(grid-area: amount).** 왼쪽
+   문구 칸 아래 붙이는 안도 검토했으나, 그러면 이 칸의 폭이 컨테이너의
+   절반으로 줄어 "3배 크게" 지시를 지키는 글자 크기(120px 출발값)가 자기
+   폭보다 넓어지기 쉽고, 오른쪽 도넛 칸만 세로로 남아 시각 균형이
+   깨진다(한쪽만 키가 커진다). 전폭에 두면 두 열(문구가 던진 물음 + 도넛이
+   보인 배분)의 "결론"으로 자연스럽게 이어지고, 큰 글자 크기가 필요로 하는
+   폭도 그대로 확보된다. 카드 형태는 유지한다(`.amount-card` 그대로
+   재사용) — D70로 캡션·구성 두 줄은 이제 렌더되지 않는다(`ui/example-
+   showcase.js`의 `amountCard` 호출부가 `showCaption: false, showComposition:
+   false`를 넘긴다, `result-panel.js` `amountCard` 머리말 참고). */
+.example-showcase-amount { grid-area: amount; width: 100%; max-width: 720px; margin: 0 auto; }
+/* [2026-08-14, 관리자 지시 — 배포 번들 실측 회귀, 원인 특정] **`align-items:
+   center`가 480px 폭 오보고의 진짜 원인이었다.** 이 카드는 flex 세로
+   컨테이너이고, `align-items: center`는 자식(라벨·값)을 **카드 폭에 맞춰
+   늘이지 않고 자기 콘텐츠 폭만큼만** 차지하게 한다 — 그러면
+   `.amount-card-value`의 `clientWidth`가 "카드 안에서 쓸 수 있는 폭"이
+   아니라 "글자가 원하는 폭"이 되어, 폭을 넘는 금액이 카드 밖으로 조용히
+   삐져나간다(실측: `clientWidth`가 카드 실제 폭보다 항상 크게 나왔다 —
+   `ui/example-showcase.js`의 `fitAmountValueToCard`가 기준으로 삼는 값
+   자체가 틀렸던 것). **가운데 정렬은 `align-items`가 아니라 이미 있던
+   `text-align: center`가 진다** — 자식을 카드 폭 100%로 늘인 채(기본값
+   `stretch`) 그 안의 텍스트만 가운데 정렬하면 시각적으로는 똑같이
+   가운데지만, 자식의 실제 사용 가능 폭이 카드 폭과 정확히 같아진다. */
+/* [2026-08-17, 소유자 지시 5번] 카드 안쪽 여백을 space-5(24)→space-4(16)로
+   줄인다 — 전체 20% 축소 예산의 일부(아래 라벨·값 글자 크기와 함께). */
+.example-showcase-amount .amount-card {
+  background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l);
+  padding: var(--space-4); box-shadow: var(--shadow-2);
+  display: flex; flex-direction: column; text-align: center;
+}
+.example-showcase-amount .amount-card-direction,
+.example-showcase-amount .amount-card-composition { align-items: center; text-align: center; }
+/* 라벨 — 카드 안 슬롯1. [2026-08-16, D70] **17px/600에서 22px/700으로
+   올린다** — 소유자가 "라벨과 범례를 굵고 더 크게"라고 명시로 지시했다.
+   22px는 이 저장소 기존 눈금(design-system 2절) 중 `type-title-m`(20px)보다
+   크고 `type-title-l`(24px)보다 작은 자리로, 값(아래, 120px)에는 한참
+   못 미치면서도 옛 17px보다 뚜렷이 커 위계(값 > 라벨 > 범례, 아래
+   `.example-showcase-visual-col .donut-legend-item` 참고)가 유지된다. 굵기도
+   600→700(`type-title-l`과 같은 굵기)로 올려 "굵게" 지시를 함께 지킨다. */
+/* `word-break: keep-all` — 22px로 커진 라벨이 375px 카드(내부 가용폭 약
+   261px)에서 두 줄로 꺾일 때, 기본 줄바꿈 규칙은 음절 경계 아무 데서나
+   꺾을 수 있어 "절세액"이 "절세"/"액"으로 쪼개지는 것을 실측으로 확인했다
+   — `keep-all`은 공백(어절) 경계에서만 꺾이게 강제해 "절세액"이 통째로
+   다음 줄로 넘어가게 한다(위 `.example-showcase-inputs-line`·`.example-
+   showcase-question`이 이미 같은 이유로 쓰는 규칙과 동일). */
+/* [2026-08-17, 소유자 지시 5번] 22px→18px(전체 축소 예산의 일부). 굵기(700)는
+   유지한다 — D70(4)의 "굵게" 지시는 이번 지시로 바뀌지 않았다. 3번(행간
+   확대) 지시를 반영해 `line-height`를 명시로 준다(옛 규칙은 브라우저
+   기본값 `normal`, 폰트마다 달라 고정하지 않으면 "조금 더 넓게"를 확인할
+   기준점이 없다). */
+.example-showcase-amount .amount-card-label { font-size: 18px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
+/* 값 — [2026-08-17, D71 + 소유자 지시 5번] **120px → 85px.** D71로 예시가
+   ISA 수익률 옵트인 없이 계산되면서 헤드라인이 구간(`○원 ~ ○원`, 최대 두
+   덩어리)에서 확정 세액공제 하나(`amount-value-chunk` 한 덩이, "1,485,000원")
+   로 줄었다 — 자릿수가 훨씬 짧아진 값이 이제부터는 이 자리의 기본값이라,
+   D70이 "3배"로 지정했던 120px을 그대로 지킬 이유가 옅어졌고, 소유자의
+   전체 20% 축소 지시(5번)를 이 자리에도 적용한다. 이 값은 여전히
+   **출발점일 뿐이다** — 실제로 화면에 남는 크기는 `ui/example-showcase.js`의
+   `fitAmountValueToCard`가 마운트 직후 실측으로 확정한다(아래 참고,
+   단일 확정 수라 이 실측이 더 줄일 일은 거의 없어졌지만 안전망으로 남긴다).
+   이 규칙은 **≥768px에서만** 기본값이다 — <768px는 아래 모바일 미디어쿼리가
+   다시 준다.
+
+   **[2026-08-14, 관리자 지시 — 배포 번들 실측 회귀] 왜 순수 CSS로 못
+   끝내는가.** 금액 덩어리(`.amount-value-chunk`, `ui/result-panel.js`의
+   `amountValueNode`)는 `nowrap`이라 절대 내부에서 줄바꿈되지 않는다
+   (design-system 5.6절 "폭이 넘치면 줄바꿈한다"는 **덩어리 사이**에서만
+   적용되고, 덩어리 안에서 적용되면 "원"이 혼자 떨어지는 결함이 재발한다).
+   그런데 그 덩어리 자체가 카드 폭보다 넓어지는 순간(자릿수가 많은 절세액 +
+   좁은 카드)이 있을 수 있다 — 뷰포트 폭(`vw`) 기준 `clamp()`로는 이
+   "자릿수에 따라 안전선이 달라진다"는 조건을 표현할 수 없어 —
+   `fitAmountValueToCard`가 실제 렌더 폭을 재서 필요한 만큼만 줄인다
+   (바닥값 32px). */
+/* [2026-08-17, 관리자 지시(2차) 6번] 85px → 68px(추가 −20%). 헤더가 다시
+   sticky가 되며 세로 예산이 다시 줄었고("고정 바 높이가 새로 생겼다"),
+   이 자리가 세로 공간을 가장 많이 먹는 항목 중 하나라 축소 대상이다
+   (`.example-showcase-scroll-arrow`의 같은 이유와 짝을 이룬다, 아래).
+   바닥값(`AMOUNT_VALUE_MIN_FONT_PX`, `ui/example-showcase.js`, 32px)보다
+   여전히 크다.
+   [2026-08-17, 관리자 지시(3차) 4번] 68px → 61px(−10%, 68×0.9=61.2 반올림).
+   바닥값(32px)보다 여전히 크다 — `fitAmountValueToCard`가 필요하면 더
+   줄인다(안전망, 위 문단 참고). */
+.example-showcase-amount .amount-card-value { font-size: 61px; line-height: 1.15; }
+/* [2026-08-16, D70] `.amount-card-caption` 규칙은 지웠다 — `showCaption:
+   false`(`ui/example-showcase.js`)로 이 자리에 캡션 문단 자체가 DOM에
+   생기지 않으므로, 스타일도 더는 쓸 자리가 없다. */
+
+/* 시각 영역(`.example-showcase-visual-col`, 옛 이름 `.example-showcase-donut`)
+   — 도넛 + 범례를 오른쪽 열 하나로 묶는다.
+
+   [2026-08-16, D70] **도넛을 330px → 396px(+20%)로.** 소유자가 "오른쪽에
+   도넛 차트, 현재 크기의 +20%"라고 지시했다 — 현재 크기(330px, 관리자
+   지시 2번의 "50% 더 크게" 결과, 원래 220px)의 1.2배가 396px이다. **SVG
+   자신의 `viewBox`는 그대로다**(벡터이므로 CSS 폭만 키워도 흐려지지 않는다
+   — 래스터 확대와 다르다). `max-width: 100%`(아래)가 좁은 화면에서
+   컨테이너보다 커지지 않게 자동으로 눌러 준다.
+
+   [2026-08-17, 소유자 지시 5번] **396px → 300px.** 화살표가 1440×900 첫
+   화면 안에 들어오게 하는 전체 축소 예산에서 이 항목이 세로 높이(donut은
+   폭=높이에 가까운 비율)를 가장 많이 먹는다 — 단순 20%(396×0.8≈317px)로는
+   예산이 맞지 않아(실측, 최종 보고 참고) 더 줄였다. `overflow: visible`을
+   추가한다 — 조각 안에 다 못 들어가는 이름+비율 라벨(`.donut-slice-label*`,
+   `charts.js`의 `applyDonutSliceInlineLabels`, D72로 이름을 함께 그리게
+   바뀌었다)이 고리 밖으로 빠질 때(리더선 폴백) SVG 기본 클리핑에 잘리지
+   않게 하려는 것이다(이 예시의 실제 33/17/50% 조각에서는 실측상 그 폴백이
+   걸리지 않았지만, 방어적으로 둔다). */
+.example-showcase-visual-col { grid-area: visual; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); width: 100%; }
+.example-showcase-visual-col .chart-donut { width: 300px; max-width: 100%; overflow: visible; }
+/* **[2026-08-14, 관리자 실측 회귀]** `ui/example-showcase.js`는 뷰포트와
+   무관하게 항상 `labelMode: 'legend'`로 도넛을 그린다("간략한 예시라 항상
+   컴팩트 모드로 그린다" — 그 파일 머리말). 그런데 `.donut-legend`의 기본
+   표시 규칙(위, `display: none`)은 `≤767px` 미디어쿼리에서만 켜진다 — 그
+   미디어쿼리는 결과 패널이 `preferredDonutSizeMode()`(뷰포트를 실제로 재는
+   함수)로 legend 모드를 고르는 것과 짝을 이루는 전제 위에 있다(실제 결과
+   도넛은 이 전제를 그대로 따르므로 문제가 없다). 예시는 그 전제를 타지
+   않고 **항상** legend 모드이므로, 데스크톱 폭에서 이 규칙이 `display:
+   none`에 걸려 범례가 하나도 남지 않는다 — 뷰포트와 무관하게 강제로 켠다.
+   `.donut-labels`는 legend 모드에서 애초에 노드 자체가 없으므로(`charts.js`
+   `drawLabels ? svgEl(...) : null`) 별도로 숨길 대상이 없다.
+
+   **[2026-08-17, D72] `.donut-slice-indexes` 강제 표시 규칙은 여기 있었다 —
+   지웠다.** ①②③ 배지 자체가 `donutChart`에서 없어졌으므로(위
+   `.donut-slice-label-group` 주석) 그 요소를 강제로 보여줄 이유도 함께
+   없어졌다. 조각 안 이름+비율(`applyDonutSliceInlineLabels`, `charts.js`)은
+   `data-label-mode="legend"` 하나만 보고 스스로 그리므로 뷰포트별 강제
+   표시 규칙이 필요 없다. */
+.example-showcase-visual-col .donut-legend { display: flex; }
+/* 범례(관리자 지시 3번, [2026-08-16] D70로 다시 확대) — 더 크게·굵게, 가운데
+   정렬. 기본 범례(`.donut-legend`, `styles.css` 아래쪽 공용 규칙)는 14px
+   보통 굵기에 좌측 정렬 열(색점 → 이름 → 금액)이다 — 열 정렬(숫자가
+   세로로 맞아떨어지는 표) 자체는 깨지 않고, **목록 전체를 블록으로 가운데에
+   놓는다**(`width: fit-content` + `margin: 0 auto`). **D70 — "계좌별
+   배분률(범례)을 굵고 더 크게"** 지시로 18px/보통 → 20px/700(굵게)로 다시
+   올린다. 값(120px)과의 위계는 여전히 크게 벌어져 있어(6배) 역전 위험이 없다.
+
+   [2026-08-17, 소유자 지시 5번] **20px → 15px, 스와치 18px → 14px.** 전체
+   축소 예산의 일부 — 굵기(700)는 유지해 D70의 "굵게" 지시는 그대로
+   지킨다. `line-height`를 1.3으로 명시해 3번(행간 확대) 지시도 함께
+   반영한다(항목 사이 `gap`은 `var(--space-2)`로 base 규약과 맞춘다 —
+   D70이 `--space-3`으로 벌렸던 것을 축소 예산에서 되돌린다).
+
+   **[2026-08-17, D72] 비율 열(`.donut-legend-pct`)이 빠졌다** — 조각 라벨이
+   이미 비율을 말하므로(위) 범례는 이름+금액만 남는다(`charts.js` `donutLegend`
+   머리말 — 역할 분담). */
+.example-showcase-visual-col .donut-legend { width: fit-content; margin: 0 auto; gap: var(--space-2); }
+.example-showcase-visual-col .donut-legend-item { font-size: 15px; line-height: 1.3; font-weight: 700; gap: var(--space-2); }
+.example-showcase-visual-col .donut-legend-swatch { width: 14px; height: 14px; }
+
+/* [2026-08-17, D72] 도넛 조각 위(안)의 이름+비율 라벨(`.donut-slice-label*`)의
+   **크기·색·펼침 로직은 이제 예시에 있지 않다** — `charts.js`의
+   `applyDonutSliceInlineLabels`가 예시와 결과 패널(모바일) 양쪽에서 공유하는
+   함수이고, 그 함수가 그리는 `.donut-slice-label*` 요소의 굵기·지시선 색은
+   이 파일 아래쪽 공용 규칙(`.donut-slice-label-name` 등)이 이미 준다 — 이
+   shadow DOM도 메인 스타일시트 전체를 그대로 복제해 쓰므로(`attachHostStyles`)
+   같은 규칙이 여기서도 적용된다. 예시 전용 오버라이드가 더는 필요 없다. */
+/* [2026-08-16, D70, 375px 실측 회귀] `.donut-legend-name`은 `flex: 1`이고
+   기본 `min-width: auto`라, 폭이 부족하면 브라우저가 CJK 텍스트를 **음절
+   경계에서** 줄바꿈해 "연금저축"이 "연금저"/"축"으로 쪼개지는 것을 375px에서
+   실측으로 확인했다 — 글자를 20px→17px(아래 모바일 규칙)로만 낮춘 것으로는
+   부족했다. `word-break: keep-all`은 CJK에서도 "낱말(공백으로 못 나뉘는
+   한 덩이) 안에서는 꺾지 않는다"로 동작해(문구 두 줄에 이미 쓰는 것과 같은
+   속성) "연금저축" 자체가 쪼개지는 것을 막는다 — 대신 그 옆 칸(금액·비율)이
+   필요하면 줄어들거나 꺾인다(이름이 계좌를 가리키는 핵심 정보이므로 우선
+   보호한다). */
+.example-showcase-visual-col .donut-legend-name { word-break: keep-all; }
+
+/* 이동 화살표(관리자 지시 6번 → [2026-08-16] D70으로 세 번째 재작업) — 예시
+   맨 아래, 두 열 전폭에서 가운데. 누르면 입력/결과 구역으로 스크롤한다
+   (`ui/example-showcase.js`의 `scrollToInputResult`).
+
+   [2026-08-16, D70] **모양이 뒤집혔다 — 채운 원 + 카드 입체감에서, 채우지
+   않은 굵은 윤곽(stroke) 원 + 굵고 끝이 둥근 화살표로.** 소유자가 이미지를
+   첨부해 "이 스타일로"라고 지시했다 — 배경을 칠해 떠 있는 카드처럼 보이게
+   하던 이전 처방(그라디언트·`box-shadow`로 "볼록한 원반" 은유)을 버리고,
+   SVG `<circle>`의 `stroke`(굵은 테두리)와 화살표 `<path>`의 `stroke`(굵고
+   `round` 끝)만으로 형태를 낸다 — 아이콘 자체는 `ui/example-showcase.js`의
+   `exampleShowcaseScrollArrowIcon`이 그린다.
+
+   **크기 — 문자 그대로 3배(소유자가 명시한 값).** 옛 `--space-8`(64px)의
+   3배 = `calc(var(--space-8) * 3)` = 192px. 임의의 픽셀이 아니라 기존
+   토큰에 곱셈을 걸어 "3배"라는 관계 자체를 코드에 남긴다. **매우 크다 —
+   실측 결과(1440px·375px 번들, `artifact-build.browser.mjs`) 어느 쪽도
+   컨테이너를 넘거나 다른 요소를 밀지 않았다**(375px 카드 안쪽 여유폭 약
+   311px > 192px). 넘쳤다면 가장 가까운 안 넘치는 크기로 낮췄을 것이다 —
+   실측이 그 필요를 만들지 않았다.
+
+   [2026-08-17, 소유자 지시 5번] **192px → 140px.** "화살표가 1440×900 첫
+   화면 안에 스크롤 없이 보인다"는 것을 검사로 세웠고(`example-showcase.
+   browser.mjs`), 그 예산을 맞추려면 이 자리도 더 줄여야 했다 — 단순
+   20%(192×0.8≈154px)로는 부족했다(실측, 최종 보고에 세로 예산 내역을
+   남긴다). 140px은 옛 64px의 약 2.2배(문자 그대로 "3배"는 더는 아니다 —
+   소유자가 정한 값이므로 이 사실을 보고에 명시로 남긴다)로, `calc(var(--
+   space-8) * 2.1875)`가 아니라 실측으로 맞춘 리터럴 값을 쓴다(0.0625배
+   단위의 계산식을 남기는 것이 관계를 더 흐린다고 판단했다). 여전히 최소
+   터치 타깃(44px, WCAG 2.5.5) 여러 배다.
+
+   **색은 SVG 쪽(`currentColor`)이 진다** — 이 버튼은 `color`만 갖고, 아이콘이
+   그 값을 그대로 물려받는다(`ui/example-showcase.js` `exampleShowcaseScrollArrowIcon`
+   머리말 참고). 유휴 상태는 `--text-secondary`(라이트 진한 회색·다크 밝은
+   회색, `styles-tokens.test.mjs`가 `--surface-raised` 대비 4.5:1 이상으로
+   이미 검증한 토큰 — "테마 토큰 색" 지시를 그대로 만족한다).
+
+   **채운 원을 완전히 버리지는 않는다 — 대신 아주 옅은 배경 틴트만 hover에
+   남긴다.** 배경을 아예 없애면(idle=hover 둘 다 transparent) 기존 hover
+   검사(`example-showcase.browser.mjs`의 "배경색이 실제로 바뀐다",
+   `getComputedStyle(...).backgroundColor` 비교)가 두 상태에서 같은 값을
+   읽어 거짓 실패를 낸다. `--accent-subtle`(이 저장소가 이미 hover 배경으로
+   쓰는 옅은 틴트, 예: `.theme-menu-item-selected`)을 hover에서만 준다 —
+   "채운 원"이 아니라 "닿으면 살짝 배어나오는 틴트"이므로 소유자가 지목한
+   윤곽 스타일의 정체성을 해치지 않는다.
+
+   **기존 동작을 깨지 않는다** — hover 시 아이콘이 아래로 살짝 이동하는
+   것(`.example-showcase-scroll-arrow-icon`, 옛 `span` 자식과 같은 역할),
+   키보드 Enter/Space(`ui/example-showcase.js`의 `keydown` 핸들러),
+   `prefers-reduced-motion`에서 전환이 0ms가 되는 것(아래 미디어쿼리, 선택자만
+   `span`→아이콘 클래스로 바뀌었다), 클릭 스크롤(`scrollToInputResult`) 전부
+   그대로 둔다.
+
+   **[2026-08-17, 소유자 지시 6번] 화살표에 움직임 — "누르고 싶게".** 위아래로
+   천천히, 조금씩 반복 이동하는 CSS 애니메이션을 건다. **아이콘도 버튼도
+   아니라 `.example-showcase-arrow-wrap`(감싸는 칸)에 건다** — 버튼 자신은
+   이미 `:hover`(-3px)·`:active`(-1px) 상태에서 `transform`을 쓰고, 아이콘도
+   `:hover`에서 `transform`을 쓴다(바로 위). 같은 속성(`transform`)에
+   애니메이션과 상태 규칙이 동시에 걸리면 애니메이션이 우선 적용되어(CSS
+   Animations는 일반 캐스케이드보다 늦게 계산된다) hover가 "멈춘 것처럼"
+   보인다 — 실제로 렌더해 확인했다. 감싸는 칸에 걸면 그 칸 자신은 다른
+   상태 규칙이 없어 충돌이 없고, 버튼·아이콘의 hover/active 이동은 그
+   흔들리는 칸 **안에서** 그대로 더해진다(부모·자식 transform은 서로
+   합성될 뿐 충돌하지 않는다).
+
+   **진폭 6px, 주기 2.4초, `ease-in-out`** — "조금씩"(진폭이 화살표 지름의
+   약 5%대 — 옛 140px 기준 4.3%, [2026-08-17, 관리자 지시(2차) 7번] 112px로
+   줄어들며 5.4%, [2026-08-17, 관리자 지시(3차) 4번] 100px로 줄어든 지금은
+   6%. 셋 다 눈에 띄지 않을 만큼 작은 비율이라는 사실은 변하지 않는다 —
+   값 자체(6px)는 그대로 둔다)·"부드럽게"(급가속 없는 완급)·"느긋하게"
+   (2.4초, 초당 한 번보다 느리다)를 렌더해서 고른 값이다. */
+.example-showcase-arrow-wrap {
+  grid-area: arrow; display: flex; justify-content: center; margin-top: var(--space-2);
+  animation: example-showcase-arrow-bounce 2.4s ease-in-out infinite;
+}
+@keyframes example-showcase-arrow-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+/* [2026-08-17, 관리자 지시(2차) 7번] 140px → 112px(−20%). 헤더가 다시
+   sticky가 되며(관리자 지시(2차) 1번) 세로 예산을 다시 실측해야 했다 —
+   최종 보고에 1440×900 실측치를 남긴다.
+   [2026-08-17, 관리자 지시(3차) 4번] 112px → 100px(−10%, 112×0.9=100.8
+   반올림). 로고가 30% 커지며(헤더 바 높이가 바뀔 수 있다) 세로 예산을
+   다시 실측했다 — 최종 보고. */
+.example-showcase-scroll-arrow {
+  width: 100px; height: 100px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-full); padding: 0;
+  background-color: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 120ms ease-out, color 120ms ease-out,
+    transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.example-showcase-scroll-arrow:hover {
+  background-color: var(--accent-subtle);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-3px);
+}
+.example-showcase-scroll-arrow:active { transform: translateY(-1px); }
+.example-showcase-scroll-arrow-icon { width: 100%; height: 100%; display: block; transition: transform 120ms ease-out; }
+/* 윤곽 원·화살표 글리프 자체(`stroke="currentColor"`) — 색·굵기는 이미
+   `ui/example-showcase.js`의 `exampleShowcaseScrollArrowIcon`이 SVG 속성으로
+   직접 준다(circle `stroke-width: 7`, path `stroke-width: 9`). 이 두 규칙은
+   스타일을 더하지 않는다 — `css-class-consistency.test.mjs`(정적 일치성
+   검사)가 "`class:` 프롭에 쓰인 모든 클래스가 `styles.css`에 존재해야
+   한다"고 요구하므로, `.chart-donut-entering`·`.chart-donut-slice`(위 1122행)
+   와 같은 방식으로 이름만 등록해 두는 훅 클래스다. */
+.example-showcase-scroll-arrow-ring,
+.example-showcase-scroll-arrow-glyph { /* 스타일 없음 — SVG 속성이 이미 진다. 훅 클래스 */ }
+.example-showcase-scroll-arrow:hover .example-showcase-scroll-arrow-icon { transform: translateY(var(--space-1)); }
+.example-showcase-scroll-arrow:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .example-showcase-scroll-arrow, .example-showcase-scroll-arrow-icon { transition-duration: 0ms; }
+  /* [2026-08-17, 소유자 지시 6번] 위아래 반복 애니메이션도 끈다 — 기존
+     transition-duration:0 규약과 같은 자리, 같은 조건. `animation: none`은
+     `@keyframes`가 만드는 움직임 자체를 제거한다(transition-duration은
+     애니메이션에는 적용되지 않는 별개 속성이라 따로 꺼야 한다). */
+  .example-showcase-arrow-wrap { animation: none; }
+}
+
+@media (max-width: 767px) {
+  /* [2026-08-16, D70] 좌우 2열을 좁은 화면에 우겨넣지 않는다 — 1열로
+     되돌리고, 쌓이는 순서를 DOM 순서와 같게 다시 정의한다(문구→절세액→
+     시각→화살표, 위 컨테이너 규칙의 "모바일" 문단 근거 참고).
+
+     **`1fr`이 아니라 `minmax(0, 1fr)`을 쓴다 — 실측으로 잡은 그리드
+     "blowout" 결함.** `fr` 트랙의 자동 최소 크기는 기본으로 `auto`(트랙 안
+     아이템의 min-content 기여분)로 계산된다 — 도넛 SVG처럼 폭을 명시로
+     지정한(`width: 312px`) 아이템은 줄어들지 않는 min-content로 잡혀,
+     트랙이(따라서 `.example-showcase` 전체가) 375px 뷰포트에서도 312px보다
+     좁아지지 못하고 옆으로 넘쳤다(실측: 문서 `scrollWidth` 455px, 카드
+     자체가 뷰포트 밖으로 밀려남). `minmax(0, 1fr)`은 트랙의 최소 크기를
+     **명시로 0**으로 고정해 이 자동 최소값 계산을 무시하게 하고, 그 아래
+     `.chart-donut`의 `max-width: 100%`가 그제서야 실제로 작동해 도넛을
+     칸 폭에 맞춰 줄인다. 데스크톱 2열 규칙(위)도 처음부터 `minmax(0, 1fr)`
+     이었다 — 이번에 모바일 1열에서만 이 실수가 있었다. */
+  .example-showcase {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "text" "amount" "visual" "arrow";
+    padding: var(--space-4) var(--space-4); row-gap: var(--space-3);
+  }
+  .example-showcase-text-col { text-align: center; align-items: center; }
+  /* [2026-08-17, 관리자 지시(3차) 2번] **man-icon은 모바일에서 뺀다.**
+     아이콘+세 줄 가로 배치(`.example-showcase-input-block`)는 데스크톱
+     2열 배치("가운데가 비어 보인다")를 겨눈 처방이다 — 375px 1열 스택에서는
+     그 문제 자체가 없고(콘텐츠가 이미 폭 전체를 쓴다), 아이콘을 그대로
+     끼워 넣으면 375px 실측 검사(`artifact-build.browser.mjs`의 "입력 줄
+     가로 중심이 카드 중심과 일치")가 요구하는 각 줄의 가로 중심 정렬이
+     아이콘 폭만큼 옆으로 밀려 깨진다. `display: contents`로 두 감싸는 칸
+     (`.example-showcase-input-block`·`.example-showcase-input-lines`)의
+     박스 자체를 없애 — 세 <p>가 `.example-showcase-text-col`의 flex 자식으로
+     그대로 승격되고(DOM은 그대로, 렌더 트리만 평평해진다), 옛(아이콘 이전)
+     구조와 똑같이 가운데 정렬된다. 아이콘은 `display: none`. */
+  .example-showcase-input-block, .example-showcase-input-lines { display: contents; }
+  .example-showcase-input-icon { display: none; }
+  /* 물음과 두 줄 정도 — 데스크톱은 `.example-showcase-input-block`(블록
+     전체)에 걸지만, 모바일은 그 칸이 `display: contents`라 박스가 없어
+     margin이 적용되지 않는다(스펙상 무시된다) — 그래서 옛 방식대로 실제
+     첫 <p>(`:first-of-type`)에 다시 건다. */
+  .example-showcase-input-line:first-of-type { margin-top: 2.7em; }
+  /* [2026-08-17, 소유자 지시 1·3·5번] 옛 `.example-showcase-inputs-line`
+     (한 줄)을 대체하는 `.example-showcase-input-line`(세 줄 공유 클래스) —
+     데스크톱과 같은 이유(전체 축소, 행간 확대)로 24px→20px, 줄간격
+     1.3→1.35. */
+  .example-showcase-input-line, .example-showcase-question { font-size: 20px; line-height: 1.35; }
+  /* 이 값은 **모바일 기본값(출발점)일 뿐이다.** 실제로 화면에 남는 크기는
+     위 데스크톱 규칙과 마찬가지로 `fitAmountValueToCard`(JS 실측)가 각
+     덩어리(`.amount-value-chunk`)가 카드 폭을 넘지 않을 때까지 더 줄인다.
+     CSS 값만으로 "항상 이 크기에서 안전하다"를 보장하지 않는다는 뜻이고,
+     그래서 이 값이 정확히 얼마여야 하는지는 중요하지 않다 — JS가 실제
+     문자열·실제 카드 폭 기준으로 다시 잰다.
+     [2026-08-17, D71 + 소유자 지시 5번] 64px→52px — 헤드라인이 구간에서
+     확정 단일 값으로 줄어(D71) 자릿수가 짧아졌고, 전체 축소 지시(5번)도
+     겹친다. [2026-08-17, 관리자 지시(2차) 6번] 52px→42px(추가 −20%, 소수점
+     반올림) — 데스크톱과 같은 이유·같은 비율.
+     [2026-08-17, 관리자 지시(3차) 4번] 42px→38px(−10%, 42×0.9=37.8 반올림) —
+     데스크톱과 같은 비율로 함께 줄인다("모바일도 비례"). */
+  .example-showcase-amount .amount-card-value { font-size: 38px; line-height: 1.15; }
+  /* [2026-08-16, D70] 도넛도 데스크톱과 같은 비율(+20%)로 올린다 —
+     260×1.2=312px. `max-width: 100%`(위 공용 규칙)가 이보다 좁은 실제
+     컨테이너 폭에 맞춰 자동으로 눌러 준다(375px 실측, `example-
+     showcase.browser.mjs`).
+     [2026-08-17, 소유자 지시 5번] 312px→250px — 데스크톱(396→300px, 약
+     24% 축소)과 같은 비율로 줄인다. */
+  .example-showcase-visual-col .chart-donut { width: 250px; }
+  /* 375px 실측(D70) — 데스크톱 값(20px)을 그대로 쓰면 좁은 폭에서 "연금저축"
+     행의 금액 칸("500,000원 / 월")이 두 줄로 꺾인다(`getBoundingClientRect`
+     실측 — `item` 높이가 한 줄의 2배로 나왔다). **`.donut-legend-name`에
+     건 `word-break: keep-all`(위 공용 규칙)이 계좌 이름 자체가 음절
+     단위로 쪼개지는 옛 결함은 막지만, 그 옆 금액 칸이 밀려 꺾이는 것까지는
+     막지 못한다** — 그래서 글자 크기 자체를 17px→16px로 한 단 더 낮춰
+     전체 행이 꺾임 없이 한 줄에 들어가는 크기를 실측으로 찾았다. 그래도
+     옛(D69) 데스크톱 값(18px)보다는 크고 굵기(700)는 유지해 "굵고 더
+     크게" 지시를 지킨다. */
+  /* [2026-08-17, 소유자 지시 5번] 16px→14px — 위 375px 꺾임 회귀를 다시
+     만들지 않는 선(그 결함은 글자가 클 때 생겼다 — 줄이는 방향은 안전하다)
+     안에서 전체 축소 예산을 더 반영한다. */
+  .example-showcase-visual-col .donut-legend-item { font-size: 14px; font-weight: 700; gap: var(--space-2); }
+  /* [2026-08-17, D72] `.donut-legend-pct`(3.2em 고정폭) 규칙은 여기 있었다 —
+     비율 열 자체가 범례에서 빠지면서(위) 지웠다. */
+}
+
 /* 데스크톱 5:7 분할. [2026-08-12, D48로 폐기] 이 자리에 있던 sticky 결과
    패널은 없앴다 — 소유자가 "스크롤 막대 둘"을 신고했고, `.result-slot`이
    `position: sticky` + `max-height` + `overflow-y: auto`로 자기 안에서 따로
@@ -342,11 +1002,24 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    (4.3절). */
 .input-panel { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l); padding: var(--space-5); box-shadow: var(--shadow-1); }
 .input-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
-.panel-title { font-size: 24px; font-weight: 700; margin: 0; }
+/* [2026-08-17, 관리자 지시(2차) 9번] 제목 앞 아이콘(`icons.js`)이 들어오면서
+   `flex`+`gap`으로 바꾼다 — 아이콘과 글자를 나란히, 세로 가운데로 맞춘다. */
+.panel-title { font-size: 24px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: var(--space-2); }
 .input-group { padding: var(--space-4) 0; border-bottom: 1px solid var(--border-subtle); }
 .input-group:last-child { border-bottom: none; }
-.input-group-title { margin: 0 0 var(--space-3); }
+.input-group-title { margin: 0 0 var(--space-3); display: flex; align-items: center; gap: var(--space-2); }
 .input-group-conditional { background: var(--accent-subtle); border-radius: var(--radius-m); padding: var(--space-4); border-bottom: none; margin-top: var(--space-3); }
+
+/* [2026-08-17, 관리자 지시(2차) 9번] 섹션 아이콘 — 크기·스트로크만 여기서
+   준다(색·굵기는 `ui/icons.js`의 `strokeIcon`이 이미 `currentColor`·2px로
+   고정했다). **하나의 자리에서만 크기를 정한다** — 입력 패널의 「입력」·
+   「①~④」 그룹 제목, 예시 물음(shadow DOM 안에서도 메인 스타일시트를
+   그대로 복제해 쓰므로 같은 규칙이 적용된다, `ui/example-showcase.js`의
+   `attachHostStyles`), 결과 헤더(`.donut-optimal-kicker` 옆 아이콘 자리)가
+   전부 이 한 클래스를 공유한다 — 자리마다 다른 크기를 주면 "한 가지
+   스트로크 스타일"이라는 지시가 무너진다. 색은 `text-secondary`로 고정해
+   글자(대개 `text-primary`)보다 한 단 옅은 "보조 표시"로 읽히게 한다. */
+.section-icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--text-secondary); }
 
 .field { margin-bottom: var(--space-4); }
 .field-label { display: block; font-size: 14px; color: var(--text-secondary); margin-bottom: var(--space-2); }
@@ -561,6 +1234,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .amount-card-delta { /* .amount-card 상속 외 추가 규칙 없음 */ }
 .amount-card-label { font-size: 14px; color: var(--text-secondary); margin: 0; }
 .amount-card-value { margin: 0; }
+/* [2026-08-14, 관리자 지시 — 배포 번들 실측 회귀] 금액 덩어리("1,713,690원"
+   전체) 안에서는 줄이 꺾이지 않는다 — 한글 음절(`원`)이 숫자와의 사이에서도
+   기본으로 줄바꿈 지점이 되는 것을 막는다. `ui/result-panel.js`의
+   `amountValueNode` 머리말 참고. 구간(`~`)의 두 덩어리 **사이**에는 이 규칙이
+   없는 보통 공백(텍스트 노드)이 있어 그 자리에서만 꺾인다. */
+.amount-value-chunk { white-space: nowrap; }
 .amount-card-caption { font-size: 12.5px; color: var(--text-secondary); margin: 0; }
 /* AmountCard 상한 변형의 슬롯4 — **금액 아래 24px 이내, 같은 카드 안**(D11).
    다른 카드로 밀거나 접으면 위반이다. `state-warning`을 쓰지 않는다: 상한은
@@ -610,6 +1289,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    않는다. 본문보다 작고 진하게 — 배지가 아니라 위계상 제목 위의 짧은
    선언(kicker)이다. */
 .donut-optimal-kicker { margin: 0; font-weight: 700; color: var(--text-secondary); }
+/* [2026-08-17, 관리자 지시(2차) 9번] 「결과」 섹션 아이콘 — 제목 줄과 나란히.
+   안의 `.type-title-m`은 이미 `margin: 0`이라(위 2절 타이포 눈금) 여기서
+   다시 줄 필요가 없다 — `gap`만으로 아이콘·글자 사이 간격을 만든다. */
+.donut-section-header-title-row { display: flex; align-items: center; gap: var(--space-2); }
 .donut-plan-name { color: var(--text-secondary); }
 /* 도넛 + `[4-C']` 위젯을 한 컬럼으로 묶는다 — 위젯이 도넛 카드의 자식이지
    넷째 층이 아니라는 것을 구조로도 지킨다(screens.md 5.14절). */
@@ -819,35 +1502,44 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .donut-center { fill: var(--text-primary); }
 .donut-center-label { font-size: 12.5px; fill: var(--text-secondary); }
 .donut-center-value { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; fill: var(--text-primary); }
-/* 조각 위 번호는 모바일에서만 — 데스크톱은 직접 라벨이 그 역할을 한다. */
-.donut-slice-indexes { display: none; }
-/* 결함 ②(design-system 3.5.5절 규약 6) — 초판은 계좌 색 위에 `surface-raised`
-   글자를 얹었다(라이트 3.46/3.28, 다크 5.02/5.06으로 두 계좌가 4.5:1 미달).
-   계좌 색은 정의상 3:1 대역에서 뽑히므로 어떤 계좌 색 위에도 작은 글자를 놓을
-   수 없다 — 그래서 번호 밑에 `surface-raised` 배지(마크 표면, 항상 밝다)를
-   깔고 그 위에서 `text-primary`를 쓴다. 배지가 계좌 색을 가리므로 번호는 언제나
-   카드 표면 위의 글자가 된다(라이트 12:1대, 다크 13:1대). */
-.donut-slice-index-badge { fill: var(--surface-raised); stroke: var(--border-strong); stroke-width: 1; }
-.donut-slice-index { font-size: 13px; font-weight: 600; fill: var(--text-primary); }
+/* **[2026-08-17, D72] ①②③ 배지·번호는 여기 있었다 — 삭제됐다.** 소유자가
+   배지를 지우고 조각 위에 계좌 이름을 직접 쓰라고 지시했다(`docs/org/
+   gate-decisions.md` D72 3번). 그 이름+비율 라벨은 아래 `.donut-slice-label*`
+   가 진다 — `charts.js`의 `applyDonutSliceInlineLabels`가 마운트 뒤 실측
+   (색 대비·겹침)으로 그린다(`donutChart` 자신은 아직 화면에 안 붙은 노드만
+   만들 수 있어 `getBBox()`를 쓸 수 없다).
+
+   **역할 분담(계약, screens.md 갱신 대상)** — 조각 라벨 = 이름 + 비율,
+   범례(아래 `.donut-legend*`) = 이름 + 금액. 번호로 조각과 범례를 짝짓던
+   일 자체가 없어졌다 — 이름이 양쪽에 다 있으므로 이름 하나가 이미 짝을
+   짓는다. */
+.donut-slice-label-group { pointer-events: none; }
+.donut-slice-label-name { font-weight: 700; font-variant-numeric: tabular-nums; }
+.donut-slice-label-pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+.donut-slice-label-leader { stroke: var(--border-strong); stroke-width: 1.5; }
 
 .donut-legend { display: none; list-style: none; margin: var(--space-3) 0 0; padding: 0; flex-direction: column; gap: var(--space-2); }
 .donut-legend-item { display: flex; align-items: center; gap: var(--space-2); font-size: 14px; }
-.donut-legend-index { color: var(--text-secondary); width: 1.2em; }
 .donut-legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
 .donut-legend-name { flex: 1; }
 .donut-legend-amount { font-variant-numeric: tabular-nums; font-weight: 600; }
-.donut-legend-pct { color: var(--text-secondary); width: 3.5em; text-align: right; }
 
-/* 모바일 — 라벨 블록 셋이 겹치므로 리스트로 내리고 조각과 번호로 잇는다(5.7절). */
+/* 모바일 — 라벨 블록 셋이 겹치므로 리스트로 내리고 조각 안 이름+비율로 잇는다(5.7절). */
 @media (max-width: 767px) {
   .donut-labels { display: none; }
-  .donut-slice-indexes { display: block; }
   .donut-legend { display: flex; }
   /* 1열이라 폼 길이가 곧 스크롤 길이다(3.11.4절 (d) 1). 그룹 헤더를 sticky로
      두어 스크롤 중에도 지금 어느 그룹에 있는지 보이게 한다. **답한 그룹을
-     자동으로 접지 않는다** — 사용자가 만들지 않은 변화를 화면에서 일으키지 않는다. */
+     자동으로 접지 않는다** — 사용자가 만들지 않은 변화를 화면에서 일으키지 않는다.
+
+     **[2026-08-17, D72] `top: 0`이 아니라 `top: var(--layout-header-height)`다.**
+     상단 앱 헤더가 다시 sticky가 되면서(관리자 지시(2차) 1번) 이 그룹
+     헤더도 같은 뷰포트 기준으로 고정되는데, 둘 다 `top: 0`이면 z-index가
+     낮은 이쪽(1)이 앱 헤더(25) **뒤에 완전히 가려진다** — 스크롤해도 그룹
+     이름이 전혀 안 보이는 회귀가 된다. 앱 헤더 실측 높이만큼 아래로 내려
+     붙이면 두 sticky 요소가 세로로 나란히 쌓인다. */
   .input-group-title {
-    position: sticky; top: 0; z-index: 1;
+    position: sticky; top: var(--layout-header-height); z-index: 1;
     min-height: 36px; display: flex; align-items: center;
     background: var(--surface-raised); margin: 0 calc(-1 * var(--space-5)) var(--space-3);
     padding: 0 var(--space-5);
@@ -1041,7 +1733,10 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      자체를 겨눠야 한다(`CSS.supports('selector(details::details-content)')`로
      지원 확인 후 실측 — 겨누니 닫힌 상태에서도 `<ul>`이 실제 높이를 가졌다). */
 @media print {
-  .app-header, .app-footer, .input-slot, .save-share { display: none; }
+  /* `.example-showcase-slot`(관리자 지시 2026-08-14 4번) — 이 사용자의 결과가
+     아닌 예시다. "인쇄물에는 결과와 고지만 남는다"는 이 블록의 원칙이 그대로
+     적용된다. shadow root 안 내용은 host를 숨기면 함께 사라진다. */
+  .app-header, .app-footer, .input-slot, .save-share, .example-showcase-slot { display: none; }
   .app-main { display: block; padding: 0; gap: 0; }
   details:not([open]) > *:not(summary) { display: block !important; }
   details:not([open])::details-content { content-visibility: visible !important; display: block !important; }

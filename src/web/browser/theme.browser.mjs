@@ -537,25 +537,37 @@ test('저장된 테마가 첫 페인트 이전에 적용된다 — 흰 화면이
   await page.evaluate(`localStorage.clear()`);
 });
 
-test('모바일 폭에서도 ThemeControl이 가명칭·과세연도 표기를 밀어내지 않는다', { skip: skipWithoutChrome }, async () => {
-  // designer의 미결 — "헤더가 넷이 된다"는 우려. 지금 헤더는 셋이고(가명칭 ·
-  // 과세연도 · ThemeControl), 트리거는 44px 하나다. 좁은 폭에서 줄이 접히거나
-  // 가로 스크롤이 생기지 않는지 실제로 잰다.
+/**
+ * [2026-08-17, 관리자 지시(2차) 1·2번, D72] 헤더 구조가 바뀌었다 — 옛
+ * `.app-header-titles`(가명칭+과세연도, 헤더의 직계 자식 둘 중 하나)가
+ * `.app-header-brand`(로고+탭)로 대체됐고, 과세연도+`ThemeControl`은
+ * `.app-header-meta`로 옮겨갔다(이제 `ThemeControl`은 헤더의 직계 자식이
+ * 아니라 `.app-header-meta`의 자식이다). **지우지 않고 고친다** — 이 검사가
+ * 원래 잡던 것(좁은 폭에서 `ThemeControl` 44px이 밀려나거나, 어느 요소가
+ * 잘리거나, 가로 스크롤이 생기는 회귀)은 새 구조에서도 똑같이 유효하다.
+ */
+test('모바일 폭에서도 ThemeControl이 로고·탭·과세연도 표기를 밀어내지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   const READ_HEADER = `(() => {
     const h = document.querySelector('.app-header');
     const kids = [...h.children].map((c) => { const r = c.getBoundingClientRect(); return { cls: c.className, w: Math.round(r.width), h: Math.round(r.height) }; });
     const trigger = document.querySelector('.theme-control-trigger').getBoundingClientRect();
-    const title = document.querySelector('.app-title');
-    const titles = document.querySelector('.app-header-titles');
+    const tab = document.querySelector('.app-tab-active');
+    // 탭 글자가 두 줄로 접혔는지 — **패딩을 포함한 버튼 전체 높이가 아니라
+    // 글자 자신의 줄 수**로 잰다(button의 top/bottom padding이 항상 붙어
+    // 있어 "줄바꿈 여부"와 "버튼 전체 높이"를 같은 값으로 볼 수 없다). 텍스트
+    // 노드를 Range로 감싸 실제 렌더 line box 개수를 센다 — 1개면 한 줄이다.
+    const textNode = tab.firstChild;
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    const tabLineCount = range.getClientRects().length;
     return {
       kids,
-      lineHeightPx: parseFloat(getComputedStyle(title).lineHeight) || 0,
-      titleHeight: Math.round(title.getBoundingClientRect().height),
+      tabLineCount,
       triggerBox: { w: Math.round(trigger.width), h: Math.round(trigger.height) },
       pageOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       clipped: [...h.querySelectorAll('*')].some((c) => c.scrollWidth > c.clientWidth + 1),
-      stacked: getComputedStyle(titles).flexDirection,
+      brandMetaStacked: getComputedStyle(h).flexDirection,
     };
   })()`;
 
@@ -570,8 +582,11 @@ test('모바일 폭에서도 ThemeControl이 가명칭·과세연도 표기를 �
     assert.equal(header.clipped, false, `${width}px에서 헤더 항목이 잘렸습니다`);
     assert.deepEqual(header.triggerBox, { w: 44, h: 44 }, `${width}px: 최소 터치 타깃 44×44`);
     for (const kid of header.kids) assert.ok(kid.w > 0 && kid.h > 0, `${width}px에서 ${kid.cls}가 사라졌습니다`);
-    // 좁은 폭에서도 가명칭은 한 줄이다 — 밀리는 대신 과세연도 표기가 아래로 쌓인다.
-    assert.ok(header.titleHeight <= header.lineHeightPx + 2, `${width}px에서 가명칭이 두 줄로 접혔습니다`);
+    // 좁은 폭에서 브랜드(로고+탭)와 메타(과세연도+테마)가 두 줄로 쌓인다
+    // (`styles.css`의 `@media (max-width: 767px) .app-header { flex-direction:
+    // column }`) — 그래서 탭 자신은 잘리지 않고 한 줄로 남는다.
+    assert.equal(header.brandMetaStacked, 'column', `${width}px에서 브랜드/메타가 세로로 쌓이지 않았습니다`);
+    assert.equal(header.tabLineCount, 1, `${width}px에서 탭 글자가 ${header.tabLineCount}줄로 접혔습니다`);
   }
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
@@ -606,4 +621,99 @@ test('테마를 바꿔도 도넛이 다시 그려지지 않는다 — 값이 바
   assert.equal(same.sameNode, true, '테마 변경이 도넛 노드를 갈아치웠습니다 — 각도 애니메이션이 다시 돕니다');
   assert.equal(same.sameD, true, '조각 각도가 다시 계산됐습니다');
   await page.evaluate(`localStorage.clear()`);
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-17, 관리자 지시(3차) 1번] 로고 — 라이트/다크 두 원본이 테마별로
+// 갈린다. 알약 배경(`--logo-plate`, `.app-logo-plate`)은 없앴다.
+// ---------------------------------------------------------------------------
+
+const READ_LOGOS = `(() => {
+  const light = document.querySelector('.app-logo-light');
+  const dark = document.querySelector('.app-logo-dark');
+  const visible = (el) => {
+    if (!el) return false;
+    if (getComputedStyle(el).display === 'none') return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  return {
+    lightVisible: visible(light),
+    darkVisible: visible(dark),
+    lightSrcIsDataUri: !!light && light.src.startsWith('data:image/png;base64,'),
+    darkSrcIsDataUri: !!dark && dark.src.startsWith('data:image/png;base64,'),
+    sameSrc: light && dark ? light.src === dark.src : null,
+    lightHeightPx: light ? light.getBoundingClientRect().height : null,
+  };
+})()`;
+
+/**
+ * **판별력을 직접 깨서 확인했다(관리자 실측, 2026-08-17).** `.app-logo-dark`의
+ * `display: none` 기본 규칙과 미디어쿼리·`[data-theme="dark"]` 오버라이드
+ * 규칙을 임시로 지우고(둘 다 `display: block`으로 고정) 이 검사를 돌리면,
+ * "OS 라이트 + 지정 없음"·"OS 다크 + 명시적 밝게" 두 조합에서 `darkVisible`이
+ * `true`(라이트여야 하는데 다크 로고도 함께 보인다)로 실패한다 — 되돌리면
+ * 통과한다.
+ */
+test('로고가 테마별로 갈린다 — 라이트에서는 라이트 로고만, 다크에서는 다크 로고만 보인다(data-theme 스탬프·prefers-color-scheme 경로 둘 다)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const combos = [
+    { name: 'OS 라이트 + 지정 없음', scheme: 'light', theme: null, expectLight: true },
+    { name: 'OS 다크 + 지정 없음(prefers-color-scheme 경로)', scheme: 'dark', theme: null, expectLight: false },
+    { name: 'OS 다크 + 명시적 밝게(data-theme 스탬프가 미디어쿼리를 이긴다)', scheme: 'dark', theme: 'light', expectLight: true },
+    { name: 'OS 라이트 + 명시적 어둡게(data-theme 스탬프 경로)', scheme: 'light', theme: 'dark', expectLight: false },
+  ];
+
+  for (const combo of combos) {
+    await emulate(page, { scheme: combo.scheme });
+    await page.evaluate(
+      combo.theme
+        ? `document.documentElement.setAttribute('data-theme', ${JSON.stringify(combo.theme)})`
+        : `document.documentElement.removeAttribute('data-theme')`,
+    );
+    const state = await page.evaluate(READ_LOGOS);
+    assert.ok(state.lightSrcIsDataUri && state.darkSrcIsDataUri, `${combo.name}: 로고 <img> 둘 다 데이터 URI가 아니다`);
+    assert.notEqual(state.sameSrc, true, `${combo.name}: 라이트/다크 로고의 데이터가 같다 — 원본이 실제로는 하나뿐일 수 있다`);
+    assert.equal(state.lightVisible, combo.expectLight, `${combo.name}: 라이트 로고 표시 상태가 어긋난다(있어야 함: ${combo.expectLight})`);
+    assert.equal(state.darkVisible, !combo.expectLight, `${combo.name}: 다크 로고 표시 상태가 어긋난다(있어야 함: ${!combo.expectLight})`);
+  }
+  await emulate(page, { scheme: 'light' });
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+});
+
+test('관리자 지시(3차) 1번 — 로고 표시 높이가 옛값(32px)의 1.3배(+30%)다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await emulate(page, { scheme: 'light' });
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+  const state = await page.evaluate(READ_LOGOS);
+  const EXPECTED = 32 * 1.3;
+  assert.ok(state.lightHeightPx != null, '로고 높이를 재지 못했다');
+  assert.ok(
+    Math.abs(state.lightHeightPx - EXPECTED) <= 1,
+    `로고 표시 높이(${state.lightHeightPx}px)가 옛 32px의 1.3배(${EXPECTED}px)와 1px 넘게 어긋난다`,
+  );
+});
+
+/**
+ * [2026-08-17, 관리자 지시(3차) 1번] 다크 전용 원본이 생겨 알약 배경의
+ * 존재 이유가 사라졌다 — 토큰·클래스가 다시 살아나는 회귀를 잡는다.
+ * **판별력을 직접 깨서 확인했다** — `--logo-plate: #ffffff;`와
+ * `.app-logo-plate { background: var(--logo-plate); ... }`를 되돌리고
+ * 돌리면 `plateTokenExists`/`plateClassExists`가 `true`로 이 검사가
+ * 빨갛다 — 되돌리면 통과한다.
+ */
+test('관리자 지시(3차) 1번 — 로고 알약 배경(--logo-plate, .app-logo-plate)이 두 테마 어디에도 없다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const read = `(() => ({
+    plateTokenExists: getComputedStyle(document.documentElement).getPropertyValue('--logo-plate').trim() !== '',
+    plateClassExists: !!document.querySelector('.app-logo-plate'),
+  }))()`;
+  for (const theme of ['light', 'dark']) {
+    await emulate(page, { scheme: theme });
+    await page.evaluate(`document.documentElement.setAttribute('data-theme','${theme}')`);
+    const state = await page.evaluate(read);
+    assert.equal(state.plateTokenExists, false, `[${theme}] --logo-plate 토큰이 여전히 값을 갖는다`);
+    assert.equal(state.plateClassExists, false, `[${theme}] .app-logo-plate 요소가 여전히 있다`);
+  }
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
 });

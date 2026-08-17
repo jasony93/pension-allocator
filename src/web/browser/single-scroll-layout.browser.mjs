@@ -52,6 +52,52 @@ test('데스크톱 — `.result-slot`이 자체 스크롤 상자가 아니다(�
   );
 });
 
+// **이 검사의 이력 — 같은 이름 아래 방향이 두 번 바뀌었다.**
+//   1) 게이트 6(D33) — 헤더가 `position: sticky`로 처음 세워졌다.
+//   2) 관리자 지시(2026-08-14) 3번 — 소유자 지시로 sticky를 풀었다. 이
+//      자리는 그때 "헤더가 고정되지 **않는다**"를 확인하도록 뒤집혔었다.
+//   3) [2026-08-17, 관리자 지시(2차) 1번, D72] — 소유자가 참조 사이트
+//      (snowball72.com/pension-calculator)의 상단 고정 탭 바 방식을
+//      지시하며 다시 고정하라고 했다. **나중 지시가 이긴다** — 검사를
+//      지우지 않고 다시 뒤집는다. 다음에 이 자리를 보는 사람이 "왜 검사
+//      이름과 내용이 어긋나 보이지"라고 어리둥절하지 않도록 이 이력을
+//      남긴다.
+// **속성 검사가 아니라 위치 검사다**(이 파일 머리말과 같은 원칙 — CSS 속성이
+// 있는지가 아니라, 스크롤한 뒤 실제로 헤더가 뷰포트 위쪽에 계속 붙어 있는지를
+// 잰다 — 관리자가 전에 잡은 실제 결함이 "문서는 sticky라고 적고 코드도
+// `position: sticky`를 가졌는데 조상의 `overflow: hidden`이 sticky 기준
+// 컨테이너를 가로채 실제로는 고정되지 않던 것"이었다. 속성만 보는 검사는 그
+// 결함을 통과시켰을 것이다).
+test('헤더가 고정된다 — 스크롤해도 헤더는 뷰포트 위쪽에 그대로 붙어 있다(D72)', { skip: skipWithoutChrome }, async () => {
+  await setViewport(1440, 900);
+  const cs = await app.page.evaluate(`getComputedStyle(document.querySelector('.app-header')).position`);
+  assert.equal(cs, 'sticky', `.app-header의 position이 sticky가 아니다: ${cs}`);
+
+  await app.page.evaluate('window.scrollTo(0, 0)');
+  await sleep(100);
+  const before = await app.page.evaluate(`document.querySelector('.app-header').getBoundingClientRect().top`);
+  assert.ok(Math.abs(before) < 2, `스크롤 맨 위에서 헤더 top(${before})이 0 근처가 아니다`);
+  const inputPanelTopBefore = await app.page.evaluate(`document.querySelector('.input-panel')?.getBoundingClientRect().top ?? null`);
+
+  await app.page.evaluate('window.scrollTo(0, 500)');
+  await sleep(150);
+  const after = await app.page.evaluate(`document.querySelector('.app-header').getBoundingClientRect().top`);
+  // 고정됐다면 500px 스크롤해도 헤더의 뷰포트 기준 top은 여전히 0 근처여야 한다.
+  assert.ok(Math.abs(after) < 2, `500px 스크롤 후 헤더 top(${after})이 0 근처가 아니다 — 고정되지 않은 것으로 보인다`);
+
+  // 본문(입력 패널)은 실제로 스크롤되어 헤더 아래로 지나가야 한다 — "헤더만
+  // 고정, 나머지는 그 아래로 흐른다"는 sticky의 정의 자체를 잰다. 절대
+  // 위치(< 0)가 아니라 **이동량**을 본다 — 예시 구역 카드가 입력 패널
+  // 위에 있어 스크롤 전 입력 패널 상단이 이미 뷰포트 훨씬 아래(양수, 500px
+  // 넘게)일 수 있으므로, 500px 스크롤 뒤에도 여전히 양수(뷰포트 안)일 수
+  // 있다 — 그 자체는 결함이 아니다. 결함은 "안 움직였다"이다.
+  const inputPanelTopAfter = await app.page.evaluate(`document.querySelector('.input-panel')?.getBoundingClientRect().top ?? null`);
+  if (inputPanelTopBefore != null && inputPanelTopAfter != null) {
+    const moved = inputPanelTopBefore - inputPanelTopAfter;
+    assert.ok(moved > 400, `500px 스크롤 후 입력 패널이 거의 움직이지 않았다(이동량 ${moved}px) — 본문이 스크롤되지 않은 것으로 보인다`);
+  }
+});
+
 test('문서를 끝까지 스크롤하면 푸터가 실제로 뷰포트 안에 들어온다', { skip: skipWithoutChrome }, async () => {
   await setViewport(1440, 1000);
   await app.page.evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);

@@ -9,6 +9,7 @@
  */
 
 import { el } from './dom.js';
+import { iconChart } from './icons.js';
 import {
   ACCOUNT_LABEL,
   PLAN_LABEL,
@@ -305,6 +306,46 @@ function blockedPanel(fatalError, store) {
 // ---------------------------------------------------------------------------
 
 /**
+ * [2026-08-14, 관리자 지시 — 배포 번들 실측 회귀] `.amount-card-value`(헤드라인
+ * 금액)를 **금액 덩어리 단위로 줄바꿈이 꺾이게** 만든다.
+ *
+ * **원인.** 한국어 텍스트의 기본 줄바꿈 규칙은 한글 음절이 인접한 문자와의
+ * 사이에서도 꺾일 수 있게 허용한다(`word-break: normal`의 기본 동작, 라틴
+ * 문자만 공백에서 꺾이는 것과 다르다). `formatKrw`가 내는 "1,713,690원"은
+ * 숫자·쉼표(라틴/ASCII)에 한글 "원" 한 글자가 곧바로 붙은 문자열이라, 폭이
+ * 좁아지면 브라우저가 **"690"과 "원" 사이**를 유효한 줄바꿈 지점으로 보고
+ * 그 자리에서 꺾는다 — "원"이 혼자 다음 줄에 남는 것은 이 기본 규칙의
+ * 결과이지 우연한 결함이 아니다. 관리자가 배포 번들(1440px)에서 실측으로
+ * 확인했고, 구간 헤드라인("최소 ~ 최대")에서는 두 금액 덩어리 사이(공백)
+ * 조차 아무 데서나 다시 꺾여 3줄로 흩어지는 것도 함께 확인했다.
+ *
+ * **수정.** `formatKrw`가 낸 금액 문자열 전체(숫자+"원")를 `nowrap` span
+ * 하나로 묶는다 — 그 안에서는 어떤 이유로도 줄이 꺾이지 않는다. 구간
+ * 헤드라인은 " ~ "로 정확히 둘로 나뉘고(`formatKrw`는 공백·물결을 내지
+ * 않으므로 이 구분자가 유일하다), **그 사이에만** 보통 공백(텍스트 노드,
+ * 줄바꿈 허용)을 남긴다 — "줄바꿈은 두 덩어리 사이에서만" 나야 한다는
+ * 지시를 그대로 구현한 것이다.
+ *
+ * **`textContent`는 바뀌지 않는다.** 덩어리 텍스트 + 사이 공백을 그대로
+ * 이어붙이면 `headlineValueText`/`formatPlanRowAmount`가 낸 원래 문자열과
+ * 글자 하나까지 같다 — `example-showcase.browser.mjs`의 "화면에 렌더된
+ * 예시 값이 …정확히 같다" 검사가 문자열 비교(`.textContent`)로 이미 이
+ * 불변식을 고정한다.
+ */
+export function amountValueNode(text) {
+  const SEP = ' ~ ';
+  const idx = text.indexOf(SEP);
+  if (idx === -1) return [el('span', { class: 'amount-value-chunk' }, [text])];
+  const before = text.slice(0, idx);
+  const after = text.slice(idx + SEP.length);
+  return [
+    el('span', { class: 'amount-value-chunk' }, [before]),
+    ' ',
+    el('span', { class: 'amount-value-chunk' }, [`~ ${after}`]),
+  ];
+}
+
+/**
  * D45 3번(관리자, 2026-08-11) — 헤드라인 자리의 대안 미리보기 형태. **`plan`의
  * `delta_vs_baseline_krw`를 새로 계산하지 않는다** — `formatPlanRowAmount`가
  * 스택바 비교 행에서 이미 쓰는 바로 그 함수이고, 여기서 `plan.is_baseline`이
@@ -319,9 +360,30 @@ function blockedPanel(fatalError, store) {
 function alternativePlanDeltaCard(plan, baseCaption) {
   return el('div', { class: 'amount-card amount-card-delta' }, [
     el('p', { class: 'amount-card-label' }, [AMOUNT_CARD_LABEL_DELTA]),
-    el('p', { class: 'amount-card-value type-display' }, [formatPlanRowAmount(plan)]),
+    el('p', { class: 'amount-card-value type-display' }, amountValueNode(formatPlanRowAmount(plan))),
     el('p', { class: 'amount-card-caption' }, [baseCaption]),
   ]);
+}
+
+/**
+ * `amountCard`의 캡션 문자열만 떼어낸 **순수 함수**(D40·D61 회귀 방지). DOM을
+ * 만들지 않으므로 이 저장소가 갖지 않은 jsdom 없이도 `node:test`로 직접 잠글
+ * 수 있다 — "사용자 자신의 결과(기본값)에서는 언제나 `TAX_CAP_ESTIMATE_NOTE`가
+ * 있다"는 계약을 캡션을 만드는 이 한 곳에서, DOM 문자열이 아니라 반환값으로
+ * 바로 확인한다(`result-panel-caption.test.mjs`). `amountCard`(바로 아래)는
+ * 이 함수의 반환값을 그대로 옮겨 적을 뿐, 문구를 다시 조립하지 않는다.
+ */
+export function amountCardBaseCaption(scenario, { compactCaption = false } = {}) {
+  // D40 — **사용자 자신의 결과에서는 언제나** 붙는다. 이 한도가 총급여액에서
+  // 계산한 상한이고 다른 소득공제·세액공제를 반영하지 않았으며, 그래서 실제
+  // 공제는 이보다 적을 수 있다는 사실이 금액과 같은 화면에 있어야 한다(계약
+  // 8.7절 `required_display`). 대안 미리보기(위 `alternativePlanDeltaCard`)에서도
+  // 같은 캡션을 쓴다 — 차이도 같은 과세연도·같은 한도 규칙 위에서 계산된
+  // 세액공제액의 차이이기 때문이다. `compactCaption`이 `true`(예시 전용)일
+  // 때만 축약한다(`ui/example-showcase.js`, 관리자 지시 2026-08-14 5번).
+  return compactCaption
+    ? `${scenario.ruleset.tax_year} 과세연도 기준`
+    : `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영 · ${TAX_CAP_ESTIMATE_NOTE}`;
 }
 
 /**
@@ -355,14 +417,49 @@ function alternativePlanDeltaCard(plan, baseCaption) {
  *
  * **오류가 아니다.** `state-error`·`state-warning` 색을 쓰지 않는다. 사용자가
  * 무언가를 잘못해서 생긴 상태가 아니다.
+ *
+ * **내보낸다** — `ui/example-showcase.js`(관리자 지시 2026-08-14 4번)가 예시
+ * 헤드라인을 이 함수로 그린다. 예시도 사용자의 실제 결과와 **같은 경로**로
+ * 계산·문구화되어야 한다는 것이 그 지시의 요구이고, 이 함수가 그 경로 자체다
+ * (D36·D38의 「절세액」/「세액공제액」·구성 두 줄 규칙을 화면이 두 번 구현하면
+ * 그중 하나는 반드시 낡는다).
+ *
+ * **`compactCaption`**(관리자 지시 2026-08-14 5번, 기본값 `false`) — 예시
+ * 전용 축약. 사용자의 실제 결과에서는 **절대 `true`로 부르지 않는다**(모든
+ * 실제 호출부는 인자를 생략해 기본값 `false`를 그대로 쓴다) — D40·D61이
+ * TAX_CAP_ESTIMATE_NOTE를 "언제나" 금액과 같은 화면에 두라고 못박은 자리는
+ * 사용자 자신의 결과이지, 재계산되지 않는 고정 예시가 아니다. 소유자가
+ * "예시에는 이만큼 필요하지 않다"고 명시했고, 긴 캡션 중 과세연도 기준
+ * 표기만 남기고 나머지(국세+지방소득세 합산·다른 소득공제 미반영·한도 추정
+ * 문장)를 뗀다. **잘림(`isReduced`) 안내 문단(`amount-card-direction`)은
+ * `compactCaption`과 무관하게 그대로 남는다** — 그건 캡션(부가 고지)이 아니라
+ * 이 배분에서 실제로 무슨 일이 있었는지 설명하는 사실 문장이라, 줄일 대상이
+ * 아니다. 캡션 문자열 자체는 `amountCardBaseCaption`(바로 위) 한 곳에서만
+ * 조립한다 — 이 함수는 그 반환값을 그대로 옮겨 적는다.
+ *
+ * **`showCaption`·`showComposition`**(D70, 관리자 지시 2026-08-16, 둘 다
+ * 기본값 `true`) — 예시 전용으로 캡션과 구성 두 줄을 **통째로 렌더하지
+ * 않는다.** 소유자가 예시에서 「2026 과세연도 기준」 캡션과 구성 두 줄(「올해
+ * 세액공제 …원」·「+ 앞으로 3년 동안 ISA 최대 …원」)을 빼라고 명시로
+ * 지시했다 — `compactCaption`(캡션을 줄이는 것)만으로는 부족하고 캡션
+ * 자체가 없어야 한다. **사용자 자신의 실제 결과에서는 이 두 옵션을 절대
+ * `false`로 부르지 않는다**(모든 실제 호출부는 인자를 생략해 기본값
+ * `true`를 그대로 쓴다) — D38이 "구성 두 줄이 같은 시야에 없으면 합계
+ * 자체를 적는 것이 금지"라고 못박은 것은 사용자 자신의 결과를 향한 것이고,
+ * 이 예외는 예시 하나에만 있다(D70 — 그 규칙이 지키려던 것, 즉 "가정이
+ * 섞였다는 사실을 감추지 않는다"가 예시에서는 다른 채널로 이미 서 있기
+ * 때문: 구간 모양 자체·"예시)" 표기·같은 시야의 「연 평균 수익률」 입력
+ * 줄). **헤드라인 값 자체(`amount-card-value`, 구간 `○원 ~ ○원`)는 이
+ * 옵션과 무관하게 언제나 그려진다** — 구성 두 줄과 캡션은 그 값을 "설명"할
+ * 뿐, 값 자체의 일부가 아니다.
  */
-function amountCard(plan, scenario, annualReturnRate = null) {
-  // D40 — **언제나** 붙는다. 이 한도가 총급여액에서 계산한 상한이고 다른
-  // 소득공제·세액공제를 반영하지 않았으며, 그래서 실제 공제는 이보다 적을 수
-  // 있다는 사실이 금액과 같은 화면에 있어야 한다(계약 8.7절 `required_display`).
-  // 대안 미리보기(아래)에서도 같은 캡션을 쓴다 — 차이도 같은 과세연도·같은
-  // 한도 규칙 위에서 계산된 세액공제액의 차이이기 때문이다.
-  const baseCaption = `${scenario.ruleset.tax_year} 과세연도 기준 · 국세 + 개인지방소득세 합산 · 다른 소득공제 미반영 · ${TAX_CAP_ESTIMATE_NOTE}`;
+export function amountCard(
+  plan,
+  scenario,
+  annualReturnRate = null,
+  { compactCaption = false, showCaption = true, showComposition = true } = {},
+) {
+  const baseCaption = amountCardBaseCaption(scenario, { compactCaption });
 
   if (!plan.is_baseline) {
     return alternativePlanDeltaCard(plan, baseCaption);
@@ -390,7 +487,7 @@ function amountCard(plan, scenario, annualReturnRate = null) {
   // 적으려면 슬롯5가 반드시 같은 화면에 있어야 한다(design-system 5.6절). 줄①은
   // `bound_code`와 무관하게 언제나 슬롯2'의 {최소}(또는 point) 안에 든 확정
   // 성분과 같은 수다(항등식).
-  const compositionBlock = includesAssumption
+  const compositionBlock = includesAssumption && showComposition
     ? el('div', { class: 'amount-card-composition' }, [
         el('p', { class: 'amount-card-composition-line type-num' }, [headlineComponentDeterminedLine(headline)]),
         el('p', { class: 'amount-card-composition-line type-num' }, [
@@ -402,8 +499,8 @@ function amountCard(plan, scenario, annualReturnRate = null) {
   if (isReduced) {
     return el('div', { class: 'amount-card' }, [
       el('p', { class: 'amount-card-label' }, [label]),
-      el('p', { class: 'amount-card-value type-display' }, [valueText]),
-      el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_REDUCED_CLAUSE}`]),
+      el('p', { class: 'amount-card-value type-display' }, amountValueNode(valueText)),
+      showCaption ? el('p', { class: 'amount-card-caption' }, [`${baseCaption} · ${AMOUNT_CARD_CAPTION_REDUCED_CLAUSE}`]) : null,
       el('div', { class: 'amount-card-direction' }, [
         // 자르기 전 금액을 함께 보인다 — 잘린 뒤 금액만 보이면 사용자는 배분이
         // 잘못됐다고 읽는다. 실제로는 배분이 아니라 **세액이 한도였다**.
@@ -416,8 +513,8 @@ function amountCard(plan, scenario, annualReturnRate = null) {
 
   return el('div', { class: 'amount-card' }, [
     el('p', { class: 'amount-card-label' }, [label]),
-    el('p', { class: 'amount-card-value type-display' }, [valueText]),
-    el('p', { class: 'amount-card-caption' }, [baseCaption]),
+    el('p', { class: 'amount-card-value type-display' }, amountValueNode(valueText)),
+    showCaption ? el('p', { class: 'amount-card-caption' }, [baseCaption]) : null,
     compositionBlock,
   ]);
 }
@@ -679,9 +776,14 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
       // 없이는 이 요소를 만들지 않는다(가드가 실제로 문다는 것은
       // `ui/donut-optimal-kicker.test.mjs`가 확인한다).
       donutOptimalKicker(planNameCaptionText),
-      // 도넛 중앙과 같은 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
+      // [2026-08-17, 관리자 지시(2차) 9번] 「결과」 섹션 아이콘(도넛/파이 모양,
+      // `icons.js`의 `iconChart`) — 제목 줄 앞에 붙인다. 도넛 중앙과 같은
+      // 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
       // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
-      el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
+      el('div', { class: 'donut-section-header-title-row' }, [
+        iconChart(),
+        el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
+      ]),
       el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
     ]),
     el('div', { class: 'donut-with-strip' }, [
