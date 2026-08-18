@@ -804,7 +804,18 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    바뀌었다)이 고리 밖으로 빠질 때(리더선 폴백) SVG 기본 클리핑에 잘리지
    않게 하려는 것이다(이 예시의 실제 33/17/50% 조각에서는 실측상 그 폴백이
    걸리지 않았지만, 방어적으로 둔다). */
-.example-showcase-visual-col { grid-area: visual; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); width: 100%; }
+/* [2026-08-18, 관리자 지시(6차) 1번] **오른쪽 열(캡션 「이렇게 배분해보세요」
+   + 도넛 + 범례) 전체를 왼쪽으로 40px.** `translateX`를 쓰는 이유 — 이 값은
+   grid 트랙 안에서의 **페인트만** 옮기고 레이아웃 박스(트랙 폭·다른 칸의
+   위치)는 그대로 둔다. 왼쪽 열(`.example-showcase-text-col`)은 이 규칙과
+   무관한 별도 grid 영역이라 x좌표가 전혀 바뀌지 않는다(실측: 최종 보고) —
+   지시가 "왼쪽 열은 그대로"라고 명시했으므로, 왼쪽 열의 마진·트랙 자체를
+   건드리는 방법(예: 열 비율 재조정)은 애초에 후보에서 제외했다. **왼쪽으로
+   옮기므로**(양수가 아니라 음수) 카드 오른쪽 경계 밖으로 넘칠 일이 없어
+   가로 스크롤을 새로 만들지 않는다 — 모바일(1열 스택, 아래 미디어쿼리)에서는
+   "오른쪽 열"이라는 개념 자체가 성립하지 않으므로(칸이 하나뿐이다) 이동을
+   0으로 되돌린다. */
+.example-showcase-visual-col { grid-area: visual; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); width: 100%; transform: translateX(-40px); }
 .example-showcase-visual-col .chart-donut { width: 300px; max-width: 100%; overflow: visible; }
 /* **[2026-08-14, 관리자 실측 회귀]** `ui/example-showcase.js`는 뷰포트와
    무관하게 항상 `labelMode: 'legend'`로 도넛을 그린다("간략한 예시라 항상
@@ -1023,6 +1034,9 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      모바일은 가운데 정렬(`text-align: center`)이라 좌우로 미는 것 자체가
      이 배치와 맞지 않는다(밀면 중앙이 아니라 오른쪽으로 치우쳐 보인다). */
   .example-showcase-text-col { text-align: center; align-items: center; margin-left: 0; }
+  /* [2026-08-18, 관리자 지시(6차) 1번] 모바일 1열 스택에서는 "오른쪽 열"이
+     없다(칸이 하나뿐이라 위아래로 쌓인다) — 데스크톱 전용 이동을 되돌린다. */
+  .example-showcase-visual-col { transform: none; }
   /* [2026-08-17, 관리자 지시(3차) 2번] **man-icon은 모바일에서 뺀다.**
      아이콘+세 줄 가로 배치(`.example-showcase-input-block`)는 데스크톱
      2열 배치("가운데가 비어 보인다")를 겨눈 처방이다 — 375px 1열 스택에서는
@@ -1858,21 +1872,19 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 
 /* [2026-08-18, 관리자 지시(4차) 6번, D74] 요약 시트(`ui/result-panel.js`의
    `summarySheet`) — **화면에는 절대 보이지 않는다.** PDF 내보내기가 실제로
-   찍는 대상일 뿐이고(`@media print`가 이 규칙을 뒤집어 보이게 한다, 아래),
-   PNG 내보내기(`summary-image.js`)는 이 DOM을 전혀 쓰지 않는다(독립 SVG를
-   새로 짠다) — 그래도 요약 시트는 만들어 둔다, PDF 경로가 필요로 하기
-   때문이다. */
+   찍는 대상일 뿐이고(`@media print`가 이 규칙을 뒤집어 보이게 한다, 아래).
+   **[2026-08-18, 관리자 지시(6차) 3번, D75] 옛(D74) 하위 클래스 열 개
+   (`.summary-sheet-heading`·`-donut`·`-total`·`-total-label`·`-total-value`·
+   `-total-composition`·`-table`·`-table th/td`)는 여기 있었다 — 지웠다.**
+   그 시절 `summarySheet`는 `donutChart`/`<table>` 등 DOM 조각을 직접
+   조립했고, 그 조각마다 이 클래스들이 스타일을 걸었다. 지금은 `summarySheet`가
+   `buildSummarySvgMarkup`(PNG 내보내기가 쓰는 바로 그 조립기, D75)이 낸
+   SVG 문자열을 그대로 삽입할 뿐이라(`ui/summary-image.js` 머리말 — "PDF도
+   PNG와 같은 SVG를 그대로 쓴다") 그 DOM 조각 자체가 더는 생기지 않는다 —
+   가리킬 대상이 없는 선택자를 남겨 두면 다음 사람이 "아직 쓰이는 규칙"으로
+   오해한다. SVG 자신의 스타일(폭·페이지 나눔)은 `@media print` 안
+   `.summary-sheet svg` 규칙(아래)이 진다. */
 .summary-sheet { display: none; }
-.summary-sheet-heading { margin: 0 0 var(--space-4); }
-.summary-sheet-donut { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); }
-.summary-sheet-total { margin-bottom: var(--space-5); }
-.summary-sheet-total-label { font-size: 16px; color: var(--text-secondary); margin: 0 0 var(--space-1); }
-.summary-sheet-total-value { margin: 0; }
-.summary-sheet-total-composition { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); }
-.summary-sheet-table { width: 100%; border-collapse: collapse; }
-.summary-sheet-table th, .summary-sheet-table td { padding: var(--space-2) var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-.summary-sheet-table th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
-.summary-sheet-table td.type-num { text-align: right; }
 
 /* ---- 인쇄 / PDF 내보내기 (screens.md 9절의 후신, 2026-08-10) ----------------
 
@@ -1942,8 +1954,19 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      없지만(브라우저마다 지원 폭이 다르다), 낼 수 있는 만큼은 낸다.
      [D74] 옛 목록(`.amount-card`·`.chart-area`·`.account-table`·`details`·
      `.allocation-bar-row`)은 전부 요약 시트 밖에 있어 이제 인쇄에 나타나지
-     않는다 — 요약 시트 자신의 항목으로 바꾼다. */
-  .summary-sheet-total, .summary-sheet-table tr { break-inside: avoid; }
+     않는다 — 요약 시트 자신의 항목으로 바꾼다.
+     **[2026-08-18, 관리자 지시(6차) 3번, D75] 요약 시트가 통째로 SVG 하나로
+     바뀌면서(`ui/result-panel.js`의 `summarySheet`가 이제
+     `buildSummarySvgMarkup`이 낸 문자열을 그대로 삽입한다 — 이 파일 위
+     `.summary-sheet` 규칙 주석 참고) 옛 `.summary-sheet-total`·
+     `.summary-sheet-table tr`(그 함수가 예전에 직접 짜던 DOM 조각들) 자체가
+     더는 없다 — SVG 하나를 페이지 폭에 맞추고 안에서 쪼개지지 않게 하는
+     것으로 뒤집는다. `width: 100%`가 없으면 SVG가 자기 고유 픽셀 크기
+     (960px 폭, `ui/summary-image.js`의 `CANVAS_WIDTH`)를 그대로 유지해
+     좁은 인쇄 용지(A4 인쇄 가능 영역은 대략 720px대)를 넘칠 수 있다 —
+     `height: auto`가 SVG의 `viewBox` 비율을 지키며 폭에 맞춰 높이를
+     비례로 줄인다. */
+  .summary-sheet svg { display: block; width: 100%; height: auto; break-inside: avoid; }
 
   /* 관리자 지시(2026-08-13, D51 통과 조건 재확인) — `designer`가 `Page.printToPDF`를
      `printBackground: false`(인쇄 대화상자의 "배경 그래픽" 체크가 기본으로 꺼진
@@ -1969,12 +1992,17 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      보인다(위 `.result-body > *:not(.summary-sheet)`) — 안 보이는 요소의
      `print-color-adjust`는 뜻이 없으므로 목록에서 뺐다(지운 것이지 값을
      바꾼 것이 아니다 — `print.browser.mjs`가 그 부재를 직접 확인한다).
-     **남는 것은 요약 시트 자신의 범례 스와치(`.donut-legend-swatch`)뿐**
-     이다 — `summarySheet`(`ui/result-panel.js`)가 실제 결과와 같은
-     `donutLegend` 컴포넌트를 재사용하므로 같은 클래스를 그대로 쓴다. */
-  .donut-legend-swatch {
-    print-color-adjust: exact; -webkit-print-color-adjust: exact;
-  }
+
+     **[2026-08-18, 관리자 지시(6차) 3번, D75] 목록이 이제 0개다 — 규칙
+     자체를 지운다.** 옛(D74) 목록의 마지막 하나(`.donut-legend-swatch`)는
+     `summarySheet`가 실제 결과 화면과 같은 `donutLegend` DOM 컴포넌트를
+     재사용하던 시절의 흔적이다(CSS `background`로 색을 칠하는 `<div>`
+     스와치였다). 지금은 `summarySheet`가 `buildSummarySvgMarkup`이 낸
+     SVG를 통째로 삽입한다 — 범례 스와치도 `<rect fill="#...">`(SVG
+     속성)로 바뀌었고, 그 값은 바로 위 문단이 이미 실측으로 확인한
+     "도넛(SVG `fill`)은 `economy`에서도 살아남는다"에 그대로 해당한다.
+     걸어 둘 예외가 더는 없다 — `print.browser.mjs`가 이 규칙의 부재와
+     SVG `fill`의 생존을 함께 확인한다. */
 }
 
 
@@ -3347,8 +3375,14 @@ const SAVE_SHARE_HEADING = '요약 저장';
 // [2026-08-18, D74] 옛 문구("인쇄 대화상자의 …")는 PDF 한 종류만 가정했다 —
 // 이제 이미지·PDF 둘 다 페이지 전체가 아니라 **요약**만 담으므로, 그 범위를
 // 두 버튼이 함께 읽는 자리에 한 번만 적는다.
+//
+// **[2026-08-18, 관리자 지시(6차) 2번, D75] "입력값은 포함되지 않습니다"가
+// 뒤집혔다.** 소유자가 D74의 유보를 명시로 덮어 요약에 입력값(생년월일·
+// 총급여액·월 납입액 등)을 넣으라고 지시했다(D75) — 문구도 그 사실을 반영해야
+// 한다, 그러지 않으면 화면 문구와 실제 산출물이 어긋난다. **입력하지 않은
+// 항목은 표시되지 않는다는 것(D75가 남긴 선 ①)도 문구가 함께 말한다.**
 const SUMMARY_EXPORT_NOTE =
-  '이미지·PDF 모두 요약(도넛·계좌별 월 납입액·총 절세액·계좌별 납입 잔여 한도·연 환산)만 담습니다. 입력값은 포함되지 않습니다.';
+  '이미지·PDF 모두 요약(도넛·계좌별 월 납입액·총 절세액·계좌별 납입 잔여 한도·연 환산)과 입력하신 값(생년월일·총급여액·월 납입액 등, 입력하지 않은 항목은 표시되지 않습니다)을 담습니다.';
 // **`window.print()`가 조용히 막히는 환경에서만 보인다** — `ui/print.js`가 판정한다.
 const PDF_EXPORT_BLOCKED_NOTE =
   '이 화면에서는 인쇄 대화상자가 자동으로 열리지 않았습니다. 이 페이지를 새 브라우저 탭에서 열어 다시 시도하거나, 키보드로 인쇄(Windows/Linux: Ctrl+P, macOS: Cmd+P)를 실행해 주세요.';
@@ -4051,6 +4085,33 @@ function isaReturnAssumptionCaption({ incomeCharacter, settlementYearsSource }) 
 const ISA_RETURN_NOT_COMPUTABLE_NOTE = '예상 수익률 정산액을 계산하지 못함';
 /** 계산과 입력은 그대로 두고 표시만 껐을 때(`display_suppressed`)의 짧은 서술 — 조용한 빈칸을 만들지 않는다(D19). */
 const ISA_RETURN_SUPPRESSED_NOTE = '예상 수익률 정산액 표시를 껐음';
+
+// ---------------------------------------------------------------------------
+// [2026-08-18, 관리자 지시(6차) 2번, D75] 요약(이미지·PDF) 도넛 오른쪽의
+// 입력값 블록.
+//
+// **D74는 "요약에는 원시 입력이 없다"였고, 그 상태를 유지한다는 것이 확장에
+// 별도 판정이 필요한 이유였다.** 소유자가 그 별도 판정을 D75로 내렸다 —
+// 도넛 오른쪽에 사용자가 입력한 값(생년월일·총급여액·월 납입액·켰다면
+// 예상 수익률·수익 성격·정산 기간)을 적으라고 지시했다. **받아들이는 근거는
+// D75 본문 그대로다 — 요약은 사용자가 자기 기기에 저장하는 자기 파일이고,
+// 값은 시트 위에 눈에 보이게 실린다. 우리가 전송하는 것이 없다는 사실은
+// 변하지 않는다.**
+//
+// **유지되는 선 — 입력하지 않은 값은 줄 자체가 없다.** 이 라벨 객체는
+// 여섯 항목의 "이름표"일 뿐이고, 실제로 어느 줄이 그려지는가는
+// `ui/summary-data.js`의 `buildSummaryInputs`가 항목마다 값이 실제로
+// 있는지를 보고 정한다 — 라벨이 여기 있다고 항상 그려지는 것이 아니다.
+// ---------------------------------------------------------------------------
+const SUMMARY_INPUTS_HEADING = '입력값';
+const SUMMARY_INPUT_LABEL = {
+  birth_date: BIRTH_DATE_LABEL,
+  current_salary: '총급여액',
+  monthly_capacity: '월 납입액',
+  isa_return_rate: ISA_RETURN_RATE_LABEL,
+  isa_income_character: '수익 성격',
+  isa_settlement_years: '정산 기간',
+};
 
 // ───────── src/web/ui/modal.js ─────────
 /**
@@ -7418,11 +7479,12 @@ function scenarioDisplaysEqual(a, b) {
 /**
  * 요약 내보내기(관리자 지시 6번, D74)가 담을 자료를 한 곳에서 조립하는
  * **순수 함수**. DOM에 의존하지 않는다 — 인쇄용 요약 시트(`result-panel.js`의
- * `summarySheet`, 실제 DOM 컴포넌트를 재사용한다)와 PNG 래스터라이즈용 SVG
- * 빌더(`summary-image.js`, DOM 밖에서 독립 SVG 문자열을 짠다)가 이 함수
- * 하나를 함께 불러 "요약에 무엇이 들어가는가"를 두 곳에 따로 적지 않는다 —
- * 따로 적으면 둘 중 하나는 반드시 낡는다(이 저장소가 이미 여러 번 겪은
- * 결함 패턴, 예: `charts.js`의 `allocationSegments`가 도넛·스택바 공유로
+ * `summarySheet`)와 PNG 래스터라이즈용 SVG 빌더(`summary-image.js`, DOM 밖에서
+ * 독립 SVG 문자열을 짠다)가 **같은 SVG 조립기 하나**(`buildSummarySvgMarkup`)를
+ * 거쳐 나온다(D75, `ui/summary-image.js` 머리말) — 이 함수는 그 조립기가 그릴
+ * 자료를 한 곳에서만 정의해, "요약에 무엇이 들어가는가"를 두 곳에 따로 적지
+ * 않는다. 따로 적으면 둘 중 하나는 반드시 낡는다(이 저장소가 이미 여러 번
+ * 겪은 결함 패턴, 예: `charts.js`의 `allocationSegments`가 도넛·스택바 공유로
  * 같은 문제를 풀었던 것과 같은 이유).
  *
  * **D74가 정한 다섯 항목만 담는다** — 도넛(배분 구성) · 계좌별 월 납입액 ·
@@ -7430,13 +7492,17 @@ function scenarioDisplaysEqual(a, b) {
  * 연 환산. **가정 사항·다른 배분 비교는 이 함수가 아예 읽지 않는다** —
  * D74가 명시로 뺀 항목이라 필드 자체가 없다.
  *
- * **원시 입력(생년월일·총급여)이 이 함수를 통해 요약에 들어갈 방법이 없다.**
- * 인자는 `plan`·`scenario`·`annualReturnRate`(사용자가 준 수익률 가정,
- * `echo`에서 이미 되비친 값 — 계산에 실제로 쓰인 값이지 원본 프로필이
- * 아니다) 셋뿐이다. `profile.birth_date`·`profile.current_year_total_
- * salary_krw`가 든 `EngineRequest`나 `EngineResponse.echo` 전체를 통째로
- * 받지 않는다 — **함수 시그니처 자체가 그 값에 접근할 길을 막는다**
- * (`summary-data.test.mjs`가 반환값에 원시 입력이 없음을 기계로 고정한다).
+ * **[2026-08-18, 관리자 지시(6차) 2번, D75] 넷째 인자 `form`이 새로 생겼다 —
+ * `inputs` 필드 하나가 함께 늘었다.** D74 시절 이 문단은 "원시 입력이 이
+ * 함수를 통해 요약에 들어갈 방법이 없다"였다 — 소유자가 D75로 그 유보를
+ * 명시로 덮었다(도넛 오른쪽에 입력값을 적으라는 지시). **그래도 원시
+ * `form` 전체를 그대로 담지 않는다** — `buildSummaryInputs`(아래)가 D75가
+ * 지정한 여섯 항목만 화이트리스트로 골라 담고, 나머지 수십 개 폼 필드는
+ * 이 함수도 그 헬퍼도 아예 읽지 않는다. `form`을 생략하면(옛 호출부처럼)
+ * `inputs`는 빈 배열이다 — 이 함수의 나머지 넷(도넛·계좌·총 절세액·과세연도)은
+ * 여전히 `plan`·`scenario`·`annualReturnRate`만으로 완결된다(그 셋의 안전은
+ * D74 시절과 똑같이 유효하다 — echo가 되비춘 계산 입력이지 원본 프로필이
+ * 아니다).
  *
  * **절세액 처리(D74 조건).** 합계가 가정 성분(ISA 수익률)을 담으면
  * (`includes_assumption_component`) 조건절이 반드시 함께 있어야 한다는
@@ -7452,7 +7518,87 @@ function scenarioDisplaysEqual(a, b) {
 
 
 
-function buildSummaryData(plan, scenario, annualReturnRate = null) {
+/** `''`/`null`/`undefined`를 "안 넣었다"로 접는다 — 공백만 있는 값도 마찬가지다. */
+function nonEmptyText(raw) {
+  const text = (raw ?? '').toString().trim();
+  return text === '' ? null : text;
+}
+
+/**
+ * 「만원」 단위 폼 입력을 그대로(원으로 환산하지 않고) 사람이 읽는 문자열로
+ * 바꾼다 — 예: `"4000"` → `"4,000만원"`. **`validation.js`의
+ * `parseManwonToWon`을 쓰지 않는다** — 그 함수는 계산에 쓸 원 단위 값을
+ * 내는 것이 목적이고, 여기서는 사용자가 입력 화면에서 본 것과 같은 단위로
+ * 그대로 되비추는 것이 목적이다(두 목적이 다르므로 반올림 규약이 갈려도
+ * 문제가 되지 않는다 — 이 값은 계산에 다시 쓰이지 않고 화면 표시로 끝난다).
+ */
+function manwonDisplayText(raw) {
+  const text = nonEmptyText(raw);
+  if (text === null) return null;
+  const num = Number(text);
+  if (!Number.isFinite(num)) return null;
+  return `${num.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}만원`;
+}
+
+function isaReturnRateDisplayText(raw) {
+  const text = nonEmptyText(raw);
+  if (text === null) return null;
+  const num = Number(text);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return `연 ${num.toLocaleString('ko-KR', { maximumFractionDigits: 4 })}%`;
+}
+
+function isaSettlementYearsDisplayText(raw) {
+  const text = nonEmptyText(raw);
+  if (text === null || !/^\d+$/.test(text) || Number(text) < 1) return null;
+  return `${Number(text)}년`;
+}
+
+/**
+ * [2026-08-18, 관리자 지시(6차) 2번, D75] 요약 도넛 오른쪽에 적을 입력값
+ * 목록 — **소유자가 명시로 지정한 항목만** 담는 화이트리스트다. `form`
+ * (`state/store.js`의 폼) 전체를 통째로 순회하지 않는다 — 여기 나열한 여섯
+ * 키 이외의 어떤 폼 필드도 이 함수가 읽지 않으므로, 폼에 새 필드가 늘어도
+ * 이 함수를 통해 몰래 새어 나갈 길이 없다.
+ *
+ * **입력하지 않은 값은 줄 자체가 없다(D75 선 ①).** 항목마다 개별로
+ * 판정한다 — ISA 수익률을 켰어도 정산 기간을 비웠으면 그 줄만 빠진다.
+ * `settlement_years`가 없으면 엔진이 룰셋의 계약기간 하한을 쓰는 것과
+ * 같은 이유로, 화면도 "안 적었다"를 지어내 채우지 않는다.
+ *
+ * 순수 함수 — DOM도, 엔진도 부르지 않는다. 반환 순서는 항상 같다(생년월일
+ * → 총급여액 → 월 납입액 → [켰다면] 예상 수익률 → 수익 성격 → 정산 기간).
+ */
+function buildSummaryInputs(form) {
+  if (!form) return [];
+  const lines = [];
+
+  const birthDate = nonEmptyText(form.birthDate);
+  if (birthDate) lines.push({ key: 'birth_date', label: SUMMARY_INPUT_LABEL.birth_date, valueText: birthDate });
+
+  const salary = manwonDisplayText(form.currentSalary);
+  if (salary) lines.push({ key: 'current_salary', label: SUMMARY_INPUT_LABEL.current_salary, valueText: salary });
+
+  const capacity = manwonDisplayText(form.monthlyCapacity);
+  if (capacity) lines.push({ key: 'monthly_capacity', label: SUMMARY_INPUT_LABEL.monthly_capacity, valueText: `월 ${capacity}` });
+
+  if (form.isaReturnEnabled) {
+    const rateText = isaReturnRateDisplayText(form.isaReturnRatePercent);
+    if (rateText) lines.push({ key: 'isa_return_rate', label: SUMMARY_INPUT_LABEL.isa_return_rate, valueText: rateText });
+
+    const characterLabel = ISA_INCOME_CHARACTER_LABEL[form.isaIncomeCharacter];
+    if (characterLabel) {
+      lines.push({ key: 'isa_income_character', label: SUMMARY_INPUT_LABEL.isa_income_character, valueText: characterLabel });
+    }
+
+    const yearsText = isaSettlementYearsDisplayText(form.isaSettlementYears);
+    if (yearsText) lines.push({ key: 'isa_settlement_years', label: SUMMARY_INPUT_LABEL.isa_settlement_years, valueText: yearsText });
+  }
+
+  return lines;
+}
+
+function buildSummaryData(plan, scenario, annualReturnRate = null, form = null) {
   const excluded = excludedAccounts(scenario);
   const segments = allocationSegments({
     allocations: plan.allocations,
@@ -7505,43 +7651,79 @@ function buildSummaryData(plan, scenario, annualReturnRate = null) {
     accounts,
     totalTaxSavings,
     taxYear: scenario?.ruleset?.tax_year ?? null,
+    // [2026-08-18, D75] `form`을 생략한 호출부(옛 D74 시절 호출 자리가 아직
+    // 남아 있을 수 있다)에서는 빈 배열 — "안 담는다"가 아니라 "담을 값을
+    // 안 받았다"이므로 필드 자체는 항상 있다(호출부가 `data.inputs.length`를
+    // 조건 없이 물을 수 있게).
+    inputs: buildSummaryInputs(form),
   };
 }
 
 // ───────── src/web/ui/summary-image.js ─────────
 /**
- * 요약 내보내기(관리자 지시 6번, D74) — 이미지(PNG) 경로. **의존성 0** —
- * html2canvas류 라이브러리를 들이지 않는다(D74). 도넛의 arc 수학은 이미
- * `charts.js`에 순수 함수로 있으므로(`annulusSlicePath`), 요약 전체를 그
- * 위에서 짠 독립 SVG 문자열로 구성하고 → `Image`로 로드 → `<canvas>`에
- * 그려 → `toDataURL('image/png')`로 내보낸다. **`foreignObject`는 쓰지
- * 않는다**(D74) — 브라우저마다 `foreignObject` 안의 HTML을 캔버스로 구울 때
- * 캔버스를 오염시켜(taint) `toDataURL`이 `SecurityError`를 던지는 사례가
- * 알려져 있다. 이 파일이 만드는 SVG는 `<rect>`·`<path>`·`<text>`뿐이다.
+ * 요약 내보내기(관리자 지시 6번, D74) — 이미지(PNG)·PDF 두 산출물이 함께
+ * 거치는 **단 하나의 SVG 조립기**. **의존성 0** — html2canvas류 라이브러리를
+ * 들이지 않는다(D74). 도넛의 arc 수학은 이미 `charts.js`에 순수 함수로
+ * 있으므로(`annulusSlicePath`), 요약 전체를 그 위에서 짠 독립 SVG 문자열로
+ * 구성한다.
+ *
+ * **[2026-08-18, 관리자 지시(6차) 3번, D75 시행] PDF도 이 SVG를 그대로
+ * 쓴다 — "같은 요약 조립기 하나"가 문자 그대로다.** 옛(D74) 구현은 PNG는
+ * 이 파일의 독립 SVG를, PDF는 `result-panel.js`의 `summarySheet`가 만드는
+ * **별도** DOM(`donutChart`/`donutLegend` 재사용, 표는 `<table>`)을 각자
+ * 찍었다 — 두 갈래였다. 관리자 지시가 "인쇄 시트가 이 SVG를 전면 배치하는
+ * 형태가 가장 단순하다"고 지정했고, 그 형태로 통합했다 — `summarySheet`는
+ * 이제 `buildSummarySvgMarkup`이 낸 문자열을 `DOMParser`로 파싱해 그대로
+ * 삽입한다(`summarySvgElementFromMarkup`, 아래). **PNG 경로(`Image` →
+ * `<canvas>` → `toDataURL`)와 PDF 경로(라이브 DOM에 인라인 삽입 →
+ * `window.print()`)가 정확히 같은 마크업 문자열에서 갈라지므로, 둘 중
+ * 하나만 고치고 잊는 경로가 구조적으로 없다.**
+ *
+ * **`foreignObject`는 쓰지 않는다**(D74) — 브라우저마다 `foreignObject` 안의
+ * HTML을 캔버스로 구울 때 캔버스를 오염시켜(taint) `toDataURL`이
+ * `SecurityError`를 던지는 사례가 알려져 있다. 이 파일이 만드는 SVG는
+ * `<rect>`·`<path>`·`<text>`·`<polyline>`·`<line>`뿐이다.
  *
  * **왜 별도 SVG를 새로 짜고 `charts.js`의 `donutChart`(DOM 컴포넌트)를
  * 재사용하지 않는가.** `donutChart`가 그리는 색은 CSS 커스텀 프로퍼티
  * (`var(--data-pension)` 등)를 참조한다. 그 값은 **문서(document) 트리
  * 안에서만** 상속으로 풀린다 — `data:image/svg+xml,...`를 `Image.src`에
  * 넣으면 브라우저가 그 SVG를 별도의, 이 페이지 `:root`와 연결되지 않은
- * 독립 문서로 취급한다(실측 근거는 이 파일의 색 상수 주석). 그래서 이
- * 경로는 실제 hex 값을 SVG 문자열에 직접 박아야 하고, `donutChart`를
- * 그대로 쓸 수 없다 — 인쇄(PDF) 경로는 라이브 문서의 일부라 이 문제가
- * 없으므로 거기서는 `donutChart`를 그대로 재사용한다(`result-panel.js`의
- * `summarySheet`).
+ * 독립 문서로 취급한다(실측 근거는 이 파일의 색 상수 주석). 이 문제는
+ * PNG 경로에만 있었지만(별도 문서), **이제 PDF도 이 SVG를 그대로 쓰므로**
+ * 애초에 두 경로 모두 리터럴 hex만 쓰는 것이 이 통합의 전제다 — 인라인
+ * 삽입(PDF)이라면 `var(--...)`가 실제로 풀리겠지만, 그러면 PNG와 PDF가
+ * "같은 문자열"이 아니라 "같은 함수, 다른 출력"이 되어 통합의 의미가 준다.
  *
- * **테마 — 라이트 고정.** 내보낸 이미지는 뷰어의 현재(라이트/다크) 테마와
- * 무관하게 **항상 같은 모양**이어야 한다는 것이 D74의 요구다. 라이트로
- * 고정한 근거 — (1) 메신저·문서 뷰어로 옮겨질 이미지는 배경이 불투명한
- * 흰 바탕을 기대하는 자리(카카오톡 채팅창, 워드 문서 등)에 더 자주
- * 붙는다 — 어두운 배경의 PNG는 밝은 배경 위에서 가독성이 떨어지고
+ * **테마 — 라이트 고정.** 내보낸 이미지·PDF는 뷰어의 현재(라이트/다크)
+ * 테마와 무관하게 **항상 같은 모양**이어야 한다는 것이 D74의 요구다.
+ * 라이트로 고정한 근거 — (1) 메신저·문서 뷰어로 옮겨질 이미지는 배경이
+ * 불투명한 흰 바탕을 기대하는 자리(카카오톡 채팅창, 워드 문서 등)에 더
+ * 자주 붙는다 — 어두운 배경의 PNG는 밝은 배경 위에서 가독성이 떨어지고
  * 반대(밝은 PNG를 어두운 배경에)는 여전히 읽힌다(불투명 배경을 이 SVG
  * 자체가 `<rect>`로 깔기 때문). (2) 인쇄(PDF) 경로도 이미 라이트로
  * 고정되어 있다(`styles.css` `@media print` "인쇄는 테마와 무관하게
- * 라이트 팔레트를 강제한다", `styles-tokens.test.mjs`가 검사한다) — 두
- * 내보내기 경로가 같은 결정을 공유하면 "인쇄에서는 라이트인데 이미지는
- * 다크로 나온다" 같은 산출물 간 불일치가 생기지 않는다.
+ * 라이트 팔레트를 강제한다", `styles-tokens.test.mjs`가 검사한다) — 리터럴
+ * hex를 쓰는 이 SVG를 PDF에도 그대로 꽂으므로 이제는 "같은 결정을
+ * 공유"하는 정도가 아니라 **같은 문자열이 두 산출물 모두를 만든다.**
+ *
+ * **[2026-08-18, 관리자 지시(6차) 2·3번, D75] 도넛 조각 라벨(이름+비율) +
+ * 입력값 블록.** 화면 도넛(legend 모드)이 이미 하는 방식 — 조각 위에
+ * 이름+비율을 직접 쓰고, 조각이 좁으면 고리 밖 리더선으로 뺀다
+ * (`charts.js`의 `applyDonutSliceInlineLabelsToSvg`) — 을 이 독립 SVG에도
+ * 적용한다(`sliceInlineLabelsMarkup`, 아래). **다만 그 함수와 달리
+ * `getBBox()` 실측을 쓸 수 없다** — `buildSummarySvgMarkup`은
+ * `summary-image.test.mjs`가 순수 Node(`node --test`, DOM 없음)에서 직접
+ * 호출하는 문자열 빌더라, 마운트된 DOM에서만 되는 실측 API에 기댈 수
+ * 없다. 대신 문자 폭을 근사식(`estimateTextWidthPx`)으로 추정해 조각
+ * 안에 들어가는지 가늠한다 — 실제 렌더에서 잘리지 않는지는 크롭(최종
+ * 보고)과 `Page.printToPDF` 실측으로 확인한다. 도넛 오른쪽의 입력값
+ * 블록(`inputsBlockMarkup`)은 `data.inputs`(`summary-data.js`의
+ * `buildSummaryInputs`가 이미 화이트리스트·"입력 안 한 값은 줄이 없다"를
+ * 판정해 둔 배열)를 그대로 옮겨 적을 뿐, 여기서 다시 판단하지 않는다.
  */
+
+
 
 
 
@@ -7589,12 +7771,22 @@ const DONUT_CX = 260;
 const DONUT_CY_OFFSET = 190; // 도넛 영역 시작 y로부터의 상대 오프셋
 const DONUT_R = 150;
 const DONUT_R_INNER = DONUT_R * 0.55;
+// [2026-08-18, D75] 범례는 도넛 오른쪽이 아니라 도넛 **아래**로 내려간다 —
+// 도넛 오른쪽 자리를 입력값 블록에 내주기 위해서다(관리자 지시 원문 "도넛
+// 오른쪽에 사용자가 입력한 값을 적어라"). 도넛 자체의 x(`DONUT_CX`)는
+// 그대로이므로 이 재배치가 도넛·조각 라벨 기하에는 영향을 주지 않는다.
+const LEGEND_X = PADDING;
+// 입력값 블록(D75) — 도넛 오른쪽. `CANVAS_WIDTH`(960)를 넓히지 않고도 들어간다
+// — 도넛이 x=110~410을 쓰므로 480에서 시작하면 70px 여백을 두고 시작해
+// `CANVAS_WIDTH - PADDING`(904)까지 424px를 쓸 수 있다(렌더 크롭으로 확인,
+// 최종 보고).
+const INPUTS_BLOCK_X = 480;
 
 /**
  * 도넛(평면 2D — 인쇄 경로의 입체 도넛과 달리 기울기·압출을 넣지 않는다,
  * 요약은 "정보 전달"이 목적이라 단순함을 우선한다는 것을 이 파일이 스스로
- * 정한다) + 범례를 그린다. `data.donut.arcs`는 `charts.js`의 `sliceAngles`가
- * 낸 순수 각도 배열이다.
+ * 정한다). `data.donut.arcs`는 `charts.js`의 `sliceAngles`가 낸 순수 각도
+ * 배열이다. 범례는 별도 함수(`legendMarkup`, 아래)가 그린다.
  */
 function donutMarkup(data, top) {
   const cy = top + DONUT_CY_OFFSET;
@@ -7607,26 +7799,183 @@ function donutMarkup(data, top) {
   return { markup: parts.join(''), cy };
 }
 
+// ---------------------------------------------------------------------------
+// [2026-08-18, 관리자 지시(6차) 2번, D75] 도넛 조각 위(안) 이름+비율 라벨.
+// `charts.js`의 `applyDonutSliceInlineLabelsToSvg`(화면 도넛, legend 모드)와
+// 같은 방식 — 조각 안에 이름+비율 두 줄, 안 들어가면 고리 밖 + 리더선 —
+// 을 이 독립 SVG에도 적용한다. 이 파일 머리말 참고: `getBBox()` 실측을 쓸
+// 수 없어(Node에서도 호출되는 순수 문자열 빌더) **문자 폭을 근사식으로
+// 추정**한다.
+// ---------------------------------------------------------------------------
+
+function polarFlat(cx, cy, r, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  return [cx + r * Math.sin(rad), cy - r * Math.cos(rad)];
+}
+
+/**
+ * 문자 폭 근사 — Pretendard Bold 기준, ASCII(숫자·라틴·기호·`%`)는 대략
+ * 0.62em, 한글 등 전각 문자는 대략 1.0em으로 본다. **실제 DOM 측정이 아니다**
+ * (이 함수가 필요한 이유는 이 파일의 머리말 참고) — 실제 렌더에서 잘리지
+ * 않는지는 크롭·`Page.printToPDF` 실측으로 별도 확인한다.
+ */
+function estimateTextWidthPx(text, fontPx) {
+  let width = 0;
+  for (const ch of String(text)) {
+    // eslint 없이도 명확하도록: 코드포인트가 ASCII 범위(0x00~0xFF)면 좁은 글자.
+    width += ch.codePointAt(0) <= 0xff ? fontPx * 0.62 : fontPx * 1.0;
+  }
+  return width;
+}
+
+function summarySrgbChannelToLinear(channel) {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+function relativeLuminanceHex(hex) {
+  const n = hex.replace('#', '');
+  const r = parseInt(n.slice(0, 2), 16);
+  const g = parseInt(n.slice(2, 4), 16);
+  const b = parseInt(n.slice(4, 6), 16);
+  return 0.2126 * summarySrgbChannelToLinear(r) + 0.7152 * summarySrgbChannelToLinear(g) + 0.0722 * summarySrgbChannelToLinear(b);
+}
+function summaryContrastRatio(l1, l2) {
+  const [hi, lo] = l1 >= l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+/**
+ * 배경 hex와 대비가 더 큰 쪽(흰/검)을 고른다 — `charts.js`의 `bestTextColorOn`과
+ * 같은 셈법, hex 리터럴을 직접 받는다는 점만 다르다(이 파일은 CSS 계산값이
+ * 아니라 리터럴 색 상수를 쓴다). **반환값은 hex가 아니라 CSS 색 키워드
+ * (`'white'`/`'black'`)다** — `charts.js`의 같은 함수가 이미 쓰는 근거를
+ * 그대로 따른다: 흰/검은 WCAG 상대 휘도 스펙이 1과 0으로 정의하는 절댓값이라
+ * 어느 팔레트에도 속하지 않고, 디자인 토큰이 애초에 없다. hex로 쓰면
+ * `styles-tokens.test.mjs`의 "예외 파일도 `SUMMARY_EXPORT_COLORS` 밖에서는
+ * hex를 쓰지 않는다" 검사에 걸린다 — 이 함수가 실측으로 고른 값이
+ * `SUMMARY_EXPORT_COLORS`에 속하지 않는 임의의 색이 아니라 WCAG 절댓값임을
+ * 코드 형태로도 드러낸다.
+ */
+function bestTextColorOnHex(hex) {
+  const bg = relativeLuminanceHex(hex);
+  const whiteContrast = summaryContrastRatio(bg, 1);
+  const blackContrast = summaryContrastRatio(bg, 0);
+  return whiteContrast >= blackContrast ? 'white' : 'black';
+}
+
+const SUMMARY_SLICE_LABEL_NAME_FONT_PX = 15;
+const SUMMARY_SLICE_LABEL_MIN_FONT_PX = 9;
+const SUMMARY_SLICE_LABEL_FIT_MARGIN = 0.92;
+const SUMMARY_SLICE_LABEL_OUTSIDE_GAP = 16;
+
+/**
+ * 조각마다 이름+비율 두 줄을 그린다. `charts.js`의 `applyDonutSliceInlineLabelsToSvg`
+ * 머리말과 같은 배치 규칙 — 고리 반지름 정중앙, 안 들어가면 글자를 바닥값까지
+ * 줄이고 그래도 안 들어가면 고리 밖 + 리더선.
+ */
+function sliceInlineLabelsMarkup(data, cx, cy) {
+  const total = (data.donut.segments ?? []).reduce((sum, seg) => sum + seg.amount, 0);
+  if (!(total > 0)) return '';
+  const rLabel = (DONUT_R + DONUT_R_INNER) / 2;
+  const bandThickness = DONUT_R - DONUT_R_INNER;
+  const parts = [];
+
+  for (const arc of data.donut.arcs) {
+    if (!(arc.amount > 0)) continue;
+    const color = arc.isUnallocated ? SUMMARY_EXPORT_COLORS.dataUnallocated : ACCOUNT_EXPORT_COLOR[arc.account];
+    const acc = data.accounts.find((a) => a.account === arc.account);
+    const name = arc.isUnallocated ? '미배분' : (acc?.label ?? arc.account);
+    const pctText = formatPercent(arc.amount / total);
+    const mid = (arc.start + arc.end) / 2;
+    const sweepRad = (Math.max(0, arc.end - arc.start) * Math.PI) / 180;
+    // 180°(π)에서 현 길이가 최댓값(지름)을 찍고 그 뒤로 다시 줄어드는 것은
+    // `charts.js`의 같은 식과 같은 이유다(그 파일 머리말 참고).
+    const chordAtMid = 2 * rLabel * Math.sin(Math.min(sweepRad, Math.PI) / 2);
+    const insideColor = bestTextColorOnHex(color);
+
+    let nameFont = SUMMARY_SLICE_LABEL_NAME_FONT_PX;
+    const fits = (fontPx) => {
+      const pctFont = Math.max(SUMMARY_SLICE_LABEL_MIN_FONT_PX, fontPx - 2);
+      const widest = Math.max(estimateTextWidthPx(name, fontPx), estimateTextWidthPx(pctText, pctFont));
+      const blockHeight = fontPx + pctFont + 6;
+      return widest <= chordAtMid * SUMMARY_SLICE_LABEL_FIT_MARGIN && blockHeight <= bandThickness * SUMMARY_SLICE_LABEL_FIT_MARGIN;
+    };
+    while (!fits(nameFont) && nameFont > SUMMARY_SLICE_LABEL_MIN_FONT_PX) nameFont -= 1;
+    const pctFont = Math.max(SUMMARY_SLICE_LABEL_MIN_FONT_PX, nameFont - 2);
+
+    if (fits(nameFont)) {
+      const [px, py] = polarFlat(cx, cy, rLabel, mid);
+      parts.push(
+        `<text x="${px}" y="${py}" text-anchor="middle" dominant-baseline="central" fill="${insideColor}" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif">` +
+          `<tspan x="${px}" dy="-0.55em" font-size="${nameFont}" font-weight="700">${xmlEscape(name)}</tspan>` +
+          `<tspan x="${px}" dy="1.25em" font-size="${pctFont}" font-weight="700">${xmlEscape(pctText)}</tspan>` +
+          `</text>`,
+      );
+    } else {
+      const outerR = DONUT_R + SUMMARY_SLICE_LABEL_OUTSIDE_GAP;
+      const [ox, oy] = polarFlat(cx, cy, outerR, mid);
+      const [ex, ey] = polarFlat(cx, cy, DONUT_R, mid);
+      parts.push(
+        `<polyline points="${ex},${ey} ${ox},${oy}" stroke="${SUMMARY_EXPORT_COLORS.borderSubtle}" stroke-width="1" fill="none" />`,
+      );
+      parts.push(
+        `<text x="${ox}" y="${oy}" text-anchor="middle" dominant-baseline="central" fill="${SUMMARY_EXPORT_COLORS.textPrimary}" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif">` +
+          `<tspan x="${ox}" dy="-0.55em" font-size="${SUMMARY_SLICE_LABEL_NAME_FONT_PX}" font-weight="700">${xmlEscape(name)}</tspan>` +
+          `<tspan x="${ox}" dy="1.25em" font-size="${Math.max(SUMMARY_SLICE_LABEL_MIN_FONT_PX, SUMMARY_SLICE_LABEL_NAME_FONT_PX - 2)}" font-weight="700">${xmlEscape(pctText)}</tspan>` +
+          `</text>`,
+      );
+    }
+  }
+  return parts.join('');
+}
+
+/** 범례(계좌 스와치+이름+월 금액) — [2026-08-18, D75] 도넛 아래로 옮겼다(위
+ * `LEGEND_X` 주석). `top`은 범례 블록이 시작하는 y 좌표 그대로다(옛
+ * `top + 40` 오프셋은 호출부가 이미 도넛 하단에서 간격을 두고 넘기므로 이
+ * 함수 안에서 다시 더하지 않는다 — 두 곳에서 간격을 조정하면 어느 한쪽만
+ * 고쳐질 위험이 생긴다). */
 function legendMarkup(data, top) {
   const rows = [];
-  let y = top + 40;
-  const legendX = 460;
+  let y = top;
   for (const arc of data.donut.arcs) {
     const account = arc.account;
     const color = arc.isUnallocated ? SUMMARY_EXPORT_COLORS.dataUnallocated : ACCOUNT_EXPORT_COLOR[account];
     const acc = data.accounts.find((a) => a.account === account);
     const label = arc.isUnallocated ? '미배분' : (acc?.label ?? account);
     const monthly = arc.isUnallocated ? data.donut.unallocatedMonthlyKrw : (acc?.monthlyKrw ?? 0);
-    rows.push(`<rect x="${legendX}" y="${y - 14}" width="14" height="14" fill="${color}" />`);
-    rows.push(svgText(legendX + 24, y - 3, label, { size: 16, weight: 700 }));
+    rows.push(`<rect x="${LEGEND_X}" y="${y - 14}" width="14" height="14" fill="${color}" />`);
+    rows.push(svgText(LEGEND_X + 24, y - 3, label, { size: 16, weight: 700 }));
     rows.push(
-      svgText(legendX + 24, y + 18, `${monthly.toLocaleString('ko-KR')}원 / 월`, {
+      svgText(LEGEND_X + 24, y + 18, `${monthly.toLocaleString('ko-KR')}원 / 월`, {
         size: 14,
         weight: 400,
         color: SUMMARY_EXPORT_COLORS.textSecondary,
       }),
     );
     y += 52;
+  }
+  return { markup: rows.join(''), bottom: y };
+}
+
+/**
+ * [2026-08-18, 관리자 지시(6차) 2번, D75] 도넛 오른쪽 입력값 블록.
+ * `data.inputs`(`summary-data.js`의 `buildSummaryInputs`)를 그대로 옮겨
+ * 적는다 — 이 함수는 "무엇을 담는가"를 다시 판단하지 않는다(D75 선 ①은
+ * 그 함수가 이미 지켰다). `data.inputs`가 비어 있으면(옛 D74 시절 호출부처럼
+ * `form`을 안 넘긴 경우) **블록 자체를 그리지 않는다** — 빈 제목만 떠 있는
+ * 상태를 만들지 않는다.
+ */
+function inputsBlockMarkup(data, top) {
+  const inputs = data.inputs ?? [];
+  if (inputs.length === 0) return { markup: '', bottom: top };
+  const rows = [];
+  let y = top;
+  rows.push(svgText(INPUTS_BLOCK_X, y, SUMMARY_INPUTS_HEADING, { size: 15, weight: 700, color: SUMMARY_EXPORT_COLORS.textSecondary }));
+  y += 30;
+  for (const item of inputs) {
+    rows.push(svgText(INPUTS_BLOCK_X, y, item.label, { size: 13, weight: 600, color: SUMMARY_EXPORT_COLORS.textSecondary }));
+    y += 20;
+    rows.push(svgText(INPUTS_BLOCK_X, y, item.valueText, { size: 17, weight: 700 }));
+    y += 30;
   }
   return { markup: rows.join(''), bottom: y };
 }
@@ -7684,13 +8033,28 @@ function tableMarkup(data, top) {
  * `data`는 `summary-data.js`의 `buildSummaryData`가 낸 값이다 — 이 함수는
  * 그것을 SVG 문자열로 옮기기만 하고 "무엇을 담는가"는 다시 판단하지 않는다.
  * 반환값은 **완결된 SVG 문서 문자열**(`<svg ...>...</svg>`)이다.
+ *
+ * **[2026-08-18, 관리자 지시(6차) 2·3번, D75] 배치 — 도넛(조각 라벨 포함) +
+ * 범례를 왼쪽 열에, 입력값 블록을 도넛 오른쪽에 둔다.** 옛(D74) 배치는
+ * 범례가 도넛 오른쪽(`x=460`)에 있었다 — 그 자리를 입력값 블록에 내주고,
+ * 범례는 도넛 **아래**로 내렸다(`legendMarkup`·`LEGEND_X` 주석). 도넛
+ * 구역의 세로 높이는 "왼쪽 열(도넛+범례)"과 "오른쪽 열(입력값)" 중 더 긴
+ * 쪽이 정한다 — 어느 한쪽만 보고 자르면 다른 쪽이 잘려 나간다.
+ * `CANVAS_WIDTH`(960)는 그대로다 — 입력값 블록이 옛 범례 자리(x=460)보다
+ * 조금 더 오른쪽(x=480)에서 시작해도 `CANVAS_WIDTH - PADDING`(904)까지
+ * 여유가 있다(렌더 크롭 실측, 최종 보고).
  */
 function buildSummarySvgMarkup(data) {
   const titleTop = PADDING;
   const donutSectionTop = titleTop + 40;
+  const cy = donutSectionTop + DONUT_CY_OFFSET;
   const { markup: donutSvg } = donutMarkup(data, donutSectionTop);
-  const { markup: legendSvg, bottom: legendBottom } = legendMarkup(data, donutSectionTop);
-  const donutSectionBottom = Math.max(donutSectionTop + DONUT_CY_OFFSET + DONUT_R + 40, legendBottom);
+  const sliceLabelsSvg = sliceInlineLabelsMarkup(data, DONUT_CX, cy);
+  const { markup: legendSvg, bottom: legendBottom } = legendMarkup(data, cy + DONUT_R + 32);
+  const { markup: inputsSvg, bottom: inputsBottom } = inputsBlockMarkup(data, donutSectionTop + 8);
+
+  const donutColumnBottom = Math.max(cy + DONUT_R + 40, legendBottom);
+  const donutSectionBottom = Math.max(donutColumnBottom, inputsBottom);
 
   const { markup: totalSvg, bottom: totalBottom } = totalTaxSavingsMarkup(data, donutSectionBottom + 16);
   const { markup: tableSvg, bottom: tableBottom } = tableMarkup(data, totalBottom + 8);
@@ -7702,7 +8066,9 @@ function buildSummarySvgMarkup(data) {
     svgText(PADDING, titleTop + 24, '배분 요약', { size: 24, weight: 700 }),
     `<line x1="${PADDING}" y1="${donutSectionBottom + 8}" x2="${CANVAS_WIDTH - PADDING}" y2="${donutSectionBottom + 8}" stroke="${SUMMARY_EXPORT_COLORS.borderSubtle}" stroke-width="1" />`,
     donutSvg,
+    sliceLabelsSvg,
     legendSvg,
+    inputsSvg,
     totalSvg,
     `<line x1="${PADDING}" y1="${totalBottom + 4}" x2="${CANVAS_WIDTH - PADDING}" y2="${totalBottom + 4}" stroke="${SUMMARY_EXPORT_COLORS.borderSubtle}" stroke-width="1" />`,
     tableSvg,
@@ -7719,6 +8085,27 @@ function buildSummarySvgMarkup(data) {
  */
 function svgMarkupToDataUri(svgMarkup) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+}
+
+/**
+ * [2026-08-18, 관리자 지시(6차) 3번, D75] SVG 문자열 → 현재 문서에 삽입 가능한
+ * 라이브 `<svg>` 엘리먼트. **PDF 경로(`result-panel.js`의 `summarySheet`)가
+ * 쓴다** — PNG 경로는 `Image`/`<canvas>`로 별도 문서 취급해 굽지만, PDF는
+ * `window.print()`가 찍는 **이 페이지 자신의 라이브 DOM**의 일부라 인라인
+ * 삽입이 더 단순하고, `Image` 로드를 기다리는 비동기 경합도 없다(`ui/print.js`
+ * 머리말이 경계하는 "인쇄 스냅샷 타이밍" 부류의 문제를 애초에 만들지 않는다
+ * — 이 SVG는 인쇄가 시작되기 전에 이미 정적으로 DOM에 붙어 있다).
+ *
+ * `DOMParser`로 문자열을 파싱한 뒤 `document.importNode`로 현재 문서에 소유권을
+ * 옮긴다 — 파싱 직후의 노드는 아직 `DOMParser`가 만든 별도 문서에 속해 있어
+ * 그대로 `appendChild`하면 `WrongDocumentError`가 난다.
+ */
+function summarySvgElementFromMarkup(svgMarkup) {
+  if (typeof DOMParser === 'undefined' || typeof document === 'undefined') return null;
+  const parsed = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml');
+  const svg = parsed.documentElement;
+  if (!svg || svg.nodeName.toLowerCase() !== 'svg') return null;
+  return typeof document.importNode === 'function' ? document.importNode(svg, true) : svg;
 }
 
 /**
@@ -9228,72 +9615,34 @@ function assumptionBlock(response, scenario, form) {
  * 전부가 숨는다(`styles.css` — 옛 규약("결과와 고지 전부가 인쇄된다")을
  * D74가 "요약 다섯 항목만 인쇄된다"로 좁혔다).
  *
- * 담는 다섯 가지(D74가 정했다) — 도넛(배분 구성)·계좌별 월 납입액·총
- * 절세액(가정 성분이 있으면 조건절과 함께)·계좌별 납입 잔여 한도·연 환산.
- * **가정 사항·다른 배분 비교는 여기 없다** — `assumptionBlock`도
- * `stackBarComparison`도 부르지 않는다.
+ * **[2026-08-18, 관리자 지시(6차) 3번, D75] PDF도 PNG와 같은 SVG를 그대로
+ * 쓴다 — 두 산출물이 갈릴 자리를 구조로 없앤다.** 옛(D74) 구현은 이 함수가
+ * `donutChart`/`donutLegend`(DOM 컴포넌트) + `<table>`을 **직접** 조립해
+ * PNG 경로(`summary-image.js`의 독립 SVG)와 서로 다른 마크업을 각자
+ * 유지했다 — 도넛 라벨(D75 2번)이나 입력값 블록(D75) 같은 변경이 생길 때마다
+ * 두 곳을 동시에 고쳐야 했고, 하나만 고치면 그 자리에서 조용히 갈라진다.
+ * 이제 이 함수는 `buildSummarySvgMarkup`(PNG 경로가 쓰는 바로 그 함수)이
+ * 낸 SVG 문자열을 `summarySvgElementFromMarkup`으로 파싱해 그대로 삽입할
+ * 뿐, 도넛·표·입력값 블록을 다시 조립하지 않는다.
  *
- * 도넛은 실제 결과 화면과 **같은 컴포넌트**(`donutChart`/`donutLegend`)를
- * 그대로 재사용한다 — 인쇄는 라이브 문서의 일부라 CSS 커스텀 프로퍼티
- * (계좌 색 토큰)가 정상적으로 상속된다(PNG 내보내기와 다른 점 —
- * `summary-image.js`가 별도 문서를 만들어야 하는 이유는 그 파일 머리말
- * 참고). 계좌별 표·총 절세액 텍스트는 `buildSummaryData`(순수 함수,
- * `summary-data.js`)가 조립한 값을 그대로 옮겨 적는다 — PNG 내보내기와
- * "무엇이 요약에 들어가는가"를 한 곳에서 공유해, 두 산출물이 서로 다른
- * 것을 담는 회귀를 막는다.
+ * 담는 것 — D74가 정한 다섯 항목(도넛(조각 라벨 포함)·계좌별 월 납입액·
+ * 총 절세액·계좌별 납입 잔여 한도·연 환산) + D75가 더한 입력값 블록.
+ * **가정 사항·다른 배분 비교는 여기 없다** — `assumptionBlock`도
+ * `stackBarComparison`도 부르지 않는다(`buildSummaryData`가 애초에 그
+ * 값을 읽지 않는다).
+ *
+ * **리터럴 hex 색을 쓰는 것이 이 통합의 전제다.** `buildSummarySvgMarkup`은
+ * CSS 커스텀 프로퍼티를 참조하지 않는다(D74, `summary-image.js` 머리말) —
+ * 그래서 이 인라인 삽입 경로도, PNG의 독립 문서 경로도 똑같은 문자열에서
+ * 똑같은 색이 나온다. 인쇄가 라이브 문서 안에 있다는 사실은 이제 이 함수의
+ * 전제가 아니다(`var(--...)` 상속에 기대지 않는다) — 그래서 `donutChart`를
+ * 더는 재사용하지 않는다.
  */
-function summarySheet(plan, scenario, annualReturnRate) {
-  const data = buildSummaryData(plan, scenario, annualReturnRate);
-  const excluded = excludedAccounts(scenario);
-  const donutArgs = {
-    allocations: plan.allocations,
-    unallocatedAnnualKrw: plan.unallocated_annual_krw,
-    unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
-    excludedAccounts: excluded,
-  };
-  const donut = donutChart({
-    ...donutArgs,
-    totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
-    isProposed: !scenario.is_enacted,
-    // 요약은 항상 컴팩트(범례) 모드다 — 인쇄 페이지 폭이 화면 뷰포트와
-    // 무관하므로, 뷰포트를 재서 고르는 `preferredDonutSizeMode`를 쓰지
-    // 않는다(예시 구역 `exampleShowcaseSection`과 같은 이유).
-    labelMode: 'legend',
-  });
-
-  const totalBlock = el('div', { class: 'summary-sheet-total' }, [
-    el('p', { class: 'summary-sheet-total-label' }, [data.totalTaxSavings.label]),
-    el('p', { class: 'summary-sheet-total-value type-display' }, amountValueNode(data.totalTaxSavings.valueText)),
-    data.totalTaxSavings.includesAssumption
-      ? el('div', { class: 'summary-sheet-total-composition' }, [
-          el('p', { class: 'type-num' }, [data.totalTaxSavings.determinedLine]),
-          el('p', { class: 'type-num' }, [data.totalTaxSavings.assumptionLine]),
-        ])
-      : null,
-  ]);
-
-  const table = el('table', { class: 'summary-sheet-table' }, [
-    el('thead', {}, [el('tr', {}, ['계좌', '월 납입액', '연 환산', '납입 잔여 한도'].map((h) => el('th', {}, [h])))]),
-    el(
-      'tbody',
-      {},
-      data.accounts.map((a) =>
-        el('tr', {}, [
-          el('td', {}, [a.label]),
-          el('td', { class: 'type-num' }, [formatKrw(a.monthlyKrw)]),
-          el('td', { class: 'type-num' }, [formatKrw(a.annualKrw)]),
-          el('td', { class: 'type-num' }, [formatKrw(a.remainingLimitKrw)]),
-        ]),
-      ),
-    ),
-  ]);
-
-  return el('div', { class: 'summary-sheet' }, [
-    el('h2', { class: 'summary-sheet-heading' }, ['배분 요약']),
-    el('div', { class: 'summary-sheet-donut' }, [donut, donutLegend(donutArgs)]),
-    totalBlock,
-    table,
-  ]);
+function summarySheet(plan, scenario, annualReturnRate, form) {
+  const data = buildSummaryData(plan, scenario, annualReturnRate, form);
+  const svgMarkup = buildSummarySvgMarkup(data);
+  const svgEl = summarySvgElementFromMarkup(svgMarkup);
+  return el('div', { class: 'summary-sheet' }, [svgEl].filter(Boolean));
 }
 
 /**
@@ -9329,7 +9678,11 @@ function saveShareBlock(store, plan, scenario, annualReturnRate) {
       class: 'btn btn-secondary',
       onclick: async () => {
         try {
-          const data = buildSummaryData(plan, scenario, annualReturnRate);
+          // [2026-08-18, 관리자 지시(6차) 2번, D75] `store.getState().form`을
+          // 클릭 시점에 다시 읽는다 — `shareButton`(아래)이 이미 같은 이유로
+          // 그렇게 한다: 클로저가 마운트 시점 값을 붙잡으면 그 뒤 입력이
+          // 바뀌어도 예전 값이 이미지에 실린다.
+          const data = buildSummaryData(plan, scenario, annualReturnRate, store.getState().form);
           const dataUrl = await exportSummaryPng(data);
           downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
           store.reportSaveShare('image');
@@ -9521,7 +9874,7 @@ function resultPanelForScenario(
     // none }`) 인쇄에서만 나타난다. 위치는 DOM 순서일 뿐 시각 순서를 정하지
     // 않는다(어차피 숨어 있다) — 저장·공유 버튼 바로 앞에 두어 "이 결과를
     // 어떻게 들고 나갈까"라는 흐름과 코드 순서가 같게 맞춘다.
-    summarySheet(plan, scenario, annualReturnRate),
+    summarySheet(plan, scenario, annualReturnRate, form),
     saveShareBlock(store, plan, scenario, annualReturnRate),
   ]);
 }
