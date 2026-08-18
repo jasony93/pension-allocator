@@ -55,13 +55,27 @@ const MEASURE_RING = `(() => {
   };
 })()`;
 
-/** 결과 자리에 도형이 둘 있는 프레임이 있었는지 프레임 단위로 지켜본다. */
+/**
+ * 결과 자리에 도형이 둘 있는 프레임이 있었는지 프레임 단위로 지켜본다.
+ *
+ * [2026-08-18, D74] **`.summary-sheet` 안의 도넛은 세지 않는다.** 요약
+ * 시트(`ui/result-panel.js`의 `summarySheet`, 화면에서는 `display: none`)도
+ * 실제 결과가 나오는 즉시 `donutChart`를 그대로 재사용해 자기 도넛을
+ * 그린다 — 인쇄 전용이라 "자리(도넛이 실제로 보이는 자리)"에는 참여하지
+ * 않는데도, `.chart-donut`을 그냥 세면 그 사본까지 함께 잡혀 "도넛이 2개"
+ * 로 오판한다(실측으로 확인 — 전환 순간 rings=1·donuts=1 프레임이 새로
+ * 생겼다. 자리표시자가 채 사라지기 전에 요약 시트의 도넛이 이미 그려지기
+ * 때문이다). `.closest('.summary-sheet')`로 걸러내면 이 자리 세기가 화면에
+ * 실제로 "보이는" 도형만 다시 정확히 잰다.
+ */
 const WATCH_SEAT = `(() => {
   window.__seatSamples = [];
   window.__seatWatching = true;
+  const visibleDonutCount = () =>
+    [...document.querySelectorAll('.chart-donut')].filter((el) => !el.closest('.summary-sheet')).length;
   const sample = () => {
     const rings = document.querySelectorAll('.placeholder-ring').length;
-    const donuts = document.querySelectorAll('.chart-donut').length;
+    const donuts = visibleDonutCount();
     const last = window.__seatSamples[window.__seatSamples.length - 1];
     if (!last || last[0] !== rings || last[1] !== donuts) window.__seatSamples.push([rings, donuts]);
     if (window.__seatWatching) requestAnimationFrame(sample);
@@ -69,7 +83,7 @@ const WATCH_SEAT = `(() => {
   // DOM이 바뀌는 순간마다도 본다 — rAF 사이에 끼어든 교체를 놓치지 않는다.
   window.__seatObserver = new MutationObserver(() => {
     const rings = document.querySelectorAll('.placeholder-ring').length;
-    const donuts = document.querySelectorAll('.chart-donut').length;
+    const donuts = visibleDonutCount();
     window.__seatSamples.push([rings, donuts]);
   });
   window.__seatObserver.observe(document.querySelector('.result-slot'), { childList: true, subtree: true });

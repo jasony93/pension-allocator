@@ -244,6 +244,23 @@ function walk(dir, out = []) {
   return out;
 }
 
+// [2026-08-18, 관리자 지시(4차) 6번, D74] **예외가 다시 생겼다 —
+// `ui/summary-image.js` 하나.** 2026-08-10 주석(아래 테스트 본문)은 "공유
+// 이미지가 PDF로 바뀌며 예외가 사라졌다"고 적었는데, D74로 PNG 내보내기가
+// 되돌아왔다 — 다만 옛 `ui/share.js`(전체 페이지 캔버스)의 부활이 아니라
+// 요약 시트 전용이다. **이유는 그때와 같다** — `Image.src`에 넣는
+// `data:image/svg+xml,...`는 이 문서의 `:root`와 연결되지 않은 독립 문서라
+// CSS 커스텀 프로퍼티(`var(--data-pension)` 등)가 상속되지 않는다
+// (`ui/summary-image.js` 머리말이 그 근거를 적어 둔다). **드리프트 방어는
+// 이 검사 대신 다른 검사가 진다** — `ui/summary-image-colors` 대조
+// (`summary-image.test.mjs` "PNG 내보내기 색 상수가 styles.css의 라이트
+// 토큰과 어긋나지 않는다")가 `SUMMARY_EXPORT_COLORS`의 값을 `styles.css`
+// `:root`와 직접 비교해, 토큰이 바뀌는데 이 상수를 안 고치면 그 검사가 잡는다
+// — "예외를 늘리되 드리프트를 놓치지 않는다"는 이 파일의 원래 취지를
+// 그대로 지킨다. **색 계산 함수(`hsl`·`oklch`·`color-mix` 등)는 이 파일도
+// 여전히 금지다** — 예외는 "리터럴 hex 값"에만 있다.
+const COLOR_LITERAL_EXEMPT_FILES = new Set(['ui/summary-image.js']);
+
 test('JS가 색을 계산하지 않는다', () => {
   // design-system 5.20절: 압출 측면 색은 **전용 토큰**이고 "구현은 산식을 다시
   // 돌리지 않는다". 초판처럼 "명도 −18%"를 코드가 계산하고 있으면 계좌 색이
@@ -252,16 +269,35 @@ test('JS가 색을 계산하지 않는다', () => {
   // **예전엔 `ui/share.js`(캔버스에 캡처용 PNG를 새로 그리던 코드)만 예외였다**
   // — 캔버스 API가 CSS 커스텀 프로퍼티를 읽지 못해 hex를 직접 써야 했다.
   // 2026-08-10, 공유 이미지를 PDF 내보내기(`ui/print.js` + 브라우저 인쇄)로
-  // 바꾸며 그 파일 자체가 사라졌다 — 인쇄는 `styles.css`를 그대로 쓰므로 이제
-  // 예외 없이 전 코드가 이 검사를 통과해야 한다.
+  // 바꾸며 그 파일 자체가 사라졌다 — 인쇄는 `styles.css`를 그대로 쓰므로 그
+  // 시점에는 예외 없이 전 코드가 이 검사를 통과했다. **D74로 다시 예외가
+  // 생겼다** — 위 주석 참고.
   const offenders = [];
   for (const file of walk(here)) {
     const rel = path.relative(here, file).replace(/\\/g, '/');
     const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    for (const hex of text.match(/['"`]#[0-9a-fA-F]{3,8}['"`]/g) ?? []) offenders.push(`${rel}: ${hex}`);
+    if (!COLOR_LITERAL_EXEMPT_FILES.has(rel)) {
+      for (const hex of text.match(/['"`]#[0-9a-fA-F]{3,8}['"`]/g) ?? []) offenders.push(`${rel}: ${hex}`);
+    }
     for (const fn of text.match(/\b(?:brightness|saturate|hsl|oklch|color-mix)\s*\(/g) ?? []) offenders.push(`${rel}: ${fn}`);
   }
   assert.deepEqual(offenders, [], `UI 코드가 색을 직접 정하거나 계산합니다:\n${offenders.join('\n')}`);
+});
+
+test('색 리터럴 예외 파일은 정확히 SUMMARY_EXPORT_COLORS 상수 하나만 hex를 담는다 — 예외가 조용히 번지지 않는다', () => {
+  // 예외 목록에 파일을 올리는 것과 "그 파일 안에서 아무 색이나 마음대로
+  // 써도 된다"는 다른 것이다. 이 검사는 예외 파일 안에서도 hex 리터럴이
+  // `SUMMARY_EXPORT_COLORS` 객체 리터럴 **안에서만** 나타나는지를 확인한다 —
+  // 객체 밖(예: 어떤 함수 안에 즉흥적으로 `'#ff0000'`을 쓰는 것)은 여전히
+  // 막는다.
+  for (const rel of COLOR_LITERAL_EXEMPT_FILES) {
+    const text = readFileSync(path.join(here, rel), 'utf8');
+    const objectMatch = /export const SUMMARY_EXPORT_COLORS = \{[\s\S]*?\n\};/.exec(text);
+    assert.ok(objectMatch, `${rel}에서 SUMMARY_EXPORT_COLORS 선언을 찾지 못했습니다`);
+    const withoutObject = text.slice(0, objectMatch.index) + text.slice(objectMatch.index + objectMatch[0].length);
+    const stray = withoutObject.match(/['"`]#[0-9a-fA-F]{3,8}['"`]/g) ?? [];
+    assert.deepEqual(stray, [], `${rel}의 SUMMARY_EXPORT_COLORS 밖에 hex 리터럴이 있습니다: ${stray.join(', ')}`);
+  }
 });
 
 // **"공유 이미지는 테마를 읽지 않는다" 검사는 여기 있었다.** 2026-08-10,

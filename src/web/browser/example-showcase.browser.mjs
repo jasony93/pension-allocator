@@ -40,7 +40,9 @@ const READ_SHOWCASE = `(() => {
   const visualCol = q('.example-showcase-visual-col');
   const inputLines = qa('.example-showcase-input-line');
   const inputBlock = q('.example-showcase-input-block');
+  const inputIconCol = q('.example-showcase-input-icon-col');
   const inputIcon = q('.example-showcase-input-icon');
+  const inputName = q('.example-showcase-input-name');
   const question = q('.example-showcase-question');
   const amountCard = q('.amount-card');
   const legend = q('.donut-legend');
@@ -58,8 +60,14 @@ const READ_SHOWCASE = `(() => {
     textColChildTags: textCol ? [...textCol.children].map((c) => c.tagName) : [],
     // [2026-08-17, 관리자 지시(3차) 2번] man-icon이 입력 세 줄과 한 블록
     // (.example-showcase-input-block, DIV)을 이룬다 — 그 블록의 자식 태그
-    // (IMG + DIV)와 아이콘 자체의 렌더 크기를 함께 잰다.
+    // (아이콘 열 DIV + 세 줄 DIV)와 아이콘 자체의 렌더 크기를 함께 잰다.
+    // [2026-08-18, 관리자 지시(4차) 1번] 아이콘 열 자체가 DIV(아이콘 열,
+    // .example-showcase-input-icon-col)로 한 겹 더 감싸졌다 — 그 열의
+    // 자식 태그(IMG + P)와 이름표 텍스트도 함께 잰다.
     inputBlockChildTags: inputBlock ? [...inputBlock.children].map((c) => c.tagName) : [],
+    inputIconColChildTags: inputIconCol ? [...inputIconCol.children].map((c) => c.tagName) : [],
+    inputIconColRect: inputIconCol ? rectOf(inputIconCol) : null,
+    inputNameText: inputName?.textContent ?? null,
     inputIconRect: inputIcon ? rectOf(inputIcon) : null,
     inputIconAlt: inputIcon ? inputIcon.getAttribute('alt') : null,
     inputLineTexts: inputLines.map((el) => el.textContent),
@@ -144,9 +152,18 @@ test('헤더와 입력/결과 사이에 예시 섹션이 실제로 렌더된다(
   // 지우지 않고 뒤집는다.
   assert.equal(data.textColChildTags[0], 'H2', '물음이 텍스트 칸의 첫 자식이어야 한다(맨 위)');
   assert.deepEqual(data.textColChildTags.slice(1), ['DIV'], '물음 다음에 입력 블록(man-icon + 세 줄을 감싼 DIV) 하나가 와야 한다');
-  assert.equal(data.inputBlockChildTags.length, 2, '입력 블록 자식 수가 2(아이콘+줄 열)가 아니다');
-  assert.equal(data.inputBlockChildTags[0], 'IMG', '입력 블록의 첫 자식이 man-icon(IMG)이 아니다');
+  assert.equal(data.inputBlockChildTags.length, 2, '입력 블록 자식 수가 2(아이콘 열+줄 열)가 아니다');
+  // [2026-08-18, 관리자 지시(4차) 1번으로 뒤집혔다] 옛 검사는 입력 블록의
+  // 첫 자식이 man-icon(IMG) 그 자체라고 기대했다 — 이제는 아이콘과
+  // 이름표(「김철수씨」)를 함께 담는 DIV(`.example-showcase-input-icon-col`)
+  // 하나가 온다. IMG는 그 DIV 안, 첫 자식으로 그대로 남는다 — 지우지 않고
+  // 뒤집는다.
+  assert.equal(data.inputBlockChildTags[0], 'DIV', '입력 블록의 첫 자식이 아이콘 열(DIV)이 아니다');
   assert.equal(data.inputBlockChildTags[1], 'DIV', '입력 블록의 둘째 자식이 세 줄을 감싼 DIV가 아니다');
+  assert.equal(data.inputIconColChildTags.length, 2, '아이콘 열 자식 수가 2(아이콘+이름표)가 아니다');
+  assert.equal(data.inputIconColChildTags[0], 'IMG', '아이콘 열의 첫 자식이 man-icon(IMG)이 아니다');
+  assert.equal(data.inputIconColChildTags[1], 'P', '아이콘 열의 둘째 자식이 이름표(P)가 아니다');
+  assert.equal(data.inputNameText, '김철수씨', '아이콘 밑 이름표가 「김철수씨」가 아니다');
   assert.ok(data.inputIconRect, 'man-icon을 찾지 못했다');
   assert.ok(data.inputIconRect.width > 0 && data.inputIconRect.height > 0, `man-icon이 0크기로 렌더됐다: ${JSON.stringify(data.inputIconRect)}`);
   assert.equal(data.inputIconAlt, '', 'man-icon은 장식용이므로 alt=""여야 한다');
@@ -236,6 +253,104 @@ test('소유자 지시 5번 — 도넛이 D70 크기(396px)보다 작다(300px)'
   const data = await page.evaluate(READ_SHOWCASE);
   assert.equal(data.donutWidth, 300, `도넛 렌더 폭이 300px가 아니다: ${data.donutWidth}`);
   assert.ok(data.donutWidth < 396, '도넛이 D70 크기(396px)보다 작지 않다');
+});
+
+/**
+ * [2026-08-18, 관리자 지시(5차) 1번] **물음이 1440px에서 한 줄이다.**
+ *
+ * `.example-showcase-question`(h2)은 `display: flex` 컨테이너다 —
+ * `getClientRects()`를 h2나 그 안의 `<span>`(플렉스 아이템, 그 자체로 block
+ * 수준 박스가 된다)에 걸면 안의 텍스트가 몇 줄로 꺾이든 박스 하나(rect
+ * 1개)만 돌아와 줄 수를 알려주지 않는다(실측으로 확인 — 이 오판이 처음
+ * "이미 한 줄이다"라는 잘못된 결론을 냈었다). **`Range`를 텍스트 노드
+ * 자체에 걸어야** 줄마다 별도 rect가 나온다 — 이 검사가 재는 것이 그것이다.
+ */
+test('관리자 지시(5차) 1번 — 1440×900에서 물음이 한 줄이다(Range 실측), 문서 가로 스크롤이 없다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  await sleep(200);
+
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const questionText = root.querySelector('.example-showcase-question-text');
+    const range = document.createRange();
+    range.selectNodeContents(questionText);
+    return {
+      questionLineCount: range.getClientRects().length,
+      docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  })()`);
+
+  assert.equal(m.questionLineCount, 1, `1440px — 물음이 한 줄이 아니다(${m.questionLineCount}줄로 꺾였다)`);
+  assert.equal(m.docOverflowsX, false, '1440px — 물음이 한 줄이 되며 페이지 가로 스크롤이 생겼다');
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+/**
+ * [2026-08-18, 관리자 지시(5차) 2번] man-icon + 나이/소득/월납입금 블록을
+ * 옛(관리자 지시(3차) 2번, `--space-7` 48px) 위치에서 오른쪽으로 10ch 더
+ * 옮긴다 — 물음(`.example-showcase-question`) 자신의 왼쪽 시작 위치는
+ * 그대로다. 그래서 이 검사는 (1) 입력 블록의 왼쪽 끝이 옛 자리(48px)보다
+ * 10ch만큼 더 안쪽인지, (2) 그 사이 물음의 왼쪽 끝은 전혀 움직이지 않았는지
+ * 둘을 함께 잰다.
+ */
+test('관리자 지시(5차) 2번 — man-icon+입력 세 줄 블록이 옛 위치에서 오른쪽으로 10ch 더 밀렸고, 물음 위치는 그대로다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  const data = await page.evaluate(READ_SHOWCASE);
+
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const textCol = root.querySelector('.example-showcase-text-col');
+    const inputBlock = root.querySelector('.example-showcase-input-block');
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute; visibility:hidden; white-space:pre;';
+    probe.textContent = '0123456789';
+    document.body.appendChild(probe);
+    const tenChPx = probe.getBoundingClientRect().width;
+    probe.remove();
+    return {
+      textColLeft: textCol.getBoundingClientRect().left,
+      inputBlockLeft: inputBlock.getBoundingClientRect().left,
+      tenChPx,
+    };
+  })()`);
+
+  // 옛 위치(관리자 지시(3차) 2번) — 텍스트 칸 왼쪽 끝에서 `--space-7`(48px)만큼
+  // 들여져 있었다. 지금은 거기서 10ch(대략 `m.tenChPx`px, 본문 기준 폰트로
+  // 근사)만큼 더 들여져 있어야 한다 — 정확한 ch 환산은 이 블록 자신의
+  // 폰트(본문 상속, 16px)를 기준으로 하므로, 같은 폰트로 만든 프로브
+  // (`probe`)의 10글자 폭과 대략 같은 크기여야 한다(여유 6px — 폰트 폭
+  // 근사 오차).
+  const OLD_INDENT_PX = 48;
+  const actualIndent = m.inputBlockLeft - m.textColLeft;
+  const extra = actualIndent - OLD_INDENT_PX;
+  assert.ok(
+    Math.abs(extra - m.tenChPx) <= 6,
+    `추가 이동량(${extra}px)이 10ch 근사값(${m.tenChPx}px)과 6px 넘게 어긋난다(옛 48px 기준 실제 들여쓰기 ${actualIndent}px)`,
+  );
+  assert.ok(
+    Math.abs(data.questionRect.left - data.textColRect.left) <= 2,
+    `물음 왼쪽 끝(${data.questionRect.left})이 여전히 왼쪽 칸 왼쪽 끝(${data.textColRect.left}) 근처여야 하는데 벗어났다 — 물음 위치가 함께 움직였다`,
+  );
+});
+
+/**
+ * [2026-08-18, 관리자 지시(5차) 4번] 「이렇게 배분해보세요」를 5px 아래로 —
+ * 캡션의 `margin-top`이 5px이어야 한다(옛값은 0이었다).
+ */
+test('관리자 지시(5차) 4번 — 「이렇게 배분해보세요」 캡션의 위쪽 여백이 5px이다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  const marginTop = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const heading = host.shadowRoot.querySelector('.example-showcase-visual-heading');
+    return getComputedStyle(heading).marginTop;
+  })()`);
+  assert.equal(marginTop, '5px', `「이렇게 배분해보세요」 위쪽 여백이 5px가 아니다: ${marginTop}`);
 });
 
 test('문구는 왼쪽 칸에서 왼쪽 정렬·세로 가운데, 도넛/범례는 오른쪽 칸에서 가로 가운데, 절세액/화살표는 섹션 전체에서 가로 가운데', { skip: skipWithoutChrome }, async () => {
@@ -806,18 +921,26 @@ test('화살표에 마우스를 올리면 배경색이 실제로 바뀐다(hover
 // ---------------------------------------------------------------------------
 
 /**
- * 세 줄 높이 계산 근거는 `styles.css`의 `.example-showcase-input-icon` 주석과
- * 같다 — font-size 28px × line-height 1.35 × 3줄 + 내부 gap(space-2, 8px) 2개.
+ * [2026-08-18, 관리자 지시(4차) 1·2번] **뒤집힌 기대값.** 옛 검사는
+ * 아이콘 자신의 높이가 세 줄 전체 높이(당시 28px 기준)와 정확히 같기를
+ * 기대했다 — 그때는 아이콘 열에 아이콘 하나뿐이었다. 이제 아이콘 밑에
+ * 이름표(「김철수씨」)가 붙어 **아이콘 열 전체**(아이콘+gap+이름표)가 세
+ * 줄 전체 높이와 같아야 하고, 아이콘 자신은 그 몫에서 이름표 자리를 뺀
+ * 값이어야 한다 — 계산 근거는 `styles.css`의 `.example-showcase-input-icon`
+ * 주석과 같다(입력 줄 25px 기준 3줄 + gap 둘 = 117.25px, 거기서 이름표
+ * (12.5px × 1.4 + gap 4px = 21.5px)를 뺀 95.75px).
  */
 test('관리자 지시(3차) 2번 — man-icon 높이가 입력 세 줄 전체 높이와 같다(데스크톱)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const data = await page.evaluate(READ_SHOWCASE);
   assert.ok(data.inputIconRect, 'man-icon을 찾지 못했다');
-  const EXPECTED = 28 * 1.35 * 3 + 8 * 2;
+  const LINES_HEIGHT = 25 * 1.35 * 3 + 8 * 2;
+  const NAME_TAG_SHARE = 12.5 * 1.4 + 4;
+  const EXPECTED = LINES_HEIGHT - NAME_TAG_SHARE;
   assert.ok(
     Math.abs(data.inputIconRect.height - EXPECTED) <= 1,
-    `man-icon 높이(${data.inputIconRect.height}px)가 세 줄 계산값(${EXPECTED}px)과 1px 넘게 어긋난다`,
+    `man-icon 높이(${data.inputIconRect.height}px)가 계산값(${EXPECTED}px)과 1px 넘게 어긋난다`,
   );
   // 정사각형 원본(512×512)이므로 표시 비율도 1:1에 가까워야 한다(스케일만
   // 달라졌지 원본을 눌러 찌그러뜨리지 않았다).

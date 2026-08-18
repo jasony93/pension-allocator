@@ -41,11 +41,24 @@ import { el, mount, patch, significantCount, indexAfterSignificant } from './dom
 import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { mountExampleShowcase } from './example-showcase.js';
-import { SERVICE_NAME } from '../copy.js';
+import { SERVICE_NAME, SHARE_LINK_INVALID_NOTE } from '../copy.js';
 import { createStore } from '../state/store.js';
+import { readShareFragmentFromLocation } from '../state/share-link.js';
 import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
 import { LOGO_LIGHT_DATA_URI, LOGO_DARK_DATA_URI, LOGO_INTRINSIC_WIDTH, LOGO_INTRINSIC_HEIGHT } from '../assets/logo.js';
+
+/**
+ * [관리자 지시(4차) 7번, D74] 공유 링크로 열렸는데 프래그먼트를 읽지
+ * 못했을 때(옛 버전·손상) 보이는 배너. **조용히 무시하지 않는다** — 짧게
+ * 알린다는 D74의 조건을 그대로 옮긴다. `role="status"`는 기존
+ * `proposedSameAsCurrentBody`의 안내 배너와 같은 패턴이다.
+ */
+function sharedFragmentInvalidNotice() {
+  return el('div', { class: 'inline-alert inline-alert-warning shared-fragment-notice', role: 'status' }, [
+    el('p', { class: 'type-body-strong' }, [SHARE_LINK_INVALID_NOTE]),
+  ]);
+}
 
 /**
  * 상단 탭 바 — [2026-08-17, 관리자 지시(2차) 1번] `snowball72.com/pension-calculator`
@@ -192,6 +205,21 @@ export function mountApp(root, { engineClient, analytics }) {
   layout.append(header, exampleSlot, mainEl, footer);
   mount(root, layout);
   mountExampleShowcase(exampleSlot, { engineClient });
+
+  // [관리자 지시(4차) 7번, D74] 공유 링크로 열렸으면 입력을 채우고 계산까지
+  // 실행한다. 프래그먼트가 아예 없으면(보통 방문) 아무것도 하지 않는다 —
+  // `readShareFragmentFromLocation`이 그 둘을 구분한다(`null` vs
+  // `{ ok:false, ... }`). **한 번만 읽는다** — 이후 사용자가 값을 고치면
+  // 해시가 낡은 값을 계속 가리키게 되지만, 그 상태를 URL과 동기화하는 것은
+  // 이번 지시(공유 시점의 스냅샷 링크)의 범위 밖이다.
+  const sharedFragment = readShareFragmentFromLocation();
+  if (sharedFragment) {
+    if (sharedFragment.ok) {
+      store.applySharedForm(sharedFragment.form);
+    } else {
+      mainEl.before(sharedFragmentInvalidNotice());
+    }
+  }
 
   renderNow = function renderImpl() {
     const state = store.getState();

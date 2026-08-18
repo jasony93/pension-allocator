@@ -87,8 +87,14 @@ import {
   donutPlanNameCaption,
   DONUT_OPTIMAL_KICKER_LABEL,
   PDF_EXPORT_LABEL,
-  PDF_EXPORT_NOTE,
+  IMAGE_EXPORT_LABEL,
+  SAVE_SHARE_HEADING,
+  SUMMARY_EXPORT_NOTE,
   PDF_EXPORT_BLOCKED_NOTE,
+  IMAGE_EXPORT_BLOCKED_NOTE,
+  SHARE_LINK_LABEL,
+  SHARE_LINK_COPIED_NOTE,
+  SHARE_LINK_COPY_BLOCKED_NOTE,
   ISA_CARRYOVER_REPEAL_DIVERGENCE_NOTE,
   CURRENT_SCENARIO_TAB_LABEL,
   PROPOSED_SCENARIO_TAB_LABEL,
@@ -97,6 +103,7 @@ import {
 import { formatKrw, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
 import { taxCreditHeadlineView, anyPlanCapApplied, showsCapBelowCeilingNote, HEADLINE_MODE } from '../tax-credit-view.js';
+import { buildShareUrl } from '../state/share-link.js';
 import {
   donutChart,
   donutLegend,
@@ -122,6 +129,8 @@ import {
 } from './eligibility.js';
 import { exportToPdf } from './print.js';
 import { scenarioDisplaysEqual } from './scenario-compare.js';
+import { buildSummaryData } from './summary-data.js';
+import { exportSummaryPng, downloadDataUrl } from './summary-image.js';
 
 // 필수 항목의 라벨·초점 대상·충족 판정은 `validation.js`의 `CORE_REQUIREMENTS`
 // 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
@@ -1526,11 +1535,91 @@ function assumptionBlock(response, scenario, form) {
 // `copy.js`에서 없어졌으니 여기 남기면 `undefined` 참조가 된다.
 
 /**
+ * `[6번, D74]` 요약 시트 — 이미지·PDF 내보내기가 실제로 찍는 대상. 화면에는
+ * 보이지 않는다(`styles.css`의 `.summary-sheet { display: none }`) —
+ * 인쇄(`@media print`)에서만 나타나고, 그때는 `.result-body`의 나머지
+ * 전부가 숨는다(`styles.css` — 옛 규약("결과와 고지 전부가 인쇄된다")을
+ * D74가 "요약 다섯 항목만 인쇄된다"로 좁혔다).
+ *
+ * 담는 다섯 가지(D74가 정했다) — 도넛(배분 구성)·계좌별 월 납입액·총
+ * 절세액(가정 성분이 있으면 조건절과 함께)·계좌별 납입 잔여 한도·연 환산.
+ * **가정 사항·다른 배분 비교는 여기 없다** — `assumptionBlock`도
+ * `stackBarComparison`도 부르지 않는다.
+ *
+ * 도넛은 실제 결과 화면과 **같은 컴포넌트**(`donutChart`/`donutLegend`)를
+ * 그대로 재사용한다 — 인쇄는 라이브 문서의 일부라 CSS 커스텀 프로퍼티
+ * (계좌 색 토큰)가 정상적으로 상속된다(PNG 내보내기와 다른 점 —
+ * `summary-image.js`가 별도 문서를 만들어야 하는 이유는 그 파일 머리말
+ * 참고). 계좌별 표·총 절세액 텍스트는 `buildSummaryData`(순수 함수,
+ * `summary-data.js`)가 조립한 값을 그대로 옮겨 적는다 — PNG 내보내기와
+ * "무엇이 요약에 들어가는가"를 한 곳에서 공유해, 두 산출물이 서로 다른
+ * 것을 담는 회귀를 막는다.
+ */
+function summarySheet(plan, scenario, annualReturnRate) {
+  const data = buildSummaryData(plan, scenario, annualReturnRate);
+  const excluded = excludedAccounts(scenario);
+  const donutArgs = {
+    allocations: plan.allocations,
+    unallocatedAnnualKrw: plan.unallocated_annual_krw,
+    unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
+    excludedAccounts: excluded,
+  };
+  const donut = donutChart({
+    ...donutArgs,
+    totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
+    isProposed: !scenario.is_enacted,
+    // 요약은 항상 컴팩트(범례) 모드다 — 인쇄 페이지 폭이 화면 뷰포트와
+    // 무관하므로, 뷰포트를 재서 고르는 `preferredDonutSizeMode`를 쓰지
+    // 않는다(예시 구역 `exampleShowcaseSection`과 같은 이유).
+    labelMode: 'legend',
+  });
+
+  const totalBlock = el('div', { class: 'summary-sheet-total' }, [
+    el('p', { class: 'summary-sheet-total-label' }, [data.totalTaxSavings.label]),
+    el('p', { class: 'summary-sheet-total-value type-display' }, amountValueNode(data.totalTaxSavings.valueText)),
+    data.totalTaxSavings.includesAssumption
+      ? el('div', { class: 'summary-sheet-total-composition' }, [
+          el('p', { class: 'type-num' }, [data.totalTaxSavings.determinedLine]),
+          el('p', { class: 'type-num' }, [data.totalTaxSavings.assumptionLine]),
+        ])
+      : null,
+  ]);
+
+  const table = el('table', { class: 'summary-sheet-table' }, [
+    el('thead', {}, [el('tr', {}, ['계좌', '월 납입액', '연 환산', '납입 잔여 한도'].map((h) => el('th', {}, [h])))]),
+    el(
+      'tbody',
+      {},
+      data.accounts.map((a) =>
+        el('tr', {}, [
+          el('td', {}, [a.label]),
+          el('td', { class: 'type-num' }, [formatKrw(a.monthlyKrw)]),
+          el('td', { class: 'type-num' }, [formatKrw(a.annualKrw)]),
+          el('td', { class: 'type-num' }, [formatKrw(a.remainingLimitKrw)]),
+        ]),
+      ),
+    ),
+  ]);
+
+  return el('div', { class: 'summary-sheet' }, [
+    el('h2', { class: 'summary-sheet-heading' }, ['배분 요약']),
+    el('div', { class: 'summary-sheet-donut' }, [donut, donutLegend(donutArgs)]),
+    totalBlock,
+    table,
+  ]);
+}
+
+/**
  * `[4-H]` — 2026-08-10 소유자 지시로 "공유용 이미지 만들기"(캔버스 PNG)를
- * 걷어내고 PDF 내보내기(브라우저 인쇄)로 바꿨다. 무엇이 실리는지·실리지
- * 않는지는 `styles.css`의 `@media print`가 구조로 보증한다(`ui/print.js`
- * 머리말) — 이 함수는 더 이상 `plan`·`scenario`를 읽어 안전한 값만 옮겨 담을
- * 필요가 없다. 인쇄되는 것이 곧 화면에 이미 떠 있는 결과 패널 그 자체다.
+ * 걷어내고 PDF 내보내기(브라우저 인쇄)로 바꿨다.
+ *
+ * **[2026-08-18, 관리자 지시(4차) 6·7번, D74] 「요약 저장」으로 다시
+ * 갈린다.** 이미지가 돌아왔지만 옛 방식(전체 페이지 캔버스, D10에서
+ * 걷어냄)이 아니다 — 이번에는 이미지·PDF 둘 다 **요약 시트**(`summarySheet`,
+ * 바로 위)만 찍는다. PDF는 인쇄 CSS가 좁힌 결과이고(`styles.css`), 이미지는
+ * `summary-image.js`가 같은 자료(`buildSummaryData`)를 독립 SVG로 짜서
+ * 캔버스에 굽는다. **여기에 공유 링크(관리자 지시 7번)도 함께 둔다** —
+ * "저장·공유" 한 블록이라는 원래 자리 그대로다.
  *
  * **`onBlocked`가 클로저로 잡은 `note` 노드에 직접 쓰지 않고
  * `document.querySelector`로 그 순간 다시 찾는다.** `exportToPdf`의 차단
@@ -1541,10 +1630,31 @@ function assumptionBlock(response, scenario, form) {
  * 렌더의 것이라 거기 쓴 텍스트가 화면에 반영되지 않는다(실측으로 잡았다:
  * `print()` 호출은 됐는데 문구는 그대로였다). `.save-share-note`는 결과
  * 패널에 하나뿐이므로, 콜백이 불릴 때 **그 순간의 살아있는 노드**를 다시
- * 찾으면 이 경합이 사라진다.
+ * 찾으면 이 경합이 사라진다. 이미지 버튼의 실패 안내(`.save-share-note`
+ * 재사용)와 공유 링크의 확인 안내(`.share-link-note`, 별도 노드 — PDF/이미지
+ * 캡션을 지우지 않고 나란히 둔다)도 같은 이유로 클릭 시점에 다시 찾는다.
  */
-function saveShareBlock(store) {
-  const button = el(
+function saveShareBlock(store, plan, scenario, annualReturnRate) {
+  const imageButton = el(
+    'button',
+    {
+      type: 'button',
+      class: 'btn btn-secondary',
+      onclick: async () => {
+        try {
+          const data = buildSummaryData(plan, scenario, annualReturnRate);
+          const dataUrl = await exportSummaryPng(data);
+          downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
+          store.reportSaveShare('image');
+        } catch {
+          const note = document.querySelector('.save-share-note');
+          if (note) note.textContent = IMAGE_EXPORT_BLOCKED_NOTE;
+        }
+      },
+    },
+    [IMAGE_EXPORT_LABEL],
+  );
+  const pdfButton = el(
     'button',
     {
       type: 'button',
@@ -1561,8 +1671,46 @@ function saveShareBlock(store) {
     },
     [PDF_EXPORT_LABEL],
   );
-  const note = el('p', { class: 'type-caption save-share-note' }, [PDF_EXPORT_NOTE]);
-  return el('div', { class: 'save-share' }, [button, note]);
+  const note = el('p', { class: 'type-caption save-share-note' }, [SUMMARY_EXPORT_NOTE]);
+
+  /**
+   * [관리자 지시(4차) 7번, D74] 공유 링크 — URL **프래그먼트**에 현재 입력을
+   * 실어(`state/share-link.js`) 클립보드에 복사한다. **D74의 조건 — 공유
+   * 시점에 "이 링크에는 입력하신 값이 들어 있습니다"가 반드시 보여야
+   * 한다.** 복사 성공·실패 어느 쪽이든 이 문구는 먼저 뜬다(성공하면 복사
+   * 완료를, 실패하면 "자동 복사 실패, 아래 주소를 직접 복사" 뒤에 실제
+   * 링크를 이어 붙인다) — "복사됐다"는 사실만 알리고 "값이 들어 있다"를
+   * 빠뜨리면 D74의 판정이 무너진다.
+   */
+  const shareButton = el(
+    'button',
+    {
+      type: 'button',
+      class: 'btn btn-secondary',
+      onclick: async () => {
+        const url = buildShareUrl(store.getState().form);
+        const noteEl = document.querySelector('.share-link-note');
+        try {
+          if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
+          await navigator.clipboard.writeText(url);
+          if (noteEl) noteEl.textContent = SHARE_LINK_COPIED_NOTE;
+        } catch {
+          if (noteEl) noteEl.textContent = `${SHARE_LINK_COPY_BLOCKED_NOTE} ${url}`;
+        }
+        store.reportSaveShare('link_copy');
+      },
+    },
+    [SHARE_LINK_LABEL],
+  );
+  const shareNote = el('p', { class: 'type-caption share-link-note' }, ['']);
+
+  return el('div', { class: 'save-share' }, [
+    el('p', { class: 'save-share-heading type-body-strong' }, [SAVE_SHARE_HEADING]),
+    el('div', { class: 'save-share-actions' }, [imageButton, pdfButton]),
+    note,
+    el('div', { class: 'save-share-actions save-share-actions-secondary' }, [shareButton]),
+    shareNote,
+  ]);
 }
 
 function proposedScenarioCaption(scenario) {
@@ -1656,12 +1804,13 @@ function resultPanelForScenario(
   const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
   const showAllExitBanner = scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty');
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
+  const annualReturnRate = response.echo.isa_return_assumption?.annual_return_rate ?? null;
 
   return el('div', { class: 'result-body' }, [
     // 5.1.0(D28) — "무엇을 주었는가"(echo)를 헤드라인 구성 줄②의 조건절에도
     // 그대로 쓴다. 화면이 수익률을 제안하거나 미리 채우지 않는다(0.10절) —
     // 여기서도 사용자가 준 값을 되비출 뿐 새 값을 만들지 않는다.
-    amountCard(plan, scenario, response.echo.isa_return_assumption?.annual_return_rate ?? null),
+    amountCard(plan, scenario, annualReturnRate),
     // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
     // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
@@ -1681,7 +1830,12 @@ function resultPanelForScenario(
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),
     assumptionBlock(response, scenario, form),
-    saveShareBlock(store),
+    // `[6번, D74]` 요약 시트 — 화면에는 안 보이고(`.summary-sheet { display:
+    // none }`) 인쇄에서만 나타난다. 위치는 DOM 순서일 뿐 시각 순서를 정하지
+    // 않는다(어차피 숨어 있다) — 저장·공유 버튼 바로 앞에 두어 "이 결과를
+    // 어떻게 들고 나갈까"라는 흐름과 코드 순서가 같게 맞춘다.
+    summarySheet(plan, scenario, annualReturnRate),
+    saveShareBlock(store, plan, scenario, annualReturnRate),
   ]);
 }
 

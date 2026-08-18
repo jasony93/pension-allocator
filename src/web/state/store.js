@@ -445,6 +445,24 @@ export function createStore({ engineClient, analytics, onChange }) {
     analytics.track('alternative_row_click', {});
   }
 
+  /**
+   * [관리자 지시(4차) 7번, D74] 공유 링크(`state/share-link.js`)로 페이지를
+   * 열었을 때 폼을 한 번에 채운다. **`setField`를 필드마다 반복 호출하지
+   * 않는다** — 그러면 매 필드마다 `reportInputStartIfNeeded`가 걸려 이
+   * 페이지 로드가 "사용자가 입력을 시작했다"는 `input_start` 계측을
+   * 필드 수만큼 내게 된다(실제로는 사용자가 아무것도 타이핑하지 않았다 —
+   * 링크가 대신 채운 것이다). 계측 없이 폼을 한 번에 바꾸고 즉시 계산한다
+   * (`immediate: true` — 공유 링크를 연 사용자는 결과를 바로 보려는 것이지
+   * 디바운스 400ms를 기다릴 이유가 없다).
+   */
+  function applySharedForm(partialForm) {
+    form = { ...form, ...partialForm };
+    validation = validateForm(form);
+    notify();
+    scheduleCompute({ immediate: true });
+    maybeFetchBoundaries();
+  }
+
   loadProvisionalRules();
 
   return {
@@ -453,6 +471,7 @@ export function createStore({ engineClient, analytics, onChange }) {
     reset,
     reportSaveShare,
     reportAlternativeClick,
+    applySharedForm,
     // 테스트/디버깅에서 디바운스를 기다리지 않고 즉시 계산을 트리거할 때 쓴다.
     flush: () => scheduleCompute({ immediate: true }),
   };

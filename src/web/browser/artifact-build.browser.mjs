@@ -178,13 +178,22 @@ test('배포 번들, 1440px — 예시의 절세액 금액 덩어리가 중간�
     const chunks = [...root.querySelectorAll('.amount-value-chunk')];
     const section = root.querySelector('.example-showcase');
     const question = root.querySelector('.example-showcase-question');
+    const questionText = root.querySelector('.example-showcase-question-text');
     const inputLines = [...root.querySelectorAll('.example-showcase-input-line')];
     const sectionRect = section.getBoundingClientRect();
+    // [2026-08-18, 관리자 지시(5차) 1번] 줄 수를 요소 자체가 아니라 Range로
+    // 잰다 — .example-showcase-question은 flex 컨테이너(h2)라
+    // getClientRects()가 내부 줄바꿈과 무관하게 항상 박스 하나(rect 1개)를
+    // 낸다 — 안의 텍스트가 몇 줄로 꺾이든 속지 않으려면 실제 텍스트 조각을
+    // 감싼 Range로 재야 한다(줄마다 별도 rect가 나온다).
+    const range = document.createRange();
+    range.selectNodeContents(questionText);
     return {
       chunkCount: chunks.length,
       chunkRectCounts: chunks.map((c) => c.getClientRects().length),
       chunkTexts: chunks.map((c) => c.textContent),
       questionOverflows: question.getBoundingClientRect().width > sectionRect.width + 1,
+      questionLineCount: range.getClientRects().length,
       inputLineCount: inputLines.length,
       inputLineOverflows: inputLines.map((el) => el.getBoundingClientRect().width > sectionRect.width + 1),
       docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -200,6 +209,8 @@ test('배포 번들, 1440px — 예시의 절세액 금액 덩어리가 중간�
     );
   }
   assert.equal(m.questionOverflows, false, '배포 번들 1440px — 물음 문장이 예시 구역 폭을 넘는다');
+  // [2026-08-18, 관리자 지시(5차) 1번] 물음이 1440px에서 한 줄이다.
+  assert.equal(m.questionLineCount, 1, `배포 번들 1440px — 물음이 한 줄이 아니다(${m.questionLineCount}줄로 꺾였다)`);
   assert.equal(m.inputLineCount, 3, `배포 번들 1440px — 입력 줄이 정확히 3개여야 한다: ${m.inputLineCount}`);
   for (const [i, overflows] of m.inputLineOverflows.entries()) {
     assert.equal(overflows, false, `배포 번들 1440px — 입력 줄 ${i}이 예시 구역 폭을 넘는다`);
@@ -678,6 +689,39 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         wrappedLight.iconFilter === 'none' || !wrappedLight.iconFilter,
         `아티팩트처럼 감싼 조건(라이트) — man-icon에 filter가 걸려 있다: ${wrappedLight.iconFilter}`,
       );
+
+      // [2026-08-18, 관리자 지시(5차) 1번] **감싼 조건 + 1440×900 실측.**
+      // 위(감싸지 않은 번들)에 있는 같은 종류의 실측(물음 한 줄·화살표
+      // 첫 화면)을, 스타일 유실 결함이 실제로 일어나는 이 감싼 조건에서도
+      // 반복한다 — 그리드 비율(`.example-showcase` 열 비율) 자체가 여기서
+      // 안 실리면 물음 폭이 옛(1:1) 값으로 되돌아가 다시 두 줄로 꺾인다.
+      await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+      await sleep(200);
+      const wrapped1440 = await page.evaluate(`(() => {
+        const host = document.querySelector('.example-showcase-slot');
+        const root = host.shadowRoot;
+        const questionText = root.querySelector('.example-showcase-question-text');
+        const arrow = root.querySelector('.example-showcase-scroll-arrow');
+        const range = document.createRange();
+        range.selectNodeContents(questionText);
+        return {
+          questionLineCount: range.getClientRects().length,
+          arrowBottom: arrow ? arrow.getBoundingClientRect().bottom : null,
+          viewportH: window.innerHeight,
+          docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        };
+      })()`);
+      assert.equal(
+        wrapped1440.questionLineCount,
+        1,
+        `아티팩트처럼 감싼 조건, 1440px — 물음이 한 줄이 아니다(${wrapped1440.questionLineCount}줄로 꺾였다)`,
+      );
+      assert.ok(
+        wrapped1440.arrowBottom != null && wrapped1440.arrowBottom <= wrapped1440.viewportH,
+        `아티팩트처럼 감싼 조건, 1440×900 — 화살표 아래쪽(${wrapped1440.arrowBottom}px)이 뷰포트 높이(${wrapped1440.viewportH}px)를 넘는다`,
+      );
+      assert.equal(wrapped1440.docOverflowsX, false, '아티팩트처럼 감싼 조건, 1440px — 가로 스크롤이 생겼다');
+      await page.send('Emulation.clearDeviceMetricsOverride');
 
       await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
       await sleep(150);

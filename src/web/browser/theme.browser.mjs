@@ -717,3 +717,45 @@ test('관리자 지시(3차) 1번 — 로고 알약 배경(--logo-plate, .app-lo
   }
   await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
 });
+
+// ---------------------------------------------------------------------------
+// [2026-08-18, 관리자 지시(5차) 3번] 헤더 탭 — 로고와의 간격 +10px, 폰트 +20%.
+// ---------------------------------------------------------------------------
+
+/**
+ * 로고(보이는 쪽)와 첫 탭의 실제 렌더 간격(로고 오른쪽 끝 ~ 탭 왼쪽 끝)이
+ * 옛 `var(--space-4)`(16px)보다 정확히 10px 커야 한다(26px). `getBoundingClientRect`
+ * 간격을 재는 이유 — `gap` 속성값을 CSS에서 읽는 것보다, 실제 두 요소
+ * 사이에 그 간격이 렌더로 드러나는지가 더 신뢰할 수 있는 실측이다.
+ */
+test('관리자 지시(5차) 3번 — 로고와 탭 사이 간격이 옛값(16px)보다 정확히 10px 크다(26px)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await emulate(page, { scheme: 'light' });
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+  const gap = await page.evaluate(`(() => {
+    const logo = document.querySelector('.app-logo-light');
+    const tab = document.querySelector('.app-tab-active');
+    const logoRect = logo.getBoundingClientRect();
+    const tabRect = tab.getBoundingClientRect();
+    return tabRect.left - logoRect.right;
+  })()`);
+  const EXPECTED = 16 + 10;
+  assert.ok(
+    Math.abs(gap - EXPECTED) <= 1,
+    `로고-탭 간격(${gap}px)이 기대값(${EXPECTED}px, 옛 16px + 10px)과 1px 넘게 어긋난다`,
+  );
+});
+
+/**
+ * 탭 글자 크기가 옛값(15px)의 1.2배(18px)다.
+ */
+test('관리자 지시(5차) 3번 — 탭 글자 크기가 옛값(15px)의 1.2배(18px)다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const fontSize = await page.evaluate(`getComputedStyle(document.querySelector('.app-tab-active')).fontSize`);
+  const px = Number(fontSize.replace('px', ''));
+  const EXPECTED = 15 * 1.2;
+  assert.ok(
+    Math.abs(px - EXPECTED) <= 0.5,
+    `탭 글자 크기(${fontSize})가 기대값(${EXPECTED}px, 옛 15px × 1.2)과 어긋난다`,
+  );
+});

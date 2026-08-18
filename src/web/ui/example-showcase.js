@@ -119,6 +119,19 @@
  * 으로 들여 완화한다(`.example-showcase-input-block`의 `margin-left`,
  * `styles.css`). 다크 모드에서는 원본(검정 선화)이 다크 배경에 묻혀
  * `filter: invert(1)`로 반전한다(실측, 최종 보고).
+ *
+ * **[2026-08-18, 관리자 지시(4차) 1·2·3·4번] 예시 칸 손질 네 가지.**
+ * 1. 물음+아이콘+입력 세 줄 전체(`.example-showcase-text-col`)를 오른쪽으로
+ *    `8ch` 밀었다(`styles.css`) — 모바일 1열 스택에서는 가운데 정렬이라
+ *    이 이동을 다시 0으로 되돌린다(모바일 미디어쿼리).
+ * 2. 나이/소득/월납입금 문구(`.example-showcase-input-line`)만 −10%
+ *    (28px→25px 데스크톱·20px→18px 모바일) — 물음(`.example-showcase-question`)
+ *    글자 크기는 그대로 둔다. 옛 공용 `font-size` 선언을 클래스별로 갈랐다.
+ * 3. 도넛 위에 「이렇게 배분해보세요」(`example-showcase-visual-heading`) —
+ *    나이/소득/월납입금 문구와 같은 크기 눈금을 쓴다(`styles.css`).
+ * 4. 화살표 아래 「나는 어떻게 배분하지?」(`example-showcase-arrow-caption`) —
+ *    `.example-showcase-arrow-wrap`(애니메이션이 걸린 바로 그 칸) **안에**
+ *    넣어 화살표와 함께 움직인다.
  */
 
 import { el, svgEl } from './dom.js';
@@ -233,6 +246,26 @@ export function exampleInputLineTexts() {
  * 결과를 담지 않으므로(질문일 뿐 값이 아니다) 고정 문자열로 둔다.
  */
 export const EXAMPLE_QUESTION_TEXT = '당신의 소중한 월급, 어디에 넣어야 세금이 가장 적을까요?';
+
+/**
+ * [2026-08-18, 관리자 지시(4차) 1번] man-icon 밑에 적는 페르소나 이름. 세법
+ * 수치도 계산 결과도 아닌 고정 장식 문구다 — 실제 사용자를 가리키지 않고
+ * (개인 식별 가능 정보가 아니다), 예시 페르소나에 이름을 붙여 "누군가의
+ * 이야기"로 읽히게 하려는 소유자 지시를 그대로 옮긴다.
+ */
+export const EXAMPLE_PERSONA_NAME = '김철수씨';
+
+/**
+ * [2026-08-18, 관리자 지시(4차) 3번] 도넛 위 캡션. 계산 결과를 담지 않는
+ * 정적 안내 문구라 고정 문자열로 둔다(물음 텍스트와 같은 근거).
+ */
+export const EXAMPLE_ALLOCATION_HEADING_TEXT = '이렇게 배분해보세요';
+
+/**
+ * [2026-08-18, 관리자 지시(4차) 4번] 화살표 아래(안) 캡션 — 다음 행동을
+ * 부른다. 화살표와 같은 애니메이션 래퍼 안에 그려진다(`exampleShowcaseSection`).
+ */
+export const EXAMPLE_ARROW_CAPTION_TEXT = '나는 어떻게 배분하지?';
 
 /**
  * [2026-08-14, 관리자 지시 6번] 예시 맨 아래의 이동 화살표. 누르면(또는
@@ -360,7 +393,15 @@ function exampleShowcaseSection({ scenario, plan }) {
   // 줄(물음 줄 다음)을 감싼 `.example-showcase-input-block`이 이미지 하나 +
   // 줄 셋을 담는 열을 나란히 둔다. 장식적 이미지(정보가 문장 자체에 이미
   // 있다)이므로 `alt=""` + `aria-hidden="true"`로 스크린리더가 건너뛴다.
-  const inputBlock = el('div', { class: 'example-showcase-input-block' }, [
+  //
+  // [2026-08-18, 관리자 지시(4차) 1번] **아이콘 밑에 「김철수씨」를 붙인다.**
+  // 페르소나에 이름을 준다 — 예시가 "누군가의 이야기"로 읽히게 하려는
+  // 소유자 지시다. 아이콘·이름을 한 열(`example-showcase-input-icon-col`)로
+  // 묶어야 세 줄(`example-showcase-input-lines`) 블록과 나란히 놓인다. 이름은
+  // 세법 수치도 계산 결과도 아닌 고정 장식 문구이므로 `EXAMPLE_PERSONA_NAME`
+  // 상수 하나로 둔다 — man-icon과 마찬가지로 장식(`aria-hidden`은 주지
+  // 않는다, 이름은 스크린리더가 읽어도 되는 실제 텍스트다).
+  const iconCol = el('div', { class: 'example-showcase-input-icon-col' }, [
     el('img', {
       class: 'example-showcase-input-icon',
       src: MAN_ICON_DATA_URI,
@@ -369,6 +410,10 @@ function exampleShowcaseSection({ scenario, plan }) {
       height: MAN_ICON_INTRINSIC_HEIGHT,
       'aria-hidden': 'true',
     }),
+    el('p', { class: 'example-showcase-input-name' }, [EXAMPLE_PERSONA_NAME]),
+  ]);
+  const inputBlock = el('div', { class: 'example-showcase-input-block' }, [
+    iconCol,
     el(
       'div',
       { class: 'example-showcase-input-lines' },
@@ -388,8 +433,25 @@ function exampleShowcaseSection({ scenario, plan }) {
   const amountBlock = el('div', { class: 'example-showcase-amount' }, [
     amountCard(plan, scenario, null, { compactCaption: true, showCaption: false, showComposition: false }),
   ]);
-  const visualCol = el('div', { class: 'example-showcase-visual-col' }, [donut, donutLegend(donutArgs)]);
-  const arrowWrap = el('div', { class: 'example-showcase-arrow-wrap' }, [exampleShowcaseScrollArrow()]);
+  // [2026-08-18, 관리자 지시(4차) 3번] 도넛 위 캡션 — "이렇게 배분해보세요".
+  // 크기는 나이/소득/월납입금 문구(`.example-showcase-input-line`, 2번 지시로
+  // −10%된 값)와 비슷하게 맞춘다 — 별도 눈금을 새로 만들지 않고 같은 CSS
+  // 변수(font-size)를 그대로 상속하도록 같은 규칙 그룹에 선택자를 추가한다
+  // (styles.css `.example-showcase-input-line, .example-showcase-visual-heading`).
+  const visualCol = el('div', { class: 'example-showcase-visual-col' }, [
+    el('p', { class: 'example-showcase-visual-heading' }, [EXAMPLE_ALLOCATION_HEADING_TEXT]),
+    donut,
+    donutLegend(donutArgs),
+  ]);
+  // [2026-08-18, 관리자 지시(4차) 4번] 화살표 아래 "나는 어떻게 배분하지?" —
+  // **애니메이션 래퍼(`.example-showcase-arrow-wrap`) 안에 넣는다**(지시
+  // 원문: "화살표와 같이 움직이게"). 그 래퍼 전체가 위아래로 흔들리므로
+  // (`example-showcase-arrow-bounce`), 안에 든 것은 무엇이든 함께 움직인다 —
+  // 별도 애니메이션을 새로 걸 필요가 없다.
+  const arrowWrap = el('div', { class: 'example-showcase-arrow-wrap' }, [
+    exampleShowcaseScrollArrow(),
+    el('p', { class: 'example-showcase-arrow-caption' }, [EXAMPLE_ARROW_CAPTION_TEXT]),
+  ]);
 
   return el('section', { class: 'example-showcase', 'aria-labelledby': 'example-showcase-question' }, [
     textCol,

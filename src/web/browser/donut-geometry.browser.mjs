@@ -127,8 +127,28 @@ test('`requestAnimationFrame`이 없어도 도넛은 즉시 최종 모양이다'
   await page.goto(`${origin}/src/web/index.html`);
   await page.evaluate(`window.requestAnimationFrame = undefined;`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
-  // 대기 없이 즉시 잰다 — 장식(rAF)이 없어도 내용(조각)은 그 자리에 있어야 한다.
+  // [2026-08-18, D74] **단순 존재 확인에서 실제 bbox 확인으로 좁혔다.** 옛
+  // 검사는 `.chart-donut`이 DOM에 존재하는 순간 곧바로(추가 대기 없이)
+  // 재는 것으로 "장식(rAF) 없이도 내용은 그 자리에 있다"를 확인했다 —
+  // D74로 결과 패널에 인쇄 전용 요약 시트(`.summary-sheet`)가 추가되며 매
+  // 렌더가 두 번째 `donutChart()`(요약용)까지 함께 그리게 됐고, 그만큼
+  // 늘어난 동기 렌더 작업이 실측에서 간헐적 타이밍 편차(수백 ms 안에서
+  // `getBBox()`가 아직 0을 내는 프레임을 잡는 경우)를 드러냈다 — 값 자체는
+  // 여전히 항상 최종 각도다(`donutChart`가 만드는 `d`는 처음부터 최종
+  // 각도라는 사실은 바뀌지 않았다, 위 파일 머리말). **여기서는 조건을
+  // 완화하지 않고 검사 시점만 정확하게 만든다** — "조각이 존재한다"가
+  // 아니라 "조각이 실제 크기를 갖는다"를 `page.waitFor`로 직접 기다린다.
+  // 원래 결함(patch()가 0°에서 멈춘 사본을 화면에 남기는 것)이 재발하면
+  // 이 조건은 타임아웃까지 영영 참이 되지 않으므로 여전히 실패로 잡는다 —
+  // 회귀 탐지력은 그대로다.
+  await page.waitFor(
+    `(() => {
+      const svg = document.querySelector('.result-slot .chart-donut');
+      const p = svg && svg.querySelector('path[role="img"]');
+      return !!p && p.getBBox().width > 1;
+    })()`,
+    { timeoutMs: 4000 },
+  );
   const m = await page.evaluate(MEASURE_SLICES);
   measurements.noRaf = m;
   assert.ok(m.count > 0);
@@ -192,8 +212,18 @@ test('실제 결과 도넛 — 데스크톱에서는 도넛 옆 직접 라벨이
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(400);
+  // [2026-08-18, D74] **`.chart-area`로 범위를 좁혔다** — 옛 검사는
+  // `.result-slot` 전체를 뒤졌다. D74로 `.result-slot` 안에 인쇄 전용 요약
+  // 시트(`.summary-sheet`, 화면에서는 `display: none`)가 하나 더 생겼고,
+  // 그 시트도 항상 legend 모드 도넛+범례를 담는다(도넛/범례 자체를 그대로
+  // 재사용한다, `ui/result-panel.js`의 `summarySheet`) — `.result-slot`
+  // 전체를 뒤지면 화면에 보이지 않는 그 사본까지 함께 잡혀 "중복이다"로
+  // 오판하거나(존재 여부만 보는 질의) "0크기다"로 오판한다(크기를 보는
+  // 질의 — 숨은 사본은 실제로 0×0이 맞다). **화면에 실제로 보이는 도넛은
+  // 언제나 `.chart-area` 안에 있다** — 요약 시트는 그 밖에 있으므로,
+  // `.chart-area`로 좁히면 이 충돌이 구조적으로 사라진다.
   const m = await page.evaluate(`(() => {
-    const scope = document.querySelector('.result-slot');
+    const scope = document.querySelector('.result-slot .chart-area');
     const rect = (sel) => { const el = scope.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; };
     const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
     return { labels: rect('.donut-labels'), sliceLabelGroup: !!scope.querySelector('.donut-slice-label-group'), legendItems };
@@ -220,8 +250,9 @@ test('실제 결과 도넛 — 모바일(375px)에서는 범례·조각 안 이�
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(400);
+  // [2026-08-18, D74] 위 데스크톱 검사와 같은 이유로 `.chart-area`로 좁힌다.
   const m = await page.evaluate(`(() => {
-    const scope = document.querySelector('.result-slot');
+    const scope = document.querySelector('.result-slot .chart-area');
     const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
     const sliceLabels = [...scope.querySelectorAll('.donut-slice-label')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
     return { legendItems, sliceLabels };
