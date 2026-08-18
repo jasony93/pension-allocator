@@ -43,6 +43,17 @@ import { openApp, attachSandboxedFrame, skipWithoutChrome, sleep, FILL_REQUIRED_
  * 비교·계좌별 세제혜택 막대(`AccountBenefitStrip`)는 이제 인쇄에 **없다.**
  * 아래에서 옛 검사 이름 옆에 "[뒤집힘]"을 달아 어떤 것이 방향을 바꿨는지
  * 표시한다 — 검사 자체는 지우지 않았고, 단언(assert)의 방향만 반대다.
+ *
+ * **[2026-08-18, 관리자 지시(6차) 2·3번, D75] 두 번째 뒤집힘 — 입력값이
+ * 요약에 들어가고, PDF가 PNG와 같은 SVG 조립기 하나에서 나온다.** 소유자가
+ * D74의 "요약에는 원시 입력이 없다"는 유보를 명시로 덮어(D75) 도넛 오른쪽에
+ * 입력값(생년월일·총급여액·월 납입액 등)을 적으라고 지시했다 — "[뒤집힘,
+ * D75]"를 단 검사들이 그것을 확인한다. 같은 회차에 `ui/result-panel.js`의
+ * `summarySheet`가 더는 `donutChart`/`<table>` DOM을 직접 조립하지 않고
+ * `ui/summary-image.js`의 `buildSummarySvgMarkup`(PNG 내보내기가 쓰는 바로
+ * 그 조립기)이 낸 SVG를 그대로 삽입한다 — PDF·PNG가 갈릴 자리가 구조로
+ * 없어졌다는 것을 "[신설, D75]" 검사들이 실측(`Page.printToPDF` 포함)으로
+ * 확인한다.
  */
 
 let app;
@@ -68,7 +79,14 @@ test('[뒤집힘, D74] 「요약 저장」 버튼 둘(이미지·PDF) + 「내 �
   assert.deepEqual(labels, ['이미지로 저장', 'PDF로 저장', '내 결과 공유하기']);
 });
 
-test('인쇄 미디어에서 입력 패널이 통째로 사라진다 — 입력값이 인쇄물에 실릴 방법이 없다', { skip: skipWithoutChrome }, async () => {
+test('[뒤집힘, D75] 인쇄 미디어에서 입력 패널(`.input-slot`) 자체는 여전히 사라지지만, 요약 시트에는 이제 생년월일·총급여액이 보인다', { skip: skipWithoutChrome }, async () => {
+  // 옛(D74) 검사 이름은 "입력 패널이 통째로 사라진다 — 입력값이 인쇄물에
+  // 실릴 방법이 없다"였다. **D75가 그 마지막 절반을 명시로 뒤집었다** —
+  // 소유자가 도넛 오른쪽에 입력값을 적으라고 지시했고(관리자 지시(6차)
+  // 2번), 받아들이는 근거는 "요약은 사용자가 자기 기기에 저장하는 자기
+  // 파일"이라는 것이다(D75). **`.input-slot`(원본 `<input>`이 실제로
+  // 담긴 자리) 자체가 사라진다는 것은 여전히 참이다** — D75가 뒤집은 것은
+  // "값이 어디에도 없다"이지 "입력 패널이 안 보인다"가 아니다.
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
@@ -87,21 +105,19 @@ test('인쇄 미디어에서 입력 패널이 통째로 사라진다 — 입력�
     assert.equal(layout.resultSlotOverflow, 'visible', 'overflow가 풀리지 않으면 뷰포트 높이로 잘린다');
     assert.equal(layout.saveShareDisplay, 'none', '인쇄된 종이 위의 "PDF로 저장" 버튼은 뜻이 없다');
 
-    // 화면에 실제로 값을 쳐 넣은 문자열이 인쇄 레이아웃에서도 안 보이는지 —
-    // `.input-slot`이 `display:none`이면 `innerText`에도 안 잡힌다(그려지지
-    // 않는 텍스트는 innerText가 세지 않는다). `.result-slot`만 살아 있는
-    // 상태에서 다시 확인한다.
-    //
-    // **월 납입 여력(500,000원)은 이 목록에 없다.** 배분액 합계가 곧 월 납입
-    // 여력이라 계좌별 배분 행에 같은 숫자가 정당하게 나타날 수 있다(입력을
-    // 그대로 옮긴 것이 아니라 배분 **결과**다) — screens.md 9절이 이미
-    // "배분 금액의 합계로 월 납입 여력이 추정될 수 있습니다"로 못박아 둔
-    // 받아들여진 위험이다. 여기서는 계산 자체에 결코 등장할 수 없는
-    // 값(생년월일·총급여액)만 "새면 안 되는 값"으로 잰다.
+    // [뒤집힘, D75] `.result-slot`의 나머지(요약 시트 밖)는 여전히 안
+    // 보이므로, `.result-slot`에 실제로 렌더된 텍스트는 곧 요약 시트의
+    // 텍스트다. 생년월일(FILL_REQUIRED_FIELDS의 `1980-01-01`, 마스킹
+    // 형식)과 총급여액(같은 픽스처의 `6000`만원 → `6,000만원`으로 표시,
+    // `ui/summary-data.js`의 `manwonDisplayText`)이 **이제는 있어야 한다.**
     const resultText = await page.evaluate(`document.querySelector('.result-slot').innerText`);
-    for (const secret of ['1980', '19800101', '60,000,000']) {
-      assert.ok(!resultText.includes(secret), `인쇄 레이아웃에 입력값이 보입니다: ${secret}`);
-    }
+    assert.ok(resultText.includes('1980-01-01'), `요약 시트에 생년월일이 보이지 않습니다: ${JSON.stringify(resultText)}`);
+    assert.ok(resultText.includes('6,000만원'), `요약 시트에 총급여액이 보이지 않습니다: ${JSON.stringify(resultText)}`);
+    // **원 단위로 환산한 총급여(60,000,000원)는 여전히 어디에도 없다** —
+    // D75가 되비추는 것은 사용자가 화면에서 본 것과 같은 단위(만원)이지,
+    // 계산에 쓰인 원 단위 값이 아니다(`ui/summary-data.js`의
+    // `manwonDisplayText` 머리말).
+    assert.ok(!resultText.includes('60,000,000'), `요약 시트에 원 단위로 환산한 총급여가 보입니다: ${JSON.stringify(resultText)}`);
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }
@@ -127,6 +143,139 @@ test('인쇄 미디어에서도 도넛(SVG)이 실제 크기를 유지한다', {
     assert.ok(svg.paths > 0, '도넛 조각 path가 없습니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+});
+
+/**
+ * [신설, 2026-08-18, 관리자 지시(6차) 2·3번, D75] 인쇄 미디어에서 도넛 조각
+ * 라벨(이름+비율)과 입력값 블록이 **실제로 렌더된 위치·크기**를 갖는지
+ * 잰다. `ui/print.js` 머리말이 경계하는 "화면에서 통과하는 것과 실제
+ * 산출물이 다르다" 부류의 결함은 대부분 **print 시점에 DOM을 다시
+ * 바꾸는 로직**(`beforeprint`에서 `<details>`를 여는 것 같은)에서
+ * 났었다 — 이 SVG는 정적으로(스토어가 렌더할 때 이미) DOM에 붙으므로
+ * 그 위험이 구조적으로 없지만, 그래도 `Emulation.setEmulatedMedia`가
+ * 실제 인쇄 CSS를 그대로 적용한 상태에서 잰다는 점에서 이 파일의 다른
+ * 인쇄 검사들과 같은 신뢰 수준이다.
+ */
+test('[신설, D75] 인쇄 미디어에서 도넛 조각 라벨(이름+비율)과 입력값 블록이 실제 위치·크기를 갖는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setEmulatedMedia', { media: 'print' });
+  try {
+    const m = await page.evaluate(`(() => {
+      const svg = document.querySelector('.summary-sheet svg');
+      if (!svg) return null;
+      const texts = [...svg.querySelectorAll('text')].map((t) => ({
+        text: t.textContent,
+        rect: (() => { const r = t.getBoundingClientRect(); return { width: r.width, height: r.height, left: r.left }; })(),
+      }));
+      return {
+        allText: texts.map((t) => t.text),
+        // 조각 라벨은 이름+비율 두 tspan을 한 text 노드에 담으므로 textContent가
+        // "ISA100%"처럼 붙어 나온다(summary-image.js의 sliceInlineLabelsMarkup)
+        // — 전체 일치가 아니라 부분 일치로 찾는다.
+        pctLabelRects: texts.filter((t) => /\\d+%/.test(t.text)).map((t) => t.rect),
+        inputsHeadingRect: texts.find((t) => t.text === '입력값')?.rect ?? null,
+        birthDateRect: texts.find((t) => t.text === '1980-01-01')?.rect ?? null,
+      };
+    })()`);
+    assert.ok(m, '요약 시트 SVG를 찾지 못했습니다');
+    assert.ok(m.pctLabelRects.length > 0, `도넛 조각 비율 라벨(예: "25%")이 SVG 안에 없습니다: ${JSON.stringify(m.allText)}`);
+    for (const r of m.pctLabelRects) {
+      assert.ok(r.width > 0 && r.height > 0, `조각 비율 라벨이 0크기로 렌더됐습니다: ${JSON.stringify(r)}`);
+    }
+    assert.ok(m.inputsHeadingRect, '입력값 블록 제목("입력값")이 SVG 안에 없습니다');
+    assert.ok(m.inputsHeadingRect.width > 0 && m.inputsHeadingRect.height > 0, `입력값 블록 제목이 0크기로 렌더됐습니다: ${JSON.stringify(m.inputsHeadingRect)}`);
+    assert.ok(m.birthDateRect, '생년월일 값("1980-01-01")이 SVG 안에 없습니다');
+    // 입력값 블록이 도넛 **오른쪽**에 있다 — 도넛 라벨(조각 안/밖)보다
+    // 항상 더 오른쪽 x좌표에서 시작해야 한다(관리자 지시 원문 "도넛
+    // 오른쪽에 사용자가 입력한 값을 적어라").
+    const donutLabelsMaxLeft = Math.max(...m.pctLabelRects.map((r) => r.left));
+    assert.ok(
+      m.inputsHeadingRect.left > donutLabelsMaxLeft,
+      `입력값 블록(x=${m.inputsHeadingRect.left})이 도넛 조각 라벨(최댓값 x=${donutLabelsMaxLeft})보다 오른쪽에 있지 않습니다`,
+    );
+  } finally {
+    await page.send('Emulation.setEmulatedMedia', { media: '' });
+  }
+});
+
+/**
+ * [신설, 2026-08-18, 관리자 지시(6차) 3번, D75] **실제 `Page.printToPDF`
+ * 산출물**에서 입력값 블록이 그려진 자리(도넛 오른쪽, `.summary-sheet
+ * svg`의 라이브 좌표를 그대로 페이지 좌표로 스케일한 영역)에 실제로 잉크
+ * (흰 배경이 아닌 화소)가 있는지 화소로 확인한다. computed style·
+ * `getBoundingClientRect()`는 `Page.printToPDF`가 실제로 무엇을 그리는지
+ * 보증하지 않는다는 것이 이 파일의 핵심 경계 대상이다(머리말 ①·②) —
+ * 그래서 여기서는 실제 PDF를 뽑아 스크린샷으로 화소를 읽는다(위
+ * "printBackground:false" 검사와 같은 우회 기법).
+ */
+test('[신설, D75, Page.printToPDF 실측] 실제 PDF 화소에도 입력값 블록 자리에 잉크가 있다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+
+  const { data: pdfB64 } = await page.send('Page.printToPDF', {
+    printBackground: true,
+    landscape: false,
+    paperWidth: 8.27,
+    paperHeight: 11.7,
+  });
+  const { launchChrome, openPage } = await import('./harness.mjs');
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmpPdf = path.join(os.tmpdir(), `print-inputs-block-check-${Date.now()}.pdf`);
+  await fs.writeFile(tmpPdf, Buffer.from(pdfB64, 'base64'));
+  try {
+    const chrome = await launchChrome();
+    try {
+      let foundInk = false;
+      // 요약 시트는 첫 페이지에 시작한다(짧은 픽스처 — 계좌 셋 + 입력값
+      // 여섯 줄이라도 A4 한 장을 넘기지 않는다) — 그래도 페이지 나눔이
+      // 바뀔 여지를 두어 3페이지까지 본다(위 "printBackground:false"
+      // 검사와 같은 방어).
+      for (let pageNo = 1; pageNo <= 3 && !foundInk; pageNo += 1) {
+        const fileUrl = `file:///${tmpPdf.replace(/\\/g, '/')}#page=${pageNo}&zoom=150`;
+        const pdfPage = await openPage(chrome.browserWsUrl, fileUrl);
+        await sleep(1200);
+        const { data: shotB64 } = await pdfPage.send('Page.captureScreenshot', { format: 'png' });
+        foundInk = await pdfPage.evaluate(`(async () => {
+          const img = new Image();
+          const loaded = new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+          img.src = 'data:image/png;base64,${shotB64}';
+          await loaded;
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          // 스크린샷 전체 폭 중 오른쪽 55~95% 대역(입력값 블록이 도넛
+          // 오른쪽에 있으므로 왼쪽 절반은 건너뛴다)에서, 흰색(배경)이
+          // 아닌 화소가 있는지 훑는다 — "이 대역에 아무것도 안 그려지지
+          // 않았다"만 아니면 된다(정확한 글자를 픽셀로 읽지는 않는다,
+          // 그건 이 검사의 목적이 아니다 — 구조적 위치 확인이 목적이다).
+          const { width, height, data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const xStart = Math.floor(width * 0.55);
+          const xEnd = Math.floor(width * 0.95);
+          const yStart = Math.floor(height * 0.05);
+          const yEnd = Math.floor(height * 0.55);
+          for (let y = yStart; y < yEnd; y += 3) {
+            for (let x = xStart; x < xEnd; x += 3) {
+              const i = (y * width + x) * 4;
+              const r = data[i], g = data[i + 1], b = data[i + 2];
+              if (!(r > 250 && g > 250 && b > 250)) return true; // 흰 배경이 아닌 화소를 찾았다
+            }
+          }
+          return false;
+        })()`);
+        pdfPage.close();
+      }
+      assert.ok(
+        foundInk,
+        '실제 PDF 화소(1~3페이지)의 오른쪽 대역(도넛 오른쪽, 입력값 블록이 있어야 할 자리)에서 흰 배경이 아닌 화소를 찾지 못했습니다',
+      );
+    } finally {
+      await chrome.close();
+    }
+  } finally {
+    await fs.rm(tmpPdf, { force: true });
   }
 });
 
@@ -168,28 +317,33 @@ test('[뒤집힘, D74] 인쇄 미디어에서 `AccountBenefitStrip`이 더 이�
   }
 });
 
-test('[뒤집힘, D74] 인쇄 미디어에서 헤드라인 카드(`.amount-card`, 사용자 자신의 실제 결과)는 숨고, 요약 시트의 총 절세액 블록이 대신 보인다', { skip: skipWithoutChrome }, async () => {
+test('[뒤집힘, D74·D75] 인쇄 미디어에서 헤드라인 카드(`.amount-card`, 사용자 자신의 실제 결과)는 숨고, 요약 SVG 안의 총 절세액 텍스트가 대신 보인다', { skip: skipWithoutChrome }, async () => {
   // 옛 검사("남은 고지 요소가 모두 실제로 렌더된다")는 `.amount-card`가
   // 인쇄에서 보이는 것을 요구했다 — 그때는 인쇄물이 결과 패널 전체였다.
-  // 지금은 `.amount-card`가 `.result-body`의 요약 시트 밖 자식이라 숨고,
-  // 같은 값을 담은 `.summary-sheet-total`이 대신 그 자리를 진다.
+  // D74로 `.amount-card`가 `.result-body`의 요약 시트 밖 자식이라 숨고,
+  // 같은 값을 담은 `.summary-sheet-total`(DOM 요소)이 대신 그 자리를 졌다.
+  //
+  // **[2026-08-18, 관리자 지시(6차) 3번, D75로 다시 뒤집힌다]** `.summary-sheet-total`
+  // 이라는 DOM 요소 자체가 없어졌다 — `summarySheet`가 이제
+  // `buildSummarySvgMarkup`이 낸 SVG를 통째로 삽입하고, 총 절세액은 그
+  // SVG 안의 `<text font-size="44">`(`ui/summary-image.js`의
+  // `totalTaxSavingsMarkup`, `valueText` 크기)다. class가 아니라 SVG
+  // 속성으로 그 자리를 찾는다.
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
     const state = await page.evaluate(`(() => {
-      const box = (sel) => {
-        const el = document.querySelector(sel);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { display: getComputedStyle(el).display, width: r.width, height: r.height };
-      };
-      return { amountCard: box('.amount-card'), summaryTotal: box('.summary-sheet-total') };
+      const amountCard = document.querySelector('.amount-card');
+      const amountCardBox = amountCard ? { display: getComputedStyle(amountCard).display } : null;
+      const valueText = document.querySelector('.summary-sheet svg text[font-size="44"]');
+      const r = valueText ? valueText.getBoundingClientRect() : null;
+      return { amountCardBox, summaryValueRect: r ? { width: r.width, height: r.height } : null, summaryValueText: valueText?.textContent ?? null };
     })()`);
-    assert.ok(state.amountCard, '.amount-card가 DOM에 없습니다 — 검사 전제가 깨졌습니다');
-    assert.equal(state.amountCard.display, 'none', '.amount-card가 인쇄에서 여전히 보입니다 — D74가 요약 범위 밖으로 뺐다');
-    assert.ok(state.summaryTotal, '.summary-sheet-total이 인쇄 레이아웃에 없습니다');
-    assert.notEqual(state.summaryTotal.display, 'none', '.summary-sheet-total이 인쇄에서 숨어 있습니다');
-    assert.ok(state.summaryTotal.height > 0, '.summary-sheet-total이 0 높이입니다');
+    assert.ok(state.amountCardBox, '.amount-card가 DOM에 없습니다 — 검사 전제가 깨졌습니다');
+    assert.equal(state.amountCardBox.display, 'none', '.amount-card가 인쇄에서 여전히 보입니다 — D74가 요약 범위 밖으로 뺐다');
+    assert.ok(state.summaryValueRect, '요약 SVG 안에서 총 절세액 텍스트(font-size 44)를 찾지 못했습니다');
+    assert.ok(state.summaryValueRect.width > 0 && state.summaryValueRect.height > 0, `총 절세액 텍스트가 0크기입니다: ${JSON.stringify(state.summaryValueRect)}`);
+    assert.ok(state.summaryValueText && state.summaryValueText.includes('원'), `총 절세액 텍스트 내용이 금액처럼 보이지 않습니다: ${state.summaryValueText}`);
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }
@@ -236,18 +390,28 @@ test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 인�
   }
 });
 
-test('[뒤집힘, D74] printBackground:false에서 옛 위젯 배경은 더 이상 나타나지 않고, 요약 시트의 범례 스와치만 살아남는다', { skip: skipWithoutChrome }, async () => {
+test('[뒤집힘, D74·D75] printBackground:false에서 옛 위젯 배경은 나타나지 않고, `print-color-adjust: exact` 예외 자체가 이제 하나도 없다', { skip: skipWithoutChrome }, async () => {
   // 옛 검사(관리자 지시 2026-08-13)는 `.account-benefit-strip` 등 다섯
   // 선택자가 `print-color-adjust: exact`를 갖고 실제 PDF 화소에도 그
   // 배경이 남는 것을 요구했다. D74로 그 요소들 전부가 인쇄 범위 밖으로
-  // 빠졌으므로(위 "AccountBenefitStrip이 더 이상 보이지 않는다" 검사),
-  // **`print-color-adjust: exact` 선언 자체도 `styles.css`에서 지웠다**
-  // (안 보이는 요소에 색 보존 규칙을 남겨 둘 이유가 없다) — 여기서는 그
-  // 부재를 계산값으로 확인한다. **남는 것은 요약 시트 자신의 범례 스와치
-  // (`.donut-legend-swatch`)뿐**이다.
+  // 빠졌고(위 "AccountBenefitStrip이 더 이상 보이지 않는다" 검사),
+  // **`print-color-adjust: exact` 선언 자체도 `styles.css`에서 지웠다.**
+  //
+  // **[2026-08-18, 관리자 지시(6차) 3번, D75로 한 번 더 뒤집힌다]** D74
+  // 시절 이 검사는 "요약 시트의 범례 스와치(`.donut-legend-swatch`)만은
+  // 여전히 `exact`여야 한다"고 기대했다 — 그때는 `summarySheet`가 실제
+  // 결과 화면과 같은 `donutLegend` DOM 컴포넌트(CSS `background`로 칠하는
+  // `<div>` 스와치)를 재사용했기 때문이다. 지금은 `summarySheet`가
+  // `buildSummarySvgMarkup`(PNG와 공유하는 조립기)이 낸 SVG를 그대로
+  // 삽입한다 — 범례 스와치도 `<rect fill="#...">`(SVG 속성)로 바뀌었고,
+  // 도넛 조각과 마찬가지로 `economy`(기본값)에서도 살아남는다(아래 (b)가
+  // 화소로 확인한다) — **그 값을 지키려고 걸어 둘 CSS 예외 자체가
+  // 필요 없어졌다.** `.donut-legend-swatch` 클래스는 이제 `.summary-sheet`
+  // 안 어디에도 없다.
   const { page } = app;
 
-  // (a) print-color-adjust 계산값.
+  // (a) print-color-adjust 계산값 — 옛 위젯 셋은 여전히 `exact`가 아니어야
+  // 하고, `.summary-sheet` 안에는 `.donut-legend-swatch` 클래스 자체가 없다.
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
     const rows = await page.evaluate(`(() => {
@@ -261,7 +425,8 @@ test('[뒤집힘, D74] printBackground:false에서 옛 위젯 배경은 더 이�
         accountBenefitStrip: sel('.account-benefit-strip'),
         benefitDot: sel('.benefit-dot'),
         allocBarTrack: sel('.alloc-bar-track'),
-        summaryLegendSwatch: sel('.summary-sheet .donut-legend-swatch'),
+        summaryLegendSwatchExists: !!document.querySelector('.summary-sheet .donut-legend-swatch'),
+        summarySvgRectCount: document.querySelectorAll('.summary-sheet svg rect').length,
       };
     })()`);
     // 옛 위젯 셋 — 요소 자체는 여전히 DOM에 있다(화면에서는 보이므로),
@@ -271,9 +436,8 @@ test('[뒤집힘, D74] printBackground:false에서 옛 위젯 배경은 더 이�
       assert.ok(!row.missing, `${name}을 찾지 못했습니다 — 검사 전제가 깨졌습니다`);
       assert.notEqual(row.value, 'exact', `${name}의 print-color-adjust가 여전히 "exact"입니다 — D74로 인쇄 범위 밖이라 더 이상 걸릴 이유가 없다`);
     }
-    // 요약 시트의 범례 스와치 — 여기는 여전히 exact여야 한다(살아남는 값).
-    assert.ok(!rows.summaryLegendSwatch.missing, '.summary-sheet .donut-legend-swatch를 찾지 못했습니다');
-    assert.equal(rows.summaryLegendSwatch.value, 'exact', '요약 시트 범례 스와치의 print-color-adjust가 exact가 아닙니다');
+    assert.equal(rows.summaryLegendSwatchExists, false, 'D75 — .summary-sheet 안에 옛 DOM 범례 스와치(.donut-legend-swatch)가 여전히 있습니다');
+    assert.ok(rows.summarySvgRectCount > 0, '요약 시트 SVG 안에 <rect>(범례 스와치·배경)가 하나도 없습니다 — 검사 전제가 깨졌습니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }
@@ -415,15 +579,27 @@ test('[신설, D74] 인쇄 미디어에서 「다른 배분 비교」(`.stackbar
   }
 });
 
-test('[신설, D74] 요약 시트 자신에도 원시 입력(생년월일·총급여)이 없다', { skip: skipWithoutChrome }, async () => {
+test('[뒤집힘, D75] 요약 시트 자신에 이제 입력값이 있다 — 도넛 오른쪽 입력값 블록', { skip: skipWithoutChrome }, async () => {
+  // 옛 이름은 "[신설, D74] 요약 시트 자신에도 원시 입력(생년월일·총급여)이
+  // 없다"였다. 소유자가 D75로 그 유보를 명시로 덮었다 — 이 검사는 그
+  // 뒤집힘을 확인한다: (1) 입력값 블록 제목("입력값")과 생년월일·총급여액이
+  // 요약 시트에 실제로 있고, (2) `form`을 켜지 않은 값(ISA 예상 수익률 — D42
+  // 픽스처는 이 값을 켜지 않는다)은 여전히 줄 자체가 없다(D75 선 ①).
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
     const summaryText = await page.evaluate(`document.querySelector('.summary-sheet').innerText`);
     assert.ok(summaryText.length > 0, '요약 시트가 비어 있습니다 — 검사 전제가 깨졌습니다');
-    for (const secret of ['1980', '19800101', '60,000,000']) {
-      assert.ok(!summaryText.includes(secret), `요약 시트에 입력값이 보입니다: ${secret}`);
-    }
+    assert.ok(summaryText.includes('입력값'), '요약 시트에 입력값 블록 제목이 없습니다');
+    assert.ok(summaryText.includes('1980-01-01'), '요약 시트에 생년월일이 없습니다');
+    assert.ok(summaryText.includes('6,000만원'), '요약 시트에 총급여액이 없습니다');
+    // 이 픽스처(FILL_REQUIRED_FIELDS)는 ISA 예상 수익률을 켜지 않는다 —
+    // D75 선 ①(입력하지 않은 값은 줄 자체가 없다)이 지켜졌는지 여기서 잰다.
+    assert.ok(!summaryText.includes('수익 성격'), 'ISA 수익률을 안 켰는데 수익 성격 줄이 있습니다');
+    assert.ok(!summaryText.includes('정산 기간'), 'ISA 수익률을 안 켰는데 정산 기간 줄이 있습니다');
+    // 원 단위 환산값은 여전히 없다 — D75가 되비추는 것은 화면에서 입력한
+    // 단위(만원)이지 계산에 쓰인 원 단위가 아니다.
+    assert.ok(!summaryText.includes('60,000,000'), '요약 시트에 원 단위로 환산한 총급여가 보입니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }

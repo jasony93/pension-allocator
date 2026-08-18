@@ -1,11 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSummaryData } from './summary-data.js';
+import { buildSummaryData, buildSummaryInputs } from './summary-data.js';
 
 /**
- * D74 6번 — 요약 내보내기에는 원시 입력(생년월일·총급여)이 없어야 한다는
- * 조건과, 절세액이 가정 성분을 담으면 조건절이 함께 있어야 한다는 D38
+ * D74 6번 — 절세액이 가정 성분을 담으면 조건절이 함께 있어야 한다는 D38
  * 계열 조건을 여기서 검사로 물린다.
+ *
+ * **[2026-08-18, 관리자 지시(6차) 2번, D75] 원시 입력 검사가 뒤집혔다.** 옛
+ * 검사(맨 아래, 이름 그대로 남겨 두었다)는 "원시 입력(생년월일·총급여)이
+ * 반환값 어디에도 없다"를 요구했다 — `form`을 받지 않던 시절의 계약이다.
+ * 소유자가 D75로 그 유보를 명시로 덮어 도넛 오른쪽에 입력값을 적으라고
+ * 지시했으므로, 이제는 그 반대(「입력값이 `inputs` 블록에 있고, 입력 안
+ * 한 값은 없다」)가 참이어야 한다 — 새 테스트들이 그것을 확인한다. 옛
+ * 검사는 `form`을 넘기지 않는 호출(`form` 생략, 인자 3개)에서는 여전히
+ * 참이다 — 그 경로가 D74 시절의 안전을 그대로 보존한다는 뜻이므로 지우지
+ * 않고 그 조건을 명시한 이름으로 남긴다.
  */
 
 const baseScenario = {
@@ -51,16 +60,22 @@ function basePlan(overrides = {}) {
   };
 }
 
-test('buildSummaryData의 함수 시그니처 자체가 원시 프로필(생년월일·총급여)에 접근할 길을 막는다 — 인자가 plan·scenario·annualReturnRate 셋뿐이다', () => {
-  // `Function.length`는 기본값 있는 매개변수(annualReturnRate = null)를 세지 않는다
-  // (언어 스펙) — 그래서 여기서는 2(plan·scenario)가 맞다. 네 번째 인자
-  // (예: response 전체나 profile)가 새로 생기면 이 값이 바뀐다.
-  assert.equal(buildSummaryData.length, 2, 'response/profile 전체를 받는 새 인자가 생기면 이 검사가 깨진다');
+test('[뒤집힘, D75] buildSummaryData가 이제 4번째 인자 form을 받는다 — .length 자체는 그대로다(둘 다 기본값이 있어서다)', () => {
+  // `Function.length`는 기본값 있는 매개변수를 세지 않는다(언어 스펙) — 옛
+  // `annualReturnRate = null`도 이미 세지 않았고, D75로 추가된 `form = null`도
+  // 마찬가지로 기본값이 있어 이 숫자를 움직이지 않는다. **그래서 이 검사가
+  // 지키던 옛 전제("함수 시그니처 자체가 원시 프로필 접근을 막는다")는 더는
+  // 참이 아니다** — `form`을 넘기면 실제로 원시 입력(생년월일·총급여 등)이
+  // 반환값(`inputs`)에 실린다. 그 사실은 아래 "D75 —" 이름의 검사들이
+  // 직접 확인한다. 이 검사가 남기는 것은 오직 "인자 개수가 2로 유지된다"는
+  // 사실 하나뿐이다 — 다섯 번째 인자가 기본값 없이 새로 생기면 이 값이
+  // 비로소 바뀐다.
+  assert.equal(buildSummaryData.length, 2);
 });
 
-test('반환값 최상위 키가 D74가 정한 다섯 항목(도넛·계좌·총 절세액·과세연도)에 정확히 대응한다 — 다른 것이 몰래 붙지 않는다', () => {
+test('반환값 최상위 키가 D74가 정한 다섯 항목 + D75의 inputs에 정확히 대응한다 — 다른 것이 몰래 붙지 않는다', () => {
   const data = buildSummaryData(basePlan(), baseScenario, null);
-  assert.deepEqual(Object.keys(data).sort(), ['accounts', 'donut', 'taxYear', 'totalTaxSavings']);
+  assert.deepEqual(Object.keys(data).sort(), ['accounts', 'donut', 'inputs', 'taxYear', 'totalTaxSavings']);
 });
 
 test('계좌별 행에 월 납입액·연 환산·납입 잔여 한도가 모두 있다 — 다른 키가 없다', () => {
@@ -129,10 +144,117 @@ test('대안 미리보기(is_baseline: false)는 기본안 대비 차이를 담�
   assert.equal(data.totalTaxSavings.includesAssumption, false);
 });
 
-test('원시 입력(생년월일·총급여)을 나타내는 키·문자열이 반환값 어디에도 없다', () => {
+test('form을 넘기지 않으면(옛 D74 호출부) 여전히 원시 입력이 반환값 어디에도 없다 — inputs는 빈 배열이다', () => {
   const data = buildSummaryData(basePlan(), baseScenario, null);
+  assert.deepEqual(data.inputs, []);
   const serialized = JSON.stringify(data);
   for (const forbidden of ['birth', 'salary', 'profile', '생년월일', '총급여']) {
     assert.ok(!serialized.toLowerCase().includes(forbidden.toLowerCase()), `요약 데이터에 금지어 "${forbidden}"가 있습니다`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-18, 관리자 지시(6차) 2번, D75] 도넛 오른쪽 입력값 블록 —
+// `buildSummaryInputs`. 여기서부터가 D74의 "원시 입력 없음" 검사를
+// 뒤집는 자리다: 이제 `form`을 넘기면 D75가 지정한 여섯 항목이 실제로
+// `inputs`에 실려야 하고, **입력하지 않은 항목은 줄 자체가 없어야 한다.**
+// ---------------------------------------------------------------------------
+
+function baseFilledForm(overrides = {}) {
+  return {
+    birthDate: '1980-01-01',
+    currentSalary: '6000',
+    monthlyCapacity: '50',
+    isaReturnEnabled: false,
+    isaReturnRatePercent: '',
+    isaIncomeCharacter: null,
+    isaSettlementYears: '',
+    ...overrides,
+  };
+}
+
+test('D75 — form이 없으면 buildSummaryInputs는 빈 배열을 낸다', () => {
+  assert.deepEqual(buildSummaryInputs(null), []);
+  assert.deepEqual(buildSummaryInputs(undefined), []);
+});
+
+test('D75 — 생년월일·총급여액·월 납입액 셋을 채우면(ISA 수익률은 안 켠 채) 그 셋만 정확히 순서대로 나온다', () => {
+  const inputs = buildSummaryInputs(baseFilledForm());
+  assert.deepEqual(
+    inputs.map((i) => i.key),
+    ['birth_date', 'current_salary', 'monthly_capacity'],
+  );
+  assert.equal(inputs.find((i) => i.key === 'birth_date').valueText, '1980-01-01');
+  assert.equal(inputs.find((i) => i.key === 'current_salary').valueText, '6,000만원');
+  assert.equal(inputs.find((i) => i.key === 'monthly_capacity').valueText, '월 50만원');
+  for (const i of inputs) assert.ok(i.label && i.label.length > 0, `${i.key} 줄에 라벨이 없습니다`);
+});
+
+test('D75 — 입력하지 않은 값은 줄 자체가 없다(빈 문자열·null 모두)', () => {
+  const inputs = buildSummaryInputs(baseFilledForm({ currentSalary: '', monthlyCapacity: null }));
+  assert.deepEqual(
+    inputs.map((i) => i.key),
+    ['birth_date'],
+    '총급여액·월 납입액을 비웠는데 그 줄이 남아 있습니다',
+  );
+});
+
+test('D75 — ISA 예상 수익률을 켜고 셋을 모두 채우면 여섯 줄 전부가, 순서대로 나온다', () => {
+  const inputs = buildSummaryInputs(
+    baseFilledForm({
+      isaReturnEnabled: true,
+      isaReturnRatePercent: '5.5',
+      isaIncomeCharacter: 'interest_dividend',
+      isaSettlementYears: '3',
+    }),
+  );
+  assert.deepEqual(
+    inputs.map((i) => i.key),
+    ['birth_date', 'current_salary', 'monthly_capacity', 'isa_return_rate', 'isa_income_character', 'isa_settlement_years'],
+  );
+  assert.equal(inputs.find((i) => i.key === 'isa_return_rate').valueText, '연 5.5%');
+  assert.equal(inputs.find((i) => i.key === 'isa_income_character').valueText, '이자·배당처럼 받는 형태');
+  assert.equal(inputs.find((i) => i.key === 'isa_settlement_years').valueText, '3년');
+});
+
+test('D75 — ISA 예상 수익률을 켰어도 정산 기간을 비웠으면 그 줄만 빠진다(항목별 판정, 토글 단위가 아니다)', () => {
+  const inputs = buildSummaryInputs(
+    baseFilledForm({ isaReturnEnabled: true, isaReturnRatePercent: '5.5', isaIncomeCharacter: 'interest_dividend', isaSettlementYears: '' }),
+  );
+  assert.deepEqual(
+    inputs.map((i) => i.key),
+    ['birth_date', 'current_salary', 'monthly_capacity', 'isa_return_rate', 'isa_income_character'],
+    '정산 기간을 비웠는데 그 줄이 남아 있습니다',
+  );
+});
+
+test('D75 — ISA 예상 수익률을 켜지 않았으면 수익률·수익 성격·정산 기간을 채워도 세 줄 모두 나오지 않는다', () => {
+  const inputs = buildSummaryInputs(
+    baseFilledForm({
+      isaReturnEnabled: false,
+      isaReturnRatePercent: '5.5',
+      isaIncomeCharacter: 'interest_dividend',
+      isaSettlementYears: '3',
+    }),
+  );
+  assert.deepEqual(
+    inputs.map((i) => i.key),
+    ['birth_date', 'current_salary', 'monthly_capacity'],
+    'ISA 수익률 토글이 꺼져 있는데 그 아래 세 항목이 나왔습니다',
+  );
+});
+
+test('D75 — 화이트리스트 밖의 폼 필드(예: isaCumulative·priorSalary)는 아무리 채워도 inputs에 나타나지 않는다', () => {
+  const inputs = buildSummaryInputs(baseFilledForm({ isaCumulative: '9999', priorSalary: '5000', isaExists: true }));
+  const serialized = JSON.stringify(inputs);
+  assert.ok(!serialized.includes('9999'), 'isaCumulative 값이 새어 나왔습니다');
+  assert.ok(!serialized.includes('5000'), 'priorSalary 값이 새어 나왔습니다');
+});
+
+test('D75 — buildSummaryData(plan, scenario, rate, form)에 form을 넘기면 inputs가 채워진다', () => {
+  const data = buildSummaryData(basePlan(), baseScenario, null, baseFilledForm());
+  assert.deepEqual(
+    data.inputs.map((i) => i.key),
+    ['birth_date', 'current_salary', 'monthly_capacity'],
+  );
 });

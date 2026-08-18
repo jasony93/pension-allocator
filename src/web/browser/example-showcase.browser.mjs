@@ -1004,3 +1004,119 @@ test('관리자 지시(3차) 2번 — 다크 모드에서 man-icon이 반전(inv
 
   await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
 });
+
+/**
+ * [신설, 2026-08-18, 관리자 지시(6차) 1번] **오른쪽 열(「이렇게 배분해보세요」
+ * 캡션 + 도넛 + 범례)을 정확히 40px 왼쪽으로 옮기고, 왼쪽 열(물음·아이콘·
+ * 입력 세 줄)의 x좌표는 전혀 건드리지 않는다.**
+ *
+ * **실측 방법 — `transform`을 토글해 델타를 직접 잰다.** `.example-showcase-visual-col`
+ * 의 `transform: translateX(-40px)`(`styles.css`)를 켠 상태와
+ * `transform: none`으로 되돌린 상태 각각에서 같은 요소의
+ * `getBoundingClientRect().left`를 재고 차이를 계산한다 — CSS 값을 다시
+ * 읽는 것(`getComputedStyle(...).transform`을 문자열로 파싱하는 것)보다
+ * **실제 렌더 좌표의 차이**를 재는 쪽이 "정확히 40px 이동했다"를 더
+ * 직접적으로 증명한다(행렬 문자열 파싱은 부호·단위 실수가 검사 자체에
+ * 숨어들 위험이 있다).
+ */
+test('관리자 지시(6차) 1번 — 오른쪽 열(캡션+도넛)이 정확히 40px 왼쪽으로 옮겨졌고, 왼쪽 열(물음·아이콘·입력 세 줄) x좌표는 그대로다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  await sleep(200);
+
+  const READ_POSITIONS = `(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const visualCol = root.querySelector('.example-showcase-visual-col');
+    const heading = root.querySelector('.example-showcase-visual-heading');
+    const donut = root.querySelector('.chart-donut');
+    const legend = root.querySelector('.donut-legend');
+    const textCol = root.querySelector('.example-showcase-text-col');
+    const question = root.querySelector('.example-showcase-question');
+    const inputIcon = root.querySelector('.example-showcase-input-icon');
+    return {
+      visualColLeft: visualCol.getBoundingClientRect().left,
+      headingLeft: heading.getBoundingClientRect().left,
+      donutLeft: donut.getBoundingClientRect().left,
+      legendLeft: legend.getBoundingClientRect().left,
+      textColLeft: textCol.getBoundingClientRect().left,
+      questionLeft: question.getBoundingClientRect().left,
+      inputIconLeft: inputIcon.getBoundingClientRect().left,
+      docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  })()`;
+
+  // (1) 현재(이동된) 상태 — 실제 배포 CSS 그대로.
+  const shifted = await page.evaluate(READ_POSITIONS);
+  assert.equal(shifted.docOverflowsX, false, '오른쪽 열을 옮긴 뒤에도 문서 가로 스크롤이 없어야 한다');
+
+  // (2) `transform`을 꺼서(=옛 위치) 다시 잰다 — 같은 프레임 안에서 토글하므로
+  // 다른 레이아웃 변화(리사이즈·리렌더)가 끼어들 여지가 없다.
+  await page.evaluate(`(() => {
+    const visualCol = document.querySelector('.example-showcase-slot').shadowRoot.querySelector('.example-showcase-visual-col');
+    visualCol.style.transform = 'none';
+  })()`);
+  const unshifted = await page.evaluate(READ_POSITIONS);
+
+  // (3) 되돌린다 — 이 검사 뒤에 오는 다른 검사(정렬 등)에 영향을 주지 않는다.
+  await page.evaluate(`(() => {
+    const visualCol = document.querySelector('.example-showcase-slot').shadowRoot.querySelector('.example-showcase-visual-col');
+    visualCol.style.transform = '';
+  })()`);
+
+  const TOLERANCE_PX = 0.5;
+  for (const [label, shiftedLeft, unshiftedLeft] of [
+    ['오른쪽 열 자체', shifted.visualColLeft, unshifted.visualColLeft],
+    ['「이렇게 배분해보세요」 캡션', shifted.headingLeft, unshifted.headingLeft],
+    ['도넛', shifted.donutLeft, unshifted.donutLeft],
+    ['범례', shifted.legendLeft, unshifted.legendLeft],
+  ]) {
+    const delta = shiftedLeft - unshiftedLeft;
+    assert.ok(
+      Math.abs(delta - -40) <= TOLERANCE_PX,
+      `${label}의 이동량(${delta.toFixed(2)}px)이 -40px과 ${TOLERANCE_PX}px 넘게 어긋난다(이동 전 ${unshiftedLeft}, 이동 후 ${shiftedLeft})`,
+    );
+  }
+
+  // 왼쪽 열(물음·man-icon)은 오른쪽 열의 transform 토글과 완전히 무관한
+  // 별도 grid 영역이다 — x좌표가 조금도 움직이지 않아야 한다.
+  assert.ok(
+    Math.abs(shifted.textColLeft - unshifted.textColLeft) <= TOLERANCE_PX,
+    `왼쪽 칸(.example-showcase-text-col) 왼쪽 끝이 움직였다: 이동 전 ${unshifted.textColLeft}, 이동 후 ${shifted.textColLeft}`,
+  );
+  assert.ok(
+    Math.abs(shifted.questionLeft - unshifted.questionLeft) <= TOLERANCE_PX,
+    `물음 줄 왼쪽 끝이 움직였다: 이동 전 ${unshifted.questionLeft}, 이동 후 ${shifted.questionLeft}`,
+  );
+  assert.ok(
+    Math.abs(shifted.inputIconLeft - unshifted.inputIconLeft) <= TOLERANCE_PX,
+    `man-icon 왼쪽 끝이 움직였다: 이동 전 ${unshifted.inputIconLeft}, 이동 후 ${shifted.inputIconLeft}`,
+  );
+
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+/**
+ * [신설, 2026-08-18, 관리자 지시(6차) 1번] 모바일(1열 스택)에서는 "오른쪽
+ * 열"이라는 개념 자체가 없다 — 이동이 0으로 되돌려져 있어야 한다
+ * (`styles.css` 모바일 미디어쿼리의 `.example-showcase-visual-col { transform:
+ * none; }`).
+ */
+test('관리자 지시(6차) 1번 — 375px(모바일 1열 스택)에서는 오른쪽 열 이동이 0으로 되돌려진다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 1200, deviceScaleFactor: 1, mobile: true });
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  await sleep(200);
+  const transformValue = await page.evaluate(`(() => {
+    const visualCol = document.querySelector('.example-showcase-slot').shadowRoot.querySelector('.example-showcase-visual-col');
+    return getComputedStyle(visualCol).transform;
+  })()`);
+  assert.ok(
+    transformValue === 'none' || transformValue === '',
+    `375px에서 오른쪽 열에 여전히 transform이 걸려 있다: ${transformValue}`,
+  );
+  const overflowsX = await page.evaluate(`document.documentElement.scrollWidth > document.documentElement.clientWidth`);
+  assert.equal(overflowsX, false, '375px에서 가로 스크롤이 생겼다');
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});

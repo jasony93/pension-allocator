@@ -130,7 +130,7 @@ import {
 import { exportToPdf } from './print.js';
 import { scenarioDisplaysEqual } from './scenario-compare.js';
 import { buildSummaryData } from './summary-data.js';
-import { exportSummaryPng, downloadDataUrl } from './summary-image.js';
+import { exportSummaryPng, downloadDataUrl, buildSummarySvgMarkup, summarySvgElementFromMarkup } from './summary-image.js';
 
 // 필수 항목의 라벨·초점 대상·충족 판정은 `validation.js`의 `CORE_REQUIREMENTS`
 // 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
@@ -1541,72 +1541,34 @@ function assumptionBlock(response, scenario, form) {
  * 전부가 숨는다(`styles.css` — 옛 규약("결과와 고지 전부가 인쇄된다")을
  * D74가 "요약 다섯 항목만 인쇄된다"로 좁혔다).
  *
- * 담는 다섯 가지(D74가 정했다) — 도넛(배분 구성)·계좌별 월 납입액·총
- * 절세액(가정 성분이 있으면 조건절과 함께)·계좌별 납입 잔여 한도·연 환산.
- * **가정 사항·다른 배분 비교는 여기 없다** — `assumptionBlock`도
- * `stackBarComparison`도 부르지 않는다.
+ * **[2026-08-18, 관리자 지시(6차) 3번, D75] PDF도 PNG와 같은 SVG를 그대로
+ * 쓴다 — 두 산출물이 갈릴 자리를 구조로 없앤다.** 옛(D74) 구현은 이 함수가
+ * `donutChart`/`donutLegend`(DOM 컴포넌트) + `<table>`을 **직접** 조립해
+ * PNG 경로(`summary-image.js`의 독립 SVG)와 서로 다른 마크업을 각자
+ * 유지했다 — 도넛 라벨(D75 2번)이나 입력값 블록(D75) 같은 변경이 생길 때마다
+ * 두 곳을 동시에 고쳐야 했고, 하나만 고치면 그 자리에서 조용히 갈라진다.
+ * 이제 이 함수는 `buildSummarySvgMarkup`(PNG 경로가 쓰는 바로 그 함수)이
+ * 낸 SVG 문자열을 `summarySvgElementFromMarkup`으로 파싱해 그대로 삽입할
+ * 뿐, 도넛·표·입력값 블록을 다시 조립하지 않는다.
  *
- * 도넛은 실제 결과 화면과 **같은 컴포넌트**(`donutChart`/`donutLegend`)를
- * 그대로 재사용한다 — 인쇄는 라이브 문서의 일부라 CSS 커스텀 프로퍼티
- * (계좌 색 토큰)가 정상적으로 상속된다(PNG 내보내기와 다른 점 —
- * `summary-image.js`가 별도 문서를 만들어야 하는 이유는 그 파일 머리말
- * 참고). 계좌별 표·총 절세액 텍스트는 `buildSummaryData`(순수 함수,
- * `summary-data.js`)가 조립한 값을 그대로 옮겨 적는다 — PNG 내보내기와
- * "무엇이 요약에 들어가는가"를 한 곳에서 공유해, 두 산출물이 서로 다른
- * 것을 담는 회귀를 막는다.
+ * 담는 것 — D74가 정한 다섯 항목(도넛(조각 라벨 포함)·계좌별 월 납입액·
+ * 총 절세액·계좌별 납입 잔여 한도·연 환산) + D75가 더한 입력값 블록.
+ * **가정 사항·다른 배분 비교는 여기 없다** — `assumptionBlock`도
+ * `stackBarComparison`도 부르지 않는다(`buildSummaryData`가 애초에 그
+ * 값을 읽지 않는다).
+ *
+ * **리터럴 hex 색을 쓰는 것이 이 통합의 전제다.** `buildSummarySvgMarkup`은
+ * CSS 커스텀 프로퍼티를 참조하지 않는다(D74, `summary-image.js` 머리말) —
+ * 그래서 이 인라인 삽입 경로도, PNG의 독립 문서 경로도 똑같은 문자열에서
+ * 똑같은 색이 나온다. 인쇄가 라이브 문서 안에 있다는 사실은 이제 이 함수의
+ * 전제가 아니다(`var(--...)` 상속에 기대지 않는다) — 그래서 `donutChart`를
+ * 더는 재사용하지 않는다.
  */
-function summarySheet(plan, scenario, annualReturnRate) {
-  const data = buildSummaryData(plan, scenario, annualReturnRate);
-  const excluded = excludedAccounts(scenario);
-  const donutArgs = {
-    allocations: plan.allocations,
-    unallocatedAnnualKrw: plan.unallocated_annual_krw,
-    unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
-    excludedAccounts: excluded,
-  };
-  const donut = donutChart({
-    ...donutArgs,
-    totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
-    isProposed: !scenario.is_enacted,
-    // 요약은 항상 컴팩트(범례) 모드다 — 인쇄 페이지 폭이 화면 뷰포트와
-    // 무관하므로, 뷰포트를 재서 고르는 `preferredDonutSizeMode`를 쓰지
-    // 않는다(예시 구역 `exampleShowcaseSection`과 같은 이유).
-    labelMode: 'legend',
-  });
-
-  const totalBlock = el('div', { class: 'summary-sheet-total' }, [
-    el('p', { class: 'summary-sheet-total-label' }, [data.totalTaxSavings.label]),
-    el('p', { class: 'summary-sheet-total-value type-display' }, amountValueNode(data.totalTaxSavings.valueText)),
-    data.totalTaxSavings.includesAssumption
-      ? el('div', { class: 'summary-sheet-total-composition' }, [
-          el('p', { class: 'type-num' }, [data.totalTaxSavings.determinedLine]),
-          el('p', { class: 'type-num' }, [data.totalTaxSavings.assumptionLine]),
-        ])
-      : null,
-  ]);
-
-  const table = el('table', { class: 'summary-sheet-table' }, [
-    el('thead', {}, [el('tr', {}, ['계좌', '월 납입액', '연 환산', '납입 잔여 한도'].map((h) => el('th', {}, [h])))]),
-    el(
-      'tbody',
-      {},
-      data.accounts.map((a) =>
-        el('tr', {}, [
-          el('td', {}, [a.label]),
-          el('td', { class: 'type-num' }, [formatKrw(a.monthlyKrw)]),
-          el('td', { class: 'type-num' }, [formatKrw(a.annualKrw)]),
-          el('td', { class: 'type-num' }, [formatKrw(a.remainingLimitKrw)]),
-        ]),
-      ),
-    ),
-  ]);
-
-  return el('div', { class: 'summary-sheet' }, [
-    el('h2', { class: 'summary-sheet-heading' }, ['배분 요약']),
-    el('div', { class: 'summary-sheet-donut' }, [donut, donutLegend(donutArgs)]),
-    totalBlock,
-    table,
-  ]);
+function summarySheet(plan, scenario, annualReturnRate, form) {
+  const data = buildSummaryData(plan, scenario, annualReturnRate, form);
+  const svgMarkup = buildSummarySvgMarkup(data);
+  const svgEl = summarySvgElementFromMarkup(svgMarkup);
+  return el('div', { class: 'summary-sheet' }, [svgEl].filter(Boolean));
 }
 
 /**
@@ -1642,7 +1604,11 @@ function saveShareBlock(store, plan, scenario, annualReturnRate) {
       class: 'btn btn-secondary',
       onclick: async () => {
         try {
-          const data = buildSummaryData(plan, scenario, annualReturnRate);
+          // [2026-08-18, 관리자 지시(6차) 2번, D75] `store.getState().form`을
+          // 클릭 시점에 다시 읽는다 — `shareButton`(아래)이 이미 같은 이유로
+          // 그렇게 한다: 클로저가 마운트 시점 값을 붙잡으면 그 뒤 입력이
+          // 바뀌어도 예전 값이 이미지에 실린다.
+          const data = buildSummaryData(plan, scenario, annualReturnRate, store.getState().form);
           const dataUrl = await exportSummaryPng(data);
           downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
           store.reportSaveShare('image');
@@ -1834,7 +1800,7 @@ function resultPanelForScenario(
     // none }`) 인쇄에서만 나타난다. 위치는 DOM 순서일 뿐 시각 순서를 정하지
     // 않는다(어차피 숨어 있다) — 저장·공유 버튼 바로 앞에 두어 "이 결과를
     // 어떻게 들고 나갈까"라는 흐름과 코드 순서가 같게 맞춘다.
-    summarySheet(plan, scenario, annualReturnRate),
+    summarySheet(plan, scenario, annualReturnRate, form),
     saveShareBlock(store, plan, scenario, annualReturnRate),
   ]);
 }

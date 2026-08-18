@@ -77,6 +77,67 @@ const FIXTURE = `(async () => {
   return exportSummaryPng(data);
 })()`;
 
+/**
+ * [2026-08-18, 관리자 지시(6차) 2번, D75] `form`을 실어(생년월일·총급여액·
+ * 월 납입액) PNG를 만든다 — 위 `FIXTURE`와 같은 plan/scenario를 쓰지만
+ * `buildSummaryData`의 4번째 인자로 `form`을 넘긴다. 이 값이 실제 래스터라이즈
+ * 파이프라인(SVG → `Image` → `<canvas>` → `toDataURL`)을 무사히 통과하는지
+ * (더 넓어진 콘텐츠가 PNG 자체를 깨뜨리지 않는지) 여기서 확인한다.
+ */
+const FIXTURE_WITH_INPUTS = `(async () => {
+  const { buildSummaryData } = await import('./ui/summary-data.js');
+  const { exportSummaryPng } = await import('./ui/summary-image.js');
+  const scenario = {
+    ruleset: { tax_year: 2026 },
+    account_eligibility: [
+      { account: 'annuity_savings', eligible: true },
+      { account: 'retirement_pension', eligible: true },
+      { account: 'isa', eligible: true },
+    ],
+    limits: {
+      by_account: [
+        { account: 'annuity_savings', contribution_limit_remaining_krw: 6000000 },
+        { account: 'retirement_pension', contribution_limit_remaining_krw: 3000000 },
+        { account: 'isa', contribution_limit_remaining_krw: 20000000 },
+      ],
+    },
+  };
+  const plan = {
+    is_baseline: true,
+    plan_id: 'max_tax_credit',
+    allocations: [
+      { account: 'annuity_savings', monthly_krw: 100000, annual_krw: 1200000 },
+      { account: 'retirement_pension', monthly_krw: 50000, annual_krw: 600000 },
+      { account: 'isa', monthly_krw: 200000, annual_krw: 2400000 },
+    ],
+    unallocated_annual_krw: 0,
+    unallocated_monthly_krw: 0,
+    total_allocated_monthly_krw: 350000,
+    total_allocated_annual_krw: 4200000,
+    headline_composite_total: {
+      bound_code: 'point',
+      point_estimate_krw: 1485000,
+      lower_bound_krw: 1485000,
+      upper_bound_krw: 1485000,
+      includes_assumption_component: false,
+      determined_component_krw: 1485000,
+      assumption_component_krw: null,
+      assumption_settlement_years: null,
+    },
+  };
+  const form = {
+    birthDate: '1980-01-01',
+    currentSalary: '6000',
+    monthlyCapacity: '50',
+    isaReturnEnabled: true,
+    isaReturnRatePercent: '5.5',
+    isaIncomeCharacter: 'interest_dividend',
+    isaSettlementYears: '3',
+  };
+  const data = buildSummaryData(plan, scenario, null, form);
+  return exportSummaryPng(data);
+})()`;
+
 /** PNG 시그니처(8바이트) + IHDR(width/height, big-endian)를 직접 읽는다.
  * 외부 이미지 라이브러리를 새로 들이지 않는다 — PNG 헤더 스펙은 고정이다. */
 function readPngHeader(dataUrl) {
@@ -125,4 +186,48 @@ test('[실측, D74] PNG가 SVG 문자열에 없던 foreignObject·CSS 변수 문
     const dataUrl = await page.evaluate(FIXTURE);
     readPngHeader(dataUrl);
   });
+});
+
+/**
+ * [신설, 2026-08-18, 관리자 지시(6차) 2번, D75] 입력값 블록(도넛 조각 라벨 +
+ * 도넛 오른쪽 입력값)이 붙은 더 넓은 SVG도 여전히 유효한 PNG로 래스터라이즈
+ * 된다 — 바이트를 다시 실측한다(시그니처·크기).
+ */
+test('[실측, D75] 입력값 블록이 실린 PNG도 실제로 열리는 파일이다(시그니처·크기 재확인)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
+  const dataUrl = await page.evaluate(FIXTURE_WITH_INPUTS);
+  const header = readPngHeader(dataUrl);
+  assert.ok(header.width > 0 && header.height > 0, `입력값 블록이 실린 PNG 크기가 0입니다: ${JSON.stringify(header)}`);
+  assert.ok(header.byteLength > 1000, `입력값 블록이 실린 PNG가 너무 작습니다(${header.byteLength}바이트) — 빈 이미지일 위험`);
+});
+
+/**
+ * [신설, D75] **판별력 확인.** `FIXTURE`(입력값 없음)와
+ * `FIXTURE_WITH_INPUTS`(여섯 줄 입력값)를 **같은 실행에서** 비교한다.
+ *
+ * **높이가 아니라 바이트 길이를 비교한다.** 이 픽스처(계좌 셋 모두 배분,
+ * 미배분 없음)에서는 범례가 3줄이라 도넛+범례 열이 이미 입력값 6줄
+ * 열보다 세로로 길다(직접 계산해 확인했다 — 범례 시작 y가 468, 3줄이면
+ * 바닥 624, 반면 입력값 열은 제목+6줄이면 바닥 434) — 그래서 **전체 SVG
+ * 높이는 입력값 유무와 무관하게 같다.** 그래도 입력값 블록이 실제로
+ * 그려졌다면 화소 내용(도넛 오른쪽에 글자가 더 생긴다)이 달라지므로,
+ * PNG로 구운 뒤의 **바이트 길이**는 달라야 한다 — 이 검사가 "항상 통과하는
+ * 검사"가 아니라 실제로 콘텐츠 차이를 구분한다는 것을 이 비교로 증명한다.
+ * (`buildSummaryData`에 `form`을 넘기지 않으면 `inputs`가 빈 배열이라
+ * `inputsBlockMarkup`이 아무것도 그리지 않는다 — `ui/summary-image.js`의
+ * `inputsBlockMarkup` 참고.)
+ */
+test('[실측, D75, 판별력 확인] 입력값 블록이 있는 PNG가 없는 PNG와 바이트 길이가 다르다(같은 plan/scenario, 같은 크기)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
+  const withoutInputs = readPngHeader(await page.evaluate(FIXTURE));
+  const withInputs = readPngHeader(await page.evaluate(FIXTURE_WITH_INPUTS));
+  assert.equal(withoutInputs.width, withInputs.width, 'CANVAS_WIDTH는 입력값 블록 유무와 무관하게 고정이어야 한다');
+  assert.equal(withoutInputs.height, withInputs.height, '이 픽스처에서는 도넛+범례 열이 이미 입력값 열보다 길어 SVG 전체 높이가 같아야 한다(위 계산 참고)');
+  assert.notEqual(
+    withInputs.byteLength,
+    withoutInputs.byteLength,
+    `입력값 블록이 있는 PNG(${withInputs.byteLength}바이트)와 없는 PNG(${withoutInputs.byteLength}바이트)의 바이트 길이가 같습니다 — 블록이 실제로 그려지지 않았을 위험`,
+  );
 });

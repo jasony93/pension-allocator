@@ -775,7 +775,18 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    바뀌었다)이 고리 밖으로 빠질 때(리더선 폴백) SVG 기본 클리핑에 잘리지
    않게 하려는 것이다(이 예시의 실제 33/17/50% 조각에서는 실측상 그 폴백이
    걸리지 않았지만, 방어적으로 둔다). */
-.example-showcase-visual-col { grid-area: visual; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); width: 100%; }
+/* [2026-08-18, 관리자 지시(6차) 1번] **오른쪽 열(캡션 「이렇게 배분해보세요」
+   + 도넛 + 범례) 전체를 왼쪽으로 40px.** `translateX`를 쓰는 이유 — 이 값은
+   grid 트랙 안에서의 **페인트만** 옮기고 레이아웃 박스(트랙 폭·다른 칸의
+   위치)는 그대로 둔다. 왼쪽 열(`.example-showcase-text-col`)은 이 규칙과
+   무관한 별도 grid 영역이라 x좌표가 전혀 바뀌지 않는다(실측: 최종 보고) —
+   지시가 "왼쪽 열은 그대로"라고 명시했으므로, 왼쪽 열의 마진·트랙 자체를
+   건드리는 방법(예: 열 비율 재조정)은 애초에 후보에서 제외했다. **왼쪽으로
+   옮기므로**(양수가 아니라 음수) 카드 오른쪽 경계 밖으로 넘칠 일이 없어
+   가로 스크롤을 새로 만들지 않는다 — 모바일(1열 스택, 아래 미디어쿼리)에서는
+   "오른쪽 열"이라는 개념 자체가 성립하지 않으므로(칸이 하나뿐이다) 이동을
+   0으로 되돌린다. */
+.example-showcase-visual-col { grid-area: visual; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); width: 100%; transform: translateX(-40px); }
 .example-showcase-visual-col .chart-donut { width: 300px; max-width: 100%; overflow: visible; }
 /* **[2026-08-14, 관리자 실측 회귀]** `ui/example-showcase.js`는 뷰포트와
    무관하게 항상 `labelMode: 'legend'`로 도넛을 그린다("간략한 예시라 항상
@@ -994,6 +1005,9 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      모바일은 가운데 정렬(`text-align: center`)이라 좌우로 미는 것 자체가
      이 배치와 맞지 않는다(밀면 중앙이 아니라 오른쪽으로 치우쳐 보인다). */
   .example-showcase-text-col { text-align: center; align-items: center; margin-left: 0; }
+  /* [2026-08-18, 관리자 지시(6차) 1번] 모바일 1열 스택에서는 "오른쪽 열"이
+     없다(칸이 하나뿐이라 위아래로 쌓인다) — 데스크톱 전용 이동을 되돌린다. */
+  .example-showcase-visual-col { transform: none; }
   /* [2026-08-17, 관리자 지시(3차) 2번] **man-icon은 모바일에서 뺀다.**
      아이콘+세 줄 가로 배치(`.example-showcase-input-block`)는 데스크톱
      2열 배치("가운데가 비어 보인다")를 겨눈 처방이다 — 375px 1열 스택에서는
@@ -1829,21 +1843,19 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 
 /* [2026-08-18, 관리자 지시(4차) 6번, D74] 요약 시트(`ui/result-panel.js`의
    `summarySheet`) — **화면에는 절대 보이지 않는다.** PDF 내보내기가 실제로
-   찍는 대상일 뿐이고(`@media print`가 이 규칙을 뒤집어 보이게 한다, 아래),
-   PNG 내보내기(`summary-image.js`)는 이 DOM을 전혀 쓰지 않는다(독립 SVG를
-   새로 짠다) — 그래도 요약 시트는 만들어 둔다, PDF 경로가 필요로 하기
-   때문이다. */
+   찍는 대상일 뿐이고(`@media print`가 이 규칙을 뒤집어 보이게 한다, 아래).
+   **[2026-08-18, 관리자 지시(6차) 3번, D75] 옛(D74) 하위 클래스 열 개
+   (`.summary-sheet-heading`·`-donut`·`-total`·`-total-label`·`-total-value`·
+   `-total-composition`·`-table`·`-table th/td`)는 여기 있었다 — 지웠다.**
+   그 시절 `summarySheet`는 `donutChart`/`<table>` 등 DOM 조각을 직접
+   조립했고, 그 조각마다 이 클래스들이 스타일을 걸었다. 지금은 `summarySheet`가
+   `buildSummarySvgMarkup`(PNG 내보내기가 쓰는 바로 그 조립기, D75)이 낸
+   SVG 문자열을 그대로 삽입할 뿐이라(`ui/summary-image.js` 머리말 — "PDF도
+   PNG와 같은 SVG를 그대로 쓴다") 그 DOM 조각 자체가 더는 생기지 않는다 —
+   가리킬 대상이 없는 선택자를 남겨 두면 다음 사람이 "아직 쓰이는 규칙"으로
+   오해한다. SVG 자신의 스타일(폭·페이지 나눔)은 `@media print` 안
+   `.summary-sheet svg` 규칙(아래)이 진다. */
 .summary-sheet { display: none; }
-.summary-sheet-heading { margin: 0 0 var(--space-4); }
-.summary-sheet-donut { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); }
-.summary-sheet-total { margin-bottom: var(--space-5); }
-.summary-sheet-total-label { font-size: 16px; color: var(--text-secondary); margin: 0 0 var(--space-1); }
-.summary-sheet-total-value { margin: 0; }
-.summary-sheet-total-composition { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); }
-.summary-sheet-table { width: 100%; border-collapse: collapse; }
-.summary-sheet-table th, .summary-sheet-table td { padding: var(--space-2) var(--space-2); text-align: left; border-bottom: 1px solid var(--border-subtle); }
-.summary-sheet-table th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
-.summary-sheet-table td.type-num { text-align: right; }
 
 /* ---- 인쇄 / PDF 내보내기 (screens.md 9절의 후신, 2026-08-10) ----------------
 
@@ -1913,8 +1925,19 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      없지만(브라우저마다 지원 폭이 다르다), 낼 수 있는 만큼은 낸다.
      [D74] 옛 목록(`.amount-card`·`.chart-area`·`.account-table`·`details`·
      `.allocation-bar-row`)은 전부 요약 시트 밖에 있어 이제 인쇄에 나타나지
-     않는다 — 요약 시트 자신의 항목으로 바꾼다. */
-  .summary-sheet-total, .summary-sheet-table tr { break-inside: avoid; }
+     않는다 — 요약 시트 자신의 항목으로 바꾼다.
+     **[2026-08-18, 관리자 지시(6차) 3번, D75] 요약 시트가 통째로 SVG 하나로
+     바뀌면서(`ui/result-panel.js`의 `summarySheet`가 이제
+     `buildSummarySvgMarkup`이 낸 문자열을 그대로 삽입한다 — 이 파일 위
+     `.summary-sheet` 규칙 주석 참고) 옛 `.summary-sheet-total`·
+     `.summary-sheet-table tr`(그 함수가 예전에 직접 짜던 DOM 조각들) 자체가
+     더는 없다 — SVG 하나를 페이지 폭에 맞추고 안에서 쪼개지지 않게 하는
+     것으로 뒤집는다. `width: 100%`가 없으면 SVG가 자기 고유 픽셀 크기
+     (960px 폭, `ui/summary-image.js`의 `CANVAS_WIDTH`)를 그대로 유지해
+     좁은 인쇄 용지(A4 인쇄 가능 영역은 대략 720px대)를 넘칠 수 있다 —
+     `height: auto`가 SVG의 `viewBox` 비율을 지키며 폭에 맞춰 높이를
+     비례로 줄인다. */
+  .summary-sheet svg { display: block; width: 100%; height: auto; break-inside: avoid; }
 
   /* 관리자 지시(2026-08-13, D51 통과 조건 재확인) — `designer`가 `Page.printToPDF`를
      `printBackground: false`(인쇄 대화상자의 "배경 그래픽" 체크가 기본으로 꺼진
@@ -1940,10 +1963,15 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      보인다(위 `.result-body > *:not(.summary-sheet)`) — 안 보이는 요소의
      `print-color-adjust`는 뜻이 없으므로 목록에서 뺐다(지운 것이지 값을
      바꾼 것이 아니다 — `print.browser.mjs`가 그 부재를 직접 확인한다).
-     **남는 것은 요약 시트 자신의 범례 스와치(`.donut-legend-swatch`)뿐**
-     이다 — `summarySheet`(`ui/result-panel.js`)가 실제 결과와 같은
-     `donutLegend` 컴포넌트를 재사용하므로 같은 클래스를 그대로 쓴다. */
-  .donut-legend-swatch {
-    print-color-adjust: exact; -webkit-print-color-adjust: exact;
-  }
+
+     **[2026-08-18, 관리자 지시(6차) 3번, D75] 목록이 이제 0개다 — 규칙
+     자체를 지운다.** 옛(D74) 목록의 마지막 하나(`.donut-legend-swatch`)는
+     `summarySheet`가 실제 결과 화면과 같은 `donutLegend` DOM 컴포넌트를
+     재사용하던 시절의 흔적이다(CSS `background`로 색을 칠하는 `<div>`
+     스와치였다). 지금은 `summarySheet`가 `buildSummarySvgMarkup`이 낸
+     SVG를 통째로 삽입한다 — 범례 스와치도 `<rect fill="#...">`(SVG
+     속성)로 바뀌었고, 그 값은 바로 위 문단이 이미 실측으로 확인한
+     "도넛(SVG `fill`)은 `economy`에서도 살아남는다"에 그대로 해당한다.
+     걸어 둘 예외가 더는 없다 — `print.browser.mjs`가 이 규칙의 부재와
+     SVG `fill`의 생존을 함께 확인한다. */
 }
