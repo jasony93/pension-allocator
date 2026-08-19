@@ -389,6 +389,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 @media (max-width: 767px) {
   .app-header { padding: var(--space-3) var(--space-4); flex-direction: column; align-items: stretch; gap: var(--space-2); }
   .app-header-brand, .app-header-meta { justify-content: space-between; }
+  /* [2026-08-19, D77] 탭이 둘로 늘면서 로고+탭이 한 줄에 다 들어가지
+     않는 폭(320~414px 실측)이 생겼다 — `flex-wrap`으로 탭 줄을 로고 아래
+     둘째 줄로 내린다(가로 스크롤 대신). 탭 라벨 자신은 여전히 한 줄이다
+     (`.app-tab`의 `white-space: nowrap`이 그대로 유지된다) — 바뀌는 것은
+     탭 **행**의 위치뿐이다. */
+  .app-header-brand { flex-wrap: wrap; row-gap: var(--space-2); }
+  .app-tabs { width: 100%; }
 }
 /* [2026-08-17, 관리자 지시(2차) 1번] **고정 바가 스크롤 목적지 위쪽을 가리는
    고전 결함.** 헤더가 다시 sticky가 되면서, 화살표(예시 구역)를 눌러
@@ -1101,10 +1108,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      "입력칸"은 그대로 작아 보인다 — 소유자가 "입력칸과 결과칸들이"라고 둘 다
      지목했다(design-system 4.4.1절 실측: 이 값이 유일하게 뷰포트 대비 비중을
      움직인 레버였다). */
-  .input-slot { flex: 5 1 0; min-width: 440px; max-width: 640px; }
+  .input-slot, .reverse-input-slot { flex: 5 1 0; min-width: 440px; max-width: 640px; }
   /* sticky·max-height·overflow-y를 없앴으므로 평범한 flex 항목이다 — 폭
      상한이 없어(`flex: 7 1 0`) 컨테이너가 넓어지면 자동으로 넓어진다. */
-  .result-slot { flex: 7 1 0; }
+  .result-slot, .reverse-result-slot { flex: 7 1 0; }
 }
 
 /* ---- 입력 패널 ---- */
@@ -1902,7 +1909,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   /* `.example-showcase-slot`(관리자 지시 2026-08-14 4번) — 이 사용자의 결과가
      아닌 예시다. "인쇄물에는 결과와 고지만 남는다"는 이 블록의 원칙이 그대로
      적용된다. shadow root 안 내용은 host를 숨기면 함께 사라진다. */
-  .app-header, .app-footer, .input-slot, .save-share, .example-showcase-slot { display: none; }
+  .app-header, .app-footer, .input-slot, .reverse-input-slot, .save-share, .example-showcase-slot { display: none; }
   .app-main { display: block; padding: 0; gap: 0; }
   /* [D74] `.result-body`의 자식 중 요약 시트가 아닌 것은 전부 숨긴다 —
      헤드라인 카드(`.amount-card`)·도넛+계좌별 세제혜택 막대(`.chart-area`)·
@@ -1975,3 +1982,105 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
      걸어 둘 예외가 더는 없다 — `print.browser.mjs`가 이 규칙의 부재와
      SVG `fill`의 생존을 함께 확인한다. */
 }
+
+/* =============================================================================
+   연금 역산기 탭 (게이트 5 D77, 2026-08-19)
+   ============================================================================= */
+
+/* `type-body` 토큰(design-system 2.1절, 16px/1.60/400) — 지금까지 `-strong`·
+   `-s` 변형만 구현돼 있었다. 이 탭이 처음으로 순수 본문 크기를 쓴다. */
+.type-body { font-size: 16px; line-height: 1.6; font-weight: 400; }
+
+/* 로고 래퍼 — `ui/app.js` `headerLogo()`. 라이트/다크 두 원본 중 보이는
+   쪽만 실제 크기를 차지한다(둘 중 하나는 `display: none`) — 플렉스 항목의
+   기본 크기 규칙(내용 크기, 100% 채움이 아니다)이 그대로 성립하므로 별도
+   폭 지정이 필요 없다. */
+.app-header-logo { display: flex; align-items: center; }
+
+/* 두 탭 패널의 공통 부모 — 그 자체는 레이아웃을 갖지 않는다. 실제 좌우
+   분할은 각 `.app-main`(탭별로 하나씩, 동시에 마운트된다)이 각자 진다. */
+.app-main-group { display: block; }
+
+/* 탭 전환 — **표시 전환**(2.1.2절 (3)). `display: none`으로 완전히 감추되,
+   `.app-main`(및 미디어쿼리 안의 `.app-main`)보다 특이도가 높아야
+   `@media print`의 `.app-main { display: block }` 등 다른 `.app-main` 규칙에
+   덮이지 않는다 — 클래스 두 개를 겹친 선택자(특이도 0-2-0)로 이를 보증한다. */
+.app-main.tab-panel-hidden { display: none; }
+
+/* `KnownOrUnknownField`(design-system 5.26절)의 "모르겠습니다" — `horizon-
+   option`·`segment-option`과 같은 시각 언어(선택 시 `accent` 테두리 +
+   `accent-subtle` 배경)를 쓰되, 새 클래스를 둔다 — 이 선택지는 라디오
+   그룹이 아니라 단일 토글이라 그룹 트랙 스타일(`segment-group`)이 맞지 않는다. */
+.known-or-unknown-option {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  height: 44px; padding: 0 var(--space-4); margin-top: var(--space-2);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-m);
+  background: var(--surface-sunken); color: var(--text-secondary); cursor: pointer;
+  font-size: 14px;
+}
+.known-or-unknown-option-selected { border-color: var(--accent); background: var(--accent-subtle); color: var(--text-primary); font-weight: 600; }
+.known-or-unknown-option:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* ---- `[14-A]` StatutoryFactBlock (design-system 5.34절) -------------------
+   고지가 아니라 결과의 1급 산출물이다 — `state-info` 파랑을 쓰지 않는다.
+   `AmountCard`·결과 카드와 같은 중립 표면(`surface-raised`)을 그대로 쓴다. */
+.statutory-fact-block {
+  padding: var(--space-5); background: var(--surface-raised);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-1);
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+.statutory-fact-row { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.statutory-fact-row:first-of-type { padding-top: 0; border-top: none; }
+.statutory-fact-label { color: var(--text-secondary); margin: 0; }
+.statutory-fact-amount { margin: 0; }
+.statutory-fact-caption-detail { margin: 0; padding-left: var(--space-3); border-left: 1px solid var(--border-subtle); }
+/* 성립 여부 문장 — `state-success`를 쓰지 않는다(design-system 5.34절 "법정
+   요건 충족은 축하할 일이 아니라 사실이다"). `text-primary`만 쓴다. */
+.statutory-fact-warning-text { color: var(--state-warning); }
+.statutory-fact-cap-binds { display: flex; flex-direction: column; gap: var(--space-1); }
+.statutory-fact-table { width: 100%; border-collapse: collapse; margin-top: var(--space-2); font-size: 14px; }
+.statutory-fact-table th { text-align: left; color: var(--text-secondary); font-weight: 600; padding: var(--space-2) var(--space-2) var(--space-1); border-bottom: 1px solid var(--border-subtle); }
+.statutory-fact-table td { padding: var(--space-2); border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+.statutory-fact-table tr:last-child td { border-bottom: none; }
+/* 입력 부족 상태의 빈 카드 윤곽(14.4.1절) — 링·도넛 형태를 흉내 내지 않는다. */
+.statutory-fact-block-placeholder { align-items: flex-start; color: var(--text-secondary); }
+
+/* ---- `[14-B]` ContributionAmountBar (design-system 5.35절) -----------------
+   공통 화폐 축을 공유하는 막대 목록 — 자기정규화 AllocationBar와 다르다. */
+.contribution-amount-bar {
+  padding: var(--space-5); background: var(--surface-raised);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-1);
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+.contribution-amount-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.contribution-amount-row-head { display: flex; justify-content: space-between; align-items: baseline; }
+.contribution-amount-row-label { font-weight: 600; }
+.contribution-amount-row-value { font-variant-numeric: tabular-nums; font-weight: 600; }
+.contribution-amount-track { height: 20px; border-radius: var(--radius-full); background: var(--data-track); border: 1px solid var(--border-subtle); overflow: hidden; }
+.contribution-amount-fill { height: 100%; border-radius: var(--radius-full); transition: width 240ms ease-out; }
+.contribution-amount-condition { margin: 0; }
+.contribution-amount-not-needed { margin: 0; color: var(--text-secondary); }
+.contribution-amount-absent { margin-top: 0; }
+
+/* ---- `[14-C]` WithdrawalStrategyCards (design-system 5.36절) --------------
+   스택바가 아니라 동등한 무게의 카드 나열 — 색·순서로 우열을 매기지 않는다. */
+.withdrawal-strategy-cards { display: flex; flex-direction: column; gap: var(--space-3); }
+.withdrawal-strategy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.withdrawal-strategy-grid:has(.withdrawal-strategy-card:nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.withdrawal-strategy-card {
+  padding: var(--space-4); background: var(--surface-raised);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-1);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.withdrawal-strategy-card p { margin: 0; }
+.withdrawal-strategy-undetermined { color: var(--text-secondary); }
+@media (max-width: 1023px) {
+  .withdrawal-strategy-grid, .withdrawal-strategy-grid:has(.withdrawal-strategy-card:nth-child(2):last-child) { grid-template-columns: 1fr; }
+}
+
+/* ---- `[14-D]` 절세계좌 계산기로의 연결 (14.3.5절) --------------------------- */
+.reverse-prefill { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+
+/* ---- `[14-E]` 한계·범위 고지 ------------------------------------------------ */
+.reverse-scope-note { padding-top: var(--space-2); }
+.reverse-scope-note p { margin: 0; }

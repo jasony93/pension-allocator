@@ -27,6 +27,7 @@
 import {
   compute as engineCompute,
   computeFundUseHorizonBoundaries as engineBoundaries,
+  computePensionReverse as engineComputePensionReverse,
   SCHEMA_VERSION,
 } from '../../engine/index.mjs';
 import { youthProvisionalRule } from './provisional-rules.js';
@@ -73,6 +74,20 @@ export async function compute(request) {
 export async function computeFundUseHorizonBoundaries(request) {
   const rulesets = await loadRulesets();
   return engineBoundaries(request, rulesets);
+}
+
+/**
+ * 연금 역산기(D77)의 세 번째 진입점. **목(mock)을 거치지 않고 실제 엔진에 바로
+ * 연결한다** — `compute`와 달리 이 진입점은 3단계 병렬 작업이 이미 끝난 뒤에
+ * 이 파일을 처음 여는 시점부터 실제 엔진(`src/engine/reverse.mjs`)이 계약
+ * (`engine-interface.md` 12절, schema_version 14.1.0)대로 존재했다 — 그래서
+ * "목을 먼저 만들고 엔진이 나오면 교체한다"는 3단계의 원칙이 이 진입점에는
+ * 적용될 일이 없었다. `compute`가 이미 겪은 것과 같은 경로(먼저 실제 엔진과
+ * 붙여 보고, 계약이 어긋나면 그 자리에서 잡는다)를 그대로 따른다.
+ */
+export async function computePensionReverse(request) {
+  const rulesets = await loadRulesets();
+  return engineComputePensionReverse(request, rulesets);
 }
 
 /**

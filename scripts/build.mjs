@@ -110,6 +110,28 @@ const RENAME = {
   // 경로가 쓰지 않으므로** 엔진 쪽을 개명한다. 내보내는 이름이라도 아래 INV 표가
   // 원래 이름을 되살려 별칭 바인딩이 그대로 맞는다.
   'src/engine/constants.mjs': { ISA_INCOME_CHARACTERS: 'ISA_INCOME_CHARACTERS_ENGINE' },
+  // [2026-08-19, D77] 연금 역산기 진입점(`computePensionReverse`)이 처음으로
+  // `engine-client.js`에서 실제로 임포트되면서, 그 의존 그래프 전체
+  // (`reverse.mjs`·`reverse-rules.mjs`·`reverse-exact.mjs` 등)가 처음
+  // 번들에 들어왔다. 넷이 각자 첫 탭의 엔진 모듈과 겹치는 내부 이름을
+  // 쓰고 있었다 — `compute`/`computeFundUseHorizonBoundaries`(위 첫
+  // 줄)와 같은 자리다: **공개 진입점 이름은 화면 쪽(`engine-client.js`)
+  // 것을 그대로 두고, 엔진 내부 이름을 개명한다.**
+  'src/engine/reverse.mjs': {
+    // `engine-client.js`의 `export async function computePensionReverse`가
+    // 이 이름을 그대로 쓴다 — 여기서 개명한 이름은 그 파일의 import 별칭
+    // (`engineComputePensionReverse`)과 이미 글자 그대로 같다.
+    computePensionReverse: 'engineComputePensionReverse',
+    // `notice`는 이 파일 내부에서만 쓰는 헬퍼이고(밖에 내보내지 않는다),
+    // `limits.mjs`도 같은 이름의 내부 헬퍼를 갖는다.
+    notice: 'reverseNoticeHelper',
+  },
+  // `boundaries.mjs`도 같은 이름의 내부 상수(`APPLIED_TO`)를 쓴다 — 위
+  // `isa-return.mjs`·`pension-reference.mjs`·`headline.mjs`·
+  // `fund-use-horizon.mjs`와 같은 부류의 충돌이다.
+  'src/engine/reverse-rules.mjs': { APPLIED_TO: 'APPLIED_TO_REVERSE_RULES' },
+  // `exact.mjs`도 같은 이름의 내부 상수(`ONE_N`, BigInt 1)를 쓴다.
+  'src/engine/reverse-exact.mjs': { ONE_N: 'ONE_N_REVERSE' },
 };
 
 const ident = (n) => new RegExp(`(?<![.\\w$])${n}(?![\\w$])`, 'g');

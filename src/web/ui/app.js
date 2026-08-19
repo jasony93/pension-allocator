@@ -35,15 +35,38 @@
  * 아래 `captureFocus`/`restoreFocus`는 **구조가 어긋나 노드를 교체할 수밖에 없는
  * 자리**(조건부 블록이 생겼다 사라지는 등)를 위한 대비책으로 남는다. 커서는
  * 문자 인덱스가 아니라 유효문자 개수로 기억한다.
+ *
+ * ---------------------------------------------------------------------------
+ * **[2026-08-19, D77] 탭 확장.** 「연금 역산기」 탭이 늘면서 이 파일이 새로
+ * 지는 일 셋 —
+ *
+ * 1. **탭 바.** `ui/tab-bar.js`(design-system 5.33절)가 렌더를 지고, 이
+ *    파일은 활성 탭 id만 들고 있는다.
+ * 2. **두 패널의 동시 마운트.** `screens.md` 2.1.2절 (3) — 탭 전환은
+ *    패널을 없앴다 새로 만드는 것이 아니라 **표시 전환**이어야 한다. 그래서
+ *    첫 탭(`renderInputPanel`/`renderResultPanel`)과 둘째 탭
+ *    (`renderReverseInputPanel`/`renderReverseResultPanel`)을 **매 렌더마다
+ *    함께** 고쳐 쓰고, 활성 탭이 아닌 쪽은 CSS 클래스(`tab-panel-hidden`)로만
+ *    숨긴다 — DOM에서 지우지 않는다. 두 탭은 **서로 다른 store**를 쓴다
+ *    (`state/store.js`의 것과 `state/reverse-store.js`의 것) — 재계산·
+ *    디바운스가 탭마다 독립적으로 돈다(2.1.2절 (3) 근거 2번).
+ * 3. **URL 프래그먼트.** `state/tab-fragment.js`가 탭 id만 읽고 쓴다 — 기존
+ *    공유 링크(`state/share-link.js`, D74)의 `v:1` 데이터 블롭은 첫 탭
+ *    전용으로 그대로 동작한다(아래 초기화 블록의 분기 순서가 그 구분이다).
  */
 
 import { el, mount, patch, significantCount, indexAfterSignificant } from './dom.js';
 import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
+import { renderReverseInputPanel } from './reverse-input-panel.js';
+import { renderReverseResultPanel } from './reverse-result-panel.js';
+import { renderTabBar } from './tab-bar.js';
 import { mountExampleShowcase } from './example-showcase.js';
-import { SERVICE_NAME, SHARE_LINK_INVALID_NOTE } from '../copy.js';
+import { SHARE_LINK_INVALID_NOTE } from '../copy.js';
 import { createStore } from '../state/store.js';
+import { createReverseStore, wonToManwonInputString } from '../state/reverse-store.js';
 import { readShareFragmentFromLocation } from '../state/share-link.js';
+import { readTabIdFromLocation, writeActiveTabToLocation, DEFAULT_TAB_ID } from '../state/tab-fragment.js';
 import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
 import { LOGO_LIGHT_DATA_URI, LOGO_DARK_DATA_URI, LOGO_INTRINSIC_WIDTH, LOGO_INTRINSIC_HEIGHT } from '../assets/logo.js';
@@ -61,26 +84,19 @@ function sharedFragmentInvalidNotice() {
 }
 
 /**
- * 상단 탭 바 — [2026-08-17, 관리자 지시(2차) 1번] `snowball72.com/pension-calculator`
- * 방식(왼쪽 로고 + 그 옆 탭 행)을 참조해 다시 만든다. **탭은 지금 하나뿐**이지만
- * 배열로 둔다 — 나중에 탭이 늘어도 이 목록에 항목만 추가하면 된다(렌더 로직은
- * 손대지 않는다). `active`인 탭에 `aria-current="page"`를 준다 — 실제 하위
- * 페이지 전환이 없는 단일 화면 앱이므로 ARIA `tablist`/`tab`/`tabpanel` 삼종
- * 세트(연결된 tabpanel이 있어야 성립하는 역할)를 억지로 붙이지 않는다. 사이트
- * 내비게이션에 흔한 "현재 위치 표시" 패턴(`aria-current`)이 이 자리의 실제
- * 성질과 맞는다.
- */
-const HEADER_TABS = [{ id: 'account-optimizer', label: SERVICE_NAME, active: true }];
-
-/**
  * [2026-08-17, 관리자 지시(3차) 1번] **로고 둘을 함께 심고 CSS로 표시를
  * 가른다.** `.app-logo-light`/`.app-logo-dark`(styles.css)가 `data-theme`
  * 스탬프 경로와 `prefers-color-scheme` 경로 둘 다에서 정확히 하나만
  * `display: block`으로 남긴다 — 옛 흰 알약 배경(`--logo-plate`)으로 다크에서
  * 로고를 읽히게 하던 처리는 다크 전용 원본이 생기며 이유가 사라져 없앴다.
+ *
+ * **[2026-08-19, D77 판정 2]** 브랜드는 이제 이 로고 하나가 전담한다 — 탭이
+ * 둘이 되면서 "지금 활성 탭 라벨 = 서비스 이름"이라는 겸임이 깨졌다
+ * (`screens.md` 2.1.2절 (2)). 그래서 이 함수는 로고만 그리고, 탭 행은
+ * `tab-bar.js`가 따로 진다(`mountApp` 아래).
  */
-function headerBrand() {
-  return el('div', { class: 'app-header-brand' }, [
+function headerLogo() {
+  return el('div', { class: 'app-header-logo' }, [
     el('img', {
       class: 'app-logo app-logo-light',
       src: LOGO_LIGHT_DATA_URI,
@@ -95,21 +111,6 @@ function headerBrand() {
       width: LOGO_INTRINSIC_WIDTH,
       height: LOGO_INTRINSIC_HEIGHT,
     }),
-    el(
-      'nav',
-      { class: 'app-tabs', 'aria-label': '주요 기능' },
-      HEADER_TABS.map((tab) =>
-        el(
-          'button',
-          {
-            type: 'button',
-            class: `app-tab${tab.active ? ' app-tab-active' : ''}`,
-            'aria-current': tab.active ? 'page' : null,
-          },
-          [tab.label],
-        ),
-      ),
-    ),
   ]);
 }
 
@@ -160,6 +161,10 @@ export function mountApp(root, { engineClient, analytics }) {
   }
 
   const store = createStore({ engineClient, analytics, onChange: () => scheduleRender() });
+  // 역산기 store — **첫 탭과 상태를 공유하지 않는다**(engine-interface.md
+  // 12절 머리말). 계측은 이번 회차에 만들지 않는다(D77 "계측·지표" 절) —
+  // `analytics`를 넘기지 않는다.
+  const reverseStore = createReverseStore({ engineClient, onChange: () => scheduleRender() });
   const renderGuard = { active: false };
 
   const layout = el('div', { class: 'app-layout' });
@@ -167,16 +172,10 @@ export function mountApp(root, { engineClient, analytics }) {
   // 화면 밝기는 결과가 아니라 화면 전체의 성질이고, store를 거치면 테마를 바꿀
   // 때마다 결과 패널이 다시 그려져 도넛의 각도 애니메이션이 발동한다 — 값이
   // 바뀐 것이 아니므로 조각은 그 자리에 있어야 한다. 색은 CSS 변수가 나른다.
-  //
-  // **[2026-08-17, 관리자 지시(2차) 1·2번] 헤더 구조를 다시 짰다.** 옛
-  // `.app-header-titles`(가명칭 텍스트 + 과세연도, 왼쪽)는 없어졌다 — 가명칭
-  // 자리를 이제 `headerBrand()`(로고 + 탭)가 진다. 과세연도 표기는 사라지지
-  // 않는다 — `ThemeControl`과 함께 오른쪽 묶음(`app-header-meta`)으로 옮긴다.
-  // 왼쪽(브랜드+탭)·오른쪽(과세연도+밝기) 두 묶음으로 나눈 것은 옛 구조와
-  // 같은 이유다: **묶지 않으면 모바일에서 밀린다**(`browser/theme.browser.mjs`
-  // 가 좁은 폭에서 실측한다) — 밝기 버튼은 44px 자리를 그대로 지킨다.
+  let activeTabId = DEFAULT_TAB_ID;
+  const tabsSlot = el('div', {});
   const header = el('header', { class: 'app-header' }, [
-    headerBrand(),
+    el('div', { class: 'app-header-brand' }, [headerLogo(), tabsSlot]),
     el('div', { class: 'app-header-meta' }, [
       el('span', { class: 'app-tax-year' }, ['2026 과세연도 기준']),
       themeControl(createThemeController()),
@@ -187,11 +186,27 @@ export function mountApp(root, { engineClient, analytics }) {
   // 이 화면의 재계산 대상이 아니라 한 번 계산해 두는 정적 예시다. Shadow DOM
   // 안에 그려진다(`example-showcase.js` 머리말 — `.amount-card`·`.chart-donut`
   // 재사용이 결과 패널을 겨눈 문서 전체 질의와 충돌하지 않게 하는 경계).
+  // **탭과 무관하게 항상 있다**(`screens.md` 4절 "이 화면의 상시 요소") —
+  // 탭 구조 도입이 이 자리를 바꾸지 않는다.
   const exampleSlot = el('div', { class: 'example-showcase-slot' });
-  const mainEl = el('div', { class: 'app-main' });
+
+  // ---- 두 탭의 패널 — 동시 마운트, 표시만 전환(2.1.2절 (3)) ----------------
   const inputSlot = el('div', { class: 'input-slot' });
   const resultSlot = el('div', { class: 'result-slot' });
-  mainEl.append(inputSlot, resultSlot);
+  const calculatorPanel = el('div', { class: 'app-main', id: 'tabpanel-calculator', role: 'tabpanel', 'aria-labelledby': 'tab-calculator' }, [
+    inputSlot,
+    resultSlot,
+  ]);
+
+  const reverseInputSlot = el('div', { class: 'reverse-input-slot' });
+  const reverseResultSlot = el('div', { class: 'reverse-result-slot' });
+  const reversePanel = el(
+    'div',
+    { class: 'app-main', id: 'tabpanel-pension-reverse', role: 'tabpanel', 'aria-labelledby': 'tab-pension-reverse' },
+    [reverseInputSlot, reverseResultSlot],
+  );
+
+  const mainGroup = el('div', { class: 'app-main-group' }, [calculatorPanel, reversePanel]);
 
   // 12.2(b) — "현재 제휴·광고 없음"을 푸터에서 뗀 것은 원래 `LimitNote`가
   // 같은 스크롤에서 이미 그 사실을 말하고 있었기 때문이다. **D61(관리자
@@ -202,9 +217,24 @@ export function mountApp(root, { engineClient, analytics }) {
   // 다시 넣는 것은 소유자의 결정을 되돌리는 것이다.
   const footer = el('footer', { class: 'app-footer' }, ['제공자 표기 · 룰셋 기준일 2026-08-08']);
 
-  layout.append(header, exampleSlot, mainEl, footer);
+  layout.append(header, exampleSlot, mainGroup, footer);
   mount(root, layout);
   mountExampleShowcase(exampleSlot, { engineClient });
+
+  /**
+   * 활성 탭을 바꾼다. **DOM을 지우지 않는다** — `tab-panel-hidden` 클래스
+   * 하나로 표시만 전환한다(2.1.2절 (3)). URL 프래그먼트도 함께 갱신한다
+   * (`history.replaceState`, 2.1.2절 (4)) — 탭 전환마다 히스토리가 쌓이면
+   * "뒤로 가기"가 값 입력 취소처럼 오작동하기 때문이다.
+   */
+  function setActiveTab(tabId) {
+    if (tabId === activeTabId) return;
+    activeTabId = tabId;
+    calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
+    reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
+    writeActiveTabToLocation(activeTabId);
+    patch(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
+  }
 
   // [관리자 지시(4차) 7번, D74] 공유 링크로 열렸으면 입력을 채우고 계산까지
   // 실행한다. 프래그먼트가 아예 없으면(보통 방문) 아무것도 하지 않는다 —
@@ -212,18 +242,45 @@ export function mountApp(root, { engineClient, analytics }) {
   // `{ ok:false, ... }`). **한 번만 읽는다** — 이후 사용자가 값을 고치면
   // 해시가 낡은 값을 계속 가리키게 되지만, 그 상태를 URL과 동기화하는 것은
   // 이번 지시(공유 시점의 스냅샷 링크)의 범위 밖이다.
-  const sharedFragment = readShareFragmentFromLocation();
-  if (sharedFragment) {
-    if (sharedFragment.ok) {
-      store.applySharedForm(sharedFragment.form);
-    } else {
-      mainEl.before(sharedFragmentInvalidNotice());
+  //
+  // **[2026-08-19, D77] 탭 id 프래그먼트가 먼저다.** `readTabIdFromLocation`이
+  // 탭 id(`#calculator`/`#pension-reverse`)를 찾으면 그 탭을 빈 상태로 열고,
+  // 옛 공유 링크 데이터 경로는 아예 건드리지 않는다(`state/tab-fragment.js`
+  // 머리말 — "프래그먼트 파서가 탭 id와 데이터를 구분") — 탭 id를 그 옛
+  // base64url 디코더에 넣으면 `parse_failed`로 잘못 해석되어 "손상된 공유
+  // 링크" 배너가 뜨는 회귀가 난다.
+  const tabIdFromUrl = readTabIdFromLocation();
+  if (tabIdFromUrl) {
+    activeTabId = tabIdFromUrl;
+  } else {
+    const sharedFragment = readShareFragmentFromLocation();
+    if (sharedFragment) {
+      if (sharedFragment.ok) {
+        store.applySharedForm(sharedFragment.form);
+      } else {
+        mainGroup.before(sharedFragmentInvalidNotice());
+      }
     }
+  }
+  calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
+  reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
+  mount(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
+
+  /**
+   * `[14-D]` 절세계좌 계산기로의 연결(AC-R21·AC-R22). **합계 하나만** 첫 탭의
+   * 「월 납입 여력」 필드에 채우고, 다른 필드는 바꾸지 않는다. 누른 뒤 탭을
+   * 「절세계좌 계산기」로 전환한다(9.0절 전제 2번 — 배분값·수익률·개시일 등은
+   * 옮기지 않는다).
+   */
+  function prefillMonthlyCapacity(totalMonthlyKrw) {
+    store.setField('monthlyCapacity', wonToManwonInputString(totalMonthlyKrw), { immediate: true });
+    setActiveTab('calculator');
   }
 
   renderNow = function renderImpl() {
     const state = store.getState();
-    const focusInfo = captureFocus(inputSlot);
+    const reverseState = reverseStore.getState();
+    const focusInfo = captureFocus(mainGroup);
     // 재진입 가드 — 렌더가 지금 초점을 가진 노드를 지우는 동안 브라우저가
     // 합성 blur를 발생시킨다. 그 blur가 다시 재계산을 걸고 재렌더를 예약하면
     // "렌더 → 초점 노드 제거 → blur → 재계산 → 재렌더 → …" 무한 루프가 된다
@@ -236,6 +293,7 @@ export function mountApp(root, { engineClient, analytics }) {
     // 경로는 여전히 남아 있고 그 자리에서 같은 연쇄가 시작될 수 있다.
     renderGuard.active = true;
     patch(inputSlot, renderInputPanel({ state, store, boundariesInfo: state.boundaries, renderGuard }));
+    patch(reverseInputSlot, renderReverseInputPanel({ state: reverseState, store: reverseStore, renderGuard }));
     renderGuard.active = false;
     restoreFocus(focusInfo);
     // **결과 패널도 같은 이유로 고쳐 쓴다.** 통째로 갈아치우면, 입력 칸에서
@@ -246,6 +304,7 @@ export function mountApp(root, { engineClient, analytics }) {
     // 브라우저에서 `mousedown`·`mouseup`은 오는데 `click`이 오지 않는 것을
     // 확인했다(`browser/share-modal.browser.mjs`).
     patch(resultSlot, renderResultPanel({ state, store }));
+    patch(reverseResultSlot, renderReverseResultPanel({ state: reverseState, onPrefill: prefillMonthlyCapacity }));
     // 도넛 진입 애니메이션은 여기, **patch가 끝난 뒤** 실제로 화면에 붙은
     // 노드를 다시 찾아 돌린다. `patch`는 구조가 같으면 새로 만든 노드를 버리고
     // 기존 노드에 속성만 복사하므로, `renderResultPanel`이 만드는 시점에
@@ -320,5 +379,5 @@ export function mountApp(root, { engineClient, analytics }) {
 
   renderNow();
 
-  return { render: scheduleRender, store };
+  return { render: scheduleRender, store, reverseStore };
 }

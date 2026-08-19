@@ -95,7 +95,7 @@ import { parseManwonToWon, ISA_INCOME_CHARACTERS, isaYearsSinceOpeningVisible } 
  * 어디에도 단서가 없다(AC 8 실패). 이 항목은 사용자가 방금 `예`를 눌러 스스로
  * 불러낸 필드이므로, 비어 있다는 사실을 필드 옆에서 바로 말하는 것이 맞다.
  */
-function fieldError(errors, key, { showMissing = false } = {}) {
+export function fieldError(errors, key, { showMissing = false } = {}) {
   const e = errors[key];
   if (!e) return null;
   if (e.code === 'missing' && !showMissing) return null;
@@ -114,7 +114,7 @@ function fieldError(errors, key, { showMissing = false } = {}) {
  * 같은 순수 함수(`parseManwonToWon`)로 미리보기만 만든다 — 값을 새로 계산하지
  * 않고 화면이 이미 아는 변환을 한 번 더 보여줄 뿐이다.
  */
-function numberField({ id, label, value, help, error, warning, onInput, onBlur, renderGuard, suffix = '만원' }) {
+export function numberField({ id, label, value, help, error, warning, onInput, onBlur, renderGuard, suffix = '만원' }) {
   const inputEl = el('input', {
     id,
     class: `field-input${error ? ' field-input-error' : warning ? ' field-input-warning' : ''}`,
@@ -174,7 +174,7 @@ function wonPreviewNode(value, error) {
  * 사용자가 아직 아무것도 치지 않았으면 항상 빈 문자열이고, 이 함수가 그
  * 자리에 아무 숫자도 채워 넣지 않는다.
  */
-function percentField({ id, label, value, help, error, onInput, onBlur, renderGuard }) {
+export function percentField({ id, label, value, help, error, onInput, onBlur, renderGuard }) {
   const inputEl = el('input', {
     id,
     class: `field-input${error ? ' field-input-error' : ''}`,
@@ -200,7 +200,7 @@ function percentField({ id, label, value, help, error, onInput, onBlur, renderGu
 }
 
 /** `yearsField` — 정산 기간(선택, 년). 금액이 아니므로 `numberField`를 쓰지 않는다. */
-function yearsField({ id, label, value, help, error, onInput, onBlur, renderGuard }) {
+export function yearsField({ id, label, value, help, error, onInput, onBlur, renderGuard }) {
   const inputEl = el('input', {
     id,
     class: `field-input${error ? ' field-input-error' : ''}`,
@@ -225,7 +225,7 @@ function yearsField({ id, label, value, help, error, onInput, onBlur, renderGuar
   ]);
 }
 
-function segmentToggle({ id, label, value, options, onChange, help }) {
+export function segmentToggle({ id, label, value, options, onChange, help }) {
   return el('div', { class: 'field' }, [
     el('span', { class: 'field-label' }, [label]),
     el(
@@ -256,7 +256,7 @@ function segmentToggle({ id, label, value, options, onChange, help }) {
  * 텍스트 span)를 갖는다 — 아이콘 유무로 구조가 갈리면 CSS가 자리마다 다시
  * 정렬을 맞춰야 한다.
  */
-function groupTitleNode(iconFn, text) {
+export function groupTitleNode(iconFn, text) {
   return el('h3', { class: 'input-group-title' }, [iconFn(), el('span', {}, [text])]);
 }
 
@@ -266,7 +266,7 @@ function groupTitleNode(iconFn, text) {
  * 다른 `div`로 **고쳐 써지면서** 안쪽을 통째로 갈아엎는다. 표식을 붙이면 그 자리는
  * 깔끔한 교체가 되고, 그 위아래의 입력 칸은 건드리지 않는다.
  */
-function conditionalGroup(visible, children, key) {
+export function conditionalGroup(visible, children, key) {
   return visible ? el('div', { class: 'conditional-group', 'data-key': key }, children) : null;
 }
 

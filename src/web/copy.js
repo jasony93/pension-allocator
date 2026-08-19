@@ -15,8 +15,10 @@ import { formatKrw, formatKrwAbbreviated, formatPercent, formatPercentTrimmed, f
 // 않았다는 표시였는데, 소유자가 배포를 마쳤고 이 이름으로 굳혔다. **[2026-08-17,
 // 관리자 지시(2차) 1번, D72]** 헤더 크기·위계는 이제 `styles.css`의
 // `.app-tab`이 진다 — 옛 `.app-title`(가명칭 텍스트)은 로고+탭 바로 바뀌며
-// 없어졌고, 이 상수는 지금 활성 탭(`ui/app.js`의 `HEADER_TABS`)의 라벨로
-// 쓰인다(이 파일은 여전히 문구만 갖는다).
+// 없어졌고, 이 상수는 첫 탭(`ui/tab-bar.js`의 `TABS`)의 라벨로 쓰인다(이
+// 파일은 여전히 문구만 갖는다). **[2026-08-19, D77]** 탭이 둘로 늘면서
+// 서비스 정체성은 로고(`ui/app.js`의 `headerLogo()`)가 지고, 이 이름은
+// 이제 순수하게 "첫 탭이 하는 일"만 가리킨다(D77 판정 2).
 export const SERVICE_NAME = '절세계좌 계산기';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +131,15 @@ const ERROR_MESSAGE = {
   unknown_plan_variant: () => '알 수 없는 배분안입니다.',
   ruleset_load_failed: () => '계산에 필요한 세법 규칙을 불러오지 못했습니다.',
   rule_missing: (params) => `계산에 필요한 규칙(${params.rule_id})을 찾을 수 없습니다.`,
+  // 연금 역산기(D77, `engine-interface.md` 12.1절) — 오류 코드는 두 진입점이
+  // 나누지 않는다(계약 8.11절). 개시일이 세무 유닛이 정의하는 최소 개시
+  // 연령 미만이면 이 코드가 난다. 연령 수치는 `params.minimum_age_years`로
+  // 엔진이 룰셋에서 읽어 실어 보낸 값을 그대로 쓴다 — 화면 코드에 세법 수치를
+  // 박지 않는다.
+  annuity_start_below_minimum_age: (params) =>
+    params.minimum_age_years != null
+      ? `연금 개시일의 만 나이가 최소 개시 연령(만 ${params.minimum_age_years}세) 미만입니다.`
+      : '연금 개시일의 만 나이가 최소 개시 연령 미만입니다.',
 };
 
 export function errorMessage(error) {
