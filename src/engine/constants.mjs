@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '14.0.1';
+export const SCHEMA_VERSION = '14.1.0';
 export const SUPPORTED_MAJOR = 14;
 
 export const ACCOUNT = {
@@ -656,6 +656,11 @@ export const ERROR = {
   UNKNOWN_PLAN_VARIANT: 'unknown_plan_variant',
   RULESET_LOAD_FAILED: 'ruleset_load_failed',
   RULE_MISSING: 'rule_missing',
+
+  // ── 연금 역산기 (D77) ──
+  // 개시 나이가 룰셋의 최소 개시 연령에 못 미친다. **이 오류가 있으면 법정 사실 블록이
+  // 나오지 않는다** — 성립하지 않는 개시 시점 위에서 낸 「최소 평가액」은 사실이 아니다.
+  ANNUITY_START_BELOW_MIN_AGE: 'annuity_start_below_minimum_age',
 };
 
 export const NOTICE = {
@@ -721,6 +726,38 @@ export const NOTICE = {
   ISA_RATE_GAP_AXIS_ZERO: 'isa_rate_gap_axis_zero_because_within_tax_free_limit',
 };
 
+/**
+ * **연금 역산기(D77)의 안내 코드. `NOTICE`와 목록을 나눠 둔다.**
+ *
+ * **왜 나눴나.** 두 탭은 **문구 사전이 다르다.** `src/web/copy.js`는 절세계좌 계산기의
+ * 사전이고 `wording.test.mjs`가 「`NOTICE`의 모든 코드에 문장이 있는가」를 전건 대조한다.
+ * 역산기의 코드를 그 목록에 섞으면 **첫 탭의 사전이 두 번째 탭의 문장을 지게 되고**,
+ * 그 문장이 없는 동안에는 첫 탭의 검사가 붉어진다 — 두 탭의 회차가 다른데 한쪽의 검사가
+ * 다른 쪽의 진도에 묶인다.
+ *
+ * **대가를 분명히 적어 둔다.** 이 목록은 지금 **어느 문구 검사도 지키지 않는다.**
+ * `web-dev`가 역산기 사전을 만들 때 `wording.test.mjs`와 같은 형태의 전건 대조를
+ * 이 목록에 대해서도 세워야 하고, 그 전까지는 화면에 코드 문자열이 그대로 뜰 수 있다.
+ * 계약 8.11절과 `open_questions`에 같은 말이 있다.
+ */
+export const REVERSE_NOTICE = {
+  RETURN_RATE_NOT_SUPPLIED: 'reverse_return_rate_not_supplied',
+  ACCUMULATION_PERIOD_NOT_POSITIVE: 'reverse_accumulation_period_not_positive',
+  TARGET_ALREADY_FUNDED: 'reverse_target_already_funded',
+  ANNUAL_CAP_BINDS_FIRST: 'reverse_annual_cap_binds_before_balance',
+  EXCEEDS_CONTRIBUTION_CEILING: 'reverse_exceeds_statutory_contribution_ceiling',
+  PUBLIC_PENSION_NOT_SUPPLIED: 'reverse_public_pension_not_supplied',
+  PUBLIC_PENSION_COVERS_TARGET: 'reverse_public_pension_covers_target',
+  PUBLIC_PENSION_START_AGE_NOT_IN_RULESET: 'reverse_public_pension_start_age_not_in_ruleset',
+  OTHER_INCOME_UNKNOWN: 'reverse_other_income_unknown',
+  ELECTIVE_BASIS_UNDETERMINED: 'reverse_elective_basis_undetermined',
+  WITHHOLDING_RATE_VARIES: 'reverse_withholding_rate_varies_within_payout_period',
+  ISA_CONVERSION_PATH_NOT_OPEN: 'reverse_isa_conversion_path_not_open',
+  DEFERRED_BASE_RATE_OUT_OF_SCOPE: 'reverse_deferred_retirement_base_rate_out_of_scope',
+  /** ISA 가입경과연수 미입력. **첫 탭과 같은 문자열을 일부러 쓴다** — 같은 사실이다. */
+  ISA_TENURE_MISSING: 'isa_tenure_missing',
+};
+
 export const COMPARISON_NOTE = {
   PLANS_COLLAPSED_SINGLE: 'plans_collapsed_single',
   ALL_ACCOUNTS_PENALTY: 'all_accounts_have_early_exit_penalty',
@@ -775,6 +812,31 @@ export const ASSUMPTION = {
   ISA_LOSS_ZERO: 'isa_loss_assumed_zero',
   ISA_COMPARISON_BASELINE_WITHHOLDING: 'isa_comparison_baseline_is_withholding_only',
   ISA_RETURN_HELD_TO_SETTLEMENT: 'isa_return_assumes_contract_held_to_settlement',
+};
+
+/**
+ * **연금 역산기(D77)의 가정 코드. `ASSUMPTION`과 목록을 나눈 이유는 `REVERSE_NOTICE`와 같다.**
+ *
+ * **층 4를 열지 않기 위해 서 있는 가정 둘이 여기 있다** — 무성장과 균등 인출. 둘 다 룰셋
+ * `pension.withdrawal.annual_cap.inverse_use.assumption_stated_once`가 스스로 적은 가정이고,
+ * 그 위에서만 「필요 최소 평가액」이 하나의 수가 된다.
+ */
+export const REVERSE_ASSUMPTION = {
+  ZERO_GROWTH_FOR_CAP: 'reverse_zero_growth_for_statutory_cap',
+  LEVEL_ANNUAL_WITHDRAWAL: 'reverse_level_annual_withdrawal_assumed',
+  /**
+   * 기산연차를 1로 보았다. **그 기산이 다른 집단이 있고 그 집단의 첫해 한도는 두 배다** —
+   * 계좌 개설일을 입력으로 받지 않는 한 두 집단을 구별할 수 없으므로, 한쪽을 단정하는
+   * 대신 어느 쪽을 보았는지를 값으로 낸다.
+   */
+  FIRST_WITHDRAWAL_YEAR_INDEX: 'reverse_first_withdrawal_year_index_assumed',
+  MONTHLY_COMPOUNDING: 'reverse_monthly_compounding',
+  RETURN_RATE_USER_SUPPLIED: 'reverse_return_rate_user_supplied',
+  DEFERRED_NOT_GROWN: 'reverse_deferred_retirement_not_grown',
+  LOWER_BOUNDS_ROUNDED_UP: 'reverse_lower_bounds_rounded_up',
+  ISA_CUMULATIVE_ZERO: 'reverse_isa_cumulative_contribution_zero_assumed',
+  TODAY_CURRENCY: 'reverse_amounts_in_today_currency',
+  START_DATE_DERIVED: 'reverse_annuity_start_date_derived_from_birthday',
 };
 
 /**
