@@ -186,8 +186,16 @@ export function mountApp(root, { engineClient, analytics }) {
   // 이 화면의 재계산 대상이 아니라 한 번 계산해 두는 정적 예시다. Shadow DOM
   // 안에 그려진다(`example-showcase.js` 머리말 — `.amount-card`·`.chart-donut`
   // 재사용이 결과 패널을 겨눈 문서 전체 질의와 충돌하지 않게 하는 경계).
-  // **탭과 무관하게 항상 있다**(`screens.md` 4절 "이 화면의 상시 요소") —
-  // 탭 구조 도입이 이 자리를 바꾸지 않는다.
+  // **[2026-08-19, 관리자 지시 — 번들 실측 결함] 탭과 무관하게 항상 있던
+  // 것을 뒤집는다.** `screens.md` 4절 "이 화면의 상시 요소"는 탭이 하나였던
+  // 시점의 서술이다 — 탭이 둘이 된 지금 예시 블록(고정 페르소나의 절세
+  // 배분 도넛)이 「연금 역산기」 탭 위에도 그대로 보이면, 이 계산기와
+  // 무관한 예시가 역산기 결과로 오인될 수 있다(예시 블록의 존재 이유 자체가
+  // "자기 결과로 오인되지 않게" 페르소나 입력을 병기하는 것인데, 엉뚱한
+  // 탭 위에 뜨면 그 방어가 무의미해진다). **「절세계좌 계산기」 탭이
+  // 활성일 때만 보인다** — `tab-panel-hidden`과 같은 클래스 하나로 표시만
+  // 전환한다(마운트는 한 번뿐이다 — Shadow DOM 안의 정적 예시라 탭마다
+  // 다시 계산할 것이 없으므로 지우고 다시 만들 이유가 없다).
   const exampleSlot = el('div', { class: 'example-showcase-slot' });
 
   // ---- 두 탭의 패널 — 동시 마운트, 표시만 전환(2.1.2절 (3)) ----------------
@@ -232,6 +240,9 @@ export function mountApp(root, { engineClient, analytics }) {
     activeTabId = tabId;
     calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
     reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
+    // 예시 블록은 첫 탭 전용이다(위 `exampleSlot` 주석) — 두 패널과 같은
+    // 클래스로 표시만 전환한다.
+    exampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
     writeActiveTabToLocation(activeTabId);
     patch(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
   }
@@ -264,6 +275,7 @@ export function mountApp(root, { engineClient, analytics }) {
   }
   calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
   reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
+  exampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
   mount(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
 
   /**

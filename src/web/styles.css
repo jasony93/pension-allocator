@@ -2006,6 +2006,9 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    `@media print`의 `.app-main { display: block }` 등 다른 `.app-main` 규칙에
    덮이지 않는다 — 클래스 두 개를 겹친 선택자(특이도 0-2-0)로 이를 보증한다. */
 .app-main.tab-panel-hidden { display: none; }
+/* [2026-08-19, 관리자 지시 — 번들 실측 결함] 예시 블록은 첫 탭 전용이다
+   (`ui/app.js` `exampleSlot` 주석) — 같은 표시 전환 클래스를 쓴다. */
+.example-showcase-slot.tab-panel-hidden { display: none; }
 
 /* `KnownOrUnknownField`(design-system 5.26절)의 "모르겠습니다" — `horizon-
    option`·`segment-option`과 같은 시각 언어(선택 시 `accent` 테두리 +

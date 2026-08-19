@@ -126,3 +126,34 @@ test('첫 탭 회귀 — 탭 구조가 들어온 뒤에도 예시 블록·도넛
   const donutBox = await page.evaluate(`(() => { const r = document.querySelector('.result-slot .chart-donut').getBoundingClientRect(); return { width: r.width, height: r.height }; })()`);
   assert.ok(donutBox.width > 0 && donutBox.height > 0, `결과 도넛이 실제 크기를 갖고 그려진다: ${JSON.stringify(donutBox)}`);
 });
+
+/**
+ * [2026-08-19, 관리자 지시 — 번들 실측 결함] 예시 블록(고정 페르소나 도넛)이
+ * 탭 패널 밖에 있어 「연금 역산기」 탭에서도 그대로 보이던 결함. **"있다 ≠
+ * 보인다"** — `getBoundingClientRect`로 실제 0×0인지까지 확인한다(`display:
+ * none`이 걸렸는지는 존재 여부만으로는 알 수 없다).
+ */
+test('예시 블록은 「절세계좌 계산기」 탭에서만 보이고, 「연금 역산기」 탭에서는 0×0이다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.waitFor(`!!document.querySelector('.example-showcase-slot')`);
+
+  const onCalculator = await page.evaluate(
+    `(() => { const r = document.querySelector('.example-showcase-slot').getBoundingClientRect(); return { width: r.width, height: r.height }; })()`,
+  );
+  assert.ok(onCalculator.width > 0 && onCalculator.height > 0, `절세계좌 계산기 탭에서는 예시 블록이 보여야 한다: ${JSON.stringify(onCalculator)}`);
+
+  await page.clickElement(`document.getElementById('tab-pension-reverse')`);
+  await sleep(200);
+  const onReverse = await page.evaluate(
+    `(() => { const r = document.querySelector('.example-showcase-slot').getBoundingClientRect(); return { width: r.width, height: r.height }; })()`,
+  );
+  assert.deepEqual(onReverse, { width: 0, height: 0 }, `연금 역산기 탭에서는 예시 블록이 실제로 0×0이어야 한다(있다 ≠ 보인다): ${JSON.stringify(onReverse)}`);
+
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(200);
+  const backOnCalculator = await page.evaluate(
+    `(() => { const r = document.querySelector('.example-showcase-slot').getBoundingClientRect(); return { width: r.width, height: r.height }; })()`,
+  );
+  assert.ok(backOnCalculator.width > 0 && backOnCalculator.height > 0, `첫 탭으로 돌아오면 예시 블록이 다시 보여야 한다: ${JSON.stringify(backOnCalculator)}`);
+});
