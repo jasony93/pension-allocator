@@ -428,13 +428,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
    `.example-showcase-slot`은 shadow host(빛 DOM) — 다른 섹션과 가로 여백을
    맞춘다(`.app-header`·`.app-main`과 같은 값). */
-.example-showcase-slot { padding: var(--space-5) var(--space-5) 0; }
-@media (max-width: 767px) { .example-showcase-slot { padding: var(--space-4) var(--space-4) 0; } }
+.example-showcase-slot, .reverse-example-showcase-slot { padding: var(--space-5) var(--space-5) 0; }
+@media (max-width: 767px) { .example-showcase-slot, .reverse-example-showcase-slot { padding: var(--space-4) var(--space-4) 0; } }
 /* [2026-08-17, 소유자 지시 5번] 위쪽 여백만 줄인다(좌우는 `.app-main`과 맞춘
    폭 정렬이라 손대지 않는다) — 화살표가 1440×900 첫 화면 안에 들어오게 하는
    전체 축소분의 일부다(`.example-showcase` 자체 패딩·행간격과 함께 아래에서
    더 줄인다). */
-@media (min-width: 1024px) { .example-showcase-slot { padding: var(--space-4) var(--space-6) 0; } }
+@media (min-width: 1024px) { .example-showcase-slot, .reverse-example-showcase-slot { padding: var(--space-4) var(--space-6) 0; } }
 /* 인쇄물에는 결과와 고지만 남는다(위 `.app-header` 규칙과 같은 원칙,
    `@media print` 블록 참고) — 예시는 이 사용자의 결과가 아니므로 종이에도
    실리지 않는다. */
@@ -1909,7 +1909,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   /* `.example-showcase-slot`(관리자 지시 2026-08-14 4번) — 이 사용자의 결과가
      아닌 예시다. "인쇄물에는 결과와 고지만 남는다"는 이 블록의 원칙이 그대로
      적용된다. shadow root 안 내용은 host를 숨기면 함께 사라진다. */
-  .app-header, .app-footer, .input-slot, .reverse-input-slot, .save-share, .example-showcase-slot { display: none; }
+  .app-header, .app-footer, .input-slot, .reverse-input-slot, .save-share, .example-showcase-slot, .reverse-example-showcase-slot { display: none; }
   .app-main { display: block; padding: 0; gap: 0; }
   /* [D74] `.result-body`의 자식 중 요약 시트가 아닌 것은 전부 숨긴다 —
      헤드라인 카드(`.amount-card`)·도넛+계좌별 세제혜택 막대(`.chart-area`)·
@@ -2008,7 +2008,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .app-main.tab-panel-hidden { display: none; }
 /* [2026-08-19, 관리자 지시 — 번들 실측 결함] 예시 블록은 첫 탭 전용이다
    (`ui/app.js` `exampleSlot` 주석) — 같은 표시 전환 클래스를 쓴다. */
-.example-showcase-slot.tab-panel-hidden { display: none; }
+.example-showcase-slot.tab-panel-hidden, .reverse-example-showcase-slot.tab-panel-hidden { display: none; }
 
 /* `KnownOrUnknownField`(design-system 5.26절)의 "모르겠습니다" — `horizon-
    option`·`segment-option`과 같은 시각 언어(선택 시 `accent` 테두리 +
@@ -2049,11 +2049,23 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .statutory-fact-block-placeholder { align-items: flex-start; color: var(--text-secondary); }
 
 /* ---- `[14-B]` ContributionAmountBar (design-system 5.35절) -----------------
-   공통 화폐 축을 공유하는 막대 목록 — 자기정규화 AllocationBar와 다르다. */
+   [2026-08-19, 게이트 5 D78 ③] 소유자가 막대 목록 판정을 명시로 덮었다 —
+   실제로 그리는 것은 `AccountDonut` + 도넛 옆(데스크톱)/아래(모바일) 배분표다
+   (`.account-table`, `[4-D]`와 같은 클래스를 재사용한다). 막대 목록 전용
+   클래스(`.contribution-amount-row`·`-track`·`-fill`)는 지우지 않는다 —
+   이 파일의 다른 "판정을 덮은 자리"(예: `.example-showcase-amount` 재사용)와
+   같은 기록 관행이다. 지금 이 클래스들을 만드는 JS 호출부는 없다. */
 .contribution-amount-bar {
   padding: var(--space-5); background: var(--surface-raised);
   border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-1);
   display: flex; flex-direction: column; gap: var(--space-4);
+}
+.contribution-amount-donut-row { display: flex; flex-direction: column; gap: var(--space-4); align-items: center; }
+.contribution-amount-donut-row .account-table-scroll { width: 100%; }
+@media (min-width: 768px) {
+  .contribution-amount-donut-row { flex-direction: row; align-items: flex-start; gap: var(--space-6); }
+  .contribution-amount-donut-row .chart-donut { flex: 0 0 auto; }
+  .contribution-amount-donut-row .account-table-scroll { flex: 1 1 0; }
 }
 .contribution-amount-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .contribution-amount-row-head { display: flex; justify-content: space-between; align-items: baseline; }
@@ -2061,7 +2073,13 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .contribution-amount-row-value { font-variant-numeric: tabular-nums; font-weight: 600; }
 .contribution-amount-track { height: 20px; border-radius: var(--radius-full); background: var(--data-track); border: 1px solid var(--border-subtle); overflow: hidden; }
 .contribution-amount-fill { height: 100%; border-radius: var(--radius-full); transition: width 240ms ease-out; }
-.contribution-amount-condition { margin: 0; }
+.contribution-amount-condition { margin: 0; text-align: center; }
+/* [2026-08-19, 게이트 5 D78 ④ 후속] 배분 근거 문장 — `[4-D]`의
+   `.table-row-note`가 이미 색·테두리를 진다. 행마다 둘 이상 있을 수 있어
+   줄 사이 최소 간격만 더한다. */
+.contribution-amount-fill-basis { margin: 0; }
+.contribution-amount-fill-basis + .contribution-amount-fill-basis { margin-top: var(--space-1); }
+.contribution-amount-fill-order { margin: 0; }
 .contribution-amount-not-needed { margin: 0; color: var(--text-secondary); }
 .contribution-amount-absent { margin-top: 0; }
 
@@ -2087,3 +2105,11 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 /* ---- `[14-E]` 한계·범위 고지 ------------------------------------------------ */
 .reverse-scope-note { padding-top: var(--space-2); }
 .reverse-scope-note p { margin: 0; }
+
+/* ---- 연금 역산기 예시 블록 (게이트 5 D78 ②, design-system 5.32.1절) --------
+   `.example-showcase-amount` 그리드 영역을 그대로 쓰되(새 그리드를 만들지
+   않는다), `AmountCard` 대신 무성장 조건절을 놓는다 — 이 탭에는 단일
+   헤드라인 금액이 없다. 텍스트만 가운데 정렬한다(그 영역의 폭·위치
+   규칙은 `.example-showcase-amount`가 이미 진다). */
+.reverse-example-showcase-condition { text-align: center; }
+.reverse-example-showcase-condition p { margin: 0; }

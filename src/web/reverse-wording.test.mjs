@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { REVERSE_NOTICE, REVERSE_ASSUMPTION } from '../engine/constants.mjs';
-import { reverseNoticeMessage, reverseAssumptionMessage } from './reverse-copy.js';
+import { REVERSE_NOTICE, REVERSE_ASSUMPTION, REVERSE_FILL_BASIS, REVERSE_FILL_ORDER_VARIANT } from '../engine/constants.mjs';
+import {
+  reverseNoticeMessage,
+  reverseAssumptionMessage,
+  reverseFillBasisMessage,
+  reverseFillOrderVariantMessage,
+} from './reverse-copy.js';
 
 /**
  * `wording.test.mjs`와 같은 형태의 전건 대조 시험 — 연금 역산기 판이다.
@@ -79,6 +84,60 @@ test('no REVERSE_NOTICE/REVERSE_ASSUMPTION sentence uses vocabulary the charter 
     const text = reverseAssumptionMessage(code, { annual_return_rate: 0.05 });
     for (const word of banned) assert.ok(!text.includes(word), `REVERSE_ASSUMPTION.${code}: "${word}" — ${text}`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-19, 게이트 5 D78 ④ 후속 · `tax-rules-report.md` 32절] 배분 근거
+// 코드 — `REVERSE_FILL_BASIS`·`REVERSE_FILL_ORDER_VARIANT`. 관리자 지시:
+// "지금은 NOTICE·ASSUMPTION만 훑어 이 다섯은 문구가 없어도 안 붉어진다 —
+// 두 목록에도 같은 형태의 대조를 세워라."
+// ---------------------------------------------------------------------------
+
+test('every REVERSE_FILL_BASIS code has a sentence — no raw code reaches the screen', () => {
+  for (const code of Object.values(REVERSE_FILL_BASIS)) {
+    const text = reverseFillBasisMessage(code);
+    assert.notEqual(text, code, `REVERSE_FILL_BASIS.${code}에 대응하는 문구가 reverse-copy.js에 없다`);
+    assert.ok(typeof text === 'string' && text.length > 0, `${code}: 빈 문자열이다`);
+  }
+});
+
+test('every REVERSE_FILL_ORDER_VARIANT code has a sentence — no raw code reaches the screen', () => {
+  for (const code of Object.values(REVERSE_FILL_ORDER_VARIANT)) {
+    const text = reverseFillOrderVariantMessage(code);
+    assert.notEqual(text, code, `REVERSE_FILL_ORDER_VARIANT.${code}에 대응하는 문구가 reverse-copy.js에 없다`);
+    assert.ok(typeof text === 'string' && text.length > 0, `${code}: 빈 문자열이다`);
+  }
+});
+
+test('no REVERSE_FILL_BASIS/REVERSE_FILL_ORDER_VARIANT sentence claims the tax law fixes the fill order', () => {
+  // 32.6절 1번 — "세법이 이 순서를 정한다"는 뜻을 쓰지 않는다. 쓸 수 있는
+  // 수준은 "조문이 고정한 사실이 이 방향을 지지한다"뿐이다.
+  const bannedOrderClaims = ['세법이 정', '법이 정한 순서', '법령이 정한 순서', '세법이 이 순서'];
+  for (const code of Object.values(REVERSE_FILL_BASIS)) {
+    const text = reverseFillBasisMessage(code);
+    for (const phrase of bannedOrderClaims) assert.ok(!text.includes(phrase), `REVERSE_FILL_BASIS.${code}: "${phrase}" — ${text}`);
+  }
+  for (const code of Object.values(REVERSE_FILL_ORDER_VARIANT)) {
+    const text = reverseFillOrderVariantMessage(code);
+    for (const phrase of bannedOrderClaims) assert.ok(!text.includes(phrase), `REVERSE_FILL_ORDER_VARIANT.${code}: "${phrase}" — ${text}`);
+  }
+});
+
+test('the ISA transfer fill-basis sentence names the conversion plan as its premise', () => {
+  // 관리자 지시 — "전환 계획이 전제라는 사실 명시".
+  const text = reverseFillBasisMessage('reverse_fill_isa_transfer_opens_extra_credit_limit_if_converted');
+  assert.match(text, /전환할 계획/);
+});
+
+test('the no-credit-this-year fill-basis sentence neither says "혜택 없음" nor claims a credit is granted', () => {
+  // 32.6절 판정 — 「혜택 없음」·「세액공제를 받습니다」 둘 다 금지. 쓸 수 있는
+  // 것은 "그 해의 세액공제를 낳지 않으나 인출 시 원금이 과세되지 않습니다"뿐이다.
+  const text = reverseFillBasisMessage('reverse_fill_no_credit_this_year_but_principal_untaxed_on_withdrawal');
+  assert.ok(!text.includes('혜택이 없'), text);
+  assert.ok(!text.includes('혜택 없'), text);
+  assert.ok(!/(?<!낳지 않)세액공제를 받습니다/.test(text), `세액공제를 받는다고 잘못 단정한다: ${text}`);
+  assert.match(text, /세액공제를 낳지 않습니다/);
+  assert.match(text, /과세되지 않습니다/);
 });
 
 test('isa_tenure_missing intentionally shares its sentence with the first tab — same fact, same words', () => {

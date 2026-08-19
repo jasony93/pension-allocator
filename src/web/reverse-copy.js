@@ -57,6 +57,18 @@ const REVERSE_NOTICE_MESSAGE = {
     '퇴직금(이연퇴직소득)의 감면 비율은 계산했지만, 거기에 곱해지는 퇴직소득세 밑세율은 세법 룰셋 범위 밖이라 금액으로 내지 않았습니다.',
   // 첫 탭과 같은 문자열을 일부러 쓴다(계약 8.11절) — 같은 사실이다.
   isa_tenure_missing: () => 'ISA 가입 후 경과연수를 받지 않아 가장 보수적인 값(0년)으로 계산했습니다.',
+
+  // ── 게이트 5 D78 ④ — ISA 연금 전환 (계약 14.1.1) ──
+  reverse_isa_conversion_not_declared: () =>
+    'ISA를 연금계좌로 전환할 계획을 답하지 않아, "아니오"와 같은 값으로 계산했습니다. "예"로 답하면 ISA가 개시 시점 재원에 들어가 금액이 달라집니다.',
+  reverse_isa_conversion_not_eligible_at_annuity_start: (params) =>
+    params.min_contract_years != null
+      ? `전환하겠다고 답했지만 연금 개시 시점에도 ISA 가입경과연수가 연금계좌 전환에 필요한 최소 연수(${formatYears(params.min_contract_years)})에 못 미쳐, ISA를 개시 재원에서 제외했습니다.`
+      : '전환하겠다고 답했지만 연금 개시 시점에도 ISA 가입경과연수가 연금계좌 전환에 필요한 최소 연수에 못 미쳐, ISA를 개시 재원에서 제외했습니다.',
+  reverse_isa_source_capped_by_total_contribution_limit: () =>
+    'ISA에 앉힐 수 있는 월 몫은 그 해의 한도가 아니라 ISA 총 납입한도의 남은 몫이 정했습니다.',
+  reverse_isa_conversion_threshold_share_not_apportioned: () =>
+    'ISA 전환금은 문턱을 쓰지 않는 금액이지만, 그 금액이 매년 수령액의 어느 몫인지를 정하는 규칙이 세법 룰셋에 없어 문턱에 세어지는 금액을 줄이지 않았습니다.',
 };
 
 export function reverseNoticeMessage(notice) {
@@ -83,6 +95,17 @@ const REVERSE_ASSUMPTION_MESSAGE = {
   reverse_lower_bounds_rounded_up: () => '개시 시점 필요 최소 평가액과 필요 월 납입액의 원 미만은 올려서 계산했습니다.',
   reverse_isa_cumulative_contribution_zero_assumed: () =>
     'ISA 누적 납입액을 받지 않아 0으로 보고 ISA 그 해의 납입 한도를 계산했습니다. 실제 누적 납입액이 있으면 한도는 이보다 작을 수 있습니다.',
+  // ── 게이트 5 D78 ④ — ISA 연금 전환 (계약 14.1.1) ──
+  reverse_isa_contract_held_to_annuity_start: () =>
+    'ISA 계약이 연금 개시 시점까지 유지되다가 그때 연금계좌로 전환된다고 보고 계산했습니다. 계약 만료·중도해지·재가입은 반영하지 않았습니다.',
+  reverse_isa_total_limit_spread_over_accumulation: () =>
+    'ISA 총 납입한도의 남은 몫을 적립 개월수로 균등하게 나눠 ISA의 월 몫을 계산했습니다. 세법이 정한 나눗셈이 아니라 이 계산기가 균등 납입을 가정한 것입니다.',
+  // 이 코드는 관리자가 전달한 6건 목록에 없었다 — `src/engine/constants.mjs`를
+  // 직접 대조해 찾았다(전건 대조 시험이 잡아냈다). 세액공제 한도만 1단계
+  // 상한으로 삼고 §61③ 세액 한도는 적용하지 않았다는 사실을 말한다 — 이
+  // 탭이 총급여를 받지 않아 세액 한도를 계산할 수 없기 때문이다.
+  reverse_tax_liability_cap_not_applied: () =>
+    '개시 시점 필요 최소 평가액을 계산할 때, 세액공제 한도만 적용했습니다. 총급여를 받지 않아 낼 세금 자체의 한도(소득세법 §61③)는 적용하지 않았고, 그 방향은 이 값을 실제보다 크게 잡습니다.',
   reverse_amounts_in_today_currency: () => '이 결과의 모든 금액은 오늘 화폐 기준입니다. 물가상승을 반영한 미래 화폐 환산값이 아닙니다.',
   reverse_annuity_start_date_derived_from_birthday: () =>
     '연금 개시 시점은 입력한 연금 개시일이 속한 해의 생일로 계산했습니다.',
@@ -91,6 +114,54 @@ const REVERSE_ASSUMPTION_MESSAGE = {
 export function reverseAssumptionMessage(code, params) {
   const fn = REVERSE_ASSUMPTION_MESSAGE[code];
   return fn ? fn(params ?? {}) : code;
+}
+
+// ---------------------------------------------------------------------------
+// 배분 근거 코드 (`REVERSE_FILL_BASIS`·`REVERSE_FILL_ORDER_VARIANT`, 계약
+// `Allocation.fill_steps[].basis_code`·`contribution_scenario.fill_order.
+// variant_code`, `14.2.0`, D78 ④ 후속·`tax-rules-report.md` 32절) —
+// `Allocation.fill_steps[]`·`ContributionScenario.fill_order`.
+//
+// **세법이 이 순서를 정한다는 뜻을 쓰지 않는다.** 조문이 고정하는 것은
+// 각 한도의 크기와 소멸 여부뿐이고, 어느 몫을 먼저 채울지는 그 위에 선
+// 제품 결정이다(32.5·32.6절 1번) — 첫 탭의 `fillOrderFactMessage`/
+// `fillOrderDecisionMessage`(`copy.js`)가 사실과 제품 판단을 문장으로
+// 가르는 것과 같은 원칙을 여기서도 "조문이 고정한 사실이 이 방향을
+// 지지한다" 수준까지만 쓰는 것으로 지킨다 — "세법이 정한다"고는 쓰지
+// 않는다.
+// ---------------------------------------------------------------------------
+
+const REVERSE_FILL_BASIS_MESSAGE = {
+  reverse_fill_credit_limit_expires_with_tax_year: () =>
+    '연금계좌 세액공제 한도는 그 해에 쓰지 않으면 사라집니다 — 이 몫을 그 한도 안에서 먼저 채웠습니다.',
+  // ISA 전환 계획이 전제라는 사실을 문장 안에 명시한다(관리자 지시).
+  reverse_fill_isa_transfer_opens_extra_credit_limit_if_converted: () =>
+    'ISA를 연금계좌로 전환할 계획으로 답하셔서, 전환 경로에서 열리는 추가 공제 한도까지 이 몫에 반영했습니다.',
+  // "혜택 없음"·"세액공제를 받습니다" 둘 다 금지(32.6절) — 쓸 수 있는 것은
+  // "그 해의 세액공제를 낳지 않으나 인출 시 원금이 과세되지 않습니다" 하나뿐이다.
+  reverse_fill_no_credit_this_year_but_principal_untaxed_on_withdrawal: () =>
+    '이 몫은 그 해의 세액공제를 낳지 않습니다. 다만 인출 시 원금은 과세되지 않습니다.',
+};
+
+/** 개별 계좌 행 아래 한 줄로 표시한다(screens.md §14.3.3 갱신 전까지의 임시 자리, 관리자 지시). */
+export function reverseFillBasisMessage(code) {
+  const fn = REVERSE_FILL_BASIS_MESSAGE[code];
+  return fn ? fn() : code;
+}
+
+const REVERSE_FILL_ORDER_VARIANT_MESSAGE = {
+  // "세법이 순서를 정한다"고 쓰지 않는다 — 순서를 고른 것은 이 계산기이고,
+  // 조문이 고정하는 것은 "전환 경로에서 추가 공제 한도가 열린다"는 사실뿐이다.
+  isa_before_pension_surplus: () =>
+    'ISA 전환 경로에서 추가 공제 한도가 열려 있어, 이 계산기는 그 몫을 연금계좌 초과분보다 먼저 채웠습니다.',
+  pension_surplus_before_isa: () =>
+    'ISA 전환 경로가 열려 있지 않아, 이 계산기는 종전 순서(연금계좌 초과분을 먼저 채우는 방식)를 그대로 따랐습니다.',
+};
+
+/** 배분 순서 변형에 대한 짧은 근거 한 줄 — 배분표 위(또는 아래)에 한 번만 둔다. */
+export function reverseFillOrderVariantMessage(code) {
+  const fn = REVERSE_FILL_ORDER_VARIANT_MESSAGE[code];
+  return fn ? fn() : code;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,3 +274,19 @@ export const WHAT_THIS_SHOWS_LINES = [
   '세 가지 수령 전략의 법정 사실 비교',
 ];
 export const BROWSER_ONLY_NOTE = '계산은 이 브라우저 안에서만 이루어집니다. 입력값은 전송되지 않습니다.';
+
+/** ISA 연금 전환 계획 여부 — 게이트 5 D78 ④, `requirements.md` 9.1절·AC-R30. */
+export const ISA_CONVERSION_LABEL = 'ISA를 연금계좌로 전환할 계획이 있나요?';
+export const ISA_CONVERSION_NOT_DECLARED_NOTE =
+  'ISA 전환 계획을 밝히지 않아, 계좌별 월 납입액 시나리오에서 ISA를 재원으로 반영하지 않았습니다.';
+/**
+ * "예"일 때의 효과 고지 캡션. **문턱 금액을 화면 코드에 박지 않는다** —
+ * 이미 계산된 결과가 있으면 `statutory_facts.threshold_consumption.threshold_krw`
+ * (엔진이 룰셋에서 읽은 값)를 그대로 옮기고, 아직 결과가 없으면(예: 이
+ * 필드를 처음 여는 시점) 숫자 없이 사실만 말한다.
+ */
+export function isaConversionYesEffectCaption(thresholdKrw) {
+  return thresholdKrw != null
+    ? `전환금이 개시 시점 필요 평가액을 채우는 재원으로 반영되고, ${formatKrw(thresholdKrw)} 문턱을 쓰지 않습니다.`
+    : '전환금이 개시 시점 필요 평가액을 채우는 재원으로 반영되고, 사적연금 분리과세 문턱을 쓰지 않습니다.';
+}

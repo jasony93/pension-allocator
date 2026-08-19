@@ -147,6 +147,11 @@ export function loadReverseRules(rulesetBundle, taxYear) {
   access.use(RULE.PENSION_NON_DEDUCTED_PRINCIPAL, APPLIED_TO);
   access.use(RULE.PENSION_MIDTERM_RESTRICTION, APPLIED_TO);
   access.use(RULE.CREDIT_TRANSFER_EXTRA, APPLIED_TO);
+  // 배분 순서의 근거 둘(32.2절·32.3절). **한도의 크기가 아니라 그 성질**을 딛는다 —
+  // 미사용 공제 한도에 이월 규정이 없다는 것과, 공제 한도를 넘는 납입에도 남는 것이
+  // 있다는 것이다. 근거로 실리므로 여기서 읽는다.
+  access.use(RULE.CREDIT_UNUSED_CARRYOVER, APPLIED_TO);
+  access.use(RULE.PENSION_BEYOND_CREDIT_LIMIT, APPLIED_TO);
   access.use(RULE.ISA_CLAWBACK, APPLIED_TO);
   access.use(RULE.PENSION_EARLIEST_START, APPLIED_TO);
 

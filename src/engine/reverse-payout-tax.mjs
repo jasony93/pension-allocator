@@ -14,7 +14,7 @@
 
 import { EXACT_ZERO, addExact, cmpExact, exactOf, maxExact, minExact, mulExact, subExact } from './exact.mjs';
 import { toRatio } from './ratio.mjs';
-import { ROUNDING_STAGE } from './constants.mjs';
+import { MONTHS_IN_TAX_YEAR, ROUNDING_STAGE } from './constants.mjs';
 
 /** 비율(십진 소수)을 정확값 곱셈에 쓸 수 있는 분수로. 읽지 못하면 `null`. */
 function rateExact(rate) {
@@ -297,6 +297,31 @@ export function isaDeemedTerminationOnWithdrawal(
   return {
     deemed_terminated: withdrawalKrw > cumulativeContributionKrw,
     reason_code: null,
+  };
+}
+
+/**
+ * **개시 시점에** 그 경로가 열려 있는가 (D78 ④).
+ *
+ * 위 함수가 재는 것은 **오늘**이고 이 함수가 재는 것은 **연금 개시일**이다. 전환은 개시
+ * 시점에 일어나므로 재원 판정에 쓰이는 것은 이쪽이다 — 오늘 2년차인 계좌도 개시가 30년
+ * 뒤면 그때는 요건을 채운다.
+ *
+ * **경과연수는 개월수를 해로 내림해 더한다.** 개시가 열두 달 뒤면 한 해가 지난 것이고,
+ * 열한 달 뒤면 아직 아니다. **미입력 경과연수는 0으로 본다** — 요건을 늦게 채우는 쪽이라
+ * 전환 가능을 과장하지 않는다.
+ */
+export function isaPensionConversionPathAtStart(rules, { yearsSinceOpening, monthsUntilStart }) {
+  const assumedTenure = yearsSinceOpening ?? 0;
+  const elapsedYears = Number.isSafeInteger(monthsUntilStart)
+    ? Math.max(0, Math.floor(monthsUntilStart / MONTHS_IN_TAX_YEAR))
+    : 0;
+  const atStart = assumedTenure + elapsedYears;
+  return {
+    path_open: atStart >= rules.isaMinContractYears,
+    min_contract_years: rules.isaMinContractYears,
+    years_since_opening_at_annuity_start: atStart,
+    tenure_assumed_zero: yearsSinceOpening === null || yearsSinceOpening === undefined,
   };
 }
 

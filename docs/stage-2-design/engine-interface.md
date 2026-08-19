@@ -11,6 +11,11 @@ inputs:
   - data/tax-rules/2026.json
   - data/tax-rules/2027-proposed.json
 open_questions:
+  - "**[D78 ④·`web-dev`에게 넘기는 빚이 여섯 는다] 새 코드에 문구가 없다.** 안내 넷(`reverse_isa_conversion_not_declared` · `reverse_isa_conversion_not_eligible_at_annuity_start` · `reverse_isa_source_capped_by_total_contribution_limit` · `reverse_isa_conversion_threshold_share_not_apportioned`)과 가정 둘(`reverse_isa_contract_held_to_annuity_start` · `reverse_isa_total_limit_spread_over_accumulation`)이다. **전건 대조는 이미 서 있다** — `src/web/reverse-wording.test.mjs`의 두 시험이 **지금 붉다**(문구 없는 코드 여섯을 이름으로 짚는다). 이 유닛은 `src/web/`을 열지 않으므로 **그 붉음이 인계 신호이고, 문장 여섯이 들어오면 꺼진다.** **요청에도 칸 하나가 는다** — `accounts.isa.conversion_planned`(boolean \\| null). **화면이 이 칸을 보내지 않으면 `null`로 읽히고, 그때 ISA는 재원에서 빠진 채 `reverse_isa_conversion_not_declared`가 나간다.**"
+  - "**[D78 ④·`product-planner`·관리자 판정이 필요하다] 소유자 지적의 나머지 절반은 계약이 아니라 배분 순서에 있다.** 전환을 「예」로 답하면 ISA가 개시 재원이 되지만, **배분 순서는 D77의 넷 그대로**(연금저축 → IRP → 연금저축 → ISA)라 **필요 월 납입액이 연금 두 계좌의 납입 한도(월 1,500,000원)를 넘을 때만 ISA 행에 금액이 앉는다.** 그 아래에서는 ISA 행이 `room_monthly_krw > 0` · `monthly_krw = 0` · `limited_by: \"required_amount_met\"`로 나간다 — 「넣을 자리는 있는데 그만큼 필요하지 않다」는 사실이다. **소유자가 「ISA에도 매달 얼마」를 보고 싶어 한 것이라면 그것은 순서를 바꾸는 판정이고**, 그 순서의 근거(공제 한도의 계좌별 구조·중도인출 제약, design 14.5절)를 무엇으로 대체할지가 함께 정해져야 한다. **이 유닛이 스스로 바꾸지 않았다.** 아울러 **requirements 9.1절에 이 입력이 반영돼야 한다** — 이 유닛은 requirements를 고치지 않는다."
+  - "**[D78 ④·`tax-domain`에게 올린다] 룰셋이 정하지 않아 이 유닛이 관행으로 메운 자리 둘.** ① **총 납입한도(1억원)의 잔여를 적립 개월수로 균등하게 나눠** ISA의 월 몫을 냈다(`reverse_isa_total_limit_spread_over_accumulation`). 조문은 그 나눗셈을 정하지 않으며, 균등 납입을 보는 이 탭의 다른 가정과 방향을 맞춘 것이다. **한도를 작게 잡는 쪽**이라 ISA 몫을 과장하지 않는다. ② **전환금(과세제외금액)이 매년 수령액의 어느 몫인지**를 정한 규칙이 없어 **문턱에 세어지는 금액을 줄이지 않았다**(`reverse_isa_conversion_threshold_share_not_apportioned`). 인출 순서(과세제외금액이 가장 먼저)는 룰셋에 있으나 그것을 연차별 수령액에 배분하는 규율이 없다 — **문턱을 크게 잡는 쪽**이라 「분리과세 안입니다」가 덜 나간다. 값 칸이 열리면 두 자리 다 사라져야 한다."
+  - "~~**[D78 ④·관리자에게 올린다] 버전을 patch로 올린 것은 지시에 따른 것이고, 0.D의 문자대로면 minor다.**~~ **[해소]** 관리자가 **`14.2.0`(minor)**로 바로잡았다 — 선택 필드·열거형 값·코드가 늘고 **금액이 움직인다.**"
+  - "**[D78 ④ 후속·`web-dev`에게 넘기는 빚이 더 는다] 배분 근거 코드에는 전건 대조가 없다.** `src/web/reverse-wording.test.mjs`는 `REVERSE_NOTICE`·`REVERSE_ASSUMPTION` 둘만 훑는다. 이번에 는 **`REVERSE_FILL_BASIS` 셋**(`reverse_fill_credit_limit_expires_with_tax_year` · `reverse_fill_isa_transfer_opens_extra_credit_limit_if_converted` · `reverse_fill_no_credit_this_year_but_principal_untaxed_on_withdrawal`)과 **`REVERSE_FILL_ORDER_VARIANT` 둘**(`isa_before_pension_surplus` · `pension_surplus_before_isa`)은 **그 검사 밖이라 문구가 없어도 붉어지지 않는다.** 두 목록에도 같은 형태의 대조를 세워야 한다. **문구에 32.6절의 제약 셋이 그대로 걸린다** — 「세법이 이 순서를 정한다」로 적지 말 것, ISA 자리에 **전환 계획 전제**를 명시할 것, 연금계좌 초과분에 「세액공제를 받습니다」를 붙이지 말 것(붙일 수 있는 것은 「그 해의 세액공제를 낳지 않으나 인출 시 원금이 과세되지 않습니다」이고 조항이 함께 가야 한다)."
   - "**[D77·관리자에게 올린다] 정답지 GC-P1b의 기대값이 그 문서 안에서 자기모순이고, 이 유닛은 정답지를 고치지 않았다.** 18.2절 표가 「소득세 528,000 + 지방 52,800 = **580,800**」이라고 적는데 `12,000,000 × 0.04`는 **480,000**이다 — 528,000은 480,000에 지방소득세를 이미 한 번 얹은 수이고 표가 그 위에 한 번 더 얹었다. **같은 문서가 그 오류를 스스로 잡는다**: 바로 앞 18.1절이 「5%를 4%로 잘못 잡으면 **132,000원**이 어긋난다」고 적고 `660,000 − 132,000 = 528,000`이다. 시험은 룰셋의 4%와 부가율 10%의 곱(**480,000 + 48,000 = 528,000**)을 걸었고 **정답지의 교차 검산과 일치한다.** 값의 저자는 `tax-domain`이므로 **18.2절의 재산출이 필요하다** — 이 유닛이 고칠 자리가 아니다."
   - "**[D77·`tax-domain`에게 올린다] 연금수령한도 산식의 계수 둘이 룰셋에 값 칸이 없고 `expression` 문자열 안에만 있다.** 엔진이 `÷ (B − 연금수령연차) × R/100` 모양에서 B와 R을 꺼내 쓴다(`reverse-rules.mjs`). **선례가 있다** — `limits.mjs`의 `readTenureCap`이 ISA 연간한도 산식에서 경과연수 상한을 같은 방식으로 꺼낸다. **모양이 어긋나면 계수를 지어내지 않고 멈추고**, 산식과 룰셋이 스스로 적은 `derived_ratios.table`이 갈려도 멈춘다(두 검사 다 시험으로 고정). **`pension.withdrawal.annual_cap.value`에 `denominator_base`·`ratio_numerator`·`ratio_denominator` 같은 값 칸이 생기면 이 산문 파싱은 사라져야 한다.** 같은 형태가 하나 더 있다 — 문턱을 **쓰지 않는 재원의 목록**(이연퇴직소득·과세제외금액·ISA 전환금액)이 `what_the_sum_counts.not_counted`의 **산문 배열**이라 엔진이 분류를 코드로 들고 있다(`thresholdCountedAmount`). 값 칸(예: `source_code`별 `counts_toward_threshold`)이 열리면 그 전사도 사라진다."
   - "**[D77·`web-dev`에게 넘기는 빚] 역산기의 안내·가정 코드 23개가 지금 어느 문구 검사도 지키지 않는다.** `src/web/wording.test.mjs`가 「`NOTICE`의 모든 코드에 문장이 있는가」를 전건 대조하는데, 역산기 코드를 그 목록에 넣으면 **첫 탭의 검사가 두 번째 탭의 진도에 묶인다**(문장이 없는 동안 붉어진다). 그래서 `REVERSE_NOTICE`·`REVERSE_ASSUMPTION`으로 목록을 갈랐고(8.11절), **대가로 그 23개에는 검사가 없다.** `web-dev`가 역산기 문구 사전을 만들 때 **같은 형태의 전건 대조를 그 두 목록에 대해서도 세워야 한다.** 오류 코드 하나(`annuity_start_below_minimum_age`)는 갈라 두지 않았고 `copy.js`의 `ERROR_MESSAGE`에 문장이 필요하다 — 그 사전에는 전건 대조가 원래 없다."
@@ -86,7 +91,7 @@ open_questions:
 
 ## 0. 지금의 계약
 
-**현재 계약 버전: `14.1.0`.**
+**현재 계약 버전: `14.2.0`.**
 
 **이 절은 지금 유효한 것만 적는다.** 여기까지 어떻게 왔는지와 **각 major 판정의 근거**는 **11절(부록)**에 버전·판정 번호와 함께 있다. 그 둘을 가른 이유는 하나다 — 다음에 이 계약을 읽는 사람이 「지금 응답에 무엇이 들어 있는가」를 알기 위해 여섯 번의 버전 상향을 따라 읽어야 했다.
 
@@ -122,6 +127,7 @@ open_questions:
 | 코드 문자열 | 오류 · 안내 · 가정 · 경고 · 비교 안내, 그리고 필드 전용 열거형 셋 | 8.1~8.8절 |
 | 두 번째 진입점 | `computeFundUseHorizonBoundaries` — 배분을 계산하지 않는 조회 | 9절 |
 | **세 번째 진입점** | `computePensionReverse` — **연금 역산기**(`14.1.0`, D77). 요청·응답이 첫 탭과 겹치는 칸이 하나도 없다. 세 블록(법정 사실 · 계좌별 월 납입 시나리오 · 수령 전략 비교)과 그 전용 코드 공간 | 12절 · 8.11절 |
+| ISA 연금 전환 | `accounts.isa.conversion_planned`(`14.2.0`, D78 ④) — **「예」일 때만 ISA가 개시 시점 필요 평가액의 재원이 된다.** 재원 여부와 그 이유가 블록 ①·②·③ 셋 다에 값으로 실린다 | 12.3절 · 12.6절 · 12.7절 · 12.8절 |
 
 ### 0.B 지금 유효한 판정 — 화면이 어길 수 없는 것
 
@@ -1642,7 +1648,7 @@ accounts.isa               : IsaAccountState
 
 **나눈 이유는 문구 사전이 둘이기 때문이다.** `src/web/copy.js`는 **첫 탭의** 사전이고, `src/web/wording.test.mjs`가 「`NOTICE`의 모든 코드에 문장이 있는가」를 전건 대조한다. 역산기의 코드를 그 목록에 섞으면 **첫 탭의 사전이 두 번째 탭의 문장을 지게 되고**, 문장이 없는 동안 첫 탭의 검사가 붉어진다 — 두 탭의 회차가 다른데 한쪽의 검사가 다른 쪽 진도에 묶인다. **오류 코드만은 나누지 않았다** — 오류는 두 진입점이 같은 형태로 내고, 새 코드 하나(`annuity_start_below_minimum_age`)가 8.1절에 있다.
 
-**대가를 분명히 적어 둔다 — 이 두 목록은 지금 어느 문구 검사도 지키지 않는다.** `web-dev`가 역산기 문구 사전을 만들 때 `wording.test.mjs`와 **같은 형태의 전건 대조**를 `REVERSE_NOTICE`·`REVERSE_ASSUMPTION`에 대해서도 세워야 한다. 그 전까지는 화면에 코드 문자열이 그대로 뜰 수 있다.
+**대가를 분명히 적어 두었었다 — 「이 두 목록은 어느 문구 검사도 지키지 않는다」.** **그 빚은 갚혔다**(`14.2.0` 시점): `web-dev`가 `src/web/reverse-wording.test.mjs`로 두 목록에 대한 **전건 대조**를 세웠고, 문구가 없는 코드는 그 검사가 붉어진다. **그래서 이 목록에 코드를 더하는 회차는 `src/web/reverse-copy.js`에 문장을 더하는 회차를 함께 부른다** — 코드를 더한 쪽(`calc-engine-dev`)은 `src/web/`을 열지 않으므로 그 검사는 **문구가 붙기 전까지 붉은 채로 남고, 그 붉음이 인계 신호다.**
 
 **안내 코드**(`REVERSE_NOTICE`) — 응답의 `notices[]`로 나가고 형태는 7.2절과 같다.
 
@@ -1657,7 +1663,11 @@ accounts.isa               : IsaAccountState
 - `reverse_other_income_unknown` (info) — AC-R10. `profile.other_income.state`가 `"known"`이 아니라 「문턱 초과 감수」의 **유불리를 판정하지 않았다.** 이 갈림의 축은 연금 총액이 아니라 연금 외 종합소득이다. **화면이 어느 전략을 유리하다고 적으면 위반이다.**
 - `reverse_elective_basis_undetermined` (warning) — §64조의4 제2호 가목의 곱셈 대상이 룰셋에서 미확정이고 **이 좌표에서는 두 읽기가 다른 결론을 낸다**(또는 공적연금 안분·나목의 공제 재계산이 조문에 없다). 값은 두 읽기로 다 나가되 **어느 쪽이 유리한지는 말하지 않는다.**
 - `reverse_withholding_rate_varies_within_payout_period` (info) — 수령 기간 안에서 연령별 원천징수세율 구간의 경계를 넘는다. `params.crossing_ages`. 응답의 세액은 **첫 해 기준**이고 화면이 그것을 전 기간의 값으로 적으면 거짓이다.
-- `reverse_isa_conversion_path_not_open` (info) — AC-R20. ISA 가입경과연수가 룰셋의 의무가입기간 미만이라 연금계좌 전환 경로가 아직 열리지 않았다. `params.min_contract_years` · `params.years_since_opening`.
+- `reverse_isa_conversion_path_not_open` (info) — AC-R20. ISA 가입경과연수가 룰셋의 의무가입기간 미만이라 연금계좌 전환 경로가 **오늘** 열려 있지 않다. `params.min_contract_years` · `params.years_since_opening`. **이 코드는 계산을 바꾸지 않는다** — 재원 판정이 딛는 것은 개시 시점이고 그쪽은 아래 `reverse_isa_conversion_not_eligible_at_annuity_start`다. 오늘 닫혀 있고 개시 시점에 열리는 좌표에서는 **이 코드만 나가고** 재원 판정은 「들어감」이다.
+- `reverse_isa_conversion_not_declared` (info) — D78 ④. `accounts.isa.conversion_planned`가 `null`이라 **「아니오」와 같은 수로 계산했다.** 「효과가 없다」가 아니라 **「묻지 않았다」**이고, 「예」로 답하면 ISA가 개시 재원에 들어가 금액이 달라진다. **ISA 보유 신호가 있을 때만 나간다**(잔액이 0보다 크거나 경과연수·누적 납입액 중 하나가 실려 있을 때) — 없는 계좌 이야기를 하지 않는다. 화면은 이 코드를 보고 **전환 여부 질문을 아직 안 했거나 사용자가 비워 두었다**고 읽으면 된다.
+- `reverse_isa_conversion_not_eligible_at_annuity_start` (warning) — D78 ④. 전환을 「예」로 답했으나 **개시 시점에도** 의무가입기간이 차지 않아 그때 전환할 수 없다. 그래서 ISA를 개시 재원에서 뺐다 — **이 코드는 금액을 바꾼다.** `params.min_contract_years` · `params.years_since_opening`(미입력이면 `null`) · `params.years_since_opening_at_annuity_start`. **「전환하면 됩니다」에 해당하는 값이 이 코드와 함께 나가지 않는다.**
+- `reverse_isa_source_capped_by_total_contribution_limit` (info) — D78 ④. ISA에 앉힐 수 있는 월 몫을 **총 납입한도의 잔여**가 정했다(그 해의 한도가 아니라). `params.remaining_total_limit_krw` · `params.isa_source_monthly_krw` · `params.accumulation_months`. **잔여 0도 이 코드로 나간다** — 「ISA에 더 넣을 수 있는 것이 없다」가 그 자리의 사실이다.
+- `reverse_isa_conversion_threshold_share_not_apportioned` (info) — D78 ④·30절. 전환금은 과세제외금액이라 1,500만원 문턱을 **한 원도 쓰지 않는데**, 그것이 매년 수령액의 어느 몫인지를 정한 규칙이 룰셋에 없다. 그래서 **문턱에 세어지는 금액을 줄이지 않았다** — 문턱을 크게 잡는 방향이고 「분리과세 안입니다」가 **덜** 나간다. ISA가 재원으로 들어가고 전환할 금액이 있을 때만 나간다.
 - `reverse_deferred_retirement_base_rate_out_of_scope` (info) — 이연퇴직소득의 감면 **비율**은 냈으나 곱해지는 밑세율(퇴직소득세)이 이 룰셋의 범위 밖이라 **금액을 내지 않았다.**
 - `isa_tenure_missing` (warning) — `accounts.isa.years_since_opening`이 없어 가장 보수적인 값으로 계산했다. **첫 탭과 같은 문자열을 일부러 쓴다** — 같은 사실이고, 두 사전이 같은 문장을 쓸 수 있어야 한다.
 
@@ -1671,6 +1681,9 @@ accounts.isa               : IsaAccountState
 - `reverse_deferred_retirement_not_grown` — 퇴직금(이연퇴직소득) 재원을 **성장 없이** 개시 시점 금액 그대로 목표에서 뺐다. 필요 월 납입액을 크게 잡는 방향이다.
 - `reverse_lower_bounds_rounded_up` — 하한(필요 최소 평가액·필요 월 납입액)의 원 미만을 **올림**했다. **버리면 하한이 하한이 아니게 된다.** 조문이 정한 자리가 아니라 이 조직의 표시 규약이다.
 - `reverse_isa_cumulative_contribution_zero_assumed` — `accounts.isa.cumulative_contribution_krw`가 없어 0으로 보았다. ISA 그 해의 납입 한도를 크게 잡는 방향이고, 그만큼 「세 계좌만으로 달성할 수 없습니다」가 **덜** 나간다.
+- `reverse_isa_contract_held_to_annuity_start` — D78 ④. ISA 계약이 **개시 시점까지 유지되고 그때 연금계좌로 전환된다**고 보았다. **ISA가 개시 재원으로 들어갈 때만 선다.** 계약 만료·해지·재가입은 요청이 담지 않으므로 엔진이 그 경로를 계산하지 않는다.
+- `reverse_tax_liability_cap_not_applied` — D78 ④ 후속(32.2절). **1단계(연금계좌)의 상한을 세액공제 한도로만 잡았다.** 조문이 정한 상한은 「세액공제 한도와 **§61③ 세액 한도** 중 실제로 공제를 낳는 쪽」인데, 세액 한도는 산출세액의 함수이고 **이 탭은 총급여를 받지 않는다.** **입력을 늘리는 대신 적용하지 않았다.** `params.rule_id_not_applied`가 적용하지 않은 규칙의 이름이고, **그 규칙은 `legal_basis`에 실리지 않는다**(읽지 않았으므로). 방향은 산출세액이 작은 사람에게 **1단계를 실제보다 크게** 잡는 쪽이다.
+- `reverse_isa_total_limit_spread_over_accumulation` — D78 ④. ISA 총 납입한도의 **잔여를 적립 개월수로 균등하게 나눠** 월 몫을 냈다. **조문이 정한 나눗셈이 아니다** — 균등 납입을 보는 이 탭의 관행이고, 한도를 **작게** 잡는 방향이라 ISA 몫을 과장하지 않는다. 재원으로 들어갈 때만 선다.
 - `reverse_amounts_in_today_currency` — AC-R24. 이 탭이 내는 모든 금액은 **오늘 화폐 기준**이다.
 - `reverse_annuity_start_date_derived_from_birthday` — 개시 시점을 **그 해의 생일**로 정했다. `params.kind`. 만 나이가 생일에 오르므로 이렇게 두면 **개시가 속한 과세기간 안에서 연령 구간을 넘는 일이 생기지 않는다** — 룰셋이 미확정으로 남긴 「과세기간 중 생일을 지나는 해의 세율」을 피해 가는 자리다. 세법이 정한 것이 아니다.
 
@@ -1678,7 +1691,10 @@ accounts.isa               : IsaAccountState
 
 - `contribution_scenario_absent_reason_code` — `"return_rate_not_supplied"` / `"accumulation_period_not_positive"` / `null`. **`null`은 블록이 있다는 뜻이다.**
 - `minimum_start_balance.binding_code` · `target_feasibility.binding_code` — `"annual_cap"`(법정 한도가 더 요구한다) / `"remaining_balance"`(잔액이 더 요구한다). **같으면 `"remaining_balance"`다** — 실제로 더 요구할 때만 한도를 탓한다.
-- `Allocation.limited_by`(역산기) — `"contribution_limit"`(그 계좌의 한도가 찼고 **더 넣을 것이 남았다**) / `"required_amount_met"`(필요액을 다 채우고 멈췄다) / `"not_needed"`(그 계좌에 넣을 몫이 없다). **첫 탭의 `limited_by`와 값이 다르다**(8.9절) — 두 탭이 푸는 문제가 반대이기 때문이다.
+- `Allocation.limited_by`(역산기) — `"contribution_limit"`(그 계좌의 한도가 찼고 **더 넣을 것이 남았다**. 방이 0이라 한 원도 못 받은 것도 여기다) / `"required_amount_met"`(필요액을 다 채우고 멈췄다) / `"not_needed"`(앉히지 못한 몫이 없는데 그 계좌 몫이 0이다) / `"not_a_source"`(**그 계좌가 이 계획의 재원이 아니다** — `14.2.0`, D78 ④. ISA 전용이고, 전환하지 않을 ISA에는 방 자체가 없다). **첫 탭의 `limited_by`와 값이 다르다**(8.9절) — 두 탭이 푸는 문제가 반대이기 때문이다.
+- `Allocation.fill_steps[].basis_code`(`14.2.0`, D78 ④ 후속 · `REVERSE_FILL_BASIS`) — **그 몫이 그 자리에 놓인 근거**다. `"reverse_fill_credit_limit_expires_with_tax_year"`(연금계좌 세액공제 한도는 **그 해에 쓰지 않으면 사라진다** — 미사용 한도를 나르는 규정이 없다) / `"reverse_fill_isa_transfer_opens_extra_credit_limit_if_converted"`(**전환 경로에서만** §59조의3③④의 추가한도가 열린다. **전환 계획을 「예」로 답한 것이 전제이고 화면이 그 전제를 함께 적어야 한다**) / `"reverse_fill_no_credit_this_year_but_principal_untaxed_on_withdrawal"`(**그 해의 세액공제를 낳지 않는다.** 「혜택이 없다」로 적으면 거짓이다 — 과세이연과 인출 시 원금 비과세가 남는다) / `null`(부르는 쪽이 재원 여부를 정하지 않은 산술 호출. **진입점의 응답에는 나오지 않는다**). **어느 코드도 「세법이 이 순서를 정한다」를 뜻하지 않는다** — 각 코드가 말하는 것은 조문이 고정한 사실 하나뿐이다(32.6절 1번).
+- `contribution_scenario.fill_order.variant_code`(`14.2.0` · `REVERSE_FILL_ORDER_VARIANT`) — `"isa_before_pension_surplus"`(전환 근거가 서서 ISA가 연금계좌 초과분보다 앞) / `"pension_surplus_before_isa"`(근거가 서지 않아 종전 순서). **근거가 없는데 ISA를 앞세우면 조문에 없는 이득을 계산에 넣는 것이다**(32.5절).
+- `isa_source_excluded_reason_code`(`14.2.0`, D78 ④ · 12.6·12.7절) — `"conversion_not_planned"`(전환을 「아니오」로 답했다) / `"conversion_not_declared"`(**답하지 않았다.** 「아니오」와 같은 수를 내지만 사용자의 답이 아니다) / `"conversion_not_eligible_at_annuity_start"`(「예」로 답했으나 개시 시점에 의무가입기간이 안 찬다) / `null`(**ISA가 재원으로 들어갔다는 뜻이다**). 앞의 셋이면 ISA 잔액도 ISA 월 납입도 목표를 채우지 않는다.
 - `PayoutStrategy.strategy_code` — `"within_threshold"` / `"exceed_threshold"` / `"isa_supplement"`. **순서가 고정이고 그 순서가 우열이 아니다.**
 - `exceed_threshold.comparison_code` — `"threshold_not_exceeded"` / `"other_income_unknown"` / `"elective_basis_undetermined"` / `"determined"`. **`"determined"`가 아니면 `lower_option_code`가 `null`이고 화면은 유불리를 적을 수 없다.**
 - `exceed_threshold.lower_option_code` — `"comprehensive"` / `"separate"` / `null`. **선택권은 납세자에게 있고, 이 값은 「낮은 쪽」이지 「권하는 쪽」이 아니다.**
@@ -1773,7 +1789,8 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 | `retirement_pension.balance_krw` | integer | 원 | **필수** | 퇴직연금계좌(IRP) 현재 평가액. 계좌가 없으면 0 |
 | `isa.balance_krw` | integer | 원 | **필수** | ISA 현재 평가액. **0보다 커야 「ISA 충당」 전략이 나온다**(AC-R18) |
 | `isa.years_since_opening` | integer \| null | 년 | 선택 | ISA 가입경과연수. **`null`이면 0으로 보고 `isa_tenure_missing`을 낸다.** 연금계좌 전환 경로의 개폐와 ISA 그 해의 납입 한도를 정한다 |
-| `isa.cumulative_contribution_krw` | integer \| null | 원 | 선택 | ISA 계약기간 중 누적 납입액. **`null`이면 0으로 보고 가정을 낸다**(한도를 크게 잡는 방향). 원금 초과 인출의 해지 의제 판정에도 쓰인다 — 없으면 그 판정을 내지 않는다 |
+| `isa.cumulative_contribution_krw` | integer \| null | 원 | 선택 | ISA 계약기간 중 누적 납입액. **`null`이면 0으로 보고 가정을 낸다**(한도를 크게 잡는 방향). 원금 초과 인출의 해지 의제 판정에도 쓰인다 — 없으면 그 판정을 내지 않는다. **ISA를 재원으로 쓸 때는 총 납입한도의 잔여(= 총 납입한도 − 이 값)가 월 몫의 상한이 된다** |
+| `isa.conversion_planned` | boolean \| null | — | 선택 | **개시 시점에 ISA를 연금계좌로 전환할 계획인가**(`14.2.0`, D78 ④). ISA를 보유했을 때만 뜻이 있다. **`true`이면 ISA 현재 잔액과 ISA 월 납입이 「개시 시점 필요 평가액」을 채우는 재원에 들어간다.** `false`이면 들어가지 않고 ISA는 블록 ③의 「충당 전략」 카드에만 남는다. **`null`은 「아니오」와 같은 수를 내되 `reverse_isa_conversion_not_declared`를 낸다** — 「답하지 않았다」와 「아니라고 답했다」는 다른 상태다. **`true`·`false`·`null` 밖의 값은 `invalid_enum`**이고 칸을 아예 주지 않으면 `null`과 같다. **`true`여도 개시 시점에 룰셋의 의무가입기간(§91조의18)이 안 차면 재원에서 빠진다** — 그때는 전환 자체가 불가능하다 |
 
 ### 12.4 `PensionReverseResponse`
 
@@ -1836,11 +1853,13 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 | `threshold_consumption.threshold_krw` | integer | 원/연 | 룰셋의 분리과세 기준금액 |
 | `threshold_consumption.counted_annual_krw` | integer | 원/연 | **문턱에 실제로 세어지는 금액.** 이연퇴직소득과 과세제외금액·ISA 전환금액은 여기 없다 |
 | `threshold_consumption.within_threshold` · `elective_opens` | boolean | — | 「이하」이면 안이다. 밖이면 §64조의4의 선택이 열린다 |
-| `threshold_consumption.rows[]` | `{ source_code, consumes_threshold, basis_rule_ids }` | — | AC-R13. `source_code`는 `tax_credited_contribution_and_return` · `isa_conversion_amount` · `deferred_retirement_income`. **마지막 행은 퇴직금을 「예」로 답했을 때만 있다**(AC-R14) |
+| `threshold_consumption.rows[]` | `{ source_code, consumes_threshold, in_plan, basis_rule_ids }` | — | AC-R13. `source_code`는 `tax_credited_contribution_and_return` · `isa_conversion_amount` · `deferred_retirement_income`. **마지막 행은 퇴직금을 「예」로 답했을 때만 있다**(AC-R14). `in_plan`(boolean, `14.2.0`)은 **그 재원이 이 사람의 계획에 실제로 들어가는가**다 — `isa_conversion_amount` 행은 `accounts.isa.conversion_planned`가 `true`이고 개시 시점에 전환할 수 있을 때만 `true`다. **`consumes_threshold`는 계획과 무관하게 언제나 `false`**이고 그 둘을 섞으면 안 된다 |
 | `threshold_consumption.deferred_retirement_ratio` | object \| null | — | 감면 비율과 그 목. **`base_rate_in_scope: false` · `income_tax_krw: null`** — 밑세율이 룰셋 범위 밖이라 금액을 내지 않는다 |
 | `contribution_ceiling.pension_pool_monthly_krw` · `_annual_krw` | integer | 원/월 · 원/연 | 연금 두 계좌가 **나눠 쓰는** 납입 한도 |
-| `contribution_ceiling.isa_monthly_krw` · `isa_annual_krw` | integer | 원/월 · 원/연 | ISA 그 해의 한도. **경과연수의 함수이고 총 납입한도에서 멈춘다** |
-| `contribution_ceiling.total_monthly_krw` | integer | 원/월 | 세 계좌 법정 상한의 합계. AC-R17이 이 값과 견준다 |
+| `contribution_ceiling.isa_monthly_krw` · `isa_annual_krw` | integer | 원/월 · 원/연 | ISA 그 해의 한도. **경과연수의 함수이고 총 납입한도에서 멈춘다.** 이것은 「넣을 수 있는가」이지 「넣으면 목표에 닿는가」가 아니다 |
+| `contribution_ceiling.total_monthly_krw` | integer | 원/월 | 세 계좌 법정 상한의 합계. **전환 여부와 무관한 법정 사실이다** — AC-R17이 견주는 자는 12.7절의 `source_ceiling_monthly_krw`이고 이 값이 아니다(`14.2.0`에서 갈렸다) |
+| `contribution_ceiling.isa_counted_as_start_source` | boolean | — | **ISA가 이 계획의 개시 재원인가**(`14.2.0`, D78 ④). `accounts.isa.conversion_planned`가 `true`이고 개시 시점에 의무가입기간이 찼을 때만 `true`. **수익률을 읽지 않으므로 이 칸이 블록 ①에 있어도 층 4는 열리지 않는다** |
+| `contribution_ceiling.isa_source_excluded_reason_code` | string \| null | — | 8.11절의 열거형. **`null`이면 들어갔다는 뜻이다** |
 
 ### 12.7 `ContributionScenario` — 블록 ②, 사용자의 수익률 위
 
@@ -1853,14 +1872,22 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 | `condition_clause.compounding_code` | `"monthly"` | — | **월 복리.** 세법이 정하지 않아 이 조직이 정한 관행이고 가정으로도 나간다 |
 | `accumulation_months` | integer | 월 | 1 이상 |
 | `target_balance_krw` | integer | 원 | 블록 ①의 `required_krw`와 **같은 수다** |
-| `existing_pension_balance_krw` | integer | 원 | 연금저축 + IRP의 현재 평가액. **ISA는 들어가지 않는다** — 연금수령한도의 평가액이 아니다 |
+| `existing_pension_balance_krw` | integer | 원 | 연금저축 + IRP의 현재 평가액. **ISA는 이 칸에 들어가지 않는다** — 전환 전 ISA는 연금수령한도가 딛는 평가액이 아니다. 전환 재원은 아래 두 칸이 따로 진다 |
 | `future_value_of_existing_krw` | integer | 원 | 그 잔액이 개시 시점에 불어난 값 |
+| `isa_counted_as_start_source` | boolean | — | **ISA가 이 계획의 개시 재원인가**(`14.2.0`, D78 ④). 12.6절의 같은 이름 칸과 **언제나 같은 값**이다 |
+| `isa_source_excluded_reason_code` | string \| null | — | 8.11절의 열거형. **`null`이면 들어갔다는 뜻이다** |
+| `existing_isa_balance_krw` | integer | 원 | **재원으로 센 ISA 잔액**(`14.2.0`). 재원이 아니면 **0**이고, 그것은 「ISA 잔액이 0원이다」가 아니라 「이 계획에서 목표를 채우는 몫이 0원이다」이다 — 잔액 자체는 12.8절 카드 ③이 그대로 낸다 |
+| `future_value_of_existing_isa_krw` | integer | 원 | 그 ISA 잔액이 개시 시점에 불어난 값. **개시 시점에 연금계좌로 전환된다고 본 금액이다**(가정 `reverse_isa_contract_held_to_annuity_start`). 재원이 아니면 0 |
 | `deferred_retirement_krw` | integer | 원 | 퇴직금 재원. **성장 없이 그대로 목표에서 뺀다** |
-| `gap_krw` | integer | 원 | 목표 − (불어난 잔액 + 퇴직금). **0 이하일 수 있다** |
+| `gap_krw` | integer | 원 | 목표 − (불어난 연금 잔액 + 불어난 ISA 재원 + 퇴직금). **0 이하일 수 있다.** 세 항이 각각 올림된 값이라 표시된 세 칸으로 다시 계산하면 **1원까지 어긋날 수 있다** |
 | `required_monthly_total_krw` | integer | 원/월 | **목표에 닿는 가장 작은 정수.** 1원을 빼면 닿지 않는다 |
 | `allocations[]` | Allocation | — | 아래 |
+| `fill_order.variant_code` | string | — | 8.11절의 열거형(`14.2.0`, D78 ④ 후속). **2·3단계의 상대 순서가 전환 근거의 유무로 뒤집힌다** |
+| `fill_order.is_statutory_order` | boolean | — | **언제나 `false`.** 세법이 정하는 것은 각 한도의 크기와 소멸 여부이고 **순서는 그 위에 선 제품 결정이다**(`tax-rules-report.md` 32.5절·32.6절 1번). **화면이 「법이 이 순서를 정한다」로 적으면 위반이다** |
+| `fill_order.basis_rule_ids` | string[] | — | 이 방향을 지지하는 조문의 규칙 이름들. **순서를 정한 규칙이 아니라 방향을 지지하는 사실의 규칙이다** |
 | `allocated_monthly_total_krw` | integer | 원/월 | 세 계좌에 실제로 앉은 합계 |
-| `unallocatable_monthly_krw` | integer | 원/월 | **어느 계좌에도 앉지 못한 몫.** 0보다 크면 법정 상한을 넘은 것이다 |
+| `unallocatable_monthly_krw` | integer | 원/월 | **어느 계좌에도 앉지 못한 몫.** 0보다 크면 재원으로 쓸 수 있는 상한을 넘은 것이다 |
+| `source_ceiling_monthly_krw` | integer | 원/월 | **재원으로 쓸 수 있는 상한의 합계**(`14.2.0`, D78 ④). 연금 두 계좌의 납입 한도 + (ISA가 재원이면 ISA 몫). **AC-R17이 견주는 자가 이것이다** — 12.6절의 `total_monthly_krw`가 아니다. ISA가 재원이 아니면 연금 두 계좌의 몫뿐이고, 그 차이가 「전환한다고 답하면 더 담을 수 있다」의 크기다. `reverse_exceeds_statutory_contribution_ceiling`의 `params.ceiling_monthly_krw`도 이 값이다 |
 | `exceeds_statutory_contribution_ceiling` | boolean | — | AC-R17. **정확히 같으면 `false`다** |
 
 `allocations[]`의 원소 — 순서는 `annuity_savings` · `retirement_pension` · `isa` 고정.
@@ -1869,10 +1896,11 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 |---|---|---|---|
 | `account` | string | — | 2.4절의 세 식별자 |
 | `monthly_krw` · `annual_krw` | integer | 원/월 · 원/연 | `annual_krw`는 `monthly_krw × 12`다 |
-| `room_monthly_krw` | integer | 원/월 | 그 계좌가 받을 수 있었던 최대 |
-| `fill_order` | integer \| null | — | 몇 번째로 채워졌는가. 0원이면 `null` |
+| `room_monthly_krw` | integer | 원/월 | 그 계좌가 받을 수 있었던 최대. **ISA 행은 재원일 때만 0보다 크고**(`14.2.0`), 그 값은 「그 해의 한도 ÷ 12」와 「총 납입한도 잔여 ÷ 적립 개월수」 가운데 **작은 쪽**이다 |
+| `fill_order` | integer \| null | — | **처음** 채워진 자리의 순번. 0원이면 `null` |
+| `fill_steps[]` | `{ order, monthly_krw, room_monthly_krw, basis_code, basis_rule_ids }` | 원/월 | **그 계좌가 채워진 자리마다 한 원소**(`14.2.0`, D78 ④ 후속). **연금저축은 둘일 수 있다** — 1단계(세액공제 한도까지)와 3단계(연 납입 한도까지)의 **근거가 서로 다르기 때문에** 하나로 접지 않는다. 원소의 `monthly_krw` 합은 행의 `monthly_krw`와 같다. 한 원도 못 받은 계좌는 **빈 배열**이다 |
 | `limited_by` | string | — | 8.11절. **「한도가 막았다」는 실제로 더 넣을 것이 남았을 때만 나온다** |
-| `basis_rule_ids` | string[] | — | **어느 계좌에 얼마인지의 근거.** 관리자 지시가 이 칸을 요구했다 |
+| `basis_rule_ids` | string[] | — | **어느 계좌에 얼마인지의 근거.** 관리자 지시가 이 칸을 요구했다. `14.2.0`부터 **실제로 채워진 자리들의 근거를 합친 것**이고(중복 없이 정렬), 한 원도 못 받은 계좌는 그 계좌를 규율하는 한도 규칙이 실린다 |
 
 ### 12.8 `PayoutStrategy[]` — 블록 ③, 나란히
 
@@ -1886,8 +1914,10 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 - `separate` — `rate` · `basis_is_undetermined`(**룰셋에서 읽는다**) · `public_pension_share_not_apportioned` · `remainder_is_undetermined` · `reading_a`/`reading_b`(각각 `multiplied_base_krw` · `gamok_total_krw` · `namok_total_krw` · `total_krw`) · `readings_agree_on_lower_option` · `lower_option_code`.
 - **`comparison_code`가 `"determined"`가 아니면 `comprehensive`·`separate`·`lower_option_code`·`first_year_after_tax_krw`가 `null`이거나 결론을 담지 않는다.** 연금 외 소득을 모르면 계산 자체를 하지 않고, 두 읽기가 갈리면 값은 내되 어느 쪽이 유리한지 말하지 않는다.
 
-**③ `isa_supplement`** — **`accounts.isa.balance_krw > 0`일 때만 있다.** `isa_balance_krw` · `pension_conversion_path{path_open, min_contract_years, reason_code}` · `conversion_consumes_threshold: false` · `contract_held_withdrawal{deemed_terminated, reason_code}` · `basis_rule_ids`.
+**③ `isa_supplement`** — **`accounts.isa.balance_krw > 0`일 때만 있다**(전환을 「예」로 답해도 이 조건은 그대로다). `isa_balance_krw` · `pension_conversion_path{path_open, min_contract_years, reason_code}` · `conversion_planned` · `counted_as_start_source` · `pension_conversion_path_at_annuity_start{path_open, min_contract_years, years_since_opening_at_annuity_start, tenure_assumed_zero}` · `conversion_consumes_threshold: false` · `contract_held_withdrawal{deemed_terminated, reason_code}` · `basis_rule_ids`.
 
+- `conversion_planned`(boolean \| null, `14.2.0`) — 요청 그대로의 메아리다. `counted_as_start_source`(boolean)는 **블록 ②가 ISA를 재원으로 셌는가**이고, 12.6·12.7절의 `isa_counted_as_start_source`와 **언제나 같은 값**이다. **화면이 이 칸을 보고 카드의 금액이 블록 ②에 이미 반영됐는지를 가른다** — 반영된 것을 「추가로 더 쓸 수 있는 돈」처럼 적으면 같은 돈을 두 번 세는 것이다.
+- `pension_conversion_path`는 **오늘**을 재고 `pension_conversion_path_at_annuity_start`는 **연금 개시일**을 잰다. **재원 판정이 딛는 것은 뒤쪽이다.** 뒤쪽의 경과연수는 `years_since_opening + ⌊적립 개월수 ÷ 12⌋`이고, `tenure_assumed_zero`가 `true`면 경과연수 미입력을 0으로 본 것이다(전환 가능을 과장하지 않는 방향).
 - `path_open`이 `false`면 **「아직 열리지 않았다」는 사실만** 나간다(AC-R20).
 - `contract_held_withdrawal.deemed_terminated`는 `true`/`false`/**`null`**이다. 의무가입기간이 지난 뒤의 원금 초과 인출은 **조문이 규율하지 않으므로 참도 거짓도 내지 않는다.**
 
@@ -1898,6 +1928,8 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 - **물가상승 반영값.** 모든 금액이 오늘 화폐 기준이다(AC-R24).
 - **종신형.** `payout_years`라는 입력 자체가 성립하지 않고, 종신계약에 연금수령한도가 걸리는지도 룰셋이 미확인이다.
 - **퇴직소득세액.** 감면 비율까지만 내고 밑세율은 룰셋 범위 밖이다.
+- **전환금이 매년 수령액의 어느 몫인가**(`14.2.0`, D78 ④). 전환금은 과세제외금액이라 문턱을 쓰지 않고 인출 순서상 가장 먼저 나오지만, **그것을 연차별 수령액에 나누는 규칙이 룰셋에 없다.** 그래서 문턱에 세어지는 금액을 **줄이지 않고**(문턱을 크게 잡는 방향) `reverse_isa_conversion_threshold_share_not_apportioned`로 그 사실을 낸다. **화면이 「전환하면 분리과세 안으로 들어옵니다」라고 적으면 엔진이 내지 않은 결론이다.**
+- **ISA 계약의 만료·연장·재가입 경로.** 전환을 「예」로 답하면 계약이 개시 시점까지 유지된다고 본다(가정 `reverse_isa_contract_held_to_annuity_start`).
 - **금융상품·금융사 이름.** 어느 칸에도 없다(AC-R26).
 
 ---
@@ -1973,6 +2005,7 @@ computePensionReverse(request: PensionReverseRequest, rulesets: RulesetBundle): 
 
 | 버전 | 판정 | 무엇이 바뀌었나 |
 |---|---|---|
+| `14.2.0` | D78 ④ | **D78 ④ — ISA 연금 전환 여부가 입력이 된다.** 소유자가 「ISA 계좌가 있다고 기입해도 ISA 납입액이 없다」를 지적했고, 전환 여부(`accounts.isa.conversion_planned`, boolean \| null)가 선택 입력으로 는다. **`true`이면 ISA 잔액과 ISA 월 납입이 개시 시점 필요 평가액의 재원이 된다** — 그 결과 응답에 칸 일곱이 늘고(`isa_counted_as_start_source`·`isa_source_excluded_reason_code`·`existing_isa_balance_krw`·`future_value_of_existing_isa_krw`·`source_ceiling_monthly_krw`·`rows[].in_plan`·카드 ③의 전환 칸 셋), `limited_by`에 `not_a_source`가 늘며, 안내 코드 넷·가정 코드 둘이 8.11절에 는다. **AC-R17이 견주는 자가 「세 계좌 법정 상한」에서 「재원으로 쓸 수 있는 상한」으로 바뀐다.** `compute`(첫 탭)의 요청·응답은 한 글자도 안 바뀌고 금액도 한 원 안 움직인다. **역산기 쪽 금액은 움직인다** — 전환을 답하지 않은 요청에서 ISA 행이 받던 몫이 0이 되고 그만큼 못 앉힌 몫이 는다. 그것이 D78 ④의 판정 자체다(전환하지 않을 계좌에 앉힌 납입은 연금계좌 평가액이 되지 못한다). **같은 회차에 배분 순서도 바뀐다**(`tax-domain` 32절 판정). 1단계가 **세액공제 한도까지**로 좁혀지고(근거는 공제율이 아니라 **미사용 한도의 소멸성**), **전환 근거가 서면 ISA가 연금계좌 초과분보다 앞**에 오며, 서지 않으면 종전 순서로 되돌아간다. 그래서 칸이 더 는다 — 배분 행마다 `fill_steps[]`(자리별 금액·방·**근거 코드**·근거 규칙)와 시나리오의 `fill_order{variant_code, is_statutory_order: false, basis_rule_ids}`, 그리고 가정 코드 하나(`reverse_tax_liability_cap_not_applied`)다. **§61③ 세액 한도는 적용하지 않는다** — 산출세액을 알아야 하는데 이 탭은 총급여를 받지 않으므로 **입력을 늘리는 대신 그 사실을 가정으로 낸다.** **버전은 minor다** — 0.D의 문자대로 선택 필드·열거형 값·코드가 늘고 금액이 움직인다(첫 초안은 patch였고 관리자가 minor로 바로잡았다) |
 | `14.1.0` | D77 | **D77 — 연금 역산기.** 세 번째 진입점 `computePensionReverse`와 그 요청·응답(12절), 전용 코드 공간 `REVERSE_NOTICE`·`REVERSE_ASSUMPTION`(8.11절), 오류 코드 하나(`annuity_start_below_minimum_age`, 8.1절)가 는다. **`compute`의 요청·응답은 한 글자도 바뀌지 않고 금액은 한 원도 움직이지 않는다.** 진입점 추가와 코드 목록 추가뿐이므로 0.D절의 **minor**이고, `src/web`의 목은 major가 같아 **그대로 돈다**(선례: `5.1.0`·`8.1.0`). **목이 새로 져야 하는 것은 없다** — 화면이 이 진입점을 부르기 시작할 때 지면 된다. **다만 문구 사전은 비어 있다** — 8.11절이 그 빚을 이름으로 적는다 |
 | `14.0.1` | D55 (후속) | **D55 — 계약이 적은 서술 하나에 사는 사람이 없다.** 5.12절의 「12% 구간 트림 폭 1~8원」은 **틀린 서술이 아니라 전제를 만족하는 좌표가 없는 서술**이다 — 그 구간의 세액 한도 최솟값(4,230,000)이 최대 공제액(1,440,000)의 세 배라 한도가 물 수 없고, 물지 않으면 트림도 없다. **「거짓」이 아니라 「공허」이므로 지우지 않고 그렇게 적는다** — 사는 사람이 없다는 사실 자체가 값이다(다음 회차가 그 좌표를 찾으러 나서지 않는다). 하한 4,230,000은 정답지 GC-32e가 값으로 문다. **요청도 응답도 한 글자 안 바뀌고 금액도 한 원 안 움직인다** — 필드·보장·열거형 어느 것도 건드리지 않으므로 0.D절의 **patch**다(선례: `3.3.1`). `src/web`의 목은 major가 같아 그대로 돈다 |
 | `14.0.0` | D54 (후속) | **D54 — 이월 판정의 자를 정한다. 그리고 관리자가 판정해 놓고 계약·구현에 옮기지 않은 것 하나.** `contribution_carryover_available`이 **`applied`에 직결돼 있던 것을 끊고 실제 잘림(`reduced_income_tax_krw > 0`)에 매단다.** 자는 **표시 금액**이다 — 시행령 §118의3①의 대상이 「받지 아니한 **금액**」이고 구조가 의제인출 + 의제재납입이라 **그 금액이 계좌에 남아 있어야** 하는데 원 미만은 남을 수 없다. **그 단계를 정하는 조문이 없다는 사실을 계약이 함께 명시한다**(5.5절). 딸려 움직이는 것 셋 — `carryover_shares_future_year_credit_limit`·`carryover_requires_application`이 그 좌표에서 `null`이 되고, `basis_rule_ids`에서 전환 특례 규칙이 빠진다. **금액은 한 원도 바뀌지 않는다.** **왜 major인지는 0.22절** |

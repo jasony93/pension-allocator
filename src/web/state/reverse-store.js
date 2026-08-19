@@ -42,6 +42,11 @@ export function initialReverseForm() {
     isaYearsSinceOpening: '',
     // AC-R29(2026-08-19 신설) — 미입력이면 엔진이 해지 의제 판정을 내지 않는다.
     isaCumulativeContribution: '',
+    // ISA 연금 전환 계획(게이트 5 D78 ④, AC-R30) — **기본값을 두지 않는다.**
+    // `null`|`true`|`false` 세 상태를 그대로 쓴다. "아니오"와 "미응답"이
+    // 계산상으로는 같아도(둘 다 ISA를 재원에서 뺀다) 화면 메시지가 다르므로,
+    // 미리 "아니오"를 골라 두면 그 구분이 성립하지 않는다(14.2절 규약 8).
+    isaConversionPlanned: null,
     deferredRetirementPresent: false,
     deferredRetirementAmount: '',
     // '예' | '아니오' | 'unknown' — 기본 "모름"(접힘, screens.md 14.2절 규약 4).
@@ -139,6 +144,11 @@ export function buildPensionReverseRequest(form, { asOfDate } = {}) {
             ? Number(form.isaYearsSinceOpening)
             : null,
         cumulative_contribution_krw: form.isaExists ? reverseManwonToWonOrNull(form.isaCumulativeContribution) : null,
+        // D78 ④ — "ISA 계좌가 있나요?"가 "아니오"면 이 값 자체를 묻지 않은
+        // 것이므로 `null`을 보낸다("미응답"과 계산상 같은 값이지만, ISA가
+        // 없는 사람에게 전환 여부를 물은 적이 없다는 사실은 화면에서만
+        // 의미가 있다 — 엔진에는 `isaExists`라는 개념이 없다).
+        conversion_planned: form.isaExists ? form.isaConversionPlanned : null,
       },
     },
   };

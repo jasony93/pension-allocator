@@ -2,7 +2,7 @@
 // 여기 있는 숫자는 스키마 버전과 개월수 상한처럼 세법과 무관한 것뿐이다.
 // 한도·비율·구간 경계는 전부 data/tax-rules/에서 읽는다.
 
-export const SCHEMA_VERSION = '14.1.0';
+export const SCHEMA_VERSION = '14.2.0';
 export const SUPPORTED_MAJOR = 14;
 
 export const ACCOUNT = {
@@ -735,10 +735,10 @@ export const NOTICE = {
  * 그 문장이 없는 동안에는 첫 탭의 검사가 붉어진다 — 두 탭의 회차가 다른데 한쪽의 검사가
  * 다른 쪽의 진도에 묶인다.
  *
- * **대가를 분명히 적어 둔다.** 이 목록은 지금 **어느 문구 검사도 지키지 않는다.**
- * `web-dev`가 역산기 사전을 만들 때 `wording.test.mjs`와 같은 형태의 전건 대조를
- * 이 목록에 대해서도 세워야 하고, 그 전까지는 화면에 코드 문자열이 그대로 뜰 수 있다.
- * 계약 8.11절과 `open_questions`에 같은 말이 있다.
+ * **그 대가는 갚혔다.** `web-dev`가 `src/web/reverse-wording.test.mjs`로 이 목록에 대한
+ * **전건 대조**를 세웠다. **그래서 여기에 코드를 더하면 그 검사가 붉어진다** — 문구가
+ * 붙기 전까지 붉은 채로 남는 것이 의도이고, 그것이 인계 신호다. 이 파일을 고치는 유닛은
+ * `src/web/`을 열지 않는다. 계약 8.11절에 같은 말이 있다.
  */
 export const REVERSE_NOTICE = {
   RETURN_RATE_NOT_SUPPLIED: 'reverse_return_rate_not_supplied',
@@ -756,6 +756,27 @@ export const REVERSE_NOTICE = {
   DEFERRED_BASE_RATE_OUT_OF_SCOPE: 'reverse_deferred_retirement_base_rate_out_of_scope',
   /** ISA 가입경과연수 미입력. **첫 탭과 같은 문자열을 일부러 쓴다** — 같은 사실이다. */
   ISA_TENURE_MISSING: 'isa_tenure_missing',
+
+  // ── D78 ④ ISA 연금 전환 ──
+  /**
+   * 전환 여부에 **답하지 않았다.** 「아니오」와 같이 계산했지만 그것은 사용자의 답이 아니다 —
+   * 「예」로 답하면 ISA가 개시 재원에 들어가 금액이 달라진다는 **사실만** 낸다.
+   */
+  ISA_CONVERSION_NOT_DECLARED: 'reverse_isa_conversion_not_declared',
+  /**
+   * 전환하겠다고 답했으나 **개시 시점에도 의무가입기간이 차지 않는다.** 그 시점에 전환할 수
+   * 없으므로 ISA를 개시 재원에서 뺐다. `ISA_CONVERSION_PATH_NOT_OPEN`(오늘 기준)과 **다른
+   * 사실이다** — 이쪽은 계산을 바꾼다.
+   */
+  ISA_CONVERSION_NOT_ELIGIBLE_AT_START: 'reverse_isa_conversion_not_eligible_at_annuity_start',
+  /** ISA에 앉을 수 있는 월 몫을 **총 납입한도의 잔여**가 정했다(잔여 0도 포함). */
+  ISA_SOURCE_CAPPED_BY_TOTAL_LIMIT: 'reverse_isa_source_capped_by_total_contribution_limit',
+  /**
+   * 전환금은 과세제외금액이라 문턱을 쓰지 않는데, **그것이 수령액의 어느 몫인지를 정한
+   * 규칙이 룰셋에 없다.** 그래서 문턱에 세어지는 금액을 줄이지 않았다 — 문턱을 **크게**
+   * 잡는 방향이고, 「분리과세 안입니다」가 덜 나간다.
+   */
+  ISA_CONVERSION_THRESHOLD_SHARE_NOT_APPORTIONED: 'reverse_isa_conversion_threshold_share_not_apportioned',
 };
 
 export const COMPARISON_NOTE = {
@@ -835,8 +856,53 @@ export const REVERSE_ASSUMPTION = {
   DEFERRED_NOT_GROWN: 'reverse_deferred_retirement_not_grown',
   LOWER_BOUNDS_ROUNDED_UP: 'reverse_lower_bounds_rounded_up',
   ISA_CUMULATIVE_ZERO: 'reverse_isa_cumulative_contribution_zero_assumed',
+  /**
+   * ISA 계약이 **개시 시점까지 유지되고 그때 연금계좌로 전환된다**고 보았다. 전환을
+   * 「예」로 답했을 때만 선다. 계약 만료·해지·재가입은 요청이 담지 않는다.
+   */
+  ISA_CONTRACT_HELD_TO_START: 'reverse_isa_contract_held_to_annuity_start',
+  /**
+   * 총 납입한도의 **잔여를 적립 개월수로 균등하게 나눴다.** 조문은 그 나눗셈을 정하지
+   * 않는다 — 균등 납입을 보는 이 탭의 관행이고, 한도를 **작게** 잡는 방향이다.
+   */
+  ISA_TOTAL_LIMIT_SPREAD: 'reverse_isa_total_limit_spread_over_accumulation',
+  /**
+   * **1단계의 상한을 세액공제 한도로만 잡았다**(D78 ④ 후속 · 32.2절). 조문이 정한 상한은
+   * 「세액공제 한도와 §61③ 세액 한도 중 **실제로 공제를 낳는 쪽**」인데, 세액 한도는
+   * 산출세액의 함수이고 **이 탭은 총급여를 받지 않는다.** 입력을 늘리는 대신 적용하지
+   * 않았고, 그 방향은 산출세액이 작은 사람에게 **1단계를 실제보다 크게** 잡는 쪽이다.
+   */
+  TAX_LIABILITY_CAP_NOT_APPLIED: 'reverse_tax_liability_cap_not_applied',
   TODAY_CURRENCY: 'reverse_amounts_in_today_currency',
   START_DATE_DERIVED: 'reverse_annuity_start_date_derived_from_birthday',
+};
+
+/**
+ * **그 몫이 그 자리에 놓인 근거**(D78 ④ 후속 · `tax-rules-report.md` 32절).
+ *
+ * **세법이 순서를 정하지 않는다.** 조문이 정하는 것은 각 한도의 크기와 **소멸 여부**이고,
+ * 순서는 그 위에 선 제품 결정이다(32.5절·32.6절 1번). 그래서 코드 이름이 「법정 순서」를
+ * 뜻하지 않게 지었다 — 각 코드가 말하는 것은 **조문이 고정한 사실 하나**뿐이다.
+ */
+export const REVERSE_FILL_BASIS = {
+  /** 연금계좌 세액공제 한도는 **그 해에 쓰지 않으면 사라진다** — 미사용 한도를 나르는 규정이 없다. */
+  CREDIT_LIMIT_EXPIRES: 'reverse_fill_credit_limit_expires_with_tax_year',
+  /**
+   * ISA를 거쳐 전환하면 **그 해의 공제 한도와 별도로** 추가한도가 열린다(§59조의3③④).
+   * **전환 계획을 「예」로 답하고 개시 시점에 경로가 열릴 때만** 이 근거가 선다.
+   */
+  ISA_TRANSFER_EXTRA_LIMIT: 'reverse_fill_isa_transfer_opens_extra_credit_limit_if_converted',
+  /**
+   * 공제 한도를 넘는 납입은 **그 해의 세액공제를 낳지 않는다.** 그러나 「혜택이 없다」는
+   * 거짓이다(32.3절) — 과세이연과 **인출 시 원금 비과세**가 남는다.
+   */
+  NO_CREDIT_THIS_YEAR: 'reverse_fill_no_credit_this_year_but_principal_untaxed_on_withdrawal',
+};
+
+/** 2·3단계의 상대 순서. **전환 근거가 서지 않으면 뒤집힌다**(32.5절). */
+export const REVERSE_FILL_ORDER_VARIANT = {
+  ISA_FIRST: 'isa_before_pension_surplus',
+  PENSION_SURPLUS_FIRST: 'pension_surplus_before_isa',
 };
 
 /**

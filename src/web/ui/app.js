@@ -62,6 +62,7 @@ import { renderReverseInputPanel } from './reverse-input-panel.js';
 import { renderReverseResultPanel } from './reverse-result-panel.js';
 import { renderTabBar } from './tab-bar.js';
 import { mountExampleShowcase } from './example-showcase.js';
+import { mountReverseExampleShowcase } from './reverse-example-showcase.js';
 import { SHARE_LINK_INVALID_NOTE } from '../copy.js';
 import { createStore } from '../state/store.js';
 import { createReverseStore, wonToManwonInputString } from '../state/reverse-store.js';
@@ -197,6 +198,15 @@ export function mountApp(root, { engineClient, analytics }) {
   // 전환한다(마운트는 한 번뿐이다 — Shadow DOM 안의 정적 예시라 탭마다
   // 다시 계산할 것이 없으므로 지우고 다시 만들 이유가 없다).
   const exampleSlot = el('div', { class: 'example-showcase-slot' });
+  // [2026-08-19, 게이트 5 D78 ②] 연금 역산기 탭 전용 예시(김철수씨·연금
+  // 개시일·월 수령액 구도). `exampleSlot`과 같은 자리(헤더 바로 아래)에
+  // 나란히 두고, 표시 전환으로 정확히 반대 탭에서만 보이게 한다 — 둘 다
+  // 마운트는 한 번뿐이다(정적 예시라 탭 전환마다 다시 계산하지 않는다).
+  // **클래스는 일부러 다르게 둔다** — `.example-showcase-slot`은 계속
+  // 첫 탭 슬롯 하나만 가리켜야 기존 검사(`document.querySelector('.example-
+  // showcase-slot')`가 단수를 전제한다)가 그대로 유효하다. 레이아웃 CSS
+  // (좌우 여백 등)는 `styles.css`가 두 클래스를 함께 선택해 공유한다.
+  const reverseExampleSlot = el('div', { class: 'reverse-example-showcase-slot' });
 
   // ---- 두 탭의 패널 — 동시 마운트, 표시만 전환(2.1.2절 (3)) ----------------
   const inputSlot = el('div', { class: 'input-slot' });
@@ -225,9 +235,10 @@ export function mountApp(root, { engineClient, analytics }) {
   // 다시 넣는 것은 소유자의 결정을 되돌리는 것이다.
   const footer = el('footer', { class: 'app-footer' }, ['제공자 표기 · 룰셋 기준일 2026-08-08']);
 
-  layout.append(header, exampleSlot, mainGroup, footer);
+  layout.append(header, exampleSlot, reverseExampleSlot, mainGroup, footer);
   mount(root, layout);
   mountExampleShowcase(exampleSlot, { engineClient });
+  mountReverseExampleShowcase(reverseExampleSlot, { engineClient });
 
   /**
    * 활성 탭을 바꾼다. **DOM을 지우지 않는다** — `tab-panel-hidden` 클래스
@@ -240,9 +251,10 @@ export function mountApp(root, { engineClient, analytics }) {
     activeTabId = tabId;
     calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
     reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
-    // 예시 블록은 첫 탭 전용이다(위 `exampleSlot` 주석) — 두 패널과 같은
-    // 클래스로 표시만 전환한다.
+    // 예시 블록은 각 탭 전용이다(위 `exampleSlot`/`reverseExampleSlot` 주석) —
+    // 두 패널과 같은 클래스로 표시만 전환한다.
     exampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
+    reverseExampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
     writeActiveTabToLocation(activeTabId);
     patch(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
   }
@@ -276,6 +288,7 @@ export function mountApp(root, { engineClient, analytics }) {
   calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
   reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
   exampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
+  reverseExampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
   mount(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
 
   /**
@@ -329,6 +342,10 @@ export function mountApp(root, { engineClient, analytics }) {
     // `render` 시점에 재면 버려질 사본을 잰다) — 데스크톱(labelled) 도넛에는
     // `data-label-mode="legend"`가 없어 이 함수가 조용히 아무것도 하지 않는다.
     applyDonutSliceInlineLabels(resultSlot);
+    // [2026-08-19, D78 ③] 역산기 결과에도 `AccountDonut`이 생겼다 — 같은
+    // 이유로 같은 후처리를 그 슬롯에도 건다.
+    runDonutEntrance(reverseResultSlot);
+    applyDonutSliceInlineLabels(reverseResultSlot);
   };
 
   setRerenderHook(scheduleRender);
@@ -338,7 +355,10 @@ export function mountApp(root, { engineClient, analytics }) {
   // 다시 그려야 한다. `ThemeControl`은 store를 거치지 않으므로(위 주석) 테마
   // 전환은 `renderNow`를 다시 부르지 않는다 — 그래서 이 감시를 한 번, 여기서
   // 따로 건다(예시 쪽과 같은 두 경로를 듣는 `watchDonutThemeChange`, `charts.js`).
-  watchDonutThemeChange(() => applyDonutSliceInlineLabels(resultSlot));
+  watchDonutThemeChange(() => {
+    applyDonutSliceInlineLabels(resultSlot);
+    applyDonutSliceInlineLabels(reverseResultSlot);
+  });
 
   // 도넛은 라벨을 옆에 붙이는지 아래 리스트로 내리는지에 따라 **상자 크기 자체가
   // 다르다**(charts.js `donutGeometry`). CSS는 `viewBox`를 바꿀 수 없으므로 그

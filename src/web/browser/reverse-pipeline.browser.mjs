@@ -51,6 +51,15 @@ test('필수 넷을 채우면 별도 제출 없이 법정 사실 블록이 자�
   assert.match(amount, /원/, '개시 시점 필요 최소 평가액이 금액으로 표시된다');
 });
 
+test('법정 사실 블록 안의 조문 칩은 최대 한 개다(게이트 5 D78 ①)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const chipCount = await page.evaluate(`document.querySelectorAll('.statutory-fact-block .law-chip').length`);
+  assert.ok(chipCount <= 1, `법정 사실 블록의 칩 개수(${chipCount})가 1개를 넘는다 — "한 사실당 최대 한 칩" 위반`);
+  // 표 안에는 칩이 전면 제거되어야 한다(D78 ①, 별도로 다시 확인).
+  const tableChipCount = await page.evaluate(`document.querySelectorAll('.statutory-fact-table .law-chip').length`);
+  assert.equal(tableChipCount, 0, '재원별 표 안에는 칩이 하나도 없어야 한다');
+});
+
 test('평균 수익률을 입력하지 않으면 ContributionAmountBar 자체가 DOM에 없고, 대체 한 줄만 실제로 보인다(AC-R6)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const state = await page.evaluate(`(() => {
@@ -82,22 +91,39 @@ test('평균 수익률 입력란에는 기본값·자리표시자·힌트 숫자
   assert.equal(field.hasDefaultAttr, false);
 });
 
-test('평균 수익률을 입력하면 ContributionAmountBar가 실제로 나타나고, 매 행에 조건절이 붙는다(AC-R15)', { skip: skipWithoutChrome }, async () => {
+test('평균 수익률을 입력하면 ContributionAmountBar가 실제로 나타나고, 조건절이 도넛·표를 감싼다(AC-R15, D78 ③로 형태가 바뀌었다)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.evaluate(setValue('averageReturnRatePercent', '5'));
   await page.waitFor(`!!document.querySelector('.contribution-amount-bar')`, { timeoutMs: 6000 });
-  const rows = await page.evaluate(`[...document.querySelectorAll('.contribution-amount-row')].map((row) => {
-    const r = row.getBoundingClientRect();
+  // D78 ③ — 이제 계좌별 행이 아니라 배분표 행(연금저축·IRP 두 계좌, ISA는
+  // 아직 전환 계획을 답하지 않아 재원이 아니다)이다.
+  const state = await page.evaluate(`(() => {
+    const bar = document.querySelector('.contribution-amount-bar');
+    const rows = [...bar.querySelectorAll('.account-table tbody tr')].filter((tr) => !tr.classList.contains('table-row-note'));
+    const condition = bar.querySelector('.contribution-amount-condition')?.innerText ?? null;
+    return { rowCount: rows.length, condition };
+  })()`);
+  assert.equal(state.rowCount, 2, '아직 ISA 전환 계획을 답하지 않아 연금저축·IRP 두 행만 있어야 한다');
+  assert.match(state.condition ?? '', /연 5%가 유지된다면/, '조건절이 도넛·표를 감싸는 캡션 한 줄로 있어야 한다(D78 ③, design-system 5.35절 3번)');
+});
+
+test('계좌별 월 납입액 시나리오는 AccountDonut + 배분표다(게이트 5 D78 ③) — 막대 목록이 아니다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const state = await page.evaluate(`(() => {
+    const bar = document.querySelector('.contribution-amount-bar');
+    const donut = bar?.querySelector('.chart-donut');
+    const donutBox = donut ? donut.getBoundingClientRect() : null;
     return {
-      box: { width: r.width, height: r.height },
-      condition: row.querySelector('.contribution-amount-condition')?.innerText ?? null,
+      hasDonut: !!donut,
+      donutVisible: donutBox ? donutBox.width > 0 && donutBox.height > 0 : false,
+      hasTable: !!bar?.querySelector('.account-table'),
+      hasOldBarRows: !!bar?.querySelector('.contribution-amount-track'),
     };
-  })`);
-  assert.equal(rows.length, 3, '연금저축·IRP·ISA 세 행이 있어야 한다');
-  for (const row of rows) {
-    assert.ok(row.box.width > 0 && row.box.height > 0, '각 행이 실제로 화면에 그려진다');
-    assert.match(row.condition ?? '', /연 5%가 유지된다면/, '조건절이 금액과 같은 행에 있어야 한다');
-  }
+  })()`);
+  assert.equal(state.hasDonut, true, 'AccountDonut이 실제로 그려져야 한다');
+  assert.equal(state.donutVisible, true, '도넛이 0×0이 아니라 실제로 보여야 한다');
+  assert.equal(state.hasTable, true, '도넛 옆(또는 아래) 배분표가 있어야 한다');
+  assert.equal(state.hasOldBarRows, false, '옛 막대 목록(D78 ③ 이전 설계)이 다시 그려지면 위반이다');
 });
 
 test('수령 전략 비교는 항상 두 카드, ISA 잔액이 있으면 세 카드다(AC-R18)', { skip: skipWithoutChrome }, async () => {
@@ -113,6 +139,44 @@ test('수령 전략 비교는 항상 두 카드, ISA 잔액이 있으면 세 카
   assert.equal(afterIsa, 3, 'ISA 잔액이 0보다 크면 세 카드여야 한다');
 });
 
+test('수령 전략 카드 하나당 조문 칩은 최대 한 개다(게이트 5 D78 ①)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const counts = await page.evaluate(`[...document.querySelectorAll('.withdrawal-strategy-card')].map((c) => c.querySelectorAll('.law-chip').length)`);
+  assert.equal(counts.length, 3, '지금은 ISA 카드까지 세 카드가 있어야 한다');
+  for (const count of counts) assert.ok(count <= 1, `카드 하나에 칩이 ${count}개 있다 — "카드당 최대 한 칩" 위반`);
+});
+
+test('ISA 계좌 보유 여부가 "예"일 때만 전환 계획 토글이 나타난다(게이트 5 D78 ④, AC-R30)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  // 지금 ISA 계좌 보유 여부는 "예"다(앞선 시험들이 그렇게 남겨 두었다).
+  const whileIsaExists = await page.evaluate(`(() => {
+    const yes = document.getElementById('isaConversionPlanned-true');
+    const no = document.getElementById('isaConversionPlanned-false');
+    return {
+      toggleExists: !!yes,
+      // segmentToggle은 선택 상태를 'segment-option-selected' 클래스로 표시한다
+      // (aria-checked는 el()이 boolean 속성 관례를 따라 false일 때
+      // 속성 자체를 생략한다 — null도 "선택 안 됨"으로 읽어야 한다).
+      yesSelected: yes?.classList.contains('segment-option-selected') ?? null,
+      noSelected: no?.classList.contains('segment-option-selected') ?? null,
+    };
+  })()`);
+  assert.equal(whileIsaExists.toggleExists, true, 'ISA가 있으면 전환 계획 토글이 보여야 한다');
+  assert.equal(whileIsaExists.yesSelected, false, '"예"가 미리 선택돼 있으면 위반이다(AC-R30)');
+  assert.equal(whileIsaExists.noSelected, false, '"아니오"도 미리 선택돼 있으면 안 된다 — 이 필드는 기본값이 없다(AC-R30)');
+
+  await page.clickElement(`document.getElementById('reverseIsaExists-false')`);
+  await sleep(150);
+  const whileIsaAbsent = await page.evaluate(`!!document.getElementById('isaConversionPlanned-true')`);
+  assert.equal(whileIsaAbsent, false, 'ISA 계좌 보유 여부가 "아니오"면 전환 계획 토글 자체가 없어야 한다');
+
+  // 이후 시험을 위해 다시 켠다.
+  await page.clickElement(`document.getElementById('reverseIsaExists-true')`);
+  await sleep(150);
+  await page.evaluate(setValue('isaBalance', '300'));
+  await sleep(300);
+});
+
 test('ISA 계좌 보유 여부가 "아니오"면 ISA 잔액·경과연수·누적 납입액 입력란이 모두 없다(AC-R9)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.clickElement(`document.getElementById('reverseIsaExists-false')`);
@@ -121,8 +185,9 @@ test('ISA 계좌 보유 여부가 "아니오"면 ISA 잔액·경과연수·누�
     balance: !!document.getElementById('isaBalance'),
     years: !!document.getElementById('reverseIsaYearsSinceOpening'),
     cumulative: !!document.getElementById('isaCumulativeContribution'),
+    conversion: !!document.getElementById('isaConversionPlanned-true'),
   }))()`);
-  assert.deepEqual(hidden, { balance: false, years: false, cumulative: false });
+  assert.deepEqual(hidden, { balance: false, years: false, cumulative: false, conversion: false });
 });
 
 test('개시일이 최소 개시 연령 미만이면 그 필드에 오류가 뜨고 법정 사실 블록은 사라진다(AC-R5)', { skip: skipWithoutChrome }, async () => {

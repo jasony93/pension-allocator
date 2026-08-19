@@ -11,6 +11,7 @@ import { loadReverseRules } from './reverse-rules.mjs';
 import {
   allocateMonthlyContribution,
   futureValueOfMonthlyPlan,
+  isaSourceMonthlyCap,
   monthlyContributionCeilings,
   requiredMonthlyContribution,
 } from './reverse-accumulation.mjs';
@@ -183,6 +184,87 @@ test('법정 상한을 넘는 몫은 어느 계좌에도 앉지 않고 사실로
   assert.equal(allocation.unallocatable_monthly_krw, 100_000);
   assert.equal(allocation.exceeds_statutory_ceiling, true);
   assert.equal(allocation.allocated_monthly_total_krw, ceilings.total_monthly_krw);
+});
+
+// ── ISA를 재원으로 쓸 때의 몫 (D78 ④) ──────────────────────────────────
+
+test('ISA 몫은 그 해의 한도와 총 납입한도의 잔여 가운데 작은 쪽이다', () => {
+  const r = rules();
+  const long = isaSourceMonthlyCap(r, {
+    isaYearsSinceOpening: 0,
+    isaCumulativeKrw: 0,
+    accumulationMonths: 240,
+  });
+  // 적립기가 스무 해면 총 납입한도 쪽이 문다 — 그 해의 한도보다 훨씬 작다.
+  assert.equal(long.monthly_krw, Math.floor(r.isaTotalLimitKrw / 240));
+  assert.equal(long.capped_by_total_contribution_limit, true);
+  assert.ok(long.monthly_krw < long.annual_limit_monthly_krw);
+
+  // 열두 달만 남았고 경과연수가 0이면 그 해의 한도가 문다.
+  const short = isaSourceMonthlyCap(r, {
+    isaYearsSinceOpening: 0,
+    isaCumulativeKrw: 0,
+    accumulationMonths: 12,
+  });
+  assert.equal(short.monthly_krw, short.annual_limit_monthly_krw);
+  assert.equal(short.capped_by_total_contribution_limit, false);
+});
+
+test('경계 — 총 납입한도를 다 쓰면 ISA 몫은 0이고 잔여도 0이다', () => {
+  const r = rules();
+  const exhausted = isaSourceMonthlyCap(r, {
+    isaYearsSinceOpening: 4,
+    isaCumulativeKrw: r.isaTotalLimitKrw,
+    accumulationMonths: 120,
+  });
+  assert.equal(exhausted.remaining_total_limit_krw, 0);
+  assert.equal(exhausted.monthly_krw, 0);
+
+  // 1원이 남아도 「없다」와 「있다」는 다른 사실이다. 다만 그 1원이 월 몫을 만들지는 않는다.
+  const nearly = isaSourceMonthlyCap(r, {
+    isaYearsSinceOpening: 4,
+    isaCumulativeKrw: r.isaTotalLimitKrw - 1,
+    accumulationMonths: 120,
+  });
+  assert.equal(nearly.remaining_total_limit_krw, 1);
+  assert.equal(nearly.monthly_krw, 0);
+});
+
+test('재원이 아니면 ISA에는 방이 없다 — 이유가 배분에 값으로 남는다', () => {
+  const r = rules();
+  const notSource = allocateMonthlyContribution(r, {
+    requiredMonthlyKrw: 3_000_000,
+    isaYearsSinceOpening: 0,
+    isaCumulativeKrw: 0,
+    isaSource: null,
+  });
+  const by = Object.fromEntries(notSource.allocations.map((a) => [a.account, a]));
+  assert.equal(by.isa.room_monthly_krw, 0);
+  assert.equal(by.isa.monthly_krw, 0);
+  assert.equal(by.isa.limited_by, 'not_a_source');
+  assert.equal(notSource.isa_is_source, false);
+  assert.equal(notSource.source_ceiling_monthly_krw, notSource.ceilings.pension_pool_monthly_krw);
+  // 세 계좌의 법정 상한 자체는 사실이므로 그대로 실려 나간다.
+  assert.ok(notSource.ceilings.isa_monthly_krw > 0);
+  assert.ok(notSource.unallocatable_monthly_krw > 0);
+});
+
+test('재원이면 부르는 쪽이 정한 몫까지만 앉는다', () => {
+  const r = rules();
+  const bounded = allocateMonthlyContribution(r, {
+    requiredMonthlyKrw: 3_000_000,
+    isaYearsSinceOpening: 0,
+    isaCumulativeKrw: 0,
+    isaSource: { monthly_krw: 100_000 },
+  });
+  const by = Object.fromEntries(bounded.allocations.map((a) => [a.account, a]));
+  assert.equal(by.isa.room_monthly_krw, 100_000);
+  assert.equal(by.isa.monthly_krw, 100_000);
+  assert.equal(by.isa.limited_by, 'contribution_limit');
+  assert.equal(
+    bounded.source_ceiling_monthly_krw,
+    bounded.ceilings.pension_pool_monthly_krw + 100_000,
+  );
 });
 
 test('경계 — 상한과 정확히 같으면 넘지 않은 것이다', () => {

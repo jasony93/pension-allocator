@@ -24,6 +24,11 @@ import {
   RESET_CONFIRM_ACCEPT,
   RESET_CONFIRM_CANCEL,
 } from '../copy.js';
+import {
+  ISA_CONVERSION_LABEL,
+  ISA_CONVERSION_NOT_DECLARED_NOTE,
+  isaConversionYesEffectCaption,
+} from '../reverse-copy.js';
 
 // 첫 탭의 `input-panel.js`도 같은 이름의 헬퍼를 내보낸다 — 배포 빌드
 // (`scripts/build.mjs`)가 모든 모듈을 한 스코프로 합치므로 이름이 겹치면
@@ -236,9 +241,40 @@ export function renderReverseInputPanel({ state, store, renderGuard }) {
     onBlur: () => store.flush(),
     renderGuard,
   });
+  // 게이트 5 D78 ④, AC-R30 — 명시 질문이고 **기본값이 없는 예외적인 2택
+  // 라디오**다(14.2절 규약 8). "ISA 계좌가 있나요? = 예"가 노출 조건이고,
+  // 잔액 값에서 추론하지 않는다.
+  const isaConversionToggle = segmentToggle({
+    id: 'isaConversionPlanned',
+    label: ISA_CONVERSION_LABEL,
+    value: form.isaConversionPlanned,
+    options: [
+      { value: false, label: '아니오' },
+      { value: true, label: '예' },
+    ],
+    onChange: (v) => store.setField('isaConversionPlanned', v, { immediate: true }),
+  });
+  // 아무것도 고르지 않았을 때만 — "아니오"와 계산상 같은 수를 내지만
+  // 사용자가 답한 것이 아니라는 사실을 알린다(AC-R30, 14.2절 규약 8).
+  const isaConversionUndeclaredNote =
+    form.isaExists && form.isaConversionPlanned === null
+      ? el('div', { class: 'inline-alert inline-alert-info', role: 'status' }, [
+          el('p', {}, [ISA_CONVERSION_NOT_DECLARED_NOTE]),
+        ])
+      : null;
+  // "예"일 때의 효과 고지 — 이미 계산된 결과가 있으면 실제 문턱 금액을
+  // 옮기고, 없으면 숫자 없이 사실만 말한다(세법 수치를 화면 코드에
+  // 박지 않는다).
+  const isaConversionYesNote =
+    form.isaExists && form.isaConversionPlanned === true
+      ? el('p', { class: 'field-help' }, [
+          isaConversionYesEffectCaption(state.result?.statutory_facts?.threshold_consumption?.threshold_krw ?? null),
+        ])
+      : null;
+
   const isaBlock = conditionalGroup(
     form.isaExists,
-    [isaBalanceField, isaYearsSinceOpeningField, isaCumulativeField],
+    [isaBalanceField, isaYearsSinceOpeningField, isaCumulativeField, isaConversionToggle, isaConversionUndeclaredNote, isaConversionYesNote],
     'reverseIsaBlock',
   );
 

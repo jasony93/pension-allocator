@@ -29,6 +29,7 @@ import { REVERSE_RULE, loadReverseRules } from './reverse-rules.mjs';
 import { annualWithdrawalCap, minimumStartBalance } from './reverse-cap.mjs';
 import {
   allocateMonthlyContribution,
+  isaSourceMonthlyCap,
   monthlyContributionCeilings,
   requiredMonthlyContribution,
 } from './reverse-accumulation.mjs';
@@ -38,6 +39,7 @@ import {
   electiveSeparateOption,
   isaDeemedTerminationOnWithdrawal,
   isaPensionConversionPath,
+  isaPensionConversionPathAtStart,
   separateTaxationStatus,
   thresholdCountedAmount,
   withholdingOnPrivatePension,
@@ -91,14 +93,26 @@ export function computePensionReverse(request, rulesets) {
   const assumptions = [];
   const input = shape.input;
 
+  // ── ISA 전환 판정 — 세 블록이 함께 쓴다 (D78 ④) ─────────────────────
+  // **수익률을 읽지 않는다.** 그래서 이 판정이 블록 ①에 실려도 층 4가 열리지 않는다.
+  const conversion = resolveIsaConversion(rules, input, derived, notices, assumptions);
+
   // ── 블록 ① 법정 사실 ────────────────────────────────────────────────
-  const statutory = buildStatutoryFacts(rules, input, derived, notices, assumptions);
+  const statutory = buildStatutoryFacts(rules, input, derived, conversion, notices, assumptions);
 
   // ── 블록 ② 계좌별 월 납입 시나리오 ──────────────────────────────────
-  const scenario = buildContributionScenario(rules, input, derived, statutory, notices, assumptions);
+  const scenario = buildContributionScenario(
+    rules,
+    input,
+    derived,
+    statutory,
+    conversion,
+    notices,
+    assumptions,
+  );
 
   // ── 블록 ③ 수령 전략 비교 ───────────────────────────────────────────
-  const strategies = buildPayoutStrategies(rules, input, derived, statutory, notices);
+  const strategies = buildPayoutStrategies(rules, input, derived, statutory, conversion, notices);
 
   addStandingAssumptions(assumptions, input);
 
@@ -240,6 +254,14 @@ function validate(request) {
     'accounts.isa.cumulative_contribution_krw',
   );
 
+  // **전환 계획은 예·아니오·미응답의 셋이다**(D78 ④). `null`은 「아니오」가 아니라
+  // **답하지 않았다**이고, 둘을 같은 값으로 접으면 「물었는데 아니라고 했다」와
+  // 「묻지 않았다」를 구별할 수 없게 된다.
+  const conversionPlanned = accounts[ACCOUNT.ISA]?.conversion_planned ?? null;
+  if (conversionPlanned !== null && typeof conversionPlanned !== 'boolean') {
+    errors.push(err(ERROR.INVALID_ENUM, 'accounts.isa.conversion_planned'));
+  }
+
   if (errors.length > 0) return { errors, input: null };
 
   return {
@@ -272,6 +294,7 @@ function validate(request) {
           balance_krw: accounts[ACCOUNT.ISA].balance_krw,
           years_since_opening: accounts[ACCOUNT.ISA].years_since_opening ?? null,
           cumulative_contribution_krw: accounts[ACCOUNT.ISA].cumulative_contribution_krw ?? null,
+          conversion_planned: conversionPlanned,
         },
       },
     },
@@ -339,9 +362,87 @@ function deriveTiming(input, rules) {
   };
 }
 
+// ── ISA 전환 판정 (D78 ④) ───────────────────────────────────────────────
+
+/**
+ * **ISA를 개시 시점 필요 평가액의 재원으로 세는가, 세지 않는다면 왜인가.**
+ *
+ * ISA에 있는 돈은 그 자체로 연금계좌의 평가액이 아니다 — 개시 시점에 **연금계좌로
+ * 전환**돼야 비로소 연금수령한도가 딛는 평가액이 된다. 그래서 재원 여부를 가르는 것은
+ * 잔액이 아니라 **사용자의 전환 계획**이고, 그 계획이 서려면 조문의 요건도 서야 한다.
+ *
+ * 셋 중 하나다.
+ *  · **예 + 개시 시점에 의무가입기간 충족** → 재원이다. 잔액도 월 납입도 목표를 채운다.
+ *  · **예 + 개시 시점에도 미충족** → 재원이 **아니다.** 그때 전환할 수 없기 때문이고,
+ *    그 사실을 안내로 낸다. **「전환하면 됩니다」라고 적지 않는다.**
+ *  · **아니오 · 미응답** → 재원이 아니다. 미응답은 「아니오」와 같은 수를 내되 **답하지
+ *    않았다는 사실**을 안내로 남긴다 — 답이 바뀌면 금액이 바뀌기 때문이다.
+ *
+ * **수익률을 읽지 않는다.** 이 판정이 블록 ①에 실려도 층 4는 열리지 않는다.
+ */
+function resolveIsaConversion(rules, input, derived, notices, assumptions) {
+  const isa = input.accounts[ACCOUNT.ISA];
+  const planned = isa.conversion_planned;
+  const pathAtStart = isaPensionConversionPathAtStart(rules, {
+    yearsSinceOpening: isa.years_since_opening,
+    monthsUntilStart: derived.accumulationMonths,
+  });
+  // **ISA 보유의 신호.** 잔액도 경과연수도 누적 납입액도 없는 사람에게 전환을 묻는 안내는
+  // 없는 계좌 이야기가 된다 — 이 저장소가 「없는 제약을 말하지 않는다」로 지켜 온 선이다.
+  const present =
+    isa.balance_krw > 0 ||
+    isa.years_since_opening !== null ||
+    isa.cumulative_contribution_krw !== null;
+
+  let excludedReasonCode = null;
+  if (planned !== true) {
+    excludedReasonCode = planned === false ? 'conversion_not_planned' : 'conversion_not_declared';
+  } else if (!pathAtStart.path_open) {
+    excludedReasonCode = 'conversion_not_eligible_at_annuity_start';
+  }
+  const counted = excludedReasonCode === null;
+
+  if (planned === null && present) {
+    notices.push(
+      notice(REVERSE_NOTICE.ISA_CONVERSION_NOT_DECLARED, 'info', 'accounts.isa.conversion_planned', {}, [
+        RULE.CREDIT_TRANSFER_EXTRA,
+        RULE.ISA_ACCOUNT_REQUIREMENTS,
+      ]),
+    );
+  }
+  if (excludedReasonCode === 'conversion_not_eligible_at_annuity_start') {
+    notices.push(
+      notice(
+        REVERSE_NOTICE.ISA_CONVERSION_NOT_ELIGIBLE_AT_START,
+        'warning',
+        'accounts.isa.years_since_opening',
+        {
+          min_contract_years: pathAtStart.min_contract_years,
+          years_since_opening: isa.years_since_opening,
+          years_since_opening_at_annuity_start: pathAtStart.years_since_opening_at_annuity_start,
+        },
+        [RULE.ISA_ACCOUNT_REQUIREMENTS, RULE.CREDIT_TRANSFER_EXTRA],
+      ),
+    );
+  }
+  if (counted) {
+    assumptions.push(
+      assume(REVERSE_ASSUMPTION.ISA_CONTRACT_HELD_TO_START, {}, [RULE.ISA_ACCOUNT_REQUIREMENTS]),
+    );
+  }
+
+  return {
+    planned,
+    present,
+    counted,
+    path_at_start: pathAtStart,
+    excluded_reason_code: excludedReasonCode,
+  };
+}
+
 // ── 블록 ① ─────────────────────────────────────────────────────────────
 
-function buildStatutoryFacts(rules, input, derived, notices, assumptions) {
+function buildStatutoryFacts(rules, input, derived, conversion, notices, assumptions) {
   const targetAnnual = input.target_monthly_income_krw * MONTHS_PER_YEAR;
   const publicMonthly = input.public_pension.expected_monthly_krw;
   const privateMonthly = publicMonthly === null ? input.target_monthly_income_krw : Math.max(0, input.target_monthly_income_krw - publicMonthly);
@@ -420,6 +521,22 @@ function buildStatutoryFacts(rules, input, derived, notices, assumptions) {
     ]));
   }
 
+  // **전환금은 문턱을 쓰지 않는데, 그것이 수령액의 어느 몫인지를 정한 규칙이 없다.**
+  // 인출 순서(과세제외금액이 먼저)는 룰셋에 있지만 그것을 연차별 수령액에 나누는 규칙은
+  // 없다. **없으면 없는 것이므로** 문턱에 세어지는 금액을 줄이지 않고, 줄이지 않았다는
+  // 사실을 낸다 — 문턱을 크게 잡는 방향이다.
+  if (conversion.counted && (input.accounts[ACCOUNT.ISA].balance_krw > 0 || ceilings.isa_monthly_krw > 0)) {
+    notices.push(
+      notice(
+        REVERSE_NOTICE.ISA_CONVERSION_THRESHOLD_SHARE_NOT_APPORTIONED,
+        'info',
+        'accounts.isa.conversion_planned',
+        {},
+        [RULE.PENSION_NON_DEDUCTED_PRINCIPAL, RULE.PENSION_SEPARATE_TAXATION_THRESHOLD],
+      ),
+    );
+  }
+
   const counted = thresholdCountedAmount(rules, {
     taxCreditedAndReturnKrw: privateAnnual,
     deferredRetirementKrw: input.deferred_retirement.amount_krw,
@@ -432,11 +549,15 @@ function buildStatutoryFacts(rules, input, derived, notices, assumptions) {
     {
       source_code: 'tax_credited_contribution_and_return',
       consumes_threshold: true,
+      in_plan: true,
       basis_rule_ids: [RULE.PENSION_SEPARATE_TAXATION_THRESHOLD].sort(),
     },
     {
       source_code: 'isa_conversion_amount',
       consumes_threshold: false,
+      // **이 계획에 전환금이 실제로 들어가는가.** 「문턱을 안 쓴다」는 언제나 참이고,
+      // 「이 사람의 계획에 있다」는 전환을 예로 답했고 그때 전환할 수 있을 때만 참이다.
+      in_plan: conversion.counted,
       basis_rule_ids: [RULE.PENSION_NON_DEDUCTED_PRINCIPAL, RULE.CREDIT_TRANSFER_EXTRA].sort(),
     },
   ];
@@ -444,6 +565,7 @@ function buildStatutoryFacts(rules, input, derived, notices, assumptions) {
     rows.push({
       source_code: 'deferred_retirement_income',
       consumes_threshold: false,
+      in_plan: true,
       basis_rule_ids: [REVERSE_RULE.DEFERRED_RETIREMENT_RATE, RULE.PENSION_SEPARATE_TAXATION_THRESHOLD].sort(),
     });
     notices.push(
@@ -506,6 +628,11 @@ function buildStatutoryFacts(rules, input, derived, notices, assumptions) {
       },
       contribution_ceiling: {
         ...ceilings,
+        // **한도는 셋 다 법정 사실이지만, 그중 ISA가 이 계획의 재원인지는 따로 적는다**
+        // (D78 ④). 화면이 그 둘을 섞으면 「넣을 수 있다」와 「넣으면 목표에 닿는다」가
+        // 한 문장이 된다.
+        isa_counted_as_start_source: conversion.counted,
+        isa_source_excluded_reason_code: conversion.excluded_reason_code,
         basis_rule_ids: [RULE.PENSION_CONTRIBUTION_LIMIT, RULE.ISA_ANNUAL_LIMIT, RULE.ISA_ACCOUNT_REQUIREMENTS].sort(),
       },
     },
@@ -514,7 +641,7 @@ function buildStatutoryFacts(rules, input, derived, notices, assumptions) {
 
 // ── 블록 ② ─────────────────────────────────────────────────────────────
 
-function buildContributionScenario(rules, input, derived, statutory, notices, assumptions) {
+function buildContributionScenario(rules, input, derived, statutory, conversion, notices, assumptions) {
   if (input.average_annual_return_rate === null) {
     notices.push(
       notice(REVERSE_NOTICE.RETURN_RATE_NOT_SUPPLIED, 'info', 'profile.average_annual_return_rate', {}),
@@ -531,12 +658,16 @@ function buildContributionScenario(rules, input, derived, statutory, notices, as
   }
 
   const targetKrw = statutory.block.minimum_start_balance.required_krw;
+  const isa = input.accounts[ACCOUNT.ISA];
   const pensionBalance =
     input.accounts[ACCOUNT.ANNUITY].balance_krw + input.accounts[ACCOUNT.PENSION].balance_krw;
+  // **전환하지 않을 ISA 잔액은 목표를 채우지 않는다.** 0으로 넣는 것이 그 사실이다.
+  const isaSourceBalance = conversion.counted ? isa.balance_krw : 0;
 
   const required = requiredMonthlyContribution(rules, {
     targetKrw,
     currentBalanceKrw: pensionBalance,
+    isaBalanceKrw: isaSourceBalance,
     lumpSumAtStartKrw: input.deferred_retirement.amount_krw,
     annualReturnRate: input.average_annual_return_rate,
     months: derived.accumulationMonths,
@@ -546,11 +677,40 @@ function buildContributionScenario(rules, input, derived, statutory, notices, as
     notices.push(notice(REVERSE_NOTICE.TARGET_ALREADY_FUNDED, 'info', null, { target_krw: targetKrw }));
   }
 
+  // ISA에 앉힐 수 있는 월 몫. **재원이 아니면 자리 자체가 없다**(`null`).
+  const isaCap = conversion.counted
+    ? isaSourceMonthlyCap(rules, {
+        isaYearsSinceOpening: isa.years_since_opening,
+        isaCumulativeKrw: isa.cumulative_contribution_krw,
+        accumulationMonths: derived.accumulationMonths,
+      })
+    : null;
+
   const allocation = allocateMonthlyContribution(rules, {
     requiredMonthlyKrw: required.monthly_krw,
-    isaYearsSinceOpening: input.accounts[ACCOUNT.ISA].years_since_opening,
-    isaCumulativeKrw: input.accounts[ACCOUNT.ISA].cumulative_contribution_krw,
+    isaYearsSinceOpening: isa.years_since_opening,
+    isaCumulativeKrw: isa.cumulative_contribution_krw,
+    isaSource: isaCap === null ? null : { monthly_krw: isaCap.monthly_krw },
   });
+
+  if (isaCap !== null) {
+    assumptions.push(assume(REVERSE_ASSUMPTION.ISA_TOTAL_LIMIT_SPREAD, {}, [RULE.ISA_ACCOUNT_REQUIREMENTS]));
+    if (isaCap.capped_by_total_contribution_limit) {
+      notices.push(
+        notice(
+          REVERSE_NOTICE.ISA_SOURCE_CAPPED_BY_TOTAL_LIMIT,
+          'info',
+          'accounts.isa.cumulative_contribution_krw',
+          {
+            remaining_total_limit_krw: isaCap.remaining_total_limit_krw,
+            isa_source_monthly_krw: isaCap.monthly_krw,
+            accumulation_months: derived.accumulationMonths,
+          },
+          [RULE.ISA_ACCOUNT_REQUIREMENTS, RULE.ISA_ANNUAL_LIMIT],
+        ),
+      );
+    }
+  }
 
   if (allocation.exceeds_statutory_ceiling) {
     notices.push(
@@ -560,7 +720,7 @@ function buildContributionScenario(rules, input, derived, statutory, notices, as
         null,
         {
           required_monthly_krw: required.monthly_krw,
-          ceiling_monthly_krw: allocation.ceilings.total_monthly_krw,
+          ceiling_monthly_krw: allocation.source_ceiling_monthly_krw,
           unallocatable_monthly_krw: allocation.unallocatable_monthly_krw,
         },
         [RULE.PENSION_CONTRIBUTION_LIMIT, RULE.ISA_ANNUAL_LIMIT],
@@ -573,6 +733,13 @@ function buildContributionScenario(rules, input, derived, statutory, notices, as
       annual_return_rate: input.average_annual_return_rate,
     }),
     assume(REVERSE_ASSUMPTION.MONTHLY_COMPOUNDING, { periods_per_year: MONTHS_PER_YEAR }),
+    // **1단계의 상한이 조문이 정한 상한보다 클 수 있다.** 조문의 상한은 「공제 한도와
+    // §61③ 세액 한도 중 실제로 공제를 낳는 쪽」인데 세액 한도는 산출세액의 함수이고
+    // **이 탭은 총급여를 받지 않는다.** 입력을 늘리는 대신 적용하지 않았고, 그 사실을
+    // **적용하지 않은 규칙의 이름과 함께** 낸다 — 근거 목록에는 싣지 않는다(읽지 않았다).
+    assume(REVERSE_ASSUMPTION.TAX_LIABILITY_CAP_NOT_APPLIED, {
+      rule_id_not_applied: RULE.CREDIT_TAX_CAP,
+    }),
   );
   if (input.deferred_retirement.present) {
     assumptions.push(assume(REVERSE_ASSUMPTION.DEFERRED_NOT_GROWN, {}));
@@ -590,12 +757,37 @@ function buildContributionScenario(rules, input, derived, statutory, notices, as
       target_balance_krw: targetKrw,
       existing_pension_balance_krw: pensionBalance,
       future_value_of_existing_krw: required.future_value_of_existing_krw,
+      // ── ISA 전환 재원 (D78 ④) ──
+      // **재원이 아니면 두 칸이 0이다.** 「ISA 잔액이 0원이다」가 아니라 「이 계획에서
+      // 목표를 채우는 몫이 0원이다」이고, 잔액 자체는 블록 ③의 카드가 그대로 낸다.
+      isa_counted_as_start_source: conversion.counted,
+      isa_source_excluded_reason_code: conversion.excluded_reason_code,
+      existing_isa_balance_krw: isaSourceBalance,
+      future_value_of_existing_isa_krw: required.future_value_of_existing_isa_krw,
       deferred_retirement_krw: input.deferred_retirement.amount_krw,
       gap_krw: required.gap_krw,
       required_monthly_total_krw: required.monthly_krw,
       allocations: allocation.allocations,
+      // **순서가 조건에 따라 뒤집힌다**(32.5절). 전환 근거가 서면 ISA가 연금계좌 초과분보다
+      // 앞이고, 서지 않으면 뒤다. **세법이 정한 순서가 아니라는 사실을 값으로 낸다** —
+      // 화면이 「법이 이 순서를 정한다」로 적으면 32.6절 1번을 어긴다.
+      fill_order: {
+        variant_code: allocation.fill_order_variant_code,
+        is_statutory_order: false,
+        basis_rule_ids: [
+          RULE.CREDIT_LIMIT_ANNUITY,
+          RULE.CREDIT_LIMIT_COMBINED,
+          RULE.CREDIT_UNUSED_CARRYOVER,
+          RULE.CREDIT_TRANSFER_EXTRA,
+          RULE.PENSION_BEYOND_CREDIT_LIMIT,
+          RULE.PENSION_NON_DEDUCTED_PRINCIPAL,
+        ].sort(),
+      },
       allocated_monthly_total_krw: allocation.allocated_monthly_total_krw,
       unallocatable_monthly_krw: allocation.unallocatable_monthly_krw,
+      // **넘었는지를 재는 자.** 재원으로 쓸 수 있는 계좌의 상한 합계이고, ISA가 재원이
+      // 아니면 연금 두 계좌의 몫뿐이다.
+      source_ceiling_monthly_krw: allocation.source_ceiling_monthly_krw,
       exceeds_statutory_contribution_ceiling: allocation.exceeds_statutory_ceiling,
     },
   };
@@ -603,7 +795,7 @@ function buildContributionScenario(rules, input, derived, statutory, notices, as
 
 // ── 블록 ③ ─────────────────────────────────────────────────────────────
 
-function buildPayoutStrategies(rules, input, derived, statutory, notices) {
+function buildPayoutStrategies(rules, input, derived, statutory, conversion, notices) {
   const privateAnnual = statutory.privateAnnual;
   const publicAnnual = statutory.publicAnnual;
   const strategies = [];
@@ -728,6 +920,17 @@ function buildPayoutStrategies(rules, input, derived, statutory, notices) {
       strategy_code: 'isa_supplement',
       isa_balance_krw: isa.balance_krw,
       pension_conversion_path: path,
+      // **사용자의 답과 개시 시점 판정**(D78 ④). 위 `pension_conversion_path`는 **오늘**을
+      // 재고 이 셋은 **개시 시점**을 잰다 — 재원 판정이 딛는 것은 이쪽이다.
+      conversion_planned: conversion.planned,
+      counted_as_start_source: conversion.counted,
+      pension_conversion_path_at_annuity_start: {
+        path_open: conversion.path_at_start.path_open,
+        min_contract_years: conversion.path_at_start.min_contract_years,
+        years_since_opening_at_annuity_start:
+          conversion.path_at_start.years_since_opening_at_annuity_start,
+        tenure_assumed_zero: conversion.path_at_start.tenure_assumed_zero,
+      },
       // 전환금액은 과세제외금액이 되어 **문턱을 한 원도 쓰지 않는다.**
       conversion_consumes_threshold: false,
       // 계약을 유지한 채 인출하는 경로는 조문이 규율하지 않는 자리가 남아 있다.

@@ -20,7 +20,7 @@ import {
   isaDeemedTerminationLine,
   reverseNoticeMessage,
 } from '../reverse-copy.js';
-import { reverseLawEntriesFor, reverseLawChipRow, amountWithTodayCurrency } from './reverse-shared.js';
+import { reverseLawEntriesFor, reverseLawChipRow, amountWithTodayCurrency, capChips } from './reverse-shared.js';
 
 function withinThresholdCard(strategy, legalBasis) {
   return el('div', { class: 'withdrawal-strategy-card', 'data-key': 'strategy-within-threshold' }, [
@@ -31,7 +31,7 @@ function withinThresholdCard(strategy, legalBasis) {
     el('p', { class: 'type-body-s' }, [
       `연 ${formatPercentTrimmed(strategy.first_year_withholding.rate)}로 원천징수되어 과세가 종결됩니다.`,
     ]),
-    reverseLawChipRow(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids)),
+    reverseLawChipRow(capChips(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids))),
   ]);
 }
 
@@ -42,7 +42,7 @@ function exceedThresholdCard(strategy, legalBasis) {
 
   if (strategy.comparison_code === 'threshold_not_exceeded') {
     lines.push(el('p', { class: 'type-body-s' }, [EXCEED_THRESHOLD_NOT_APPLICABLE_LINE]));
-    lines.push(reverseLawChipRow(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids)));
+    lines.push(reverseLawChipRow(capChips(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids))));
     return el('div', { class: 'withdrawal-strategy-card', 'data-key': 'strategy-exceed-threshold' }, lines);
   }
 
@@ -51,7 +51,7 @@ function exceedThresholdCard(strategy, legalBasis) {
       `사적연금 합계 ${amountWithTodayCurrency(strategy.private_pension_annual_krw)}이 문턱을 넘습니다.`,
     ]),
   );
-  lines.push(reverseLawChipRow(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids)));
+  lines.push(reverseLawChipRow(capChips(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids))));
 
   if (strategy.comparison_code === 'determined') {
     const lowerLabel = TAX_OPTION_LABEL[strategy.lower_option_code] ?? strategy.lower_option_code;
@@ -93,7 +93,7 @@ function isaSupplementCard(strategy, legalBasis) {
   return el('div', { class: 'withdrawal-strategy-card', 'data-key': 'strategy-isa-supplement' }, [
     el('h4', { class: 'type-body-strong' }, [STRATEGY_TITLE.isa_supplement]),
     el('p', { class: 'type-body-s' }, [pathLine]),
-    reverseLawChipRow(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids)),
+    reverseLawChipRow(capChips(reverseLawEntriesFor(legalBasis, strategy.basis_rule_ids))),
     ...withdrawalNodes,
   ]);
 }
