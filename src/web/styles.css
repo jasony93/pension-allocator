@@ -1112,6 +1112,18 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   /* sticky·max-height·overflow-y를 없앴으므로 평범한 flex 항목이다 — 폭
      상한이 없어(`flex: 7 1 0`) 컨테이너가 넓어지면 자동으로 넓어진다. */
   .result-slot, .reverse-result-slot { flex: 7 1 0; }
+  /* [2026-08-19, 관리자 지시 — 번들 실측 결함] `.reverse-result-slot`에만
+     `min-width: 0`을 더한다 — 첫 탭(`.result-slot`)은 안의 도넛이 항상 한
+     열을 혼자 차지해 자연스러운 내용 폭이 이미 컨테이너보다 좁으므로 이
+     방어가 필요 없었지만, 역산기 결과는 도넛+표를 한 행에 나눠 써서
+     내용의 최소 폭이 커질 수 있다. 기본값(`min-width: auto`)은 플렉스
+     항목의 자동 최소 크기를 "내용 크기"로 잡아, 안의 내용이 넓으면 이
+     항목 자체가(그리고 `.app-main`까지) 문서 밖으로 밀려난다 — 실측:
+     1440px에서 문서 가로 스크롤 1896px. `min-width: 0`은 이 항목이
+     플렉스 배분값(`flex-basis`)까지 줄어들 수 있게 하고, 안에서 넘치는
+     내용은 각 컴포넌트의 자체 처리(도넛 크기 축소·표의
+     `overflow-x: auto`)가 흡수한다. */
+  .reverse-result-slot { min-width: 0; }
 }
 
 /* ---- 입력 패널 ---- */
@@ -1273,9 +1285,9 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    고정되지 않던 기존 결함을 함께 고쳤다(design-system 5.12.1절). 배너는
    D60으로 사라졌지만 `overflow: hidden`을 없앤 상태 자체는 카드 모서리를
    자식 요소가 각자 반경으로 처리하는 현재 구조와 맞으므로 되돌리지 않는다. */
-.result-panel-inner { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-2); }
+.result-panel-inner { background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-2); min-width: 0; }
 .result-loading-overlay .result-body { opacity: 0.92; }
-.result-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); }
+.result-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 
 .requirement-checklist { display: flex; flex-direction: column; gap: var(--space-3); }
 .req-progress-row { display: flex; justify-content: space-between; align-items: baseline; }
@@ -2031,6 +2043,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   padding: var(--space-5); background: var(--surface-raised);
   border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-1);
   display: flex; flex-direction: column; gap: var(--space-4);
+  min-width: 0;
 }
 .statutory-fact-row { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
 .statutory-fact-row:first-of-type { padding-top: 0; border-top: none; }
@@ -2059,14 +2072,24 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   padding: var(--space-5); background: var(--surface-raised);
   border: 1px solid var(--border-subtle); border-radius: var(--radius-l); box-shadow: var(--shadow-1);
   display: flex; flex-direction: column; gap: var(--space-4);
+  min-width: 0;
 }
-.contribution-amount-donut-row { display: flex; flex-direction: column; gap: var(--space-4); align-items: center; }
-.contribution-amount-donut-row .account-table-scroll { width: 100%; }
+.contribution-amount-donut-row { display: flex; flex-direction: column; gap: var(--space-4); align-items: center; min-width: 0; }
+.contribution-amount-donut-row .account-table-scroll { width: 100%; min-width: 0; }
 @media (min-width: 768px) {
   .contribution-amount-donut-row { flex-direction: row; align-items: flex-start; gap: var(--space-6); }
   .contribution-amount-donut-row .chart-donut { flex: 0 0 auto; }
-  .contribution-amount-donut-row .account-table-scroll { flex: 1 1 0; }
+  /* `min-width: 0`이 없으면 이 항목의 자동 최소 크기가 `.account-table`의
+     `min-width: 560px`(내용 기준)까지 올라가 도넛 옆에서 줄어들지 못한다 —
+     `overflow-x: auto`는 이 항목 **자신**의 최소 크기 계산에는 관여하지
+     않는다(스크롤은 안의 표 요소에 걸려 있다). 실측 결함의 두 번째 원인. */
+  .contribution-amount-donut-row .account-table-scroll { flex: 1 1 0; min-width: 0; }
 }
+/* `[4-D]`의 `min-width: 560px`은 그 표(근거 열까지 포함해 네 칸)를 위해 잰
+   값이다 — 이 표는 세 칸(계좌·월 금액·연 환산)뿐이고 내용이 그보다 훨씬
+   좁아 안에서 가로 스크롤을 만들 이유가 없다("배분표는 완전히 보이게",
+   관리자 지시). 이 표에서만 그 하한을 지운다. */
+.contribution-amount-donut-row .account-table { min-width: 0; }
 .contribution-amount-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .contribution-amount-row-head { display: flex; justify-content: space-between; align-items: baseline; }
 .contribution-amount-row-label { font-weight: 600; }
@@ -2085,7 +2108,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 
 /* ---- `[14-C]` WithdrawalStrategyCards (design-system 5.36절) --------------
    스택바가 아니라 동등한 무게의 카드 나열 — 색·순서로 우열을 매기지 않는다. */
-.withdrawal-strategy-cards { display: flex; flex-direction: column; gap: var(--space-3); }
+.withdrawal-strategy-cards { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .withdrawal-strategy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .withdrawal-strategy-grid:has(.withdrawal-strategy-card:nth-child(2):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .withdrawal-strategy-card {

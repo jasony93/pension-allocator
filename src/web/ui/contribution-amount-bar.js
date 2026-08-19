@@ -83,12 +83,26 @@ export function renderContributionAmountBar({ contributionScenario }) {
   const annualReturnRate = contributionScenario.condition_clause.annual_return_rate;
   const totalMonthlyKrw = includedAllocations.reduce((sum, a) => sum + a.monthly_krw, 0);
 
+  // [2026-08-19, 관리자 지시 — 번들 실측 결함] **`labelMode`를 고정한다.**
+  // 첫 탭의 기본값(`preferredDonutSizeMode()`)은 폭 ≥1440px에서
+  // `labelledWide`(외경 320px, 라벨 여백 포함 실제 상자 684px)를 고른다 —
+  // 그 값은 도넛 **하나만** 한 열을 차지하는 첫 탭 레이아웃(`.chart-area`,
+  // 세로로 쌓는 단일 열)을 전제한다. 이 컴포넌트는 도넛과 배분표가 **한
+  // 행을 나눠 쓰므로**(design-system 5.35절 2번), 그 전제가 깨져 684px
+  // 도넛이 최소 560px 표와 나란히 서지 못하고 결과 영역 전체가 문서
+  // 밖으로 밀려났다(실측: 1440px에서 문서 가로 스크롤 1896px). **`legend`
+  // 모드(외경 200px, 상자 220px — 첫 탭이 모바일 폭에서 쓰는 것과 같은
+  // 비례)로 고정해 도넛을 표와 나란히 세울 수 있는 크기로 줄인다.** 라벨은
+  // `applyDonutSliceInlineLabels`(D72, `ui/app.js`가 이미 이 슬롯에 걸어
+  // 둔 후처리)가 조각 안 이름+비율로 그린다 — 별도 범례를 새로 만들 필요가
+  // 없다(배분표가 이미 계좌별 금액을 보여준다).
   const donut = donutChart({
     allocations: includedAllocations,
     unallocatedAnnualKrw: 0,
     unallocatedMonthlyKrw: 0,
     totalAllocatedMonthlyKrw: totalMonthlyKrw,
     excludedAccounts,
+    labelMode: 'legend',
   });
   donut.classList.add('contribution-amount-donut');
 
