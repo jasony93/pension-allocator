@@ -149,6 +149,15 @@
      `.example-showcase-input-icon`(styles.css 아래)이 테마와 무관하게
      `filter: var(--man-icon-filter)`로 값만 읽는다. */
   --man-icon-filter: none;
+  /* [2026-08-20, 관리자 지시 — 첫 탭 예시 화살표 색] `.example-showcase-scroll-arrow`가
+     `rgb(0, 255, 153)`(형광 민트)로 바뀐다. **라이트 배경(`--surface-raised`
+     `#ffffff`) 대비 실측 — WCAG 상대휘도 계산으로 대비비 약 1.33:1**(민트
+     휘도 ≈0.738, 흰색 휘도 1.0 → (1.05)/(0.788)≈1.33) — 3:1(WCAG 2.1
+     비텍스트 대비 최소 기준)에 한참 못 미친다. 소유자가 허용한 대로 **회색
+     테두리로 감싼다**(대비 부족을 아이콘 색 자체가 아니라 버튼 윤곽으로
+     보완한다) — man-icon과 같은 이유로 커스텀 프로퍼티 값으로 켠다(이
+     버튼도 Shadow DOM 안에 그려져 `:root` 선택자가 안까지 못 미친다). */
+  --example-arrow-border: 1.5px solid var(--border-strong);
 }
 
 /* 2) 운영체제가 다크이고 사용자가 라이트를 명시하지 않았을 때. */
@@ -179,6 +188,9 @@
     --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
     --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
     --man-icon-filter: invert(1);
+    /* 다크 배경(`#1e2226`) 대비 민트 휘도 대비비 ≈12:1 — 3:1을 넉넉히
+       넘는다(실측 계산, 위 라이트 값 옆 주석 참고). 테두리가 필요 없다. */
+    --example-arrow-border: none;
   }
 }
 
@@ -206,6 +218,7 @@
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
   --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
   --man-icon-filter: invert(1);
+  --example-arrow-border: none;
 }
 
 /* 4) 인쇄는 **항상 라이트**다(design-system 8.5절). 대부분의 프린터 설정에서
@@ -524,6 +537,97 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   border-radius: var(--radius-l);
   box-shadow: var(--shadow-1);
 }
+
+/* [2026-08-20, 관리자 지시 — 첫 탭 예시 블록 개편] **첫 탭 전용 수정자.**
+   위 `.example-showcase` 기본 카드 표면(배경·테두리·그림자·패딩)은 두 탭
+   모두 그대로 쓰지만, 그 grid(`grid-template-areas: "text visual" ...`)는
+   역산기 탭(`reverse-example-showcase.js`)이 옛 구조 그대로 쓰고 있어 손대지
+   않는다. 첫 탭은 이제 인물 두 행을 세로로 쌓는 구조라 grid 자체가 안 맞아,
+   `.example-showcase-multi-persona`가 붙은 섹션에서만 `display: flex`로
+   바꿔 grid 선언을 무력화한다(선언 자체는 남아 있지만 flex 컨테이너에는
+   적용되지 않는다 — 해가 없다. `.reverse-example-showcase-slot`이 없는
+   섹션에는 이 클래스가 안 붙으므로 역산기 예시는 여전히 grid 그대로다). */
+.example-showcase.example-showcase-multi-persona {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-4);
+  min-width: 0;
+}
+/* 물음 — 공용 `.example-showcase-question` 문구 스타일(폰트 크기 28px 등,
+   아래 공용 규칙)은 그대로 물려받는다. 위치 수정자만 이 자리 전용이다 —
+   예시칸 왼쪽 상단(관리자 지시 1번). flex 세로 컨테이너의 첫 자식이라 이미
+   위쪽이고, `text-align: left`는 기본값이지만 역산기 탭의
+   `.example-showcase-text-col`이 데스크톱에서 쓰는 `margin-left: 8ch`와
+   헷갈리지 않도록 0으로 명시한다. */
+.example-showcase-question-top { margin: 0 0 var(--space-2); text-align: left; }
+
+/* 인물 행 — 기본 정보(아이콘+이름+네 줄) → 도넛/범례 → 세액공제액, 왼쪽부터
+   가로로(관리자 지시 2번). `flex-wrap`을 켜 좁은 화면에서 세 칸이 한 줄에
+   못 들어가면 자동으로 다음 줄로 넘어간다 — 최근 역산기 결과(도넛+표)가
+   375px에서 넘친 것과 같은 함정(고정폭 자식이 부모를 밀어내는 것)을 `flex-
+   wrap` + `min-width: 0`으로 피한다. */
+.example-persona-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.example-persona-info { display: flex; align-items: flex-start; gap: var(--space-3); flex: 0 1 auto; min-width: 0; }
+.example-persona-icon-col { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); flex: 0 0 auto; }
+/* 아이콘 열 전체(아이콘+이름표)가 네 줄 전체 높이와 같아야 두 열을 나란히
+   놓아도 위쪽이 맞는다 — 옛 `.example-showcase-input-icon`(세 줄 기준)과
+   같은 계산 방식이되 이제 네 줄이라 상수가 다르다. 네 줄 몫
+   (18px × 1.35 × 4 + 줄 사이 gap 세 개 4px×3=12 = 109.2px)에서 이름표 몫
+   (12.5px × 1.4 + 열 안 gap 4px = 21.5px)을 뺀 값이 아이콘 자신의 높이다. */
+.example-persona-icon {
+  height: calc(18px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 12.5px * 1.4);
+  width: auto; display: block; flex: 0 0 auto;
+  /* man-icon과 같은 이유(다크 배경에 검정 선화가 묻힌다) — female-icon도
+     원본이 검정 선화라(`assets/female-icon.js` 머리말) 같은 커스텀
+     프로퍼티를 공유한다. */
+  filter: var(--man-icon-filter);
+}
+.example-persona-name {
+  margin: 0; font-size: 12.5px; line-height: 1.4; font-weight: 600;
+  color: var(--text-secondary); text-align: center; white-space: nowrap;
+}
+.example-persona-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); }
+.example-persona-line {
+  margin: 0; font-size: 18px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--text-primary); word-break: keep-all; white-space: nowrap;
+}
+
+.example-persona-donut-col {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-1); flex: 0 0 auto; min-width: 0;
+}
+.example-persona-donut-col .chart-donut { width: 160px; max-width: 100%; }
+.example-persona-donut-col .donut-legend { display: flex; width: fit-content; margin: 0 auto; gap: var(--space-1); }
+.example-persona-donut-col .donut-legend-item { font-size: 13px; line-height: 1.3; font-weight: 700; gap: var(--space-2); }
+.example-persona-donut-col .donut-legend-swatch { width: 12px; height: 12px; }
+.example-persona-donut-col .donut-legend-name { word-break: keep-all; }
+
+/* 세액공제액 — 소유자가 축소를 허용했다(두 행이 한 카드 안에 들어가야
+   한다, 관리자 지시 2번). 옛 `.example-showcase-amount`(61px 값, 전폭
+   720px — 역산기 탭이 그대로 쓴다)는 손대지 않고 이 카드 전용의 작은 값을
+   새로 정한다. */
+.example-persona-amount { flex: 0 1 220px; min-width: 160px; max-width: 240px; }
+.example-persona-amount .amount-card {
+  background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l);
+  padding: var(--space-3); box-shadow: var(--shadow-2);
+  display: flex; flex-direction: column; text-align: center;
+}
+.example-persona-amount .amount-card-direction,
+.example-persona-amount .amount-card-composition { align-items: center; text-align: center; }
+.example-persona-amount .amount-card-label { font-size: 13px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
+.example-persona-amount .amount-card-value { font-size: 26px; line-height: 1.15; }
+
+/* 구분선 — 얇은 회색(관리자 지시 2번). `<hr>` 기본 스타일(입체 테두리)을
+   지우고 한 줄 색으로 대체한다. */
+.example-persona-divider { border: none; border-top: 1px solid var(--border-subtle); margin: 0; width: 100%; }
+
 .example-showcase-text-col {
   grid-area: text;
   display: flex; flex-direction: column; justify-content: center; gap: var(--space-2);
@@ -885,9 +989,17 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 
    **색은 SVG 쪽(`currentColor`)이 진다** — 이 버튼은 `color`만 갖고, 아이콘이
    그 값을 그대로 물려받는다(`ui/example-showcase.js` `exampleShowcaseScrollArrowIcon`
-   머리말 참고). 유휴 상태는 `--text-secondary`(라이트 진한 회색·다크 밝은
-   회색, `styles-tokens.test.mjs`가 `--surface-raised` 대비 4.5:1 이상으로
-   이미 검증한 토큰 — "테마 토큰 색" 지시를 그대로 만족한다).
+   머리말 참고).
+
+   **[2026-08-20, 관리자 지시] 유휴 색이 `--text-secondary`에서
+   `rgb(0, 255, 153)`(고정값, 소유자가 지정한 리터럴이라 테마 토큰이 아니다)로
+   바뀐다.** 첫 탭·역산기 탭이 이 클래스를 공유하므로 두 탭의 화살표가 함께
+   바뀐다(공용 스타일 — 역산기 쪽은 구조를 건드리지 않았으니 이 색만 그대로
+   물려받는다). **라이트 모드에서 대비가 부족해**(위 `:root`의
+   `--example-arrow-border` 옆 주석 — 실측 대비비 ≈1.33:1, WCAG 3:1 미달)
+   `border: var(--example-arrow-border)`로 회색 테두리를 감싼다(소유자가
+   명시로 허용한 완화). 다크 모드는 대비가 이미 충분해(≈12:1)
+   `--example-arrow-border: none`이라 테두리가 보이지 않는다.
 
    **채운 원을 완전히 버리지는 않는다 — 대신 아주 옅은 배경 틴트만 hover에
    남긴다.** 배경을 아예 없애면(idle=hover 둘 다 transparent) 기존 hover
@@ -952,13 +1064,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .example-showcase-scroll-arrow {
   width: 100px; height: 100px;
   display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: var(--radius-full); padding: 0;
+  border: var(--example-arrow-border); border-radius: var(--radius-full); padding: 0;
   background-color: transparent;
-  color: var(--text-secondary);
+  color: rgb(0, 255, 153);
   cursor: pointer;
   box-shadow: none;
   transition: background-color 120ms ease-out, color 120ms ease-out,
-    transform 120ms ease-out, box-shadow 120ms ease-out;
+    transform 120ms ease-out, box-shadow 120ms ease-out, border-color 120ms ease-out;
 }
 .example-showcase-scroll-arrow:hover {
   background-color: var(--accent-subtle);
@@ -1008,6 +1120,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
     grid-template-areas: "text" "amount" "visual" "arrow";
     padding: var(--space-4) var(--space-4); row-gap: var(--space-3);
   }
+  /* [2026-08-20, 관리자 지시 — 첫 탭 예시 블록 개편] 인물 행 — 좁은 화면에서는
+     세 칸(기본 정보 → 도넛 → 세액공제액)을 한 줄에 우겨넣지 않고 세로로
+     쌓는다(위 옛 grid의 "1열로 되돌린다"는 원칙과 같은 방향). 물음도 가운데로 —
+     역산기 탭이 아직 쓰는 `.example-showcase-text-col`의 모바일 가운데 정렬
+     규칙(아래)과 같은 이유다. */
+  .example-showcase-question-top { text-align: center; }
+  .example-persona-row { flex-direction: column; align-items: center; text-align: center; gap: var(--space-3); }
+  .example-persona-info { flex-direction: column; align-items: center; }
+  .example-persona-lines { align-items: center; }
+  .example-persona-line { font-size: 16px; white-space: normal; }
   /* [2026-08-18, 관리자 지시(4차) 1번] 데스크톱의 8ch 이동을 되돌린다 —
      모바일은 가운데 정렬(`text-align: center`)이라 좌우로 미는 것 자체가
      이 배치와 맞지 않는다(밀면 중앙이 아니라 오른쪽으로 치우쳐 보인다). */

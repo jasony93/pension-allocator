@@ -132,6 +132,51 @@
  * 4. 화살표 아래 「나는 어떻게 배분하지?」(`example-showcase-arrow-caption`) —
  *    `.example-showcase-arrow-wrap`(애니메이션이 걸린 바로 그 칸) **안에**
  *    넣어 화살표와 함께 움직인다.
+ *
+ * **[2026-08-20, 관리자 지시 — 첫 탭 예시 블록 개편] 예시가 한 사람에서 두
+ * 사람으로 늘었다.**
+ *
+ * 1. **물음 문구·위치.** "월급" → "돈"으로 바꾸고(`EXAMPLE_QUESTION_TEXT`),
+ *    예시칸 **왼쪽 상단**에 둔다 — 아래 두 행(김철수씨·이승은씨) 어디에도
+ *    속하지 않는, 섹션 자체의 첫 자식이다(`exampleShowcaseSection`).
+ * 2. **두 행.** 각 행은 "기본 정보(아이콘+이름+네 줄) → 도넛 → 세액공제액"을
+ *    가로로 배치한다(`examplePersonaRow`, 새 클래스 `example-persona-*` —
+ *    `.example-showcase-text-col`·`-visual-col`·`-amount`처럼 `grid-area`가
+ *    박힌 옛 칸 클래스는 **재사용하지 않는다**. 이유 — 역산기 탭의 예시
+ *    (`reverse-example-showcase.js`)가 바로 그 옛 칸 클래스들을 그대로 쓰고
+ *    있고, `grid-area: text/amount/visual`은 섹션당 한 자리만 있다는 전제라
+ *    두 행에 나눠 쓸 수 없다. 새 이름을 쓰면 이 파일의 구조를 완전히
+ *    바꿔도 역산기 쪽 CSS·DOM은 한 글자도 스치지 않는다 — 그 파일은 "건드리지
+ *    말라"는 지시를 그대로 지킨다).
+ *    - 1행(김철수씨) — 기존 세 값(만 30세·4,000만원·월 150만원) 그대로,
+ *      맨 위에 「직업 : 직장인」 한 줄을 더해 네 줄이 됐다
+ *      (`exampleOccupationLineText`). 「이렇게 배분해보세요」 캡션은 지운다
+ *      (`EXAMPLE_ALLOCATION_HEADING_TEXT` 상수 자체도 지웠다 — 다른 어디서도
+ *      쓰지 않는 값을 남기지 않는다).
+ *    - 2행(이승은씨, 신규) — 자영업자·만 45세·종합소득금액 8,000만원(사업소득)·
+ *      월 납입액 200만원. **`hasNonWageIncome: true` + `globalIncomeAmount`로
+ *      요청을 짠다**(engine-interface.md 0.7절) — 공제율 판정 축이 총급여가
+ *      아니라 종합소득금액이 되도록. `currentSalary: '0'`(근로소득 없음,
+ *      사업소득만 있다). 1행과 같은 D71 방식(수익률 옵트인을 켜지 않는다)
+ *      그대로 계산한다(`buildExamplePersona2Form`). **값을 하드코딩하지
+ *      않는다** — 두 사람 다 실제 엔진 호출(`computeExampleScenario`·
+ *      `computeExamplePersona2Scenario`) 결과를 그대로 그린다.
+ *    - 두 행 사이에 얇은 회색 구분선(`example-persona-divider`,
+ *      `styles.css`).
+ *    - 세액공제액 칸은 옛(단일 인물) 버전보다 작다 — 두 행이 한 카드 안에
+ *      들어가야 하므로 소유자가 축소를 허용했다. 새 클래스
+ *      (`example-persona-amount`)를 쓰고 옛 `.example-showcase-amount`의
+ *      61px 값 규칙은 건드리지 않는다(그 규칙은 이제 역산기 탭 전용이다 —
+ *      아래 3번째 항목 참고).
+ * 3. **화살표 색.** `rgb(0, 255, 153)`로 바꾼다(`styles.css`
+ *    `.example-showcase-scroll-arrow`, `currentColor`가 그 값을 받는다).
+ *    라이트 모드 배경(`--surface-raised`) 대비 실측 결과와 대응(회색
+ *    테두리로 감쌌는지 여부)은 `styles.css`의 해당 규칙 옆 주석에 남긴다.
+ *
+ * **`.example-showcase-amount`·`-visual-col`·`-text-col`·`-input-*`(아이콘 열
+ * 포함) 옛 클래스는 삭제하지 않는다** — `reverse-example-showcase.js`가
+ * 여전히 그대로 쓰고 있다(그 파일 머리말: "ExampleShowcase를 컴포넌트 그대로
+ * 재사용"). 이 파일(첫 탭)만 새 `example-persona-*` 클래스로 옮겨 간다.
  */
 
 import { el, svgEl } from './dom.js';
@@ -140,6 +185,7 @@ import { excludedAccounts } from './eligibility.js';
 import { amountCard } from './result-panel.js';
 import { buildEngineRequest, initialForm, TAX_YEAR } from '../state/store.js';
 import { MAN_ICON_DATA_URI, MAN_ICON_INTRINSIC_WIDTH, MAN_ICON_INTRINSIC_HEIGHT } from '../assets/man-icon.js';
+import { FEMALE_ICON_DATA_URI, FEMALE_ICON_INTRINSIC_WIDTH, FEMALE_ICON_INTRINSIC_HEIGHT } from '../assets/female-icon.js';
 
 // ---------------------------------------------------------------------------
 // 고정 입력 셋 — 관리자 지시(2026-08-14) 4번이 지정한 값 그대로.
@@ -213,6 +259,13 @@ export async function computeExampleScenario(engineClient) {
 }
 
 /**
+ * [2026-08-20, 관리자 지시] 「직업」 줄 — 1행(김철수씨)의 네 줄 중 맨 위.
+ * 콜론 앞 공백은 「월 납입금 :」과 같은 자리(관리자가 그렇게 썼다).
+ */
+export function exampleOccupationLineText() {
+  return '직업 : 직장인';
+}
+/**
  * [2026-08-17, 소유자 지시 1번] 입력 세 줄 — 한 줄에 하나씩, 「예시)」 접두사
  * 없이. 값은 문자열로 다시 박지 않고 위 고정 입력 상수에서 조립한다 —
  * `example-showcase.test.mjs`가 정확히 이 문자열들을 상수와 대조해 고정한다.
@@ -233,9 +286,14 @@ export function exampleSalaryLineText() {
 export function exampleCapacityLineText() {
   return `월 납입금 : 월 ${EXAMPLE_MONTHLY_CAPACITY_MANWON.toLocaleString('ko-KR')}만원`;
 }
-/** 화면이 그리는 순서(나이 → 소득 → 여유 자금) 그대로다. */
+/**
+ * 화면이 그리는 순서(직업 → 나이 → 소득 → 월 납입금) 그대로다.
+ * **[2026-08-20, 관리자 지시] 「직업」 줄이 맨 위에 더해져 세 줄에서 네 줄로
+ * 늘었다** — `example-showcase.test.mjs`의 옛 3줄 기대값을 4줄로 뒤집는다
+ * (근거: 관리자 지시 원문 "기본 정보 맨 위에 직업 줄 추가").
+ */
 export function exampleInputLineTexts() {
-  return [exampleAgeLineText(), exampleSalaryLineText(), exampleCapacityLineText()];
+  return [exampleOccupationLineText(), exampleAgeLineText(), exampleSalaryLineText(), exampleCapacityLineText()];
 }
 
 /**
@@ -244,28 +302,112 @@ export function exampleInputLineTexts() {
  * 적을까요?". **[2026-08-17, 소유자 지시 4번] DOM·시각 양쪽에서 맨 위다** —
  * `exampleShowcaseSection` 참고. 정적 문구다 — 세법 수치나 이 예시의 계산
  * 결과를 담지 않으므로(질문일 뿐 값이 아니다) 고정 문자열로 둔다.
+ *
+ * **[2026-08-20, 관리자 지시] "월급" → "돈"으로 다시 썼다.** 예시가 근로소득
+ * 하나(김철수씨)에서 근로·사업소득 둘(김철수씨·이승은씨)로 늘면서 "월급"이
+ * 이승은씨에게는 거짓이 된다 — "돈"은 소득 성격을 가리지 않는다. 위치도
+ * 함께 바뀌었다 — 이제 두 행 중 어느 쪽에도 속하지 않는, 예시칸 자체의
+ * 왼쪽 상단(`exampleShowcaseSection`의 첫 자식)이다.
  */
-export const EXAMPLE_QUESTION_TEXT = '당신의 소중한 월급, 어디에 넣어야 세금이 가장 적을까요?';
+export const EXAMPLE_QUESTION_TEXT = '당신의 소중한 돈, 어디에 넣어야 세금이 가장 적을까요?';
 
 /**
- * [2026-08-18, 관리자 지시(4차) 1번] man-icon 밑에 적는 페르소나 이름. 세법
- * 수치도 계산 결과도 아닌 고정 장식 문구다 — 실제 사용자를 가리키지 않고
- * (개인 식별 가능 정보가 아니다), 예시 페르소나에 이름을 붙여 "누군가의
+ * [2026-08-18, 관리자 지시(4차) 1번] man-icon 밑에 적는 1행 페르소나 이름.
+ * 세법 수치도 계산 결과도 아닌 고정 장식 문구다 — 실제 사용자를 가리키지
+ * 않고(개인 식별 가능 정보가 아니다), 예시 페르소나에 이름을 붙여 "누군가의
  * 이야기"로 읽히게 하려는 소유자 지시를 그대로 옮긴다.
+ *
+ * **역산기 탭의 예시(`reverse-example-showcase.js`)가 이 상수를 그대로
+ * 가져다 쓴다** — 이름·값을 바꾸면 그쪽도 함께 바뀐다. 이번 회차(2행 신설)는
+ * 이 상수를 건드리지 않는다.
  */
 export const EXAMPLE_PERSONA_NAME = '김철수씨';
-
-/**
- * [2026-08-18, 관리자 지시(4차) 3번] 도넛 위 캡션. 계산 결과를 담지 않는
- * 정적 안내 문구라 고정 문자열로 둔다(물음 텍스트와 같은 근거).
- */
-export const EXAMPLE_ALLOCATION_HEADING_TEXT = '이렇게 배분해보세요';
 
 /**
  * [2026-08-18, 관리자 지시(4차) 4번] 화살표 아래(안) 캡션 — 다음 행동을
  * 부른다. 화살표와 같은 애니메이션 래퍼 안에 그려진다(`exampleShowcaseSection`).
  */
 export const EXAMPLE_ARROW_CAPTION_TEXT = '나는 어떻게 배분하지?';
+
+// ---------------------------------------------------------------------------
+// [2026-08-20, 관리자 지시] 2행 — 이승은씨. 자영업자·종합소득금액 축.
+// 1행(김철수씨)과 다른 소득 성격을 예로 들어, 공제율 판정 축이 항상
+// "총급여"만은 아니라는 것을 예시 자체로 보여준다(engine-interface.md
+// 0.7절 — has_non_wage_global_income_current_year가 참이면 판정 축이
+// global_income이 된다). **값은 전부 이 상수 넷뿐이고, 세액공제액은
+// 실제 엔진 호출(`computeExamplePersona2Scenario`)이 낸다.**
+// ---------------------------------------------------------------------------
+export const EXAMPLE_PERSONA_2_NAME = '이승은씨';
+export const EXAMPLE_PERSONA_2_AGE_YEARS = 45;
+export const EXAMPLE_PERSONA_2_GLOBAL_INCOME_MANWON = 8000;
+export const EXAMPLE_PERSONA_2_MONTHLY_CAPACITY_MANWON = 200;
+
+/** `exampleBirthDate`와 같은 역산이지만 나이가 다르다(만 45세). */
+export function examplePersona2BirthDate(taxYear) {
+  return `${taxYear - EXAMPLE_PERSONA_2_AGE_YEARS}-01-01`;
+}
+
+/**
+ * 이승은씨 요청 — `buildExampleForm`(1행)과 같은 원칙(D71: ISA 수익률 옵트인을
+ * 켜지 않는다)을 쓰되, 소득 축이 다르다. **`currentSalary: '0'`** — 근로소득이
+ * 없는 순수 사업소득자다(설계 문구 "직업 : 자영업자"). `hasNonWageIncome: true`
+ * + `globalIncomeAmount`가 종합소득금액을 싣는다 — 이 둘이 판정 축을
+ * `total_salary`에서 `global_income`으로 옮긴다(engine-interface.md 0.7절
+ * `basis_code`).
+ */
+export function buildExamplePersona2Form() {
+  return {
+    ...initialForm(),
+    birthDate: examplePersona2BirthDate(TAX_YEAR),
+    currentSalary: '0',
+    hasNonWageIncome: true,
+    globalIncomeAmount: String(EXAMPLE_PERSONA_2_GLOBAL_INCOME_MANWON),
+    monthlyCapacity: String(EXAMPLE_PERSONA_2_MONTHLY_CAPACITY_MANWON),
+    annuityStarted: false,
+    fundUseHorizon: 'unknown',
+    // isaReturnEnabled/isaReturnRatePercent/isaIncomeCharacter — 건드리지
+    // 않는다(1행과 같은 이유, `buildExampleForm` 머리말 참고).
+  };
+}
+
+/** `computeExampleScenario`(1행)와 같은 원칙 — 실제 엔진, 예시 전용 목 없음. */
+export async function computeExamplePersona2Scenario(engineClient) {
+  const request = buildEngineRequest(buildExamplePersona2Form(), ['current']);
+  const response = await engineClient.compute(request);
+  if (!response.ok) {
+    throw new Error(`example_showcase_persona2_compute_failed:${response.errors?.[0]?.code ?? 'unknown'}`);
+  }
+  const scenario = response.scenarios.find((s) => s.scenario_id === 'current') ?? response.scenarios[0];
+  if (!scenario) throw new Error('example_showcase_persona2_no_scenario');
+  const plan = scenario.plans.find((p) => p.is_baseline) ?? scenario.plans[0];
+  if (!plan) throw new Error('example_showcase_persona2_no_plan');
+  return { scenario, plan };
+}
+
+/**
+ * 이승은씨 기본 정보 네 줄. 관리자 지시 원문의 표기(콜론 앞 공백이 네 줄 모두
+ * 있다 — 1행과 달리 비대칭이 없다)를 그대로 옮긴다.
+ */
+export function examplePersona2OccupationLineText() {
+  return '직업 : 자영업자';
+}
+export function examplePersona2AgeLineText() {
+  return `나이 : 만 ${EXAMPLE_PERSONA_2_AGE_YEARS}세`;
+}
+export function examplePersona2IncomeLineText() {
+  return `소득 : ${EXAMPLE_PERSONA_2_GLOBAL_INCOME_MANWON.toLocaleString('ko-KR')}만원 (사업소득)`;
+}
+export function examplePersona2CapacityLineText() {
+  return `월 납입액 : ${EXAMPLE_PERSONA_2_MONTHLY_CAPACITY_MANWON.toLocaleString('ko-KR')}만원`;
+}
+export function examplePersona2InputLineTexts() {
+  return [
+    examplePersona2OccupationLineText(),
+    examplePersona2AgeLineText(),
+    examplePersona2IncomeLineText(),
+    examplePersona2CapacityLineText(),
+  ];
+}
 
 /**
  * [2026-08-14, 관리자 지시 6번] 예시 맨 아래의 이동 화살표. 누르면(또는
@@ -353,19 +495,14 @@ function exampleShowcaseScrollArrow() {
 }
 
 /**
- * 도넛 + 절세액 **둘로만** 좁힌다(관리자 지시 — "간략한 예시"). 계좌별 세제혜택
- * 막대·법령·가정 사항은 끌어오지 않는다.
- *
- * **[2026-08-16, D70] 좌우 2열 — 왼쪽 문구, 오른쪽 도넛/범례, 아래 전폭
- * 절세액, 맨 아래 전폭 화살표.** 시각 배치는 `grid-template-areas`가 정하고,
- * DOM 순서(키보드 tab·스크린리더 낭독 순서)는 아래에서 정한다.
- *
- * **[2026-08-17, 소유자 지시 4번] DOM 순서가 뒤집혔다 — 물음이 먼저, 입력
- * 세 줄이 그 아래.** "무엇에 대한 예시인지"를 먼저 듣고 그다음 그 조건(입력)을
- * 듣는 순서다. `aria-labelledby`는 여전히 물음(h2)을 가리킨다 — 위치가 바뀌어도
- * "이 섹션이 무엇에 대한 것인지"를 답하는 것은 늘 그 물음이었다.
+ * 한 사람의 행(row) — 기본 정보(아이콘+이름+네 줄) → 도넛/범례 → 세액공제액,
+ * 왼쪽부터 가로로 배치한다(관리자 지시, 2026-08-20). `example-showcase-text-col`·
+ * `-visual-col`·`-amount`·`-input-*`(옛 단일 인물 칸 클래스, `grid-area`가
+ * 박혀 있다) 대신 **완전히 새 클래스(`example-persona-*`)를 쓴다** — 이유는
+ * 이 파일 머리말 참고(역산기 탭 예시가 그 옛 클래스를 그대로 쓰고 있어
+ * 재사용하면 두 탭이 서로의 레이아웃을 밟는다).
  */
-function exampleShowcaseSection({ scenario, plan }) {
+function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
     allocations: plan.allocations,
@@ -379,86 +516,99 @@ function exampleShowcaseSection({ scenario, plan }) {
     // `result-panel.js`의 `chartArea`와 같은 산식.
     totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
     isProposed: !scenario.is_enacted,
-    // "간략한" 예시라 항상 컴팩트(라벨을 아래 리스트로 내리는) 모드로 그린다.
+    // 도넛+표(정보 열)+절세액이 한 행을 나눠 쓴다 — 결과 패널 넓은 도넛
+    // (labelledWide, 684px 상자)을 쓰면 행이 카드 폭을 넘는다(같은 이유로
+    // 최근 역산기 결과 도넛도 legend로 고정했다, `contribution-amount-bar.js`).
     labelMode: 'legend',
   });
 
-  // 헤딩은 물음 줄(h2) 하나다. `aria-labelledby`가 h2를 가리켜 스크린리더
-  // 사용자에게도 "무엇에 대한 예시인지"가 물음으로 들린다.
-  //
-  // [2026-08-17, 관리자 지시(2차) 9번 → 관리자 지시(3차) 3번] 물음표 아이콘을
-  // 물음 글자 앞에 붙였었는데 이번 회차에 지웠다 — h2는 다시 글자 span 하나뿐이다.
-  //
-  // [2026-08-17, 관리자 지시(3차) 2번] man-icon — 「나이/소득/월 납입금」 세
-  // 줄(물음 줄 다음)을 감싼 `.example-showcase-input-block`이 이미지 하나 +
-  // 줄 셋을 담는 열을 나란히 둔다. 장식적 이미지(정보가 문장 자체에 이미
-  // 있다)이므로 `alt=""` + `aria-hidden="true"`로 스크린리더가 건너뛴다.
-  //
-  // [2026-08-18, 관리자 지시(4차) 1번] **아이콘 밑에 「김철수씨」를 붙인다.**
-  // 페르소나에 이름을 준다 — 예시가 "누군가의 이야기"로 읽히게 하려는
-  // 소유자 지시다. 아이콘·이름을 한 열(`example-showcase-input-icon-col`)로
-  // 묶어야 세 줄(`example-showcase-input-lines`) 블록과 나란히 놓인다. 이름은
-  // 세법 수치도 계산 결과도 아닌 고정 장식 문구이므로 `EXAMPLE_PERSONA_NAME`
-  // 상수 하나로 둔다 — man-icon과 마찬가지로 장식(`aria-hidden`은 주지
-  // 않는다, 이름은 스크린리더가 읽어도 되는 실제 텍스트다).
-  const iconCol = el('div', { class: 'example-showcase-input-icon-col' }, [
+  // 장식적 이미지(정보가 문장 자체에 이미 있다)이므로 `alt=""` +
+  // `aria-hidden="true"`로 스크린리더가 건너뛴다. 이름은 실제 텍스트라
+  // `aria-hidden`을 주지 않는다.
+  const iconCol = el('div', { class: 'example-persona-icon-col' }, [
     el('img', {
-      class: 'example-showcase-input-icon',
-      src: MAN_ICON_DATA_URI,
+      class: 'example-persona-icon',
+      src: iconDataUri,
       alt: '',
-      width: MAN_ICON_INTRINSIC_WIDTH,
-      height: MAN_ICON_INTRINSIC_HEIGHT,
+      width: iconWidth,
+      height: iconHeight,
       'aria-hidden': 'true',
     }),
-    el('p', { class: 'example-showcase-input-name' }, [EXAMPLE_PERSONA_NAME]),
+    el('p', { class: 'example-persona-name' }, [name]),
   ]);
-  const inputBlock = el('div', { class: 'example-showcase-input-block' }, [
+  const infoCol = el('div', { class: 'example-persona-info' }, [
     iconCol,
     el(
       'div',
-      { class: 'example-showcase-input-lines' },
-      exampleInputLineTexts().map((line) => el('p', { class: 'example-showcase-input-line' }, [line])),
+      { class: 'example-persona-lines' },
+      lines.map((line) => el('p', { class: 'example-persona-line' }, [line])),
     ),
   ]);
-  const textCol = el('div', { class: 'example-showcase-text-col' }, [
-    el('h2', { class: 'example-showcase-question', id: 'example-showcase-question' }, [
-      el('span', { class: 'example-showcase-question-text' }, [EXAMPLE_QUESTION_TEXT]),
-    ]),
-    inputBlock,
-  ]);
-  // D71 — ISA 수익률 옵트인을 넣지 않았으므로 `headline_composite_total`은
+
+  const donutCol = el('div', { class: 'example-persona-donut-col' }, [donut, donutLegend(donutArgs)]);
+
+  // D71 — ISA 수익률 옵트인을 넣지 않았으므로 두 사람 다 `headline_composite_total`에
   // 가정 성분이 없다(includes_assumption_component: false). `annualReturnRate`
-  // 인자를 넘길 이유가 없다 — 넘겨도 `amountCard`는 그 값을 가정 성분이 있을
-  // 때만 읽는다(compositionBlock, showComposition도 어차피 false다).
-  const amountBlock = el('div', { class: 'example-showcase-amount' }, [
+  // 인자를 넘길 이유가 없다.
+  const amountCol = el('div', { class: 'example-persona-amount' }, [
     amountCard(plan, scenario, null, { compactCaption: true, showCaption: false, showComposition: false }),
   ]);
-  // [2026-08-18, 관리자 지시(4차) 3번] 도넛 위 캡션 — "이렇게 배분해보세요".
-  // 크기는 나이/소득/월납입금 문구(`.example-showcase-input-line`, 2번 지시로
-  // −10%된 값)와 비슷하게 맞춘다 — 별도 눈금을 새로 만들지 않고 같은 CSS
-  // 변수(font-size)를 그대로 상속하도록 같은 규칙 그룹에 선택자를 추가한다
-  // (styles.css `.example-showcase-input-line, .example-showcase-visual-heading`).
-  const visualCol = el('div', { class: 'example-showcase-visual-col' }, [
-    el('p', { class: 'example-showcase-visual-heading' }, [EXAMPLE_ALLOCATION_HEADING_TEXT]),
-    donut,
-    donutLegend(donutArgs),
-  ]);
-  // [2026-08-18, 관리자 지시(4차) 4번] 화살표 아래 "나는 어떻게 배분하지?" —
-  // **애니메이션 래퍼(`.example-showcase-arrow-wrap`) 안에 넣는다**(지시
-  // 원문: "화살표와 같이 움직이게"). 그 래퍼 전체가 위아래로 흔들리므로
-  // (`example-showcase-arrow-bounce`), 안에 든 것은 무엇이든 함께 움직인다 —
-  // 별도 애니메이션을 새로 걸 필요가 없다.
+
+  return el('div', { class: 'example-persona-row' }, [infoCol, donutCol, amountCol]);
+}
+
+/**
+ * 예시 섹션 전체 — 물음(왼쪽 상단, 두 행 어디에도 속하지 않는다) → 1행
+ * (김철수씨) → 구분선 → 2행(이승은씨) → 화살표. **[2026-08-20, 관리자 지시]
+ * 한 사람에서 두 사람으로 늘었다** — 옛(D70~D72) 좌우 2열(`grid-template-areas:
+ * "text visual" "amount amount" "arrow arrow"`) 배치는 이제 이 함수가 쓰지
+ * 않는다(`.example-showcase-multi-persona` 수정자 클래스가 `styles.css`에서
+ * 그 grid 규칙을 덮어쓴다) — 역산기 탭(`reverse-example-showcase.js`)은 옛
+ * 구조·클래스를 그대로 쓰므로 이 변경과 무관하다.
+ */
+function exampleShowcaseSection({ persona1, persona2 }) {
+  // [2026-08-20, 관리자 지시 1번] 물음 — "돈" 문구, 예시칸 왼쪽 상단.
+  // `.example-showcase-question`(공용 문구 스타일)은 그대로 재사용하되,
+  // 위치 수정자(`example-showcase-question-top`)로 왼쪽 정렬·아래 여백만
+  // 이 자리 전용으로 얹는다(`styles.css`).
+  const question = el(
+    'h2',
+    { class: 'example-showcase-question example-showcase-question-top', id: 'example-showcase-question' },
+    [el('span', { class: 'example-showcase-question-text' }, [EXAMPLE_QUESTION_TEXT])],
+  );
+
+  const row1 = examplePersonaRow({
+    name: EXAMPLE_PERSONA_NAME,
+    iconDataUri: MAN_ICON_DATA_URI,
+    iconWidth: MAN_ICON_INTRINSIC_WIDTH,
+    iconHeight: MAN_ICON_INTRINSIC_HEIGHT,
+    lines: exampleInputLineTexts(),
+    scenario: persona1.scenario,
+    plan: persona1.plan,
+  });
+  const row2 = examplePersonaRow({
+    name: EXAMPLE_PERSONA_2_NAME,
+    iconDataUri: FEMALE_ICON_DATA_URI,
+    iconWidth: FEMALE_ICON_INTRINSIC_WIDTH,
+    iconHeight: FEMALE_ICON_INTRINSIC_HEIGHT,
+    lines: examplePersona2InputLineTexts(),
+    scenario: persona2.scenario,
+    plan: persona2.plan,
+  });
+
+  // [2026-08-20, 관리자 지시 2번] 두 행 사이 얇은 회색 구분선.
+  const divider = el('hr', { class: 'example-persona-divider', 'aria-hidden': 'true' }, []);
+
   const arrowWrap = el('div', { class: 'example-showcase-arrow-wrap' }, [
     exampleShowcaseScrollArrow(),
     el('p', { class: 'example-showcase-arrow-caption' }, [EXAMPLE_ARROW_CAPTION_TEXT]),
   ]);
 
-  return el('section', { class: 'example-showcase', 'aria-labelledby': 'example-showcase-question' }, [
-    textCol,
-    amountBlock,
-    visualCol,
-    arrowWrap,
-  ]);
+  return el(
+    'section',
+    { class: 'example-showcase example-showcase-multi-persona', 'aria-labelledby': 'example-showcase-question' },
+    [question, row1, divider, row2, arrowWrap],
+  );
 }
 
 /**
@@ -475,12 +625,18 @@ function exampleShowcaseSection({ scenario, plan }) {
  *
  * **덩어리 자체는 절대 쪼개지 않는다** — `nowrap`(styles.css `.amount-value-chunk`)
  * 은 그대로 두고 오직 글자 크기만 줄인다.
+ *
+ * **[2026-08-20, 관리자 지시] 카드가 이제 둘이다.** 옛 구현은
+ * `querySelector`(첫 매치 하나)로 충분했다 — 예시에 인물이 하나뿐이었다.
+ * 두 행(김철수씨·이승은씨) 각각 자기 카드를 가지므로 `querySelectorAll`로
+ * 바꾸고 각각 독립적으로 잰다 — 안 그러면 2행 카드는 실측 없이 CSS 기본
+ * 크기 그대로 남아 좁은 화면에서 넘칠 수 있다. 바닥값도 낮췄다(32→18) —
+ * 카드 자체가 작아져(소유자가 축소를 허용했다, `example-persona-amount`)
+ * 옛 바닥값은 이 카드 폭에서 이미 CSS 기본값보다 크다.
  */
-const AMOUNT_VALUE_MIN_FONT_PX = 32;
+const AMOUNT_VALUE_MIN_FONT_PX = 18;
 
-function fitAmountValueToCard(root) {
-  const value = root.querySelector('.example-showcase-amount .amount-card-value');
-  if (!value) return;
+function fitSingleAmountValue(value) {
   const chunks = [...value.querySelectorAll('.amount-value-chunk')];
   if (chunks.length === 0) return;
   // 이전 실측이 남긴 인라인 크기를 먼저 지운다 — CSS(미디어쿼리)가 정한
@@ -505,6 +661,11 @@ function fitAmountValueToCard(root) {
     value.style.fontSize = `${next}px`;
     if (next === AMOUNT_VALUE_MIN_FONT_PX) return; // 바닥에 닿았다 — 더 줄여도 소용없다
   }
+}
+
+function fitAmountValueToCard(root) {
+  const values = [...root.querySelectorAll('.example-persona-amount .amount-card-value')];
+  for (const value of values) fitSingleAmountValue(value);
 }
 
 /**
@@ -587,8 +748,15 @@ export async function mountExampleShowcase(hostEl, { engineClient }) {
   shadowRoot.replaceChildren();
   const stylesReady = attachHostStyles(shadowRoot);
   try {
-    const [data] = await Promise.all([computeExampleScenario(engineClient), stylesReady]);
-    shadowRoot.appendChild(exampleShowcaseSection(data));
+    // [2026-08-20, 관리자 지시] 두 사람 — 각자 독립된 엔진 호출이다(서로 다른
+    // 판정 축을 예로 들려는 것이 목적이므로 한 요청으로 합칠 수 없다).
+    // 병렬로 부르고, 스타일 로드도 같이 기다린 뒤 한 번에 그린다.
+    const [persona1, persona2] = await Promise.all([
+      computeExampleScenario(engineClient),
+      computeExamplePersona2Scenario(engineClient),
+      stylesReady,
+    ]);
+    shadowRoot.appendChild(exampleShowcaseSection({ persona1, persona2 }));
 
     const refresh = () => {
       fitAmountValueToCard(shadowRoot);

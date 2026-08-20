@@ -9,13 +9,26 @@ import {
   EXAMPLE_SALARY_MANWON,
   EXAMPLE_MONTHLY_CAPACITY_MANWON,
   EXAMPLE_QUESTION_TEXT,
+  EXAMPLE_PERSONA_2_NAME,
+  EXAMPLE_PERSONA_2_AGE_YEARS,
+  EXAMPLE_PERSONA_2_GLOBAL_INCOME_MANWON,
+  EXAMPLE_PERSONA_2_MONTHLY_CAPACITY_MANWON,
+  exampleOccupationLineText,
   exampleAgeLineText,
   exampleSalaryLineText,
   exampleCapacityLineText,
   exampleInputLineTexts,
   exampleBirthDate,
+  examplePersona2BirthDate,
   buildExampleForm,
+  buildExamplePersona2Form,
   computeExampleScenario,
+  computeExamplePersona2Scenario,
+  examplePersona2OccupationLineText,
+  examplePersona2AgeLineText,
+  examplePersona2IncomeLineText,
+  examplePersona2CapacityLineText,
+  examplePersona2InputLineTexts,
 } from './example-showcase.js';
 import { applyDonutSliceInlineLabels } from './charts.js';
 import { buildEngineRequest, TAX_YEAR } from '../state/store.js';
@@ -55,20 +68,57 @@ test('고정 입력 셋이 관리자가 지정한 값과 정확히 같다', () =
  * 납입금 :"는 있음)까지 그대로 맞춰야 한다 — 소유자가 실제로 그렇게 썼다.
  * 「여유 자금」은 관리자 지시(2차) 5번으로 「월 납입금」이 됐다(값은 그대로).
  */
-test('입력 세 줄 — 소유자가 지정한 글자 그대로, 「예시)」 접두사가 없다', () => {
+/**
+ * [2026-08-20, 관리자 지시] **네 줄로 뒤집힌 기대값.** 옛 검사는 세 줄
+ * (나이·소득·월납입금)을 기대했다 — 「직업 : 직장인」이 맨 위에 더해지며
+ * 네 줄이 됐다(관리자 지시 원문 "기본 정보 맨 위에 직업 줄 추가"). 지우지
+ * 않고 뒤집는다.
+ */
+test('입력 네 줄 — 소유자가 지정한 글자 그대로, 「예시)」 접두사가 없다', () => {
+  assert.equal(exampleOccupationLineText(), '직업 : 직장인');
   assert.equal(exampleAgeLineText(), '나이: 만 30세');
   assert.equal(exampleSalaryLineText(), '소득: 4,000만원');
   assert.equal(exampleCapacityLineText(), '월 납입금 : 월 150만원');
-  assert.deepEqual(exampleInputLineTexts(), ['나이: 만 30세', '소득: 4,000만원', '월 납입금 : 월 150만원']);
+  assert.deepEqual(exampleInputLineTexts(), [
+    '직업 : 직장인',
+    '나이: 만 30세',
+    '소득: 4,000만원',
+    '월 납입금 : 월 150만원',
+  ]);
   for (const line of exampleInputLineTexts()) {
     assert.ok(!line.startsWith('예시)'), `입력 줄에 "예시)" 접두사가 남아 있다: "${line}"`);
     assert.ok(!line.includes('수익률'), `입력 줄에 수익률 언급이 남아 있다: "${line}"`);
   }
 });
 
-/** [2026-08-17, 관리자 지시(2차) 3번] 소유자가 물음 문장을 다시 썼다. */
-test('EXAMPLE_QUESTION_TEXT — 소유자가 쓴 물음 문장과 글자 그대로 같다', () => {
-  assert.equal(EXAMPLE_QUESTION_TEXT, '당신의 소중한 월급, 어디에 넣어야 세금이 가장 적을까요?');
+/**
+ * [2026-08-20, 관리자 지시] **뒤집힌 기대값.** "월급" → "돈"으로 다시 썼다 —
+ * 예시가 근로소득(김철수씨) 하나에서 근로·사업소득(이승은씨) 둘로 늘며
+ * "월급"이 2행에는 거짓이 된다.
+ */
+test('EXAMPLE_QUESTION_TEXT — 소유자가 다시 쓴 물음 문장과 글자 그대로 같다', () => {
+  assert.equal(EXAMPLE_QUESTION_TEXT, '당신의 소중한 돈, 어디에 넣어야 세금이 가장 적을까요?');
+});
+
+/**
+ * [2026-08-20, 관리자 지시] 2행 — 이승은씨. 값 네 상수와 네 줄 문구가
+ * 관리자 지시 원문과 글자 그대로 같은지 고정한다.
+ */
+test('2행(이승은씨) 고정 입력 넷과 문구 네 줄이 관리자 지시 원문과 같다', () => {
+  assert.equal(EXAMPLE_PERSONA_2_NAME, '이승은씨');
+  assert.equal(EXAMPLE_PERSONA_2_AGE_YEARS, 45);
+  assert.equal(EXAMPLE_PERSONA_2_GLOBAL_INCOME_MANWON, 8000);
+  assert.equal(EXAMPLE_PERSONA_2_MONTHLY_CAPACITY_MANWON, 200);
+  assert.equal(examplePersona2OccupationLineText(), '직업 : 자영업자');
+  assert.equal(examplePersona2AgeLineText(), '나이 : 만 45세');
+  assert.equal(examplePersona2IncomeLineText(), '소득 : 8,000만원 (사업소득)');
+  assert.equal(examplePersona2CapacityLineText(), '월 납입액 : 200만원');
+  assert.deepEqual(examplePersona2InputLineTexts(), [
+    '직업 : 자영업자',
+    '나이 : 만 45세',
+    '소득 : 8,000만원 (사업소득)',
+    '월 납입액 : 200만원',
+  ]);
 });
 
 /**
@@ -205,6 +255,109 @@ test('고정 입력 셋을 실제 엔진에 넣으면 계산 가능한 기본안
   assert.equal(pct('annuity_savings'), 33);
   assert.equal(pct('retirement_pension'), 17);
   assert.equal(pct('isa'), 50);
+});
+
+/**
+ * [2026-08-20, 관리자 지시] `examplePersona2BirthDate` — `exampleBirthDate`와
+ * 같은 역산 방식이지만 나이가 다르다(만 45세). 여러 과세연도로 확인해
+ * 날짜 리터럴이 아니라는 것을 같은 방식으로 고정한다.
+ */
+test('examplePersona2BirthDate — 어느 과세연도에 물어도 과세기간 종료일 기준 정확히 만 45세다', () => {
+  for (const taxYear of [2020, 2024, 2026, 2027, 2030, 2035]) {
+    const birth = examplePersona2BirthDate(taxYear);
+    assert.match(birth, /^\d{4}-01-01$/, `${taxYear} → ${birth}가 YYYY-01-01 형태가 아니다`);
+    const age = ageOn(parseIsoDate(birth), endOfTaxYear(taxYear));
+    assert.equal(age, 45, `taxYear=${taxYear}, birth=${birth} → age=${age} (45여야 한다)`);
+  }
+});
+
+test('buildExamplePersona2Form이 지금 store.js가 읽는 TAX_YEAR로 생년월일을 만들고, 종합소득금액 축을 요청한다', () => {
+  const form = buildExamplePersona2Form();
+  assert.equal(form.birthDate, examplePersona2BirthDate(TAX_YEAR));
+  assert.equal(form.currentSalary, '0', '근로소득이 없어야 한다(자영업자)');
+  assert.equal(form.hasNonWageIncome, true);
+  assert.equal(form.globalIncomeAmount, '8000');
+  assert.equal(form.monthlyCapacity, '200');
+  // D71과 같은 원칙 — ISA 수익률 옵트인을 켜지 않는다.
+  assert.equal(form.isaReturnEnabled, false);
+  assert.equal(form.isaReturnRatePercent, '');
+  assert.equal(form.isaIncomeCharacter, null);
+});
+
+/**
+ * **판별력이 있는 계약 검사(2행 판).** `computeExamplePersona2Scenario`가
+ * `engineClient`의 응답을 그대로 옮기는지, 그리고 요청 자체가 종합소득금액
+ * 축(총급여 0원 + `has_non_wage_global_income_current_year: true` +
+ * `current_year_global_income_krw`)을 정확히 싣는지 잰다.
+ */
+test('computeExamplePersona2Scenario는 engineClient의 응답을 그대로 옮기고, 종합소득금액 축을 요청에 정확히 싣는다', async () => {
+  let capturedRequest = null;
+  const sentinelPlan = {
+    plan_id: 'max_tax_credit',
+    is_baseline: true,
+    allocations: [],
+    unallocated_annual_krw: 0,
+    unallocated_monthly_krw: 0,
+    total_allocated_monthly_krw: 888888,
+    deterministic_benefit: { pension_credit_total_krw: 987654321 },
+  };
+  const fakeScenario = { scenario_id: 'current', is_enacted: true, plans: [sentinelPlan], account_eligibility: [] };
+  const fakeEngineClient = {
+    compute: async (request) => {
+      capturedRequest = request;
+      return { ok: true, schema_version: request.schema_version, echo: {}, scenarios: [fakeScenario], assumptions: [] };
+    },
+  };
+
+  const { scenario, plan } = await computeExamplePersona2Scenario(fakeEngineClient);
+  assert.equal(scenario, fakeScenario);
+  assert.equal(plan.total_allocated_monthly_krw, 888888);
+
+  assert.ok(capturedRequest, 'engineClient.compute가 호출되지 않았다');
+  assert.equal(capturedRequest.profile.birth_date, examplePersona2BirthDate(TAX_YEAR));
+  assert.equal(capturedRequest.profile.current_year_total_salary_krw, 0, '근로소득이 없어야 한다');
+  assert.equal(capturedRequest.profile.has_non_wage_global_income_current_year, true);
+  assert.equal(capturedRequest.profile.current_year_global_income_krw, 80_000_000); // 8,000만원
+  assert.equal(capturedRequest.profile.monthly_capacity_krw, 2_000_000); // 월 200만원
+  assert.equal(capturedRequest.profile.isa_return_assumption, null);
+});
+
+test('computeExamplePersona2Scenario — 엔진이 ok:false를 돌려주면 사유를 담아 던진다', async () => {
+  const fakeEngineClient = { compute: async () => ({ ok: false, errors: [{ code: 'ruleset_load_failed' }] }) };
+  await assert.rejects(
+    () => computeExamplePersona2Scenario(fakeEngineClient),
+    /example_showcase_persona2_compute_failed:ruleset_load_failed/,
+  );
+});
+
+/**
+ * **실제 세법 엔진으로 끝까지 계산한다(2행).** 이 검사의 핵심 주장 —
+ * 이승은씨의 공제율 판정 축이 실제로 `global_income`(종합소득금액)이지
+ * `total_salary`가 아니라는 것을 실제 엔진 응답(`echo.credit_rate_bracket.
+ * basis_code`)으로 확인한다(engine-interface.md 0.7절). **판별력** —
+ * `buildExamplePersona2Form`이 `hasNonWageIncome`을 빠뜨리거나
+ * `currentSalary`를 0이 아닌 값으로 잘못 채우면 `basis_code`가
+ * `total_salary`로 되돌아가 이 검사가 즉시 빨갛게 된다.
+ */
+test('이승은씨 요청을 실제 엔진에 넣으면 판정 축이 total_salary가 아니라 global_income이고, 계산 가능한 기본안이 나온다', () => {
+  const request = buildEngineRequest(buildExamplePersona2Form(), ['current']);
+  const response = engineCompute(request, rulesets);
+  assert.equal(response.ok, true, `실제 엔진이 오류를 냈다: ${JSON.stringify(response.errors ?? response)}`);
+
+  assert.equal(response.echo.credit_rate_bracket.basis_code, 'global_income', '판정 축이 종합소득금액이 아니다');
+  assert.equal(response.echo.credit_rate_bracket.measured_amount_krw, 80_000_000);
+  assert.equal(response.echo.credit_rate_bracket.fallback_applied, false, '본문 구간으로 떨어지면 안 된다 — 값을 실제로 실었다');
+
+  const scenario = response.scenarios.find((s) => s.scenario_id === 'current');
+  assert.ok(scenario, 'current 시나리오가 없다');
+  const plan = scenario.plans.find((p) => p.is_baseline) ?? scenario.plans[0];
+  assert.ok(plan, '기본안이 없다');
+
+  const allocatedSum = plan.allocations.reduce((sum, a) => sum + a.monthly_krw, 0) + plan.unallocated_monthly_krw;
+  assert.equal(allocatedSum, response.echo.monthly_capacity_krw);
+  assert.equal(response.echo.monthly_capacity_krw, 2_000_000);
+
+  assert.ok(plan.deterministic_benefit.pension_credit_total_krw > 0, '세액공제액이 0이다 — 예시로 부적절하다');
 });
 
 /**

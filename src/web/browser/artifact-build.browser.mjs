@@ -177,9 +177,11 @@ test('배포 번들, 1440px — 예시의 절세액 금액 덩어리가 중간�
     const root = host.shadowRoot;
     const chunks = [...root.querySelectorAll('.amount-value-chunk')];
     const section = root.querySelector('.example-showcase');
-    const question = root.querySelector('.example-showcase-question');
+    const question = root.querySelector('.example-showcase-question-top');
     const questionText = root.querySelector('.example-showcase-question-text');
-    const inputLines = [...root.querySelectorAll('.example-showcase-input-line')];
+    // [2026-08-20, 관리자 지시] 옛 .example-showcase-input-line(단일 인물,
+    // 세 줄)은 두 행(각 네 줄)의 .example-persona-line으로 바뀌었다 — 8개.
+    const inputLines = [...root.querySelectorAll('.example-persona-line')];
     const sectionRect = section.getBoundingClientRect();
     // [2026-08-18, 관리자 지시(5차) 1번] 줄 수를 요소 자체가 아니라 Range로
     // 잰다 — .example-showcase-question은 flex 컨테이너(h2)라
@@ -200,7 +202,9 @@ test('배포 번들, 1440px — 예시의 절세액 금액 덩어리가 중간�
     };
   })()`);
 
-  assert.equal(m.chunkCount, 1, `D71 — 배포 번들에서 금액 덩어리가 정확히 1개여야 한다(구간이 아니다): ${m.chunkCount}`);
+  // [2026-08-20, 관리자 지시로 뒤집힌 기대값] 예시가 두 사람(김철수씨·
+  // 이승은씨)으로 늘어 카드도 2개, 덩어리도 카드당 하나씩 2개다.
+  assert.equal(m.chunkCount, 2, `D71 — 배포 번들에서 금액 덩어리가 정확히 2개(카드 2개 × 1덩이)여야 한다: ${m.chunkCount}`);
   for (const [i, count] of m.chunkRectCounts.entries()) {
     assert.equal(
       count,
@@ -211,7 +215,7 @@ test('배포 번들, 1440px — 예시의 절세액 금액 덩어리가 중간�
   assert.equal(m.questionOverflows, false, '배포 번들 1440px — 물음 문장이 예시 구역 폭을 넘는다');
   // [2026-08-18, 관리자 지시(5차) 1번] 물음이 1440px에서 한 줄이다.
   assert.equal(m.questionLineCount, 1, `배포 번들 1440px — 물음이 한 줄이 아니다(${m.questionLineCount}줄로 꺾였다)`);
-  assert.equal(m.inputLineCount, 3, `배포 번들 1440px — 입력 줄이 정확히 3개여야 한다: ${m.inputLineCount}`);
+  assert.equal(m.inputLineCount, 8, `배포 번들 1440px — 입력 줄이 정확히 8개(두 행 × 네 줄)여야 한다: ${m.inputLineCount}`);
   for (const [i, overflows] of m.inputLineOverflows.entries()) {
     assert.equal(overflows, false, `배포 번들 1440px — 입력 줄 ${i}이 예시 구역 폭을 넘는다`);
   }
@@ -237,24 +241,29 @@ test('배포 번들, 375px — 예시의 절세액 금액 덩어리가 중간에
     const host = document.querySelector('.example-showcase-slot');
     const root = host.shadowRoot;
     const chunks = [...root.querySelectorAll('.amount-value-chunk')];
-    const card = root.querySelector('.amount-card');
-    const value = root.querySelector('.amount-card-value');
-    const cardRect = card.getBoundingClientRect();
-    const valueRect = value.getBoundingClientRect();
+    const cards = [...root.querySelectorAll('.amount-card')];
+    const valueOverflowsCard = cards.map((card) => {
+      const value = card.querySelector('.amount-card-value');
+      const vr = value.getBoundingClientRect();
+      const cr = card.getBoundingClientRect();
+      return vr.width > cr.width + 1;
+    });
     return {
       chunkCount: chunks.length,
       chunkRectCounts: chunks.map((c) => c.getClientRects().length),
-      valueOverflowsCard: valueRect.width > cardRect.width + 1,
+      valueOverflowsCard,
       docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     };
   })()`);
 
-  // D71 — 헤드라인이 점(단일 확정 수)이므로 덩어리도 정확히 하나다.
-  assert.equal(m.chunkCount, 1, `D71 — 배포 번들 375px에서 금액 덩어리가 정확히 1개여야 한다: ${m.chunkCount}`);
+  // [2026-08-20, 관리자 지시로 뒤집힌 기대값] 두 카드 × 한 덩이씩 = 2.
+  assert.equal(m.chunkCount, 2, `D71 — 배포 번들 375px에서 금액 덩어리가 정확히 2개(카드 2개 × 1덩이)여야 한다: ${m.chunkCount}`);
   for (const [i, count] of m.chunkRectCounts.entries()) {
     assert.equal(count, 1, `배포 번들 375px — 금액 덩어리 ${i}이 ${count}개 줄로 쪼개졌다`);
   }
-  assert.equal(m.valueOverflowsCard, false, '배포 번들 375px — 절세액이 카드 폭을 넘는다');
+  for (const [i, overflows] of m.valueOverflowsCard.entries()) {
+    assert.equal(overflows, false, `배포 번들 375px — ${i}번 카드에서 절세액이 카드 폭을 넘는다`);
+  }
   assert.equal(m.docOverflowsX, false, '배포 번들 375px — 가로 스크롤이 생겼다');
 
   await page.send('Emulation.clearDeviceMetricsOverride');
@@ -288,43 +297,36 @@ test('배포 번들, 375px — 예시의 절세액 금액 덩어리가 중간에
  * 개발 서버 검사와 같은 값).
  */
 /**
- * [2026-08-17, 관리자 지시(3차) 2번으로 뒤집혔다] **옛(D70) 검사는 "입력 세
- * 줄도 물음 줄과 같은 왼쪽 정렬"을 요구했다.** 이번 회차로 입력 세 줄이
- * man-icon과 한 행을 이루고, 그 행 전체(`.example-showcase-input-block`)가
- * "가운데가 비어 보인다"는 소유자 지적을 완화하려고 왼쪽 가장자리에서
- * 띄워진다(`margin-left: var(--space-7)`) — **이제 입력 세 줄은 물음 줄보다
- * 안쪽(오른쪽)에서 시작하는 것이 의도된 모습이다.** 지우지 않고 뒤집는다 —
- * (1) 물음 줄은 여전히 `textCol` 왼쪽 정렬, (2) 입력 세 줄은 서로 같은
- * 왼쪽 좌표(아이콘+세 줄 열이 하나의 블록이므로), (3) 그 좌표가 물음 줄보다
- * 오른쪽(들여쓰기)이되 카드를 벗어나지 않는다.
+ * [2026-08-20, 관리자 지시로 뒤집힌 기대값] **옛(D70~5차) 검사는 좌우 2열
+ * 배치(왼쪽 문구 칸·오른쪽 도넛 칸)를 전제했다.** 예시가 두 사람으로 늘며
+ * 그 grid 자체를 걷어내고 "물음(왼쪽 상단) → 인물 행 두 개(기본 정보 →
+ * 도넛 → 세액공제액, 가로)"로 다시 짰다(`ui/example-showcase.js`,
+ * `styles.css`의 `.example-showcase-multi-persona`). 지우지 않고 뒤집는다 —
+ * 이제 확인할 것은 (1) 물음이 왼쪽 정렬이고 두 행보다 위에 있다, (2) 두 행
+ * 모두 왼쪽부터 기본 정보 → 도넛 → 세액공제액 순으로 선다, (3) 문서 가로
+ * 스크롤이 없다.
  */
-test('관리자 지시(3차) 2번 — 배포 번들, 1440px — 물음 줄은 왼쪽 정렬, 입력 세 줄(+man-icon)은 안쪽으로 들여지되 서로 정렬을 맞춘다, 오른쪽 칸(도넛/범례)은 칸 중심, 절세액/화살표는 카드 전체 중심', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시 — 배포 번들, 1440px — 물음은 왼쪽 상단, 두 행 모두 기본 정보 → 도넛 → 세액공제액 순으로 가로 배치된다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const READ_LAYOUT = `(() => {
     const host = document.querySelector('.example-showcase-slot');
     const root = host.shadowRoot;
     const section = root.querySelector('.example-showcase');
-    const q = (sel) => root.querySelector(sel);
-    const donut = root.querySelector('.chart-donut');
-    const textCol = root.querySelector('.example-showcase-text-col');
-    const visualCol = root.querySelector('.example-showcase-visual-col');
-    const centerXOf = (el) => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; };
-    const leftOf = (el) => el.getBoundingClientRect().left;
-    const inputLines = [...root.querySelectorAll('.example-showcase-input-line')];
-    const icon = root.querySelector('.example-showcase-input-icon');
+    const question = root.querySelector('.example-showcase-question-top');
+    const rows = [...root.querySelectorAll('.example-persona-row')];
+    const infoCols = [...root.querySelectorAll('.example-persona-info')];
+    const donutCols = [...root.querySelectorAll('.example-persona-donut-col')];
+    const amountCols = [...root.querySelectorAll('.example-persona-amount')];
+    const rectOf = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
     return {
-      cardCenterX: centerXOf(section),
-      textColLeft: textCol ? leftOf(textCol) : null,
-      textColRight: textCol ? textCol.getBoundingClientRect().right : null,
-      inputLineLefts: inputLines.map(leftOf),
-      inputLineRights: inputLines.map((el) => el.getBoundingClientRect().right),
-      iconLeft: icon ? leftOf(icon) : null,
-      questionLeft: q('.example-showcase-question') ? leftOf(q('.example-showcase-question')) : null,
-      visualColCenterX: visualCol ? centerXOf(visualCol) : null,
-      donutCenterX: donut ? centerXOf(donut) : null,
-      legendCenterX: q('.donut-legend') ? centerXOf(q('.donut-legend')) : null,
-      amountCardCenterX: q('.amount-card') ? centerXOf(q('.amount-card')) : null,
-      arrowCenterX: q('.example-showcase-scroll-arrow') ? centerXOf(q('.example-showcase-scroll-arrow')) : null,
+      sectionLeft: rectOf(section).left,
+      questionRect: question ? rectOf(question) : null,
+      rowCount: rows.length,
+      rowTops: rows.map((r) => rectOf(r).top),
+      infoRects: infoCols.map(rectOf),
+      donutRects: donutCols.map(rectOf),
+      amountRects: amountCols.map(rectOf),
+      docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     };
   })()`;
   const TOLERANCE_PX = 2;
@@ -337,58 +339,48 @@ test('관리자 지시(3차) 2번 — 배포 번들, 1440px — 물음 줄은 �
   await sleep(300);
   const data = await page.evaluate(READ_LAYOUT);
 
-  assert.ok(data.textColLeft != null && data.inputLineLefts.length === 3 && data.questionLeft != null && data.iconLeft != null, '배포 번들 1440px — 왼쪽 문구 칸을 찾지 못했다');
-  assert.ok(Math.abs(data.questionLeft - data.textColLeft) <= TOLERANCE_PX, `배포 번들 1440px — 물음 줄이 왼쪽 정렬이 아니다`);
-  // man-icon과 입력 세 줄이 담긴 행 자체가 들여져야 하므로, 아이콘의 왼쪽
-  // 좌표가 곧 그 행의 들여쓰기 시작점이다 — 물음 줄보다 오른쪽이어야 한다.
-  assert.ok(data.iconLeft > data.textColLeft + TOLERANCE_PX, `배포 번들 1440px — man-icon(${data.iconLeft})이 물음 줄(${data.textColLeft})보다 안쪽으로 들여지지 않았다`);
-  for (const [i, left] of data.inputLineLefts.entries()) {
-    assert.ok(Math.abs(left - data.inputLineLefts[0]) <= TOLERANCE_PX, `배포 번들 1440px — 입력 줄 ${i}이 나머지 입력 줄과 왼쪽 정렬이 맞지 않는다`);
-    assert.ok(left > data.iconLeft, `배포 번들 1440px — 입력 줄 ${i}이 man-icon 왼쪽에 있다`);
-  }
-  for (const right of data.inputLineRights) {
-    assert.ok(right <= data.textColRight + TOLERANCE_PX, `배포 번들 1440px — 입력 줄이 카드(문구 칸) 오른쪽 경계(${data.textColRight})를 넘는다: ${right}`);
-  }
+  assert.ok(data.questionRect, '배포 번들 1440px — 물음을 찾지 못했다');
+  assert.ok(
+    Math.abs(data.questionRect.left - data.sectionLeft) <= 40,
+    `배포 번들 1440px — 물음(${data.questionRect.left})이 예시칸 왼쪽(${data.sectionLeft})에서 너무 멀다`,
+  );
+  assert.equal(data.rowCount, 2, '배포 번들 1440px — 인물 행이 2개여야 한다');
+  assert.ok(
+    data.questionRect.bottom <= data.rowTops[0] + 1,
+    `배포 번들 1440px — 물음(${data.questionRect.bottom})이 1행(${data.rowTops[0]})보다 위에 있지 않다`,
+  );
 
-  for (const [name, cx] of Object.entries({ '도넛': data.donutCenterX, '범례': data.legendCenterX })) {
-    assert.ok(cx != null, `배포 번들 1440px — ${name}의 가로 중심을 재지 못했다`);
+  for (let i = 0; i < 2; i++) {
     assert.ok(
-      Math.abs(cx - data.visualColCenterX) <= TOLERANCE_PX,
-      `배포 번들 1440px — ${name}의 가로 중심(${cx})이 오른쪽 칸 중심(${data.visualColCenterX})과 어긋난다`,
+      data.infoRects[i].right <= data.donutRects[i].left + TOLERANCE_PX,
+      `배포 번들 1440px — ${i}행 기본 정보(오른쪽 ${data.infoRects[i].right})가 도넛(왼쪽 ${data.donutRects[i].left})보다 왼쪽에 있지 않다`,
+    );
+    assert.ok(
+      data.donutRects[i].right <= data.amountRects[i].left + TOLERANCE_PX,
+      `배포 번들 1440px — ${i}행 도넛(오른쪽 ${data.donutRects[i].right})이 세액공제액(왼쪽 ${data.amountRects[i].left})보다 왼쪽에 있지 않다`,
     );
   }
-
-  for (const [name, cx] of Object.entries({ '절세액 카드': data.amountCardCenterX, '화살표': data.arrowCenterX })) {
-    assert.ok(cx != null, `배포 번들 1440px — ${name}의 가로 중심을 재지 못했다`);
-    assert.ok(
-      Math.abs(cx - data.cardCenterX) <= TOLERANCE_PX,
-      `배포 번들 1440px — ${name}의 가로 중심(${cx})이 카드 중심(${data.cardCenterX})과 ${TOLERANCE_PX}px 넘게 어긋난다`,
-    );
-  }
+  assert.equal(data.docOverflowsX, false, '배포 번들 1440px — 가로 스크롤이 생겼다');
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
-test('배포 번들, 375px — 1열로 붕괴한 뒤에는 문구·절세액·도넛·범례·화살표 전부 카드 중심에 있다', { skip: skipWithoutChrome }, async () => {
+test('배포 번들, 375px — 1열로 붕괴한 뒤에도 두 행이 온전히 렌더되고, 가로 스크롤이 없다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  const READ_CENTERS = `(() => {
+  const READ_MOBILE = `(() => {
     const host = document.querySelector('.example-showcase-slot');
     const root = host.shadowRoot;
     const section = root.querySelector('.example-showcase');
-    const q = (sel) => root.querySelector(sel);
-    const donut = root.querySelector('.chart-donut');
-    const inputLines = [...root.querySelectorAll('.example-showcase-input-line')];
-    const centerXOf = (el) => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; };
+    const rows = [...root.querySelectorAll('.example-persona-row')];
+    const donuts = [...root.querySelectorAll('.chart-donut')];
+    const amountCards = [...root.querySelectorAll('.amount-card')];
+    const sectionRect = section.getBoundingClientRect();
     return {
-      cardCenterX: centerXOf(section),
-      inputLines: inputLines.map(centerXOf),
-      question: q('.example-showcase-question') ? centerXOf(q('.example-showcase-question')) : null,
-      amountCard: q('.amount-card') ? centerXOf(q('.amount-card')) : null,
-      donut: donut ? centerXOf(donut) : null,
-      legend: q('.donut-legend') ? centerXOf(q('.donut-legend')) : null,
-      arrow: q('.example-showcase-scroll-arrow') ? centerXOf(q('.example-showcase-scroll-arrow')) : null,
+      rowCount: rows.length,
+      donutCount: donuts.length,
+      amountCardCount: amountCards.length,
+      rowOverflows: rows.map((r) => r.getBoundingClientRect().right > sectionRect.right + 1),
     };
   })()`;
-  const TOLERANCE_PX = 2;
 
   await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 1200, deviceScaleFactor: 1, mobile: true });
   await page.waitFor(`(() => {
@@ -396,25 +388,15 @@ test('배포 번들, 375px — 1열로 붕괴한 뒤에는 문구·절세액·�
     return !!(host && host.shadowRoot && host.shadowRoot.querySelector('.example-showcase-scroll-arrow'));
   })()`, { timeoutMs: 8000 });
   await sleep(300);
-  const data = await page.evaluate(READ_CENTERS);
-  assert.ok(typeof data.cardCenterX === 'number', '배포 번들 375px — 예시 카드를 찾지 못했다');
-  assert.equal(data.inputLines.length, 3, '배포 번들 375px — 입력 줄이 정확히 3개여야 한다');
-  for (const [i, cx] of data.inputLines.entries()) {
-    assert.ok(
-      Math.abs(cx - data.cardCenterX) <= TOLERANCE_PX,
-      `배포 번들 375px — 입력 줄 ${i}의 가로 중심(${cx})이 카드 중심(${data.cardCenterX})과 ${TOLERANCE_PX}px 넘게 어긋난다`,
-    );
+  const data = await page.evaluate(READ_MOBILE);
+  assert.equal(data.rowCount, 2, '배포 번들 375px — 인물 행이 2개여야 한다');
+  assert.equal(data.donutCount, 2, '배포 번들 375px — 도넛이 2개여야 한다');
+  assert.equal(data.amountCardCount, 2, '배포 번들 375px — 세액공제액 카드가 2개여야 한다');
+  for (const [i, overflows] of data.rowOverflows.entries()) {
+    assert.equal(overflows, false, `배포 번들 375px — ${i}행이 예시 카드 오른쪽 경계를 넘는다`);
   }
-  for (const [name, cx] of Object.entries({
-    '물음 줄': data.question, '절세액 카드': data.amountCard,
-    '도넛': data.donut, '범례': data.legend, '화살표': data.arrow,
-  })) {
-    assert.ok(cx != null, `배포 번들 375px — ${name}의 가로 중심을 재지 못했다`);
-    assert.ok(
-      Math.abs(cx - data.cardCenterX) <= TOLERANCE_PX,
-      `배포 번들 375px — ${name}의 가로 중심(${cx})이 카드 중심(${data.cardCenterX})과 ${TOLERANCE_PX}px 넘게 어긋난다`,
-    );
-  }
+  const docOverflowsX = await page.evaluate(`document.documentElement.scrollWidth > document.documentElement.clientWidth`);
+  assert.equal(docOverflowsX, false, '배포 번들 375px — 가로 스크롤이 생겼다');
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
@@ -593,7 +575,10 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         const arrowBtn = root.querySelector('.example-showcase-scroll-arrow');
         const arrowWrap = root.querySelector('.example-showcase-arrow-wrap');
         const labelGroup = root.querySelector('.donut-slice-label-group');
-        const labelEls = [...root.querySelectorAll('.donut-slice-label')];
+        // [2026-08-20] 도넛이 둘(두 행)이므로 라벨을 1행 도넛에 스코프한다 —
+        // 안 그러면 6개(3+3)가 나와 "3개" 기대값이 깨진다.
+        const donut = root.querySelector('.chart-donut');
+        const labelEls = donut ? [...donut.querySelectorAll('.donut-slice-label')] : [];
         return {
           sectionDisplay: section ? getComputedStyle(section).display : null,
           legendListStyle: legendItem ? getComputedStyle(legendItem).listStyleType : null,
@@ -604,7 +589,12 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
           // 무너진다(실측 0에 가까운 폭).
           legendSwatchWidth: legendSwatch ? legendSwatch.getBoundingClientRect().width : null,
           arrowBtnWidth: arrowBtn ? arrowBtn.getBoundingClientRect().width : null,
-          arrowBtnBorderStyle: arrowBtn ? getComputedStyle(arrowBtn).borderStyle : null,
+          // [2026-08-20, 관리자 지시 3번] 화살표 색이 rgb(0, 255, 153)로
+          // 바뀌었다 — 브라우저 기본 버튼 글자색은 이 값이 될 수 없으므로,
+          // "우리 <style>이 실렸는가"를 가리는 신호를 옛 "테두리 없음"(이제
+          // 라이트 모드에서는 대비 보완을 위해 의도적으로 테두리가 있어
+          // 이 신호로 못 쓴다)에서 이 색으로 바꾼다.
+          arrowBtnColor: arrowBtn ? getComputedStyle(arrowBtn).color : null,
           // [2026-08-17, D72] 새 구조도 감싼 조건에서 스타일을 입는지 함께
           // 확인한다 — 조각 이름+비율 라벨 그룹의 pointer-events(CSS 규칙
           // 적용 여부의 대리 지표)와 화살표 칸의 애니메이션(감싼 조건도
@@ -634,18 +624,22 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         `아티팩트처럼 감싼 조건 — 이동 화살표가 브라우저 기본 버튼 크기(${m.arrowBtnWidth}px)로 그려진다 — 스타일이 실리지 않았다`,
       );
       assert.equal(
-        m.arrowBtnBorderStyle,
-        'none',
-        `아티팩트처럼 감싼 조건 — 화살표 버튼에 브라우저 기본 테두리(빈 네모)가 남아 있다(border-style: ${m.arrowBtnBorderStyle})`,
+        m.arrowBtnColor,
+        'rgb(0, 255, 153)',
+        `아티팩트처럼 감싼 조건 — 화살표 색이 rgb(0, 255, 153)이 아니다(color: ${m.arrowBtnColor}) — 스타일이 실리지 않았다`,
       );
+      // [2026-08-20, 관리자 지시] 옛(단일 인물, 2열 grid) 배치는 이제
+      // .example-showcase-multi-persona 수정자가 flex로 바꾼다 — 뒤집힌
+      // 기대값.
       assert.equal(
         m.sectionDisplay,
-        'grid',
-        `아티팩트처럼 감싼 조건 — 예시 구역이 2열 grid로 배치되지 않았다(display: ${m.sectionDisplay}) — 정렬이 무너졌다`,
+        'flex',
+        `아티팩트처럼 감싼 조건 — 예시 구역이 flex(두 행 세로 배치)로 배치되지 않았다(display: ${m.sectionDisplay}) — 정렬이 무너졌다`,
       );
       // [2026-08-17, D72] 조각 이름+비율 라벨이 감싼 조건에서도 실제로
-      // 그려지고(3개), 그 스타일(pointer-events: none)이 실린다.
-      assert.equal(m.labelTextCount, 3, `아티팩트처럼 감싼 조건 — 조각 위 이름+비율 라벨이 3개가 아니다: ${m.labelTextCount}`);
+      // 그려지고(1행 도넛에 스코프해 3개), 그 스타일(pointer-events: none)이
+      // 실린다.
+      assert.equal(m.labelTextCount, 3, `아티팩트처럼 감싼 조건 — 1행 조각 위 이름+비율 라벨이 3개가 아니다: ${m.labelTextCount}`);
       assert.equal(
         m.labelGroupPointerEvents,
         'none',
@@ -668,7 +662,7 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
       const READ_LOGO_AND_ICON = `(() => {
         const light = document.querySelector('.app-logo-light');
         const dark = document.querySelector('.app-logo-dark');
-        const icon = document.querySelector('.example-showcase-slot').shadowRoot.querySelector('.example-showcase-input-icon');
+        const icon = document.querySelector('.example-showcase-slot').shadowRoot.querySelector('.example-persona-icon');
         const vis = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
         return {
           lightVisible: vis(light),

@@ -84,9 +84,11 @@ console.log(
 );
 
 // ---------------------------------------------------------------------------
-// man-icon — 예시 구역 입력 세 줄 왼쪽에 놓는 사람 아이콘. 512×512.
+// man-icon — 예시 구역 입력 줄들 왼쪽에 놓는 사람 아이콘. 512×512.
+// [2026-08-20, 소유자 지시] 김철수씨 아이콘 원본이 free-icon-man-3040730.png로
+// 교체됐다 — 같은 export 이름을 유지하므로 소비처는 그대로다.
 // ---------------------------------------------------------------------------
-const MAN_ICON_SRC = 'src/design/man-icon.png';
+const MAN_ICON_SRC = 'src/design/free-icon-man-3040730.png';
 const MAN_ICON_OUT = join(ROOT, 'src/web/assets/man-icon.js');
 
 const manIconB64 = toBase64(MAN_ICON_SRC);
@@ -117,3 +119,35 @@ export const MAN_ICON_INTRINSIC_HEIGHT = 512;
 
 writeFileSync(MAN_ICON_OUT, manIconOut, 'utf8');
 console.log(`man-icon 데이터 URI 모듈을 다시 썼습니다: ${MAN_ICON_OUT} (${(manIconB64.length / 1024).toFixed(1)}KB base64)`);
+
+// ---------------------------------------------------------------------------
+// female-icon — 둘째 예시(이승은씨) 아이콘. 512×512.
+// [2026-08-20, 소유자 지시] 예시가 두 행이 되며 새로 생겼다. man-icon과 같은
+// 규약(데이터 URI 모듈, 손으로 안 고침, 다크 반전은 CSS 몫).
+// ---------------------------------------------------------------------------
+const FEMALE_ICON_SRC = 'src/design/free-icon-female-5740242.png';
+const FEMALE_ICON_OUT = join(ROOT, 'src/web/assets/female-icon.js');
+
+const femaleIconB64 = toBase64(FEMALE_ICON_SRC);
+
+const femaleIconOut = `/**
+ * 여성 아이콘 — 예시 구역 둘째 행(이승은씨, \`ui/example-showcase.js\`) 기본
+ * 정보 줄들 왼쪽에 놓는다(소유자 지시, 2026-08-20).
+ *
+ * **원본** — \`src/design/free-icon-female-5740242.png\`(512×512, 투명 배경).
+ *
+ * **재생성** — \`node scripts/gen-logo-asset.mjs\`. 원본 PNG를 바꾼 뒤 이 명령만
+ * 다시 돌리면 아래 문자열이 새로 갱신된다. **이 파일을 손으로 고치지 않는다.**
+ *
+ * 왜 데이터 URI인가 — \`scripts/gen-logo-asset.mjs\` 머리말(man-icon과 같은 이유).
+ * 다크 모드에서 묻히면 man-icon처럼 CSS \`filter: invert(1)\`가 처리한다.
+ */
+export const FEMALE_ICON_DATA_URI = 'data:image/png;base64,${femaleIconB64}';
+
+/** 원본 자산의 실제 픽셀 치수(정사각형). */
+export const FEMALE_ICON_INTRINSIC_WIDTH = 512;
+export const FEMALE_ICON_INTRINSIC_HEIGHT = 512;
+`;
+
+writeFileSync(FEMALE_ICON_OUT, femaleIconOut, 'utf8');
+console.log(`female-icon 데이터 URI 모듈을 다시 썼습니다: ${FEMALE_ICON_OUT} (${(femaleIconB64.length / 1024).toFixed(1)}KB base64)`);
