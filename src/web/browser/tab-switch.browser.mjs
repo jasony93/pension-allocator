@@ -183,7 +183,11 @@ test('로고를 누르면 첫 탭이 활성화되고 페이지 맨 위로 스크
 
   await page.clickElement(`document.querySelector('.app-header-logo-button')`);
   await page.waitFor(`document.getElementById('tab-calculator').getAttribute('aria-selected') === 'true'`, { timeoutMs: 3000 });
-  await sleep(300); // smooth 스크롤이 완전히 멈출 시간
+  // smooth 스크롤이 멈출 때까지 폴링한다 — 고정 sleep은 예시영역 폰트 50%
+  // 확대(관리자 지시(3차) 5번)로 페이지가 훨씬 길어지며 이따금 300ms 안에
+  // 완전히 안 멎는 것을 실측으로 확인했다(스크롤 자체는 정상 — 속도 문제일
+  // 뿐이다).
+  await page.waitFor(`window.scrollY < 50`, { timeoutMs: 3000 });
 
   const after = await page.evaluate(`(() => ({
     activeTab: document.getElementById('tab-calculator').getAttribute('aria-selected'),

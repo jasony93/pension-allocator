@@ -759,3 +759,164 @@ test('관리자 지시(5차) 3번 — 탭 글자 크기가 옛값(15px)의 1.2�
     `탭 글자 크기(${fontSize})가 기대값(${EXPECTED}px, 옛 15px × 1.2)과 어긋난다`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// [2026-08-20, 관리자 지시(3차) — 대표 색(흰색+주황)] 세 카드 테두리·입력
+// 섹션 아이콘·체크리스트 문구/동그라미가 `--accent-warm`(rgb(230, 115, 0))
+// 인지 — 라이트·다크 두 테마, 두 탭 모두. **역산기 탭도 검사한다** — 세
+// 카드(`.example-showcase`·`.input-panel`·`.result-panel-inner`)와
+// `.input-group-title .section-icon`을 역산기 탭이 그대로 재사용하므로
+// 대표 색이 자동으로 퍼진다(관리자 지시 원문 "대표 색은 서비스 전체다").
+// ---------------------------------------------------------------------------
+
+const READ_BRAND_COLOR = `(() => {
+  const rectOf = (el) => { const r = el.getBoundingClientRect(); return { w: r.width, h: r.height }; };
+  // 세 카드 — 탭마다 하나씩(첫 탭 예시·입력·결과 + 역산기 탭 예시·입력·결과).
+  // 역산기 탭 패널은 비활성(display:none)이어도 getComputedStyle은 여전히
+  // 값을 낸다(레이아웃 파생값만 0이 된다) — 탭을 굳이 전환하지 않아도 잰다.
+  const exampleHost = document.querySelector('.example-showcase-slot');
+  const reverseExampleHost = document.querySelector('.reverse-example-showcase-slot');
+  const exampleSection = exampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
+  const reverseExampleSection = reverseExampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
+  const inputPanels = [...document.querySelectorAll('.input-panel')];
+  const resultPanels = [...document.querySelectorAll('.result-panel-inner')];
+  const groupIcons = [...document.querySelectorAll('.input-group-title .section-icon')];
+  const panelTitleIcon = document.querySelector('.panel-title .section-icon');
+  return {
+    exampleBorder: exampleSection ? getComputedStyle(exampleSection).borderTopColor : null,
+    reverseExampleBorder: reverseExampleSection ? getComputedStyle(reverseExampleSection).borderTopColor : null,
+    inputPanelBorders: inputPanels.map((el) => getComputedStyle(el).borderTopColor),
+    inputPanelCount: inputPanels.length,
+    resultPanelBorders: resultPanels.map((el) => getComputedStyle(el).borderTopColor),
+    resultPanelCount: resultPanels.length,
+    groupIconColors: groupIcons.map((el) => getComputedStyle(el).color),
+    groupIconCount: groupIcons.length,
+    panelTitleIconColor: panelTitleIcon ? getComputedStyle(panelTitleIcon).color : null,
+  };
+})()`;
+
+const ACCENT_WARM_RGB = 'rgb(230, 115, 0)';
+
+test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두리가 대표 색이다 — 라이트·다크, 두 탭 모두', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
+  await page.waitFor(`!!document.querySelector('.example-showcase-slot')?.shadowRoot?.querySelector('.example-showcase')`, { timeoutMs: 8000 });
+  await sleep(150);
+
+  const light = await page.evaluate(READ_BRAND_COLOR);
+  assert.equal(light.exampleBorder, ACCENT_WARM_RGB, `라이트 — 첫 탭 예시 카드 테두리가 대표 색이 아니다: ${light.exampleBorder}`);
+  assert.equal(light.reverseExampleBorder, ACCENT_WARM_RGB, `라이트 — 역산기 탭 예시 카드 테두리가 대표 색이 아니다: ${light.reverseExampleBorder}`);
+  assert.equal(light.inputPanelCount, 2, `입력 패널이 2개(두 탭)가 아니다: ${light.inputPanelCount}`);
+  for (const [i, c] of light.inputPanelBorders.entries()) {
+    assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
+  }
+  assert.equal(light.resultPanelCount, 2, `결과 카드가 2개(두 탭)가 아니다: ${light.resultPanelCount}`);
+  for (const [i, c] of light.resultPanelBorders.entries()) {
+    assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 결과 카드 테두리가 대표 색이 아니다: ${c}`);
+  }
+
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
+  await sleep(150);
+  const dark = await page.evaluate(READ_BRAND_COLOR);
+  assert.equal(dark.exampleBorder, ACCENT_WARM_RGB, `다크 — 첫 탭 예시 카드 테두리가 대표 색이 아니다: ${dark.exampleBorder}`);
+  assert.equal(dark.reverseExampleBorder, ACCENT_WARM_RGB, `다크 — 역산기 탭 예시 카드 테두리가 대표 색이 아니다: ${dark.reverseExampleBorder}`);
+  for (const [i, c] of dark.inputPanelBorders.entries()) {
+    assert.equal(c, ACCENT_WARM_RGB, `다크 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
+  }
+  for (const [i, c] of dark.resultPanelBorders.entries()) {
+    assert.equal(c, ACCENT_WARM_RGB, `다크 — ${i}번 결과 카드 테두리가 대표 색이 아니다: ${c}`);
+  }
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+});
+
+/**
+ * 다크 배경 대비 실측 — `--accent-warm`(rgb(230,115,0)) 대 다크
+ * `--surface-raised`(#1e2226)의 WCAG 대비비를 이 검사가 독립적으로 다시
+ * 계산해 3:1(WCAG 1.4.11 비텍스트 컴포넌트 최소 기준)을 넘는지 확인한다 —
+ * "다크에서도 주황 테두리가 서는지 실측"이라는 지시를 대비 수치로 고정한다.
+ */
+test('관리자 지시(3차) 2번 — 다크 모드 카드 테두리 대비가 WCAG 3:1을 넘는다(실측)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const ratio = await page.evaluate(`(() => {
+    function srgbToLinear(c) { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
+    function luminance([r, g, b]) { return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b); }
+    function parseRgb(s) { const m = /rgba?\\(([\\d.]+)[,\\s]+([\\d.]+)[,\\s]+([\\d.]+)/.exec(s); return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0]; }
+    const probe = document.createElement('div');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    probe.style.color = 'var(--accent-warm)';
+    probe.style.background = 'var(--surface-raised)';
+    document.body.appendChild(probe);
+    const fg = getComputedStyle(probe).color;
+    const bg = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    document.documentElement.removeAttribute('data-theme');
+    const [hi, lo] = [luminance(parseRgb(fg)), luminance(parseRgb(bg))].sort((a, b) => b - a);
+    return (hi + 0.05) / (lo + 0.05);
+  })()`);
+  assert.ok(ratio >= 3, `다크 카드 테두리(--accent-warm) 대비비(${ratio.toFixed(2)}:1)가 WCAG 3:1 미만이다`);
+});
+
+test('관리자 지시(3차) 3번 — 입력 패널의 섹션 그룹 아이콘(기본정보·계좌 등)이 대표 색이다(두 탭 모두), 패널 제목 아이콘은 그대로다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const data = await page.evaluate(READ_BRAND_COLOR);
+  assert.ok(data.groupIconCount >= 6, `그룹 아이콘이 6개 미만이다(두 탭 × 3그룹 이상 기대): ${data.groupIconCount}`);
+  for (const [i, c] of data.groupIconColors.entries()) {
+    assert.equal(c, ACCENT_WARM_RGB, `${i}번 그룹 아이콘이 대표 색이 아니다: ${c}`);
+  }
+  // 패널 제목("입력") 아이콘은 지시 범위 밖이다 — 색이 바뀌지 않아야 한다.
+  const textSecondary = await page.evaluate(`(() => {
+    const probe = document.createElement('div');
+    probe.style.color = 'var(--text-secondary)';
+    document.body.appendChild(probe);
+    const c = getComputedStyle(probe).color;
+    probe.remove();
+    return c;
+  })()`);
+  assert.equal(data.panelTitleIconColor, textSecondary, `패널 제목 아이콘 색이 바뀌었다(지시 범위 밖이어야 한다): ${data.panelTitleIconColor}`);
+});
+
+/**
+ * [2026-08-20, 관리자 지시(3차) 4번] "계산에 필요한 값이 아직 남았습니다"
+ * 문구와, 채워진 진행 동그라미(●)가 대표 색이다 — 빈 동그라미(○)는
+ * 그대로(대표 색이 아니다)여야 한다.
+ */
+test('관리자 지시(3차) 4번 — 체크리스트 문구와 채워진 동그라미가 대표 색이다, 빈 동그라미는 그대로다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.waitFor(`!!document.querySelector('.requirement-checklist')`, { timeoutMs: 8000 });
+
+  const before = await page.evaluate(`(() => {
+    const heading = document.querySelector('.req-progress-row .type-title-m');
+    const dots = [...document.querySelectorAll('.req-dot')];
+    return {
+      headingColor: heading ? getComputedStyle(heading).color : null,
+      dotCount: dots.length,
+      anyFilled: dots.some((d) => d.textContent === '●'),
+      unfilledColors: dots.filter((d) => d.textContent === '○').map((d) => getComputedStyle(d).color),
+    };
+  })()`);
+  assert.equal(before.headingColor, ACCENT_WARM_RGB, `체크리스트 문구 색이 대표 색이 아니다: ${before.headingColor}`);
+  assert.ok(before.dotCount > 0, '진행 동그라미를 찾지 못했다');
+  assert.equal(before.anyFilled, false, '아무것도 입력하지 않았는데 채워진 동그라미가 있다 — 이 검사가 전제를 잃었다');
+  for (const c of before.unfilledColors) {
+    assert.notEqual(c, ACCENT_WARM_RGB, `빈 동그라미가 이미 대표 색이다(채워지기 전엔 그대로여야 한다): ${c}`);
+  }
+
+  // 한 필드를 채워 동그라미 하나를 채운다.
+  await page.evaluate(`(() => {
+    const el = document.getElementById('currentSalary');
+    el.focus();
+    el.value = '6000';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await sleep(200);
+  const after = await page.evaluate(`(() => {
+    const filledDots = [...document.querySelectorAll('.req-item-filled .req-dot')];
+    return { filledColors: filledDots.map((d) => getComputedStyle(d).color), filledCount: filledDots.length };
+  })()`);
+  assert.ok(after.filledCount > 0, '필드를 채웠는데 채워진 동그라미가 없다');
+  for (const c of after.filledColors) {
+    assert.equal(c, ACCENT_WARM_RGB, `채워진 동그라미가 대표 색이 아니다: ${c}`);
+  }
+});

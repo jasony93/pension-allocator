@@ -349,13 +349,15 @@ test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 �
 });
 
 /**
- * [2026-08-20, 관리자 지시 1번] 도넛 크기 — 10% 확대.
+ * [2026-08-20, 관리자 지시 1번 — 관리자 지시(3차) 5번으로 뒤집힌 기대값]
+ * 도넛 크기 — 10% 확대(160→176px)였던 옛 기대값을, "도넛 라벨도 가능한
+ * 만큼 1.5배로"라는 이번 회차 지시대로 176×1.5=264px로 다시 뒤집는다.
  */
-test('도넛이 10% 확대된다(176px)', { skip: skipWithoutChrome }, async () => {
+test('도넛이 예시 폰트 50% 확대를 따라 264px다(160 × 1.1 × 1.5)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const data = await page.evaluate(READ_SHOWCASE);
-  assert.equal(data.donutWidth, 176, `1행 도넛 렌더 폭이 176px(160×1.1)가 아니다: ${data.donutWidth}`);
+  assert.equal(data.donutWidth, 264, `1행 도넛 렌더 폭이 264px(176×1.5)가 아니다: ${data.donutWidth}`);
 });
 
 /**
@@ -427,6 +429,83 @@ test('1행 입력 네 줄 글자 크기가 40px보다 작다', { skip: skipWitho
   for (const size of data.row1LineFontSizes) {
     assert.ok(px(size) < 40, `입력 줄 글자 크기(${size})가 40px보다 작아야 한다`);
   }
+});
+
+/**
+ * [2026-08-20, 관리자 지시(3차) 5번] **예시영역 폰트 50% 확대** — 대표
+ * 요소(정보 줄·이름 캡션·세액공제 카드 값)의 글자 크기를 실측해 옛값의
+ * 정확히 1.5배인지 잰다. 히어로 카피는 이 지시의 대상이 아니므로(직전
+ * 회차에 소유자가 만든 크기) 이 검사에서 다루지 않는다.
+ */
+test('관리자 지시(3차) 5번 — 예시영역 대표 요소 글자 크기가 옛값의 1.5배다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const line = root.querySelector('.example-persona-line');
+    const name = root.querySelector('.example-persona-name');
+    const amountValue = root.querySelector('.example-persona-amount .amount-card-value');
+    const amountLabel = root.querySelector('.example-persona-amount .amount-card-label');
+    return {
+      line: line ? getComputedStyle(line).fontSize : null,
+      name: name ? getComputedStyle(name).fontSize : null,
+      amountValue: amountValue ? getComputedStyle(amountValue).fontSize : null,
+      amountLabel: amountLabel ? getComputedStyle(amountLabel).fontSize : null,
+    };
+  })()`);
+  const px = (s) => Number((s ?? '0px').replace('px', ''));
+  const cases = [
+    ['정보 줄(.example-persona-line)', m.line, 18, 27],
+    ['이름 캡션(.example-persona-name)', m.name, 12.5, 18.75],
+    ['세액공제 카드 값(.amount-card-value)', m.amountValue, 26, 39],
+    ['세액공제 카드 라벨(.amount-card-label)', m.amountLabel, 13, 19.5],
+  ];
+  for (const [label, actual, oldPx, expectedPx] of cases) {
+    assert.ok(actual, `${label}을 찾지 못했다`);
+    assert.ok(
+      Math.abs(px(actual) - expectedPx) <= 0.5,
+      `${label} 글자 크기(${actual})가 옛값(${oldPx}px)의 1.5배(${expectedPx}px)가 아니다`,
+    );
+  }
+});
+
+/**
+ * [2026-08-20, 관리자 지시(3차) 1번] 히어로 카피를 더 오른쪽으로 —
+ * 소유자 표현 "스페이스바 15개 정도"(본문 폰트 기준 공백 15개 ≈ 60~75px).
+ * 카드 왼쪽 안쪽 여백(예시칸 자체의 padding-left, `--space-5`) 위에 이
+ * 만큼이 추가로 얹혔는지 잰다 — 카드 밖으로 넘치지 않는지도 함께.
+ */
+test('관리자 지시(3차) 1번 — 히어로 카피가 60~75px 더 오른쪽으로 밀리고, 카드 밖으로 넘치지 않는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  await sleep(200);
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const section = root.querySelector('.example-showcase');
+    const copy = root.querySelector('.example-hero-copy');
+    const cs = getComputedStyle(copy);
+    const sectionRect = section.getBoundingClientRect();
+    const copyRect = copy.getBoundingClientRect();
+    return {
+      marginLeft: parseFloat(cs.marginLeft),
+      copyRight: copyRect.right,
+      sectionRight: sectionRect.right,
+      docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  })()`);
+  assert.ok(
+    m.marginLeft >= 60 && m.marginLeft <= 75,
+    `히어로 카피 margin-left(${m.marginLeft}px)가 60~75px 범위 밖이다(소유자 표현 "스페이스바 15개 정도")`,
+  );
+  assert.ok(
+    m.copyRight <= m.sectionRight + 1,
+    `히어로 카피 오른쪽 끝(${m.copyRight})이 카드 오른쪽 끝(${m.sectionRight})을 넘는다`,
+  );
+  assert.equal(m.docOverflowsX, false, '히어로 카피가 오른쪽으로 밀리며 문서 가로 스크롤이 생겼다');
+  await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
 /**
@@ -505,21 +584,25 @@ test('1440×900에서 물음이 한 줄이다(Range 실측), 문서 가로 스�
 
 /**
  * 화살표가 1440×900 첫 화면 안에 스크롤 없이 보인다는 기준(2026-08-17
- * 소유자 지시 5번이 세운 기준) — [2026-08-20, 관리자 지시] "두 행으로 늘며
- * 깨질 수 있다, 깨지면 비례를 줄여서라도 유지하라"는 이번 회차 지시대로
- * 실측해 다시 고정한다. 실측(별도 스크립트) 결과 화살표 아래 끝이 y≈778px로
- * 900px 안에 있었다 — 두 행으로 늘어도 예산이 깨지지 않았다.
+ * 소유자 지시 5번이 세운 기준) — [2026-08-20, 관리자 지시(3차) 5번으로
+ * 뒤집힌 기대값] **"1440×900 화살표 유지가 목표지만, 폰트 50% 확대와
+ * 충돌해 도저히 안 되면 확대를 우선하고 화살표 바닥 실측값을 보고에
+ * 남겨라"는 소유자 지시가 이 검사의 강제력 자체를 없앴다.** 실측 결과
+ * 화살표 아래 끝이 900px를 크게 넘는다(두 행이 폰트 50% 확대로 훨씬
+ * 커지고, 히어로 카피도 옆이 아니라 아래로 내려가 세로로 쌓인다) —
+ * 지우지 않고 뒤집는다: 강제 통과 조건에서 `1366×768 실측`(artifact-
+ * build.browser.mjs)과 같은 "사실만 기록" 형태로 바꾼다.
  */
-test('1440×900 첫 화면 안에 화살표가 스크롤 없이 보인다(두 행으로 늘어도 예산이 유지된다)', { skip: skipWithoutChrome }, async () => {
+test('1440×900 실측(강제하지 않는다, 사실만 기록 — 관리자 지시(3차) 5번으로 화살표 예산이 깨졌다)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   await sleep(200);
   const data = await page.evaluate(READ_SHOWCASE);
   assert.ok(data.arrowRect, '화살표를 찾지 못했다');
-  assert.ok(
-    data.arrowRect.bottom <= 900,
-    `화살표 아래 끝(${data.arrowRect.bottom})이 900px 첫 화면을 벗어난다 — 스크롤해야 보인다`,
+  const fits = data.arrowRect.bottom <= 900;
+  console.log(
+    `[1440×900 실측] 화살표 bottom=${data.arrowRect.bottom.toFixed(1)}px, 뷰포트=900px, ${fits ? '들어간다' : `넘친다(${(data.arrowRect.bottom - 900).toFixed(1)}px)`}`,
   );
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
@@ -1036,8 +1119,11 @@ test('관리자 지시 — man-icon·female-icon 높이가 각 행의 입력 네
   const data = await page.evaluate(READ_SHOWCASE);
   assert.equal(data.iconRects.length, 2, '아이콘이 2개(행마다 하나)여야 한다');
 
-  const LINES_HEIGHT = 18 * 1.35 * 4 + 4 * 3;
-  const NAME_TAG_SHARE = 12.5 * 1.4 + 4;
+  // [2026-08-20, 관리자 지시(3차) 5번] 글자 크기가 1.5배(18→27px, 12.5→18.75px)로
+  // 커지며 이 계산식도 같은 비율로 다시 푼다 — "네 줄 높이 = 아이콘 높이"
+  // 규칙 자체는 그대로다.
+  const LINES_HEIGHT = 27 * 1.35 * 4 + 4 * 3;
+  const NAME_TAG_SHARE = 18.75 * 1.4 + 4;
   const EXPECTED = LINES_HEIGHT - NAME_TAG_SHARE;
   for (const [i, r] of data.iconRects.entries()) {
     assert.ok(
