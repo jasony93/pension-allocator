@@ -570,8 +570,6 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         const host = document.querySelector('.example-showcase-slot');
         const root = host.shadowRoot;
         const section = root.querySelector('.example-showcase');
-        const legendItem = root.querySelector('.donut-legend-item');
-        const legendSwatch = root.querySelector('.donut-legend-swatch');
         const arrowBtn = root.querySelector('.example-showcase-scroll-arrow');
         const arrowWrap = root.querySelector('.example-showcase-arrow-wrap');
         const labelGroup = root.querySelector('.donut-slice-label-group');
@@ -579,21 +577,21 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         // 안 그러면 6개(3+3)가 나와 "3개" 기대값이 깨진다.
         const donut = root.querySelector('.chart-donut');
         const labelEls = donut ? [...donut.querySelectorAll('.donut-slice-label')] : [];
+        const heroCopy = root.querySelector('.example-hero-copy');
         return {
           sectionDisplay: section ? getComputedStyle(section).display : null,
-          legendListStyle: legendItem ? getComputedStyle(legendItem).listStyleType : null,
-          // [2026-08-17, D72] ①②③ 배지가 없어져 옛 "검은 점" 신호(badgeFill)를
-          // 대신한다 — 범례 색 견본은 순수 CSS 크기 지정(width: 14px 등,
-          // .example-showcase-visual-col .donut-legend-swatch)에 기대는
-          // span이라, 스타일이 안 실리면 크기 없는 인라인 요소로
-          // 무너진다(실측 0에 가까운 폭).
-          legendSwatchWidth: legendSwatch ? legendSwatch.getBoundingClientRect().width : null,
+          // [2026-08-20, 관리자 지시(2차) 1번] 레전드를 통째로 뺐다 — 그
+          // 스타일 로드 신호(list-style: none·스와치 크기)도 함께 없어졌다.
+          // 대신 도넛 자체의 렌더 폭(176px, .example-persona-donut-col
+          // .chart-donut)을 신호로 쓴다 — 스타일이 안 실리면 SVG 고유
+          // viewBox 크기(220px 안팎)로 남아 이 값과 다르다.
+          donutWidth: donut ? donut.getBoundingClientRect().width : null,
+          heroCopyGap: heroCopy ? getComputedStyle(heroCopy).gap : null,
           arrowBtnWidth: arrowBtn ? arrowBtn.getBoundingClientRect().width : null,
-          // [2026-08-20, 관리자 지시 3번] 화살표 색이 rgb(0, 255, 153)로
-          // 바뀌었다 — 브라우저 기본 버튼 글자색은 이 값이 될 수 없으므로,
-          // "우리 <style>이 실렸는가"를 가리는 신호를 옛 "테두리 없음"(이제
-          // 라이트 모드에서는 대비 보완을 위해 의도적으로 테두리가 있어
-          // 이 신호로 못 쓴다)에서 이 색으로 바꾼다.
+          // [2026-08-20, 관리자 지시(2차) 5번 — 뒤집힌 기대값] 화살표 색이
+          // rgb(0, 255, 153)(형광 민트, 지난 회차)에서 rgb(230, 115, 0)
+          // (주황)로 다시 바뀌었다 — 브라우저 기본 버튼 글자색은 둘 다 될
+          // 수 없으므로 여전히 "우리 <style>이 실렸는가"의 신호로 쓴다.
           arrowBtnColor: arrowBtn ? getComputedStyle(arrowBtn).color : null,
           // [2026-08-17, D72] 새 구조도 감싼 조건에서 스타일을 입는지 함께
           // 확인한다 — 조각 이름+비율 라벨 그룹의 pointer-events(CSS 규칙
@@ -605,14 +603,17 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         };
       })()`);
 
+      // [2026-08-20, 관리자 지시(2차) 1번 — 뒤집힌 기대값] 옛 검사는 범례
+      // 스타일(list-style: none·스와치 크기)로 CSS 로드를 확인했다 — 레전드
+      // 자체가 없어졌으므로 도넛 렌더 폭(176px)으로 신호를 바꾼다.
       assert.equal(
-        m.legendListStyle,
-        'none',
-        `아티팩트처럼 감싼 조건 — 범례 목록에 점이 남아 있다(list-style: ${m.legendListStyle}) — 스타일이 실리지 않았다`,
+        m.donutWidth,
+        176,
+        `아티팩트처럼 감싼 조건 — 도넛 렌더 폭이 176px가 아니다(width: ${m.donutWidth}px) — 스타일이 실리지 않았을 수 있다`,
       );
       assert.ok(
-        m.legendSwatchWidth > 5,
-        `아티팩트처럼 감싼 조건 — 범례 색 견본이 크기 없는 인라인 요소로 그려진다(width: ${m.legendSwatchWidth}px) — 스타일이 실리지 않았다`,
+        m.heroCopyGap && m.heroCopyGap !== '0px',
+        `아티팩트처럼 감싼 조건 — 히어로 카피 블록 간격이 0이다(gap: ${m.heroCopyGap}) — 스타일이 실리지 않았다`,
       );
       // [2026-08-17, 관리자 지시(3차) 4번] 화살표 실제 크기가 112px→100px로
       // 줄어(−10%) 옛 문턱값(>100)이 새 정상 크기(정확히 100px)를 걸러내게
@@ -625,8 +626,8 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
       );
       assert.equal(
         m.arrowBtnColor,
-        'rgb(0, 255, 153)',
-        `아티팩트처럼 감싼 조건 — 화살표 색이 rgb(0, 255, 153)이 아니다(color: ${m.arrowBtnColor}) — 스타일이 실리지 않았다`,
+        'rgb(230, 115, 0)',
+        `아티팩트처럼 감싼 조건 — 화살표 색이 rgb(230, 115, 0)이 아니다(color: ${m.arrowBtnColor}) — 스타일이 실리지 않았다`,
       );
       // [2026-08-20, 관리자 지시] 옛(단일 인물, 2열 grid) 배치는 이제
       // .example-showcase-multi-persona 수정자가 flex로 바꾼다 — 뒤집힌

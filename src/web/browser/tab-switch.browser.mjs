@@ -157,3 +157,71 @@ test('예시 블록은 「절세계좌 계산기」 탭에서만 보이고, 「�
   );
   assert.ok(backOnCalculator.width > 0 && backOnCalculator.height > 0, `첫 탭으로 돌아오면 예시 블록이 다시 보여야 한다: ${JSON.stringify(backOnCalculator)}`);
 });
+
+/**
+ * [2026-08-20, 관리자 지시(2차) 6번] 로고를 누르면 첫 랜딩(첫 탭 활성 +
+ * 페이지 맨 위)으로 돌아간다 — **입력값은 지우지 않는다.** 연금 역산기
+ * 탭에 값을 채운 채로 로고를 누르고, (1) 활성 탭이 절세계좌 계산기로
+ * 바뀌고 (2) 스크롤이 맨 위로 오고 (3) 역산기 탭에 채운 값이 그대로
+ * 남아 있는지(탭을 다시 눌러 확인) 잰다.
+ */
+test('로고를 누르면 첫 탭이 활성화되고 페이지 맨 위로 스크롤된다(입력값은 지우지 않는다)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.waitFor(`!!document.querySelector('.app-header-logo-button')`, { timeoutMs: 8000 });
+
+  // 역산기 탭에 값을 채우고, 그 탭이 활성인 채로 아래로 스크롤한다.
+  await page.clickElement(`document.getElementById('tab-pension-reverse')`);
+  await sleep(150);
+  const set = (id, v) => `(() => { const el = document.getElementById(${JSON.stringify(id)}); el.focus(); el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+  await page.evaluate(set('reverseBirthDate', '19800101'));
+  await page.evaluate(set('targetMonthlyIncome', '250'));
+  await page.evaluate(`window.scrollTo(0, 600)`);
+  await sleep(100);
+  const beforeScroll = await page.evaluate('window.scrollY');
+  assert.ok(beforeScroll > 200, `로고 클릭 전 스크롤 위치(${beforeScroll})가 이미 맨 위다 — 이 검사가 스크롤 이동을 관측할 수 없다`);
+
+  await page.clickElement(`document.querySelector('.app-header-logo-button')`);
+  await page.waitFor(`document.getElementById('tab-calculator').getAttribute('aria-selected') === 'true'`, { timeoutMs: 3000 });
+  await sleep(300); // smooth 스크롤이 완전히 멈출 시간
+
+  const after = await page.evaluate(`(() => ({
+    activeTab: document.getElementById('tab-calculator').getAttribute('aria-selected'),
+    calculatorHidden: document.getElementById('tabpanel-calculator').classList.contains('tab-panel-hidden'),
+    scrollY: window.scrollY,
+  }))()`);
+  assert.equal(after.activeTab, 'true', '로고를 눌러도 첫 탭이 활성화되지 않았다');
+  assert.equal(after.calculatorHidden, false, '로고를 눌러도 첫 탭 패널이 여전히 숨어 있다');
+  assert.ok(after.scrollY < 50, `로고를 눌렀는데 페이지가 맨 위로 스크롤되지 않았다(scrollY=${after.scrollY})`);
+
+  // 입력값은 지워지지 않았다 — 역산기 탭으로 돌아가 확인한다.
+  await page.clickElement(`document.getElementById('tab-pension-reverse')`);
+  await sleep(150);
+  const preserved = await page.evaluate(`document.getElementById('targetMonthlyIncome').value`);
+  assert.equal(preserved, '250', '로고 클릭이 역산기 탭에 채운 입력값을 지웠다 — 지우지 않는다는 지시였다');
+});
+
+/** [2026-08-20, 관리자 지시(2차) 6번] 커서·접근성 시맨틱 — 버튼이고, 커서가 포인터다. */
+test('로고 버튼이 <button> 시맨틱이고, 커서가 pointer다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const btn = document.querySelector('.app-header-logo-button');
+    return {
+      tagName: btn ? btn.tagName : null,
+      type: btn ? btn.getAttribute('type') : null,
+      ariaLabel: btn ? btn.getAttribute('aria-label') : null,
+      cursor: btn ? getComputedStyle(btn).cursor : null,
+    };
+  })()`);
+  assert.equal(m.tagName, 'BUTTON', '로고가 버튼 시맨틱이 아니다');
+  assert.equal(m.type, 'button');
+  assert.ok(m.ariaLabel, '로고 버튼에 접근성 레이블(aria-label)이 없다');
+  assert.equal(m.cursor, 'pointer', `로고 버튼 커서가 pointer가 아니다: ${m.cursor}`);
+});
+
+/** [2026-08-20, 관리자 지시(2차) 7번] 활성 탭 밑줄 색 — `rgb(230, 115, 0)`. */
+test('활성 탭 밑줄 색이 rgb(230, 115, 0)이다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const borderColor = await page.evaluate(`getComputedStyle(document.querySelector('.app-tab-active')).borderBottomColor`);
+  assert.equal(borderColor, 'rgb(230, 115, 0)', `활성 탭 밑줄 색이 rgb(230, 115, 0)이 아니다: ${borderColor}`);
+});

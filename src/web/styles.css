@@ -163,15 +163,30 @@
      자체의 색은 전혀 건드리지 않고 그 뒤판만 밝혀 윤곽선이 실루엣 경계에서
      여전히 갈라져 보이게 한다. */
   --example-icon-plate-bg: transparent;
-  /* [2026-08-20, 관리자 지시 — 첫 탭 예시 화살표 색] `.example-showcase-scroll-arrow`가
-     `rgb(0, 255, 153)`(형광 민트)로 바뀐다. **라이트 배경(`--surface-raised`
-     `#ffffff`) 대비 실측 — WCAG 상대휘도 계산으로 대비비 약 1.33:1**(민트
-     휘도 ≈0.738, 흰색 휘도 1.0 → (1.05)/(0.788)≈1.33) — 3:1(WCAG 2.1
-     비텍스트 대비 최소 기준)에 한참 못 미친다. 소유자가 허용한 대로 **회색
-     테두리로 감싼다**(대비 부족을 아이콘 색 자체가 아니라 버튼 윤곽으로
-     보완한다) — man-icon과 같은 이유로 커스텀 프로퍼티 값으로 켠다(이
-     버튼도 Shadow DOM 안에 그려져 `:root` 선택자가 안까지 못 미친다). */
-  --example-arrow-border: 1.5px solid var(--border-strong);
+  /* [2026-08-20, 관리자 지시(2차) 5·7번] **화살표·활성 탭 밑줄 색이
+     `rgb(0, 255, 153)`(형광 민트, 지난 회차)에서 `rgb(230, 115, 0)`
+     (주황)로 다시 바뀐다.** 이번에는 회색 테두리로 감싸는 보완이 없다 —
+     소유자가 "이 주황은 충분할 것"이라고 판단했고, 실측(WCAG 상대휘도
+     계산)으로 확인했다:
+     - **라이트 배경(`--surface-raised` `#ffffff`) 대비 — 약 3.08:1**
+       (주황 휘도 ≈0.291, 흰색 휘도 1.0 → (1.05)/(0.341)≈3.08). WCAG 2.1
+       비텍스트 컴포넌트·"large text" 최소 기준(3:1)을 **근소하게 넘는다**
+       — 지난 회차 민트(≈1.33:1, 기준 미달)와 달리 회색 테두리 없이도
+       충분하다.
+     - **다크 배경(`#1e2226`) 대비 — 약 5.20:1**(주황 휘도 ≈0.291, 다크
+       휘도 ≈0.0156 → (0.291+0.05)/(0.0156+0.05)≈5.20). 3:1을 넉넉히
+       넘는다.
+     이 값은 화살표(`.example-showcase-scroll-arrow`)·활성 탭 밑줄
+     (`.app-tab-active`, 관리자 지시 7번)·히어로 카피의 강조 밑줄
+     (`.example-hero-mark`, 관리자 지시 4번)이 함께 쓴다 — 소유자가 이
+     주황과 원본 카피의 `#E2711D`가 "사실상 같은 색"이라고 판단해 하나로
+     합쳤다. **`--example-arrow-border`(지난 회차의 회색 테두리 보완)는
+     지웠다** — 더는 필요하지 않다. */
+  --accent-warm: rgb(230, 115, 0);
+  /* 히어로 카피의 강조 밑줄 전용 — 원본(`rgba(226, 113, 29, 0.45)`)과 같은
+     알파값을 새 색(`--accent-warm`)에 입힌다. 장식(밑줄)이라 텍스트 대비
+     규칙이 적용되지 않는다. */
+  --accent-warm-underline: rgba(230, 115, 0, 0.45);
 }
 
 /* 2) 운영체제가 다크이고 사용자가 라이트를 명시하지 않았을 때. */
@@ -203,9 +218,6 @@
     --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
     /* 위 :root 주석 참고 — 검정 윤곽선용 옅은 원형 판. */
     --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
-    /* 다크 배경(`#1e2226`) 대비 민트 휘도 대비비 ≈12:1 — 3:1을 넉넉히
-       넘는다(실측 계산, 위 라이트 값 옆 주석 참고). 테두리가 필요 없다. */
-    --example-arrow-border: none;
   }
 }
 
@@ -233,7 +245,6 @@
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
   --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
   --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
-  --example-arrow-border: none;
 }
 
 /* 4) 인쇄는 **항상 라이트**다(design-system 8.5절). 대부분의 프린터 설정에서
@@ -260,6 +271,12 @@
     --shadow-1: 0 1px 2px rgba(16, 18, 20, 0.06), 0 4px 12px rgba(16, 18, 20, 0.08);
     --shadow-2: 0 4px 12px rgba(16, 18, 20, 0.14);
     --shadow-3: 0 12px 32px rgba(16, 18, 20, 0.22);
+    /* 이 자리(화살표·탭 밑줄·히어로 카피)는 인쇄물에 나오지 않지만
+       (예시·탭 바·화살표 전부 `@media print`에서 숨는다), 리터럴 색 토큰은
+       테마·매체와 무관하게 항상 같은 값이라 여기도 같은 값을 적는다
+       (`styles-tokens.test.mjs` 8.5절 규칙). */
+    --accent-warm: rgb(230, 115, 0);
+    --accent-warm-underline: rgba(230, 115, 0, 0.45);
   }
 }
 
@@ -364,7 +381,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   padding: var(--space-2) 0; border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
-.app-tab-active { color: var(--text-primary); border-bottom-color: var(--accent); }
+/* [2026-08-20, 관리자 지시(2차) 7번] 밑줄 색이 공용 `--accent`(파랑, 링크·
+   포커스 링 등 다른 곳에서 여전히 쓰인다)에서 `--accent-warm`(주황,
+   화살표·히어로 카피 강조와 같은 색)으로 바뀐다 — `--accent` 자체는
+   건드리지 않는다(이 규칙 하나만 바꾼다, 다른 `--accent` 사용처는 무관). */
+.app-tab-active { color: var(--text-primary); border-bottom-color: var(--accent-warm); }
 .app-tab:not(.app-tab-active):hover { color: var(--text-primary); }
 
 /* 오른쪽 묶음 — 과세연도 표기 + `ThemeControl`. 옛 `.app-header-titles`가
@@ -577,19 +598,25 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    헷갈리지 않도록 0으로 명시한다. */
 .example-showcase-question-top { margin: 0 0 var(--space-2); text-align: left; }
 
-/* 인물 행 — 기본 정보(아이콘+이름+네 줄) → 도넛/범례 → 세액공제액, 왼쪽부터
-   가로로(관리자 지시 2번). `flex-wrap`을 켜 좁은 화면에서 세 칸이 한 줄에
-   못 들어가면 자동으로 다음 줄로 넘어간다 — 최근 역산기 결과(도넛+표)가
-   375px에서 넘친 것과 같은 함정(고정폭 자식이 부모를 밀어내는 것)을 `flex-
-   wrap` + `min-width: 0`으로 피한다. */
+/* [2026-08-20, 관리자 지시(2차) 2번] **고정 그리드 열로 다시 짰다.** 옛
+   flex(`flex: 0 1 auto`인 정보 열이 내용만큼만 차지)는 1행·2행의 기본 정보
+   문구 길이가 달라(예: "소득: 4,000만원" vs "소득 : 8,000만원 (사업소득)")
+   행마다 도넛 열·절세액 열의 시작 x좌표가 어긋났다 — 실측으로 확인된
+   결함(소유자 지시). `grid-template-columns`를 **리터럴 값**으로 고정하면
+   (컨텐츠 폭과 무관하게 항상 같은 세 트랙) 두 행이 같은 x좌표에서
+   시작한다. 열 사이 간격도 옛값(`space-5`, 24px)의 **정확히 두 배**
+   (`space-7`, 48px)로 넓힌다(소유자 지시 원문). 세 트랙 폭(정보 330 + 도넛
+   190 + 절세액 200)과 간격 둘(48×2=96)의 합은 664px — 예시칸 전체 폭의
+   대략 절반을 살짝 넘는 지점에서 이 열이 끝나, 오른쪽에 히어로 카피가
+   들어갈 자리를 남긴다(`.example-persona-rows-and-copy`, 아래). */
 .example-persona-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 330px 190px 200px;
+  column-gap: var(--space-7);
   align-items: center;
-  gap: var(--space-5);
   min-width: 0;
 }
-.example-persona-info { display: flex; align-items: flex-start; gap: var(--space-3); flex: 0 1 auto; min-width: 0; }
+.example-persona-info { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
 .example-persona-icon-col { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); flex: 0 0 auto; }
 /* 아이콘 열 전체(아이콘+이름표)가 네 줄 전체 높이와 같아야 두 열을 나란히
    놓아도 위쪽이 맞는다 — 옛 `.example-showcase-input-icon`(세 줄 기준)과
@@ -616,21 +643,25 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   color: var(--text-primary); word-break: keep-all; white-space: nowrap;
 }
 
+/* [2026-08-20, 관리자 지시(2차) 1번] **아래 레전드를 통째로 뺐다** — 조각
+   위에 이미 이름+금액이 있어(`applyDonutSliceInlineLabels`) 같은 정보를
+   되풀이하지 않는다(`ui/example-showcase.js`가 더는 `donutLegend`를
+   부르지 않는다 — 이 칸에는 도넛 하나만 남는다). **도넛을 10% 확대**
+   (160px→176px, `160*1.1=176`) — SVG는 `viewBox` 좌표계라 CSS 렌더 폭만
+   키워도 안의 조각·라벨 글자가 함께 비례로 커진다("도넛과 그 위 글자들을
+   10% 확대"라는 지시를 한 값으로 만족한다). */
 .example-persona-donut-col {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-1); flex: 0 0 auto; min-width: 0;
+  min-width: 0;
 }
-.example-persona-donut-col .chart-donut { width: 160px; max-width: 100%; }
-.example-persona-donut-col .donut-legend { display: flex; width: fit-content; margin: 0 auto; gap: var(--space-1); }
-.example-persona-donut-col .donut-legend-item { font-size: 13px; line-height: 1.3; font-weight: 700; gap: var(--space-2); }
-.example-persona-donut-col .donut-legend-swatch { width: 12px; height: 12px; }
-.example-persona-donut-col .donut-legend-name { word-break: keep-all; }
+.example-persona-donut-col .chart-donut { width: 176px; max-width: 100%; }
 
 /* 세액공제액 — 소유자가 축소를 허용했다(두 행이 한 카드 안에 들어가야
    한다, 관리자 지시 2번). 옛 `.example-showcase-amount`(61px 값, 전폭
    720px — 역산기 탭이 그대로 쓴다)는 손대지 않고 이 카드 전용의 작은 값을
-   새로 정한다. */
-.example-persona-amount { flex: 0 1 220px; min-width: 160px; max-width: 240px; }
+   새로 정한다. 그리드 트랙(200px, 위 `.example-persona-row`)을 그대로
+   채운다 — 옛 flex-basis 대신 트랙 폭이 이미 고정 폭 역할을 진다. */
+.example-persona-amount { width: 100%; min-width: 0; }
 .example-persona-amount .amount-card {
   background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-l);
   padding: var(--space-3); box-shadow: var(--shadow-2);
@@ -641,9 +672,98 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .example-persona-amount .amount-card-label { font-size: 13px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
 .example-persona-amount .amount-card-value { font-size: 26px; line-height: 1.15; }
 
-/* 구분선 — 얇은 회색(관리자 지시 2번). `<hr>` 기본 스타일(입체 테두리)을
-   지우고 한 줄 색으로 대체한다. */
-.example-persona-divider { border: none; border-top: 1px solid var(--border-subtle); margin: 0; width: 100%; }
+/* [2026-08-20, 관리자 지시(2차) 3번 — 명시적 번복] **두 행 사이 회색
+   구분선을 지웠다.** 지난 회차가 새로 넣으라고 지시했던 바로 그
+   `.example-persona-divider` 규칙은 지운다 — 소유자가 이번 회차에 다시
+   지우라고 판정했다(관리자 지시 원문 "지난 회차 지시의 명시 번복"). 클래스
+   자체를 죽은 채로 남기지 않는다 — `ui/example-showcase.js`도 이 요소를
+   더는 만들지 않는다. */
+.example-persona-rows-stack {
+  display: flex; flex-direction: column; gap: var(--space-4);
+  flex: 0 0 auto; min-width: 0;
+}
+
+/* [2026-08-20, 관리자 지시(2차) 2·4번] 왼쪽(두 행) | 오른쪽(히어로 카피).
+   `flex-wrap`을 켜 좁은 화면(모바일)에서 카피가 자동으로 다음 줄(아래)로
+   넘어가게 한다(관리자 지시 4번 (d) "모바일에서는 예시 아래로") — 별도
+   모바일 규칙 없이 이 한 속성으로 순서(DOM 순서와 같다: 행 → 카피)가
+   시각 순서와 일치한다. */
+.example-persona-rows-and-copy {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  gap: var(--space-6); min-width: 0;
+}
+
+/* 히어로 카피(관리자 지시(2차) 4번) — `src/design/예시문구.html`의 `.copy`
+   블록을 그대로 옮긴다. 폭·타이포 축척은 그 원본의 `clamp()`를 유지하되
+   `rem` 기준(브라우저 루트 16px, 이 저장소가 바꾸지 않는 값)은 그대로
+   두고, **색만 이 저장소의 테마 토큰으로 옮긴다**(원본은 라이트 고정
+   hex였다 — 아래 각 규칙 참고). `flex: 1 1 320px`로 남는 폭을 채우되
+   최소 320px 밑으로는 줄지 않는다(그 아래로 줄면 `flex-wrap`이 다음 줄로
+   넘긴다 — 모바일 처방과 같은 메커니즘). */
+.example-hero-copy {
+  flex: 1 1 320px; min-width: 320px; max-width: 560px;
+  display: flex; flex-direction: column; gap: 1.75rem;
+}
+.example-hero-headline {
+  margin: 0; font-weight: 800; letter-spacing: -0.02em;
+  font-size: clamp(1.875rem, 1.1rem + 2.6vw, 3.0625rem);
+  line-height: 1.28;
+  color: var(--text-primary);
+}
+.example-hero-headline-line {
+  display: block; opacity: 0;
+  animation: example-hero-fade-up 0.6s ease forwards;
+}
+.example-hero-headline-line:nth-child(1) { animation-delay: 0.05s; }
+.example-hero-headline-line:nth-child(2) { animation-delay: 0.18s; }
+.example-hero-headline-line:nth-child(3) { animation-delay: 0.31s; }
+/* 취소선 — "틀린 답"이라는 뜻을 이미 담은 토큰(`--state-error`, 고지·오류에
+   쓰는 바로 그 빨강)을 재사용한다. 원본은 리터럴 `#C1440E`(주황빛 빨강)
+   하나뿐이었다 — 새 토큰을 만드는 대신 뜻이 같은 기존 토큰으로 옮긴다. */
+.example-hero-strike {
+  color: var(--text-muted);
+  text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: var(--state-error);
+}
+/* 강조 — 소유자 지시 4번(b): 원본 `--accent(#E2711D)`와 소유자 지시 5번의
+   화살표 색(`rgb(230, 115, 0)`)이 사실상 같은 색이라는 소유자 판단대로
+   `--accent-warm` 하나로 합친다(`:root`, 위). 라이트·다크 대비 실측은
+   `--accent-warm` 선언 옆 주석 참고 — 헤드라인 큰 글자(원문 "large text"
+   기준)에서는 두 배경 다 3:1 이상이다. */
+.example-hero-mark {
+  color: var(--accent-warm);
+  text-decoration: underline; text-decoration-color: var(--accent-warm-underline);
+  text-decoration-thickness: 3px; text-underline-offset: 6px;
+}
+.example-hero-body {
+  display: flex; flex-direction: column; gap: 0.625rem;
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.46s;
+}
+.example-hero-body p {
+  margin: 0; font-size: clamp(1rem, 0.92rem + 0.3vw, 1.125rem); font-weight: 500; line-height: 1.65;
+  color: var(--text-secondary);
+}
+.example-hero-body p strong { color: var(--text-primary); font-weight: 700; }
+.example-hero-promise {
+  margin: 0; font-size: clamp(1.25rem, 1.05rem + 1vw, 1.625rem); font-weight: 800; letter-spacing: -0.01em; line-height: 1.4;
+  color: var(--text-primary);
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.6s;
+}
+.example-hero-caption {
+  margin: 0; font-size: 0.875rem; font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.72s;
+}
+@keyframes example-hero-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* 원본과 같은 조건 — 이 파일 전역 규약(`example-showcase-arrow-bounce` 등)과
+   같은 패턴이다. */
+@media (prefers-reduced-motion: reduce) {
+  .example-hero-headline-line, .example-hero-body, .example-hero-promise, .example-hero-caption {
+    animation: none; opacity: 1; transform: none;
+  }
+}
 
 .example-showcase-text-col {
   grid-area: text;
@@ -1005,15 +1125,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    그 값을 그대로 물려받는다(`ui/example-showcase.js` `exampleShowcaseScrollArrowIcon`
    머리말 참고).
 
-   **[2026-08-20, 관리자 지시] 유휴 색이 `--text-secondary`에서
-   `rgb(0, 255, 153)`(고정값, 소유자가 지정한 리터럴이라 테마 토큰이 아니다)로
-   바뀐다.** 첫 탭·역산기 탭이 이 클래스를 공유하므로 두 탭의 화살표가 함께
-   바뀐다(공용 스타일 — 역산기 쪽은 구조를 건드리지 않았으니 이 색만 그대로
-   물려받는다). **라이트 모드에서 대비가 부족해**(위 `:root`의
-   `--example-arrow-border` 옆 주석 — 실측 대비비 ≈1.33:1, WCAG 3:1 미달)
-   `border: var(--example-arrow-border)`로 회색 테두리를 감싼다(소유자가
-   명시로 허용한 완화). 다크 모드는 대비가 이미 충분해(≈12:1)
-   `--example-arrow-border: none`이라 테두리가 보이지 않는다.
+   **[2026-08-20, 관리자 지시(2차) 5번 — 뒤집힌 기대값] 유휴 색이
+   `rgb(0, 255, 153)`(형광 민트, 지난 회차)에서 `--accent-warm`
+   (`rgb(230, 115, 0)`, 토큰화)으로 다시 바뀐다.** 첫 탭·역산기 탭이 이
+   클래스를 공유하므로 두 탭의 화살표가 함께 바뀐다(공용 스타일). **이번
+   회차는 회색 테두리 보완이 없다** — 실측(대비비 ≈3.08:1 라이트 · ≈5.20:1
+   다크, 근거는 `:root`의 `--accent-warm` 선언 옆 주석) 결과 지난 회차
+   민트(≈1.33:1, 기준 미달)와 달리 두 배경 모두 WCAG 3:1을 넘어 테두리
+   없이도 충분하다 — 소유자의 "이 주황은 충분할 것"이라는 판단이 실측으로
+   확인됐다. `border: none`으로 되돌린다(`--example-arrow-border` 자체를
+   지웠다, 위 `:root` 참고).
 
    **채운 원을 완전히 버리지는 않는다 — 대신 아주 옅은 배경 틴트만 hover에
    남긴다.** 배경을 아예 없애면(idle=hover 둘 다 transparent) 기존 hover
@@ -1078,13 +1199,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .example-showcase-scroll-arrow {
   width: 100px; height: 100px;
   display: flex; align-items: center; justify-content: center;
-  border: var(--example-arrow-border); border-radius: var(--radius-full); padding: 0;
+  border: none; border-radius: var(--radius-full); padding: 0;
   background-color: transparent;
-  color: rgb(0, 255, 153);
+  color: var(--accent-warm);
   cursor: pointer;
   box-shadow: none;
   transition: background-color 120ms ease-out, color 120ms ease-out,
-    transform 120ms ease-out, box-shadow 120ms ease-out, border-color 120ms ease-out;
+    transform 120ms ease-out, box-shadow 120ms ease-out;
 }
 .example-showcase-scroll-arrow:hover {
   background-color: var(--accent-subtle);
@@ -1140,10 +1261,34 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      역산기 탭이 아직 쓰는 `.example-showcase-text-col`의 모바일 가운데 정렬
      규칙(아래)과 같은 이유다. */
   .example-showcase-question-top { text-align: center; }
-  .example-persona-row { flex-direction: column; align-items: center; text-align: center; gap: var(--space-3); }
+  /* [2026-08-20, 관리자 지시(2차) 2번] 인물 행이 flex에서 고정 그리드로
+     바뀌면서(데스크톱 3열) 모바일에서도 grid 속성을 다시 준다 — 옛
+     `flex-direction: column`은 grid 컨테이너에 아무 효과가 없다. 세 칸을
+     1열로 되돌리고 가운데 정렬한다(옛 방향과 같다). */
+  .example-persona-row {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    row-gap: var(--space-3);
+  }
   .example-persona-info { flex-direction: column; align-items: center; }
   .example-persona-lines { align-items: center; }
   .example-persona-line { font-size: 16px; white-space: normal; }
+  /* [2026-08-20, 관리자 지시(2차) 4번 (d)] 모바일에서는 카피가 예시 아래로
+     내려간다 — `.example-persona-rows-and-copy`의 `flex-wrap: wrap`(기본
+     CSS, 위)이 이미 좁은 폭에서 자동으로 줄바꿈하지만, 가운데 정렬과 전체
+     폭 사용을 명시로 맞춘다. */
+  .example-persona-rows-and-copy { flex-direction: column; align-items: center; }
+  .example-persona-rows-stack { width: 100%; align-items: center; }
+  /* [2026-08-20, 관리자 실측 회귀 — 320px] 데스크톱 `min-width: 320px`
+     (오른쪽 카피가 320px 밑으로는 안 줄고 다음 줄로 넘어가게 하는 값,
+     위 기본 규칙)이 375px보다 좁은 뷰포트(예: 320px, 좌우 패딩 16px씩
+     빼면 콘텐츠 폭 288px)에서는 그 최솟값 자체가 콘텐츠 폭보다 커 카드가
+     가로로 넘쳤다(실측: `docScrollWidth` 353 vs `clientWidth` 320). 모바일
+     에서는 `.example-persona-rows-and-copy`가 이미 `flex-direction: column`
+     (위)이라 "카피가 옆으로 안 들어가면 다음 줄"이라는 min-width의 원래
+     역할 자체가 필요 없다 — 0으로 되돌린다. */
+  .example-hero-copy { width: 100%; max-width: 100%; min-width: 0; text-align: left; }
   /* [2026-08-18, 관리자 지시(4차) 1번] 데스크톱의 8ch 이동을 되돌린다 —
      모바일은 가운데 정렬(`text-align: center`)이라 좌우로 미는 것 자체가
      이 배치와 맞지 않는다(밀면 중앙이 아니라 오른쪽으로 치우쳐 보인다). */
@@ -1804,6 +1949,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .donut-slice-label-group { pointer-events: none; }
 .donut-slice-label-name { font-weight: 700; font-variant-numeric: tabular-nums; }
 .donut-slice-label-pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* [2026-08-20, 관리자 지시 — 첫 탭 예시 도넛 개편] `sliceContent: 'name_amount'`
+   (예시 전용, `charts.js` `applyAmountSliceLabel`)가 그리는 셋째 클래스 —
+   금액 줄. 이름과 같은 굵기(700, "숫자가 핵심 정보"라는 위계)로, 비율보다
+   위다. */
+.donut-slice-label-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
 .donut-slice-label-leader { stroke: var(--border-strong); stroke-width: 1.5; }
 
 .donut-legend { display: none; list-style: none; margin: var(--space-3) 0 0; padding: 0; flex-direction: column; gap: var(--space-2); }
@@ -2144,6 +2294,18 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    기본 크기 규칙(내용 크기, 100% 채움이 아니다)이 그대로 성립하므로 별도
    폭 지정이 필요 없다. */
 .app-header-logo { display: flex; align-items: center; }
+/* [2026-08-20, 관리자 지시(2차) 6번] 로고가 이제 버튼 하나를 감싼다(첫
+   랜딩으로 돌아가는 동작, `ui/app.js` `headerLogo`) — 버튼 기본 크롬(테두리·
+   배경·패딩)을 지우고 로고 두 `<img>`가 옛(버튼이 없던 시절)과 똑같은
+   자리·크기로 보이게 `display: flex; align-items: center;`를 그대로
+   물려준다. `cursor: pointer`는 브라우저 기본 버튼 커서(`default`인
+   경우가 있다)에 기대지 않고 명시로 준다. */
+.app-header-logo-button {
+  display: flex; align-items: center;
+  border: none; background: transparent; padding: 0; margin: 0;
+  cursor: pointer;
+}
+.app-header-logo-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: var(--radius-s); }
 
 /* 두 탭 패널의 공통 부모 — 그 자체는 레이아웃을 갖지 않는다. 실제 좌우
    분할은 각 `.app-main`(탭별로 하나씩, 동시에 마운트된다)이 각자 진다. */

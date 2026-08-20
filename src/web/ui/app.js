@@ -68,7 +68,7 @@ import { createStore } from '../state/store.js';
 import { createReverseStore, wonToManwonInputString } from '../state/reverse-store.js';
 import { readShareFragmentFromLocation } from '../state/share-link.js';
 import { readTabIdFromLocation, writeActiveTabToLocation, DEFAULT_TAB_ID } from '../state/tab-fragment.js';
-import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
+import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange, prefersReducedMotion } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
 import { LOGO_LIGHT_DATA_URI, LOGO_DARK_DATA_URI, LOGO_INTRINSIC_WIDTH, LOGO_INTRINSIC_HEIGHT } from '../assets/logo.js';
 
@@ -96,23 +96,43 @@ function sharedFragmentInvalidNotice() {
  * (`screens.md` 2.1.2절 (2)). 그래서 이 함수는 로고만 그리고, 탭 행은
  * `tab-bar.js`가 따로 진다(`mountApp` 아래).
  */
-function headerLogo() {
-  return el('div', { class: 'app-header-logo' }, [
-    el('img', {
-      class: 'app-logo app-logo-light',
-      src: LOGO_LIGHT_DATA_URI,
-      alt: '돈길',
-      width: LOGO_INTRINSIC_WIDTH,
-      height: LOGO_INTRINSIC_HEIGHT,
-    }),
-    el('img', {
-      class: 'app-logo app-logo-dark',
-      src: LOGO_DARK_DATA_URI,
-      alt: '돈길',
-      width: LOGO_INTRINSIC_WIDTH,
-      height: LOGO_INTRINSIC_HEIGHT,
-    }),
-  ]);
+/**
+ * [2026-08-20, 관리자 지시(2차) 6번] **로고를 누르면 첫 랜딩으로 돌아간다** —
+ * 「절세계좌 계산기」 탭을 활성화하고 페이지 맨 위로 스크롤한다(입력값은
+ * 지우지 않는다 — `setActiveTab`이 표시만 전환할 뿐 store를 건드리지
+ * 않는다, `mountApp` 아래).
+ *
+ * **버튼이다**(`<a>`가 아니다) — 다른 문서로 이동하지 않는다, 예시의 이동
+ * 화살표(`example-showcase.js`의 `exampleShowcaseScrollArrow`)와 같은
+ * 판단. `type="button"`·`aria-label`로 접근성 시맨틱을 준다(로고 두
+ * `<img>`는 `alt="돈길"`이 이미 있지만, 버튼 자체의 목적은 "이동"이지
+ * "이미지 보기"가 아니므로 버튼에도 별도 레이블을 준다). `cursor: pointer`
+ * 는 `styles.css`(`.app-header-logo-button`)가 명시로 준다 — 버튼 기본
+ * 커서는 브라우저마다 갈릴 수 있다.
+ */
+function headerLogo(onClick) {
+  const button = el(
+    'button',
+    { type: 'button', class: 'app-header-logo-button', 'aria-label': '돈길 처음으로' },
+    [
+      el('img', {
+        class: 'app-logo app-logo-light',
+        src: LOGO_LIGHT_DATA_URI,
+        alt: '돈길',
+        width: LOGO_INTRINSIC_WIDTH,
+        height: LOGO_INTRINSIC_HEIGHT,
+      }),
+      el('img', {
+        class: 'app-logo app-logo-dark',
+        src: LOGO_DARK_DATA_URI,
+        alt: '돈길',
+        width: LOGO_INTRINSIC_WIDTH,
+        height: LOGO_INTRINSIC_HEIGHT,
+      }),
+    ],
+  );
+  button.addEventListener('click', onClick);
+  return el('div', { class: 'app-header-logo' }, [button]);
 }
 
 function captureFocus(container) {
@@ -176,7 +196,7 @@ export function mountApp(root, { engineClient, analytics }) {
   let activeTabId = DEFAULT_TAB_ID;
   const tabsSlot = el('div', {});
   const header = el('header', { class: 'app-header' }, [
-    el('div', { class: 'app-header-brand' }, [headerLogo(), tabsSlot]),
+    el('div', { class: 'app-header-brand' }, [headerLogo(goToFirstLanding), tabsSlot]),
     el('div', { class: 'app-header-meta' }, [
       el('span', { class: 'app-tax-year' }, ['2026 과세연도 기준']),
       themeControl(createThemeController()),
@@ -257,6 +277,19 @@ export function mountApp(root, { engineClient, analytics }) {
     reverseExampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
     writeActiveTabToLocation(activeTabId);
     patch(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));
+  }
+
+  /**
+   * [2026-08-20, 관리자 지시(2차) 6번] 로고 클릭 — 첫 탭 활성화 + 페이지
+   * 맨 위로 스크롤. **입력값은 지우지 않는다** — `setActiveTab`은 표시만
+   * 전환할 뿐 `store`/`reverseStore`를 전혀 건드리지 않는다(이미 그렇게
+   * 짜여 있다, 위 함수 참고). 이미 첫 탭이 활성이어도(그리고 `setActiveTab`
+   * 이 같은 탭이면 조용히 반환해도) 스크롤은 **항상** 실행한다 — "맨 위로"는
+   * 탭 전환과 별개의 약속이다.
+   */
+  function goToFirstLanding() {
+    setActiveTab('calculator');
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   }
 
   // [관리자 지시(4차) 7번, D74] 공유 링크로 열렸으면 입력을 채우고 계산까지

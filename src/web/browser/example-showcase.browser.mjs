@@ -60,10 +60,10 @@ const READ_SHOWCASE = `(() => {
   const centerXOf = (el) => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; };
   const question = q('.example-showcase-question-top');
   const rows = qa('.example-persona-row');
-  const divider = q('.example-persona-divider');
   const infoCols = qa('.example-persona-info');
   const donutCols = qa('.example-persona-donut-col');
   const amountCols = qa('.example-persona-amount');
+  const heroCopy = q('.example-hero-copy');
   const row1Lines = rows.length ? [...rows[0].querySelectorAll('.example-persona-line')] : [];
   const row2Lines = rows.length > 1 ? [...rows[1].querySelectorAll('.example-persona-line')] : [];
   const nameEls = qa('.example-persona-name');
@@ -78,6 +78,7 @@ const READ_SHOWCASE = `(() => {
   // 조각 라벨(이름+비율) — 1행 도넛에만 스코프한다(위 머리말 (4) 참고).
   const labelEls = donut ? [...donut.querySelectorAll('.donut-slice-label')] : [];
   const labelNameEls = donut ? [...donut.querySelectorAll('.donut-slice-label-name')] : [];
+  const labelAmountEls = donut ? [...donut.querySelectorAll('.donut-slice-label-amount')] : [];
   const labelPctEls = donut ? [...donut.querySelectorAll('.donut-slice-label-pct')] : [];
   const leaderEls = donut ? [...donut.querySelectorAll('.donut-slice-label-leader')] : [];
   const tops = donut ? [...donut.querySelectorAll('path[role="img"]')] : [];
@@ -90,7 +91,7 @@ const READ_SHOWCASE = `(() => {
     infoRects: infoCols.map(rectOf),
     donutColRects: donutCols.map(rectOf),
     amountColRects: amountCols.map(rectOf),
-    dividerRect: divider ? rectOf(divider) : null,
+    heroCopyRect: heroCopy ? rectOf(heroCopy) : null,
     row1LineTexts: row1Lines.map((el) => el.textContent),
     row2LineTexts: row2Lines.map((el) => el.textContent),
     row1LineFontSizes: row1Lines.map((el) => getComputedStyle(el).fontSize),
@@ -128,6 +129,7 @@ const READ_SHOWCASE = `(() => {
         }))
       : [],
     sliceLabelNameTexts: labelNameEls.map((el) => el.textContent),
+    sliceLabelAmountTexts: labelAmountEls.map((el) => el.textContent),
     sliceLabelPctTexts: labelPctEls.map((el) => el.textContent),
     sliceLabelFills: labelEls.map((el) => el.getAttribute('fill')),
     sliceLabelRects: labelEls.map(rectOf),
@@ -160,13 +162,18 @@ test('헤더와 입력/결과 사이에 예시 섹션이 실제로 렌더된다(
     assert.ok(r.width > 0 && r.height > 0, `${i}번 아이콘이 0크기로 렌더됐다: ${JSON.stringify(r)}`);
   }
 
-  // 두 행 사이 구분선.
-  assert.ok(data.dividerRect, '두 행 사이 구분선(.example-persona-divider)을 찾지 못했다');
-  assert.ok(data.dividerRect.width > 0, '구분선이 0폭이다');
-  assert.ok(
-    data.dividerRect.top > data.rowRects[0].bottom - 2 && data.dividerRect.top < data.rowRects[1].top + 2,
-    `구분선(top ${data.dividerRect.top})이 1행(bottom ${data.rowRects[0].bottom})과 2행(top ${data.rowRects[1].top}) 사이에 있지 않다`,
+  // [2026-08-20, 관리자 지시(2차) 3번 — 명시적 번복] **지난 회차가 새로
+  // 넣으라고 했던 두 행 사이 구분선을 다시 지웠다.** 소유자가 이번 회차에
+  // 명시로 다시 지우라고 판정했다 — 지우지 않고 뒤집는다(존재를 확인하던
+  // 검사를 부재를 확인하는 검사로 바꾼다).
+  assert.equal(
+    (await page.evaluate(`document.querySelector('.example-showcase-slot').shadowRoot.querySelectorAll('.example-persona-divider').length`)),
+    0,
+    '두 행 사이 구분선이 남아 있다 — 소유자가 다시 지우라고 판정했다(지난 회차 지시의 명시 번복)',
   );
+
+  // [2026-08-20, 관리자 지시(2차) 1번] 도넛 아래 레전드를 통째로 뺐다.
+  assert.equal(data.legendItemRects.length, 0, '도넛 아래 레전드가 남아 있다 — 지우라는 지시였다');
 
   // [2026-08-20, 관리자 지시 2번] 1행 캡션(「이렇게 배분해보세요」)은 지웠다.
   assert.equal(data.visualHeadingCount, 0, '1행 캡션(「이렇게 배분해보세요」)이 남아 있다 — 지우라는 지시였다');
@@ -180,10 +187,61 @@ test('헤더와 입력/결과 사이에 예시 섹션이 실제로 렌더된다(
   assert.equal(data.amountCardCount, 2, '세액공제액 카드가 정확히 2개여야 한다');
   assert.ok(!data.hasComposition, '가정 성분이 없으므로 구성 두 줄이 없어야 한다');
   assert.ok(!data.hasCaption, 'D70 — 예시에는 캡션이 없어야 하는데 남아 있다');
-  // [2026-08-17, D71] 1행은 여전히 확정 단일 값(구간이 아니다).
+  // [2026-08-17, D71] 1행은 여전히 확정 단일 값(구간이 아니다). 이 값(절세액
+  // 카드)은 도넛과 별개 컴포넌트라 만원 단위 축약(관리자 지시 1번)의 대상이
+  // 아니다 — 그 지시는 "도넛과 그 위 글자들"에 한정된다.
   assert.equal(data.amountLabelTexts[0], '이 배분으로 계산된 세액공제액');
   assert.equal(data.amountValueTexts[0], '1,485,000원');
   assert.ok(!data.amountValueTexts[0].includes('~'));
+
+  // [2026-08-20, 관리자 지시 1번] 도넛 조각 라벨 — 이름+금액(만원 단위,
+  // 숫자 전체 표기 금지). "50만원" 형태여야 하고, "500,000원"처럼 쉼표
+  // 3자리 전체 표기가 있으면 안 된다.
+  assert.ok(data.sliceLabelAmountTexts.length >= 3, `1행 조각의 금액 줄이 3개 미만이다: ${JSON.stringify(data.sliceLabelAmountTexts)}`);
+  for (const amountText of data.sliceLabelAmountTexts) {
+    assert.match(amountText, /만원$/, `조각 금액 줄이 만원 단위가 아니다: "${amountText}"`);
+    assert.ok(!/\d{1,3}(,\d{3})+원/.test(amountText), `조각 금액 줄에 숫자 전체 표기(원 단위)가 남아 있다: "${amountText}"`);
+  }
+  // 중앙 값도 만원 단위("150만원") — 1행 총 납입액 150만원.
+  const centerValueText = await page.evaluate(
+    `document.querySelector('.example-showcase-slot').shadowRoot.querySelector('.chart-donut .donut-center-value').textContent`,
+  );
+  assert.match(centerValueText, /만원$/, `도넛 중앙 값이 만원 단위가 아니다: "${centerValueText}"`);
+  assert.ok(!/\d{1,3}(,\d{3})+원/.test(centerValueText), `도넛 중앙 값에 숫자 전체 표기가 남아 있다: "${centerValueText}"`);
+
+  // [2026-08-20, 관리자 지시(2차) 4번] 히어로 카피 블록이 실제로 렌더된다.
+  const hero = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const copy = root.querySelector('.example-hero-copy');
+    if (!copy) return null;
+    return {
+      headlineText: copy.querySelector('.example-hero-headline')?.textContent ?? null,
+      hasStrike: !!copy.querySelector('.example-hero-strike'),
+      strikeText: copy.querySelector('.example-hero-strike')?.textContent ?? null,
+      hasMark: !!copy.querySelector('.example-hero-mark'),
+      markText: copy.querySelector('.example-hero-mark')?.textContent ?? null,
+      bodyParagraphCount: copy.querySelectorAll('.example-hero-body p').length,
+      promiseText: copy.querySelector('.example-hero-promise')?.textContent ?? null,
+      captionText: copy.querySelector('.example-hero-caption')?.textContent ?? null,
+    };
+  })()`);
+  assert.ok(hero, '히어로 카피 블록(.example-hero-copy)을 찾지 못했다');
+  assert.match(hero.headlineText, /세액공제는/);
+  assert.ok(hero.hasStrike && hero.strikeText === '무조건', '헤드라인의 취소선 단어(「무조건」)가 없다');
+  assert.ok(hero.hasMark && hero.markText === '따져보고', '헤드라인의 강조 단어(「따져보고」)가 없다');
+  assert.equal(hero.bodyParagraphCount, 2, '본문 문단이 2개가 아니다');
+  assert.equal(hero.promiseText, '넣어야 할 때와, 넣지 말아야 할 때를 알려드립니다.');
+  assert.equal(hero.captionText, '증권사 계산기가 하지 않는 이야기까지.');
+
+  // [2026-08-20, 관리자 지시(2차) 4번 (a)] Pretendard CDN 링크를 넣지
+  // 않는다 — 문서 전체(빛 DOM) 어디에도 그 링크가 없어야 한다(shadow root
+  // 안도 `attachHostStyles`가 메인 문서 스타일만 복제하므로 같은 검사로
+  // 충분하다).
+  const hasPretendardLink = await page.evaluate(
+    `[...document.querySelectorAll('link[href*="pretendard" i]')].length > 0`,
+  );
+  assert.equal(hasPretendardLink, false, 'Pretendard CDN 링크가 문서에 있다 — 넣지 말라는 지시였다');
 });
 
 /**
@@ -212,6 +270,52 @@ test('두 행 모두 왼쪽부터 기본 정보 → 도넛 → 세액공제액 �
 });
 
 /**
+ * [2026-08-20, 관리자 지시 2번] **열 정렬 — 1행·2행의 도넛 열·세액공제액
+ * 열 x 좌표가 정확히 일치한다.** 기본 정보 문구 길이가 행마다 달라도
+ * (1행 "소득: 4,000만원" vs 2행 "소득 : 8,000만원 (사업소득)") 고정
+ * 그리드 열(`example-persona-row`, styles.css)이 x좌표를 강제로 맞춘다.
+ * 열 사이 간격도 옛값(24px)의 정확히 두 배(48px)인지 함께 잰다.
+ */
+test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 정확히 일치하고, 열 사이 간격이 옛값의 두 배(48px)다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  const data = await page.evaluate(READ_SHOWCASE);
+  const TOLERANCE_PX = 0.5;
+
+  assert.ok(
+    Math.abs(data.donutColRects[0].left - data.donutColRects[1].left) <= TOLERANCE_PX,
+    `도넛 열 왼쪽 끝이 두 행에서 어긋난다: 1행 ${data.donutColRects[0].left}, 2행 ${data.donutColRects[1].left}`,
+  );
+  assert.ok(
+    Math.abs(data.amountColRects[0].left - data.amountColRects[1].left) <= TOLERANCE_PX,
+    `세액공제액 열 왼쪽 끝이 두 행에서 어긋난다: 1행 ${data.amountColRects[0].left}, 2행 ${data.amountColRects[1].left}`,
+  );
+  assert.ok(
+    Math.abs(data.infoRects[0].left - data.infoRects[1].left) <= TOLERANCE_PX,
+    `기본 정보 열 왼쪽 끝이 두 행에서 어긋난다: 1행 ${data.infoRects[0].left}, 2행 ${data.infoRects[1].left}`,
+  );
+
+  // 열 사이 간격 — 옛값(space-5, 24px)의 정확히 두 배(space-7, 48px).
+  const gap1 = data.donutColRects[0].left - data.infoRects[0].right;
+  const gap2 = data.amountColRects[0].left - data.donutColRects[0].right;
+  for (const [label, gap] of [['정보→도넛', gap1], ['도넛→세액공제액', gap2]]) {
+    assert.ok(Math.abs(gap - 48) <= 1, `${label} 간격(${gap}px)이 48px(옛 24px의 두 배)이 아니다`);
+  }
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+/**
+ * [2026-08-20, 관리자 지시 1번] 도넛 크기 — 10% 확대.
+ */
+test('도넛이 10% 확대된다(176px)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  const data = await page.evaluate(READ_SHOWCASE);
+  assert.equal(data.donutWidth, 176, `1행 도넛 렌더 폭이 176px(160×1.1)가 아니다: ${data.donutWidth}`);
+});
+
+/**
  * [2026-08-20, 관리자 지시 1번] 물음이 예시칸 왼쪽 상단에 있다 — 두 행 중
  * 어디에도 속하지 않고, 섹션 안에서 가장 위에 있으며 왼쪽 가장자리에
  * 붙는다.
@@ -237,11 +341,15 @@ test('물음이 예시칸 왼쪽 상단에 있다 — 두 행보다 위, 왼쪽 
 });
 
 /**
- * [2026-08-20, 관리자 지시 3번] 화살표 색이 `rgb(0, 255, 153)`이고, 라이트
- * 모드에서는 대비 부족을 보완하는 회색 테두리가 감싸며, 다크 모드에서는
- * (대비가 이미 충분하므로) 테두리가 없다.
+ * [2026-08-20, 관리자 지시(2차) 5번 — 뒤집힌 기대값] 화살표 색이
+ * `rgb(0, 255, 153)`(형광 민트, 지난 회차)에서 `rgb(230, 115, 0)`(주황)로
+ * 다시 바뀐다. **이번에는 회색 테두리 보완이 없다** — 실측(대비비 ≈3.08:1
+ * 라이트 · ≈5.20:1 다크, `styles.css`의 `--accent-warm` 선언 옆 주석) 결과
+ * 두 배경 모두 WCAG 3:1을 넘어 테두리 없이도 충분하다. 지우지 않고
+ * 뒤집는다 — 지난 회차는 라이트에서 `border-style: solid`를 기대했지만,
+ * 이번 회차는 라이트·다크 둘 다 `none`이어야 한다.
  */
-test('관리자 지시 3번 — 화살표 색이 rgb(0, 255, 153)이고, 라이트에서는 회색 테두리로 감싸며 다크에서는 테두리가 없다', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(2차) 5번 — 화살표 색이 rgb(230, 115, 0)이고, 라이트·다크 모두 회색 테두리가 없다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const READ_ARROW_STYLE = `(() => {
     const host = document.querySelector('.example-showcase-slot');
@@ -252,13 +360,13 @@ test('관리자 지시 3번 — 화살표 색이 rgb(0, 255, 153)이고, 라이�
 
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const light = await page.evaluate(READ_ARROW_STYLE);
-  assert.equal(light.color, 'rgb(0, 255, 153)', `라이트 모드 화살표 색이 rgb(0, 255, 153)이 아니다: ${light.color}`);
-  assert.equal(light.borderStyle, 'solid', `라이트 모드에서 화살표에 테두리(대비 보완)가 없다: ${light.borderStyle}`);
+  assert.equal(light.color, 'rgb(230, 115, 0)', `라이트 모드 화살표 색이 rgb(230, 115, 0)이 아니다: ${light.color}`);
+  assert.equal(light.borderStyle, 'none', `라이트 모드에서 화살표에 테두리가 남아 있다(이번 회차는 필요 없다): ${light.borderStyle}`);
 
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
   await sleep(150);
   const dark = await page.evaluate(READ_ARROW_STYLE);
-  assert.equal(dark.color, 'rgb(0, 255, 153)', `다크 모드 화살표 색이 rgb(0, 255, 153)이 아니다: ${dark.color}`);
+  assert.equal(dark.color, 'rgb(230, 115, 0)', `다크 모드 화살표 색이 rgb(230, 115, 0)이 아니다: ${dark.color}`);
   assert.equal(dark.borderStyle, 'none', `다크 모드에서는 테두리가 없어야 하는데 있다: ${dark.borderStyle}`);
   await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
 });
@@ -321,20 +429,6 @@ test('세액공제액이 자기 카드 폭을 넘지 않는다(두 카드 모두
   for (const count of data.amountValueChunkRectCounts) {
     assert.equal(count, 1, '금액 덩어리가 줄이 꺾였다');
   }
-});
-
-/**
- * [2026-08-20, 관리자 지시로 뒤집힌 기대값] 도넛 크기 — 옛 검사는 D70
- * 크기(396px)보다 작은 300px을 기대했다. 이제 도넛이 인물 행 한 줄 안에서
- * 정보 열·세액공제액과 자리를 나눠 쓰므로 더 작다(160px, `styles.css`
- * `.example-persona-donut-col .chart-donut`) — 지우지 않고 뒤집는다.
- */
-test('도넛이 한 행 안에 배분표·정보 열과 나란히 설 수 있는 작은 크기(160px)다', { skip: skipWithoutChrome }, async () => {
-  const { page } = app;
-  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
-  const data = await page.evaluate(READ_SHOWCASE);
-  assert.equal(data.donutWidth, 160, `1행 도넛 렌더 폭이 160px가 아니다: ${data.donutWidth}`);
-  assert.ok(data.donutWidth < 300, '도넛이 옛(D70 이후) 단일 인물 크기(300px)보다 작지 않다');
 });
 
 /**
@@ -402,16 +496,18 @@ test('예시 절세액 카드에 캡션 요소가 없다(과세연도 문구도 
   }
 });
 
-test('예시 범례·조각 라벨(이름+비율)·조각 자체가 DOM에만 있는 게 아니라 실제로 화면에 보인다(0크기가 아니다)', { skip: skipWithoutChrome }, async () => {
+/**
+ * [2026-08-20, 관리자 지시(2차) 1번 — 뒤집힌 기대값] 옛 검사는 두 도넛
+ * 합쳐 범례 6개가 화면에 보이는지 확인했다 — 이번 회차로 레전드 자체를
+ * 통째로 뺐으므로(조각 위 이름+금액이 이미 있다) 지우지 않고 뒤집는다:
+ * 범례가 **0개**여야 한다.
+ */
+test('조각 라벨(이름+금액)·조각 자체가 DOM에만 있는 게 아니라 실제로 화면에 보인다(0크기가 아니다), 레전드는 없다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const data = await page.evaluate(READ_SHOWCASE);
 
-  // 두 도넛(3개씩) 합쳐 6개.
-  assert.ok(data.legendItemRects.length >= 6, `범례 항목이 6개 미만이다: ${JSON.stringify(data.legendItemRects)}`);
-  for (const [i, r] of data.legendItemRects.entries()) {
-    assert.ok(r.width > 1 && r.height > 1, `범례 항목 ${i}이 0크기다(DOM에는 있어도 안 보인다): ${JSON.stringify(r)}`);
-  }
+  assert.equal(data.legendItemRects.length, 0, `레전드가 남아 있다(관리자 지시 1번 — 통째로 뺀다): ${JSON.stringify(data.legendItemRects)}`);
 
   // 1행 도넛에 스코프한 조각 라벨 — 3개.
   assert.ok(data.sliceLabelRects.length >= 3, `1행 도넛 조각 라벨이 3개 미만이다: ${JSON.stringify(data.sliceLabelRects)}`);
@@ -481,7 +577,6 @@ test('예시 도넛의 기하를 실측한다(1행) — 각도 합 360°, 조각
     const host = document.querySelector('.example-showcase-slot');
     const root = host.shadowRoot;
     const donut = root.querySelector('.chart-donut'); // 1행(김철수씨) — 첫 매치.
-    const donutCol = donut.closest('.example-persona-donut-col');
     const tops = [...donut.querySelectorAll('path[role="img"]')];
     const slices = tops.map((p) => ({
       start: Number(p.dataset.arcStart),
@@ -489,13 +584,9 @@ test('예시 도넛의 기하를 실측한다(1행) — 각도 합 360°, 조각
       fill: getComputedStyle(p).fill,
       ariaLabel: p.getAttribute('aria-label'),
     }));
-    // [2026-08-20] 범례를 1행 도넛 열(donutCol)에 스코프한다 — 두 도넛이
-    // 있으므로 root 전체 질의는 6개(3+3)를 낸다.
-    const legendItems = [...donutCol.querySelectorAll('.donut-legend-item')].map((li) => ({
-      name: li.querySelector('.donut-legend-name').textContent,
-      amountText: li.querySelector('.donut-legend-amount').textContent,
-      swatchColor: getComputedStyle(li.querySelector('.donut-legend-swatch')).backgroundColor,
-    }));
+    // [2026-08-20, 관리자 지시(2차) 1번] 레전드는 이제 없다(통째로 뺐다) —
+    // 아래에서 부재를 직접 확인한다.
+    const legendItemCount = root.querySelectorAll('.donut-legend-item').length;
     const centerValueText = donut.querySelector('.donut-center-value')?.textContent ?? null;
 
     const resolve = (varExpr) => {
@@ -512,7 +603,7 @@ test('예시 도넛의 기하를 실측한다(1행) — 각도 합 360°, 조각
       isa: resolve('var(--data-isa)'),
     };
 
-    return { slices, legendItems, centerValueText, tokenColor };
+    return { slices, legendItemCount, centerValueText, tokenColor };
   })()`);
 
   const recomputed = await page.evaluate(`(async () => {
@@ -530,7 +621,9 @@ test('예시 도넛의 기하를 실측한다(1행) — 각도 합 360°, 조각
       unallocatedAnnualKrw: plan.unallocated_annual_krw,
       unallocatedMonthlyKrw: plan.unallocated_monthly_krw,
       unallocatedMonthlyText: format.formatKrw(plan.unallocated_monthly_krw),
-      centerValueText: format.formatKrw(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw),
+      // [2026-08-20, 관리자 지시 1번] 중앙 값이 이제 만원 단위다 —
+      // formatKrwAbbreviated로 재계산해 화면 값과 대조한다.
+      centerValueText: format.formatKrwAbbreviated(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw),
     };
   })()`);
 
@@ -581,17 +674,10 @@ test('예시 도넛의 기하를 실측한다(1행) — 각도 합 360°, 조각
     }
   }
 
-  assert.equal(measured.centerValueText, recomputed.centerValueText, '도넛 가운데 값이 월 배분 합과 다르다');
+  assert.equal(measured.centerValueText, recomputed.centerValueText, '도넛 가운데 값이 월 배분 합(만원 단위)과 다르다');
 
-  assert.equal(measured.legendItems.length, measured.slices.length, '1행 범례 항목 수가 1행 조각 수와 다르다');
-  for (let i = 0; i < drawable.length; i++) {
-    if (drawable[i].account === 'unallocated') continue;
-    assert.equal(
-      measured.legendItems[i].swatchColor,
-      measured.tokenColor[drawable[i].account],
-      `범례 ${i}번(${drawable[i].account}) 스와치 색이 조각 색과 다르다`,
-    );
-  }
+  // [2026-08-20, 관리자 지시(2차) 1번 — 뒤집힌 기대값] 범례 자체가 없다.
+  assert.equal(measured.legendItemCount, 0, '범례가 남아 있다 — 통째로 빼라는 지시였다');
 });
 
 /**

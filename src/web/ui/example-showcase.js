@@ -180,7 +180,7 @@
  */
 
 import { el, svgEl } from './dom.js';
-import { donutChart, donutLegend, prefersReducedMotion, applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
+import { donutChart, prefersReducedMotion, applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { excludedAccounts } from './eligibility.js';
 import { amountCard } from './result-panel.js';
 import { buildEngineRequest, initialForm, TAX_YEAR } from '../state/store.js';
@@ -495,12 +495,20 @@ function exampleShowcaseScrollArrow() {
 }
 
 /**
- * 한 사람의 행(row) — 기본 정보(아이콘+이름+네 줄) → 도넛/범례 → 세액공제액,
+ * 한 사람의 행(row) — 기본 정보(아이콘+이름+네 줄) → 도넛 → 세액공제액,
  * 왼쪽부터 가로로 배치한다(관리자 지시, 2026-08-20). `example-showcase-text-col`·
  * `-visual-col`·`-amount`·`-input-*`(옛 단일 인물 칸 클래스, `grid-area`가
  * 박혀 있다) 대신 **완전히 새 클래스(`example-persona-*`)를 쓴다** — 이유는
  * 이 파일 머리말 참고(역산기 탭 예시가 그 옛 클래스를 그대로 쓰고 있어
  * 재사용하면 두 탭이 서로의 레이아웃을 밟는다).
+ *
+ * **[2026-08-20, 관리자 지시(2차) — 도넛 개편] 아래 레전드를 통째로 뺐다** —
+ * `donutLegend(donutArgs)` 호출 자체를 지웠다. 조각 위에 이미 이름+금액
+ * (`applyDonutSliceInlineLabels(..., { sliceContent: 'name_amount' })`,
+ * `mountExampleShowcase`)이 있으므로 아래 목록이 같은 정보를 되풀이했다.
+ * 도넛은 10% 확대한다 — SVG는 `viewBox` 좌표계라 CSS 렌더 폭만 키워도
+ * 안의 조각·글자가 함께 비례로 커진다(`styles.css`의
+ * `.example-persona-donut-col .chart-donut`, 160px→176px).
  */
 function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
   const excluded = excludedAccounts(scenario);
@@ -520,6 +528,9 @@ function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, sc
     // (labelledWide, 684px 상자)을 쓰면 행이 카드 폭을 넘는다(같은 이유로
     // 최근 역산기 결과 도넛도 legend로 고정했다, `contribution-amount-bar.js`).
     labelMode: 'legend',
+    // [2026-08-20, 관리자 지시] 중앙 값도 만원 단위("150만원") — 숫자 전체
+    // 표기 금지.
+    centerValueFormat: 'manwon',
   });
 
   // 장식적 이미지(정보가 문장 자체에 이미 있다)이므로 `alt=""` +
@@ -545,7 +556,7 @@ function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, sc
     ),
   ]);
 
-  const donutCol = el('div', { class: 'example-persona-donut-col' }, [donut, donutLegend(donutArgs)]);
+  const donutCol = el('div', { class: 'example-persona-donut-col' }, [donut]);
 
   // D71 — ISA 수익률 옵트인을 넣지 않았으므로 두 사람 다 `headline_composite_total`에
   // 가정 성분이 없다(includes_assumption_component: false). `annualReturnRate`
@@ -554,17 +565,81 @@ function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, sc
     amountCard(plan, scenario, null, { compactCaption: true, showCaption: false, showComposition: false }),
   ]);
 
+  // [2026-08-20, 관리자 지시 2번] **고정 그리드 열**(`example-persona-row`,
+  // styles.css) — 세 칸(정보/도넛/절세액)의 폭이 두 행에서 정확히 같은
+  // 값으로 고정되므로, 행마다 콘텐츠 폭이 달라도(기본 정보 문구 길이가
+  // 다르다) 도넛 열·절세액 열의 x 시작 좌표가 항상 일치한다 — 옛 flex
+  // (`flex: 0 1 auto`인 정보 열이 내용만큼만 차지)는 행마다 이 좌표가
+  // 어긋났다.
   return el('div', { class: 'example-persona-row' }, [infoCol, donutCol, amountCol]);
 }
 
+// ---------------------------------------------------------------------------
+// [2026-08-20, 관리자 지시(2차) 4번] 히어로 카피 — 오른쪽 빈 영역(두 행이
+// 고정 그리드 열로 좁아지며 남긴 자리, 관리자 지시 2번)에 놓는다. 소유자가
+// `src/design/예시문구.html`의 `.copy` 블록으로 만든 문구·구조를 그대로
+// 옮기되, 두 가지는 명시로 지킨다 —
+// (a) **Pretendard CDN 링크를 넣지 않는다** — 이 저장소는 이미 시스템
+//     폰트 스택(`styles.css` `body { font-family: ... }`)을 쓰고 있고,
+//     이 블록도 그 상속을 그대로 받는다(별도 font-family 선언이 없다) —
+//     CSP·자기완결 원칙(README).
+// (b) **색은 원본 라이트 고정 hex를 그대로 쓰지 않고 이 저장소의 테마
+//     토큰으로 옮긴다**(`styles.css`) — `--text-primary`(헤드라인·강조
+//     문구)·`--text-secondary`(본문)·`--text-muted`(캡션)·`--state-error`
+//     (취소선, "틀린 답"이라는 뜻이 이미 있는 토큰)·신설 `--accent-warm`
+//     (강조 밑줄 — 원본 `#E2711D`와 소유자 지시 5번의 `rgb(230, 115, 0)`가
+//     사실상 같은 색이라는 소유자 판단대로 하나로 합쳤다). fadeUp
+//     애니메이션·`prefers-reduced-motion` 처리는 그대로 옮긴다(`styles.css`).
+// ---------------------------------------------------------------------------
+export const EXAMPLE_HERO_HEADLINE_LINE_1 = '세액공제는';
+export const EXAMPLE_HERO_HEADLINE_STRIKE_WORD = '무조건';
+export const EXAMPLE_HERO_HEADLINE_LINE_2_REST = ' 받는 게 아니라';
+export const EXAMPLE_HERO_HEADLINE_MARK_WORD = '따져보고';
+export const EXAMPLE_HERO_HEADLINE_LINE_3_REST = ' 받는 것입니다';
+export const EXAMPLE_HERO_BODY_LINE_1_STRONG = '3년 안에 집을 산다면';
+export const EXAMPLE_HERO_BODY_LINE_1_REST = ', 연금저축이 오히려 손해일 수 있습니다.';
+export const EXAMPLE_HERO_BODY_LINE_2_STRONG = '소득이 없다면';
+export const EXAMPLE_HERO_BODY_LINE_2_REST = ', IRP는 애초에 가입도 안 됩니다.';
+export const EXAMPLE_HERO_PROMISE_TEXT = '넣어야 할 때와, 넣지 말아야 할 때를 알려드립니다.';
+export const EXAMPLE_HERO_CAPTION_TEXT = '증권사 계산기가 하지 않는 이야기까지.';
+
+function exampleHeroCopy() {
+  const headline = el('h2', { class: 'example-hero-headline' }, [
+    el('span', { class: 'example-hero-headline-line' }, [EXAMPLE_HERO_HEADLINE_LINE_1]),
+    el('span', { class: 'example-hero-headline-line' }, [
+      el('span', { class: 'example-hero-strike' }, [EXAMPLE_HERO_HEADLINE_STRIKE_WORD]),
+      EXAMPLE_HERO_HEADLINE_LINE_2_REST,
+    ]),
+    el('span', { class: 'example-hero-headline-line' }, [
+      el('span', { class: 'example-hero-mark' }, [EXAMPLE_HERO_HEADLINE_MARK_WORD]),
+      EXAMPLE_HERO_HEADLINE_LINE_3_REST,
+    ]),
+  ]);
+  const bodyCopy = el('div', { class: 'example-hero-body' }, [
+    el('p', {}, [el('strong', {}, [EXAMPLE_HERO_BODY_LINE_1_STRONG]), EXAMPLE_HERO_BODY_LINE_1_REST]),
+    el('p', {}, [el('strong', {}, [EXAMPLE_HERO_BODY_LINE_2_STRONG]), EXAMPLE_HERO_BODY_LINE_2_REST]),
+  ]);
+  const promise = el('p', { class: 'example-hero-promise' }, [EXAMPLE_HERO_PROMISE_TEXT]);
+  const caption = el('p', { class: 'example-hero-caption' }, [EXAMPLE_HERO_CAPTION_TEXT]);
+  return el('div', { class: 'example-hero-copy' }, [headline, bodyCopy, promise, caption]);
+}
+
 /**
- * 예시 섹션 전체 — 물음(왼쪽 상단, 두 행 어디에도 속하지 않는다) → 1행
- * (김철수씨) → 구분선 → 2행(이승은씨) → 화살표. **[2026-08-20, 관리자 지시]
- * 한 사람에서 두 사람으로 늘었다** — 옛(D70~D72) 좌우 2열(`grid-template-areas:
- * "text visual" "amount amount" "arrow arrow"`) 배치는 이제 이 함수가 쓰지
- * 않는다(`.example-showcase-multi-persona` 수정자 클래스가 `styles.css`에서
- * 그 grid 규칙을 덮어쓴다) — 역산기 탭(`reverse-example-showcase.js`)은 옛
- * 구조·클래스를 그대로 쓰므로 이 변경과 무관하다.
+ * 예시 섹션 전체 — 물음(왼쪽 상단, 두 행 어디에도 속하지 않는다) →
+ * [두 행(김철수씨·이승은씨) | 히어로 카피] → 화살표.
+ *
+ * **[2026-08-20, 관리자 지시] 한 사람에서 두 사람으로 늘었다** — 옛(D70~D72)
+ * 좌우 2열(`grid-template-areas: "text visual" "amount amount" "arrow arrow"`)
+ * 배치는 이제 이 함수가 쓰지 않는다(`.example-showcase-multi-persona`
+ * 수정자 클래스가 `styles.css`에서 그 grid 규칙을 덮어쓴다) — 역산기 탭
+ * (`reverse-example-showcase.js`)은 옛 구조·클래스를 그대로 쓰므로 이 변경과
+ * 무관하다.
+ *
+ * **[2026-08-20, 관리자 지시(2차) 3번 — 명시적 번복] 두 행 사이 회색
+ * 구분선을 지웠다.** 지난 회차(관리자 지시)가 새로 넣으라고 한 바로 그
+ * 요소다 — 소유자가 이번 회차에 명시로 다시 지우라고 판정했다. 지우지
+ * 않고 뒤집는다(구분선 존재를 확인하던 시험도 부재를 확인하도록 뒤집는다,
+ * `example-showcase.browser.mjs`).
  */
 function exampleShowcaseSection({ persona1, persona2 }) {
   // [2026-08-20, 관리자 지시 1번] 물음 — "돈" 문구, 예시칸 왼쪽 상단.
@@ -595,9 +670,12 @@ function exampleShowcaseSection({ persona1, persona2 }) {
     scenario: persona2.scenario,
     plan: persona2.plan,
   });
+  // [2026-08-20, 관리자 지시 2번] 두 행을 세로로 쌓는 왼쪽 칸 — 구분선
+  // 없이 이어 붙는다(위 3번 항목).
+  const rowsStack = el('div', { class: 'example-persona-rows-stack' }, [row1, row2]);
 
-  // [2026-08-20, 관리자 지시 2번] 두 행 사이 얇은 회색 구분선.
-  const divider = el('hr', { class: 'example-persona-divider', 'aria-hidden': 'true' }, []);
+  // [2026-08-20, 관리자 지시 2·4번] 왼쪽(두 행) | 오른쪽(히어로 카피).
+  const rowsAndCopy = el('div', { class: 'example-persona-rows-and-copy' }, [rowsStack, exampleHeroCopy()]);
 
   const arrowWrap = el('div', { class: 'example-showcase-arrow-wrap' }, [
     exampleShowcaseScrollArrow(),
@@ -607,7 +685,7 @@ function exampleShowcaseSection({ persona1, persona2 }) {
   return el(
     'section',
     { class: 'example-showcase example-showcase-multi-persona', 'aria-labelledby': 'example-showcase-question' },
-    [question, row1, divider, row2, arrowWrap],
+    [question, rowsAndCopy, arrowWrap],
   );
 }
 
@@ -758,9 +836,12 @@ export async function mountExampleShowcase(hostEl, { engineClient }) {
     ]);
     shadowRoot.appendChild(exampleShowcaseSection({ persona1, persona2 }));
 
+    // [2026-08-20, 관리자 지시] 조각 라벨 — 이름+월 금액(만원 단위), 비율은
+    // 겹치지 않을 때만. 결과 패널·역산기 탭은 이 옵션 없이 부르므로(기본값
+    // 'name_percent') 영향받지 않는다.
     const refresh = () => {
       fitAmountValueToCard(shadowRoot);
-      applyDonutSliceInlineLabels(shadowRoot);
+      applyDonutSliceInlineLabels(shadowRoot, { sliceContent: 'name_amount' });
     };
     // **동기로, 바로 잰다 — `requestAnimationFrame`을 쓰지 않는다.** 다음
     // 프레임까지 미루면 그 사이(첫 페인트가 CSS 기본값 그대로 나가는) 한
@@ -779,7 +860,7 @@ export async function mountExampleShowcase(hostEl, { engineClient }) {
         resizeTimer = setTimeout(refresh, 150);
       });
     }
-    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot));
+    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { sliceContent: 'name_amount' }));
   } catch (err) {
     console.error('[example-showcase] 예시를 계산하지 못했습니다', err);
   }
