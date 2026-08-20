@@ -669,6 +669,7 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
           darkVisible: vis(dark),
           iconWidth: icon ? icon.getBoundingClientRect().width : null,
           iconFilter: icon ? getComputedStyle(icon).filter : null,
+          iconBackground: icon ? getComputedStyle(icon).backgroundColor : null,
         };
       })()`;
 
@@ -722,10 +723,18 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
       const wrappedDark = await page.evaluate(READ_LOGO_AND_ICON);
       assert.equal(wrappedDark.lightVisible, false, '아티팩트처럼 감싼 조건(다크) — 라이트 로고가 보인다');
       assert.equal(wrappedDark.darkVisible, true, '아티팩트처럼 감싼 조건(다크) — 다크 로고가 보이지 않는다');
-      assert.match(
-        wrappedDark.iconFilter ?? '',
-        /invert/,
-        `아티팩트처럼 감싼 조건(다크) — man-icon 반전 filter가 실리지 않았다: ${wrappedDark.iconFilter}`,
+      // [2026-08-20, 관리자 지시로 뒤집힌 기대값] 옛 검사는 다크에서 invert
+      // filter를 기대했다 — 컬러 일러스트로 바뀌며 그 처방이 색을 뒤집는
+      // 결함이 됐다. 지우지 않고 뒤집는다 — 다크에서도 filter가 없어야 하고,
+      // 대신 옅은 원형 판(background)이 감싼 조건에서도 실려야 한다.
+      assert.ok(
+        wrappedDark.iconFilter === 'none' || !wrappedDark.iconFilter,
+        `아티팩트처럼 감싼 조건(다크) — man-icon에 filter가 걸려 있다(색이 뒤집힐 수 있다): ${wrappedDark.iconFilter}`,
+      );
+      assert.notEqual(
+        wrappedDark.iconBackground,
+        'rgba(0, 0, 0, 0)',
+        `아티팩트처럼 감싼 조건(다크) — man-icon 원형 판(background)이 실리지 않았다`,
       );
       await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
     } finally {

@@ -925,34 +925,46 @@ test('관리자 지시 — man-icon·female-icon 높이가 각 행의 입력 네
 });
 
 /**
- * [2026-08-17, 관리자 지시(3차) 2번] 다크에서 원본(검정 선화)이 다크 카드
- * 배경에 묻히는 문제를 `filter: invert(1)`로 반전한다 — man-icon·female-icon
- * 둘 다 같은 커스텀 프로퍼티(`--man-icon-filter`)를 공유한다(둘 다 원본이
- * 검정 선화라는 같은 이유, `assets/female-icon.js` 머리말).
+ * [2026-08-20, 관리자 지시로 뒤집힌 기대값] **옛(관리자 지시(3차) 2번) 검사는
+ * 다크에서 `filter: invert(1)`이 걸리길 기대했다** — 그때는 원본이 검정
+ * 선화였다. 아이콘이 컬러 일러스트로 재생성되며 그 전제가 깨졌다 — invert를
+ * 그대로 두면 색상환이 통째로 뒤집힌다(관리자 실측: 셔츠 초록→보라, 피부
+ * 톤→파랑). **지우지 않고 뒤집는다** — 다크에서도 `filter`가 없어야(색이
+ * 원본 그대로여야) 하고, 대신 검정 윤곽선이 다크 배경에 묻히지 않도록
+ * `background`(옅은 원형 판, `--example-icon-plate-bg`)가 걸려 있어야 한다.
  */
-test('관리자 지시(3차) 2번 — 다크 모드에서 두 아이콘(man·female) 모두 반전(invert)된다', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시 — 다크 모드에서도 두 아이콘(man·female) 색이 반전되지 않고, 대신 옅은 원형 판이 깔린다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
-  const READ_ICON_FILTERS = `(() => {
+  const READ_ICON_STYLE = `(() => {
     const host = document.querySelector('.example-showcase-slot');
     if (!host || !host.shadowRoot) return null;
-    return [...host.shadowRoot.querySelectorAll('.example-persona-icon')].map((icon) => getComputedStyle(icon).filter);
+    return [...host.shadowRoot.querySelectorAll('.example-persona-icon')].map((icon) => {
+      const cs = getComputedStyle(icon);
+      return { filter: cs.filter, background: cs.backgroundColor, borderRadius: cs.borderRadius };
+    });
   })()`;
 
   await page.goto(`${origin}/src/web/index.html`);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
-  const lightFilters = await page.evaluate(READ_ICON_FILTERS);
-  assert.equal(lightFilters.length, 2);
-  for (const f of lightFilters) {
-    assert.ok(f === 'none' || !f, `라이트에서 아이콘에 filter가 걸려 있다: ${f}`);
+  const light = await page.evaluate(READ_ICON_STYLE);
+  assert.equal(light.length, 2);
+  for (const s of light) {
+    assert.ok(s.filter === 'none' || !s.filter, `라이트에서 아이콘에 filter가 걸려 있다(색이 왜곡될 수 있다): ${s.filter}`);
   }
 
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
   await sleep(100);
-  const darkFilters = await page.evaluate(READ_ICON_FILTERS);
-  for (const f of darkFilters) {
-    assert.notEqual(f, 'none', `다크에서 아이콘에 반전 filter가 걸려 있지 않다: ${f}`);
-    assert.match(f ?? '', /invert/, `다크 아이콘 filter가 invert를 쓰지 않는다: ${f}`);
+  const dark = await page.evaluate(READ_ICON_STYLE);
+  for (const [i, s] of dark.entries()) {
+    assert.ok(
+      s.filter === 'none' || !s.filter,
+      `${i}번 아이콘 — 다크에서도 filter가 없어야 한다(컬러 일러스트라 invert하면 색이 뒤집힌다): ${s.filter}`,
+    );
+    // 검정 윤곽선을 구제하는 옅은 원형 판 — 배경이 투명이 아니고(라이트와
+    // 달라진 값), 원형(50%)으로 잘린다.
+    assert.notEqual(s.background, 'rgba(0, 0, 0, 0)', `${i}번 아이콘 — 다크에서 원형 판(background)이 없다`);
+    assert.match(s.borderRadius, /50%|9999px|999px/, `${i}번 아이콘 — 원형 판이 원형이 아니다(border-radius: ${s.borderRadius})`);
   }
 
   await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);

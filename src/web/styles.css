@@ -148,7 +148,21 @@
      그래서 반전 여부를 선택자가 아니라 이 프로퍼티 값으로 정하고,
      `.example-showcase-input-icon`(styles.css 아래)이 테마와 무관하게
      `filter: var(--man-icon-filter)`로 값만 읽는다. */
-  --man-icon-filter: none;
+  /* [2026-08-20, 관리자 지시 — 다크 모드 아이콘 색반전 결함] **`--man-icon-filter`
+     (invert(1))를 지웠다.** 그 반전은 "원본이 검정 선화"였던 시절의 처방이다
+     — 아이콘 자산이 컬러 일러스트로 재생성되며 그 전제가 깨졌고, invert를
+     그대로 두면 색상환이 통째로 뒤집힌다(셔츠 초록→보라, 피부 톤→파랑 —
+     관리자 실측). **대신 `--example-icon-plate-bg`로 다크 배경에서 묻히는
+     검은 윤곽선만 따로 구제한다** — 검정(0,0,0) 윤곽선과 다크 카드 배경
+     (`--surface-raised` 다크 `#1e2226`)의 WCAG 대비비를 계산하면 약
+     1.31:1(휘도 0 vs 0.0156)로, 라이트에서의 대비(흰 배경 위 검정 =
+     21:1)와 비교해 실측 없이도 묻힌다는 결론이 나오고, 실제 스크린샷
+     (최종 보고)으로 재확인했다. 옅은 원형 판(라이트 `transparent` — 이미
+     충분한 대비라 필요 없다, 다크는 `rgba(255,255,255,0.92)`)을 아이콘
+     `background`로 깔고 `border-radius: 50%`로 원형을 낸다 — 일러스트
+     자체의 색은 전혀 건드리지 않고 그 뒤판만 밝혀 윤곽선이 실루엣 경계에서
+     여전히 갈라져 보이게 한다. */
+  --example-icon-plate-bg: transparent;
   /* [2026-08-20, 관리자 지시 — 첫 탭 예시 화살표 색] `.example-showcase-scroll-arrow`가
      `rgb(0, 255, 153)`(형광 민트)로 바뀐다. **라이트 배경(`--surface-raised`
      `#ffffff`) 대비 실측 — WCAG 상대휘도 계산으로 대비비 약 1.33:1**(민트
@@ -187,7 +201,8 @@
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
     --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
-    --man-icon-filter: invert(1);
+    /* 위 :root 주석 참고 — 검정 윤곽선용 옅은 원형 판. */
+    --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
     /* 다크 배경(`#1e2226`) 대비 민트 휘도 대비비 ≈12:1 — 3:1을 넉넉히
        넘는다(실측 계산, 위 라이트 값 옆 주석 참고). 테두리가 필요 없다. */
     --example-arrow-border: none;
@@ -217,7 +232,7 @@
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
   --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
-  --man-icon-filter: invert(1);
+  --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
   --example-arrow-border: none;
 }
 
@@ -584,10 +599,12 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .example-persona-icon {
   height: calc(18px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 12.5px * 1.4);
   width: auto; display: block; flex: 0 0 auto;
-  /* man-icon과 같은 이유(다크 배경에 검정 선화가 묻힌다) — female-icon도
-     원본이 검정 선화라(`assets/female-icon.js` 머리말) 같은 커스텀
-     프로퍼티를 공유한다. */
-  filter: var(--man-icon-filter);
+  /* [2026-08-20, 관리자 지시 — 다크 모드 색반전 결함] 컬러 일러스트라
+     `filter: invert(...)`를 걸지 않는다(위 `:root`의 `--example-icon-plate-bg`
+     주석 참고) — man-icon·female-icon 둘 다 같은 문제·같은 처방을 공유한다.
+     다크 배경에서 검정 윤곽선만 옅은 원형 판으로 구제한다. */
+  background: var(--example-icon-plate-bg);
+  border-radius: var(--radius-full);
 }
 .example-persona-name {
   margin: 0; font-size: 12.5px; line-height: 1.4; font-weight: 600;
@@ -746,21 +763,18 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   width: auto;
   display: block;
   flex: 0 0 auto;
-  /* [2026-08-17, 관리자 지시(3차) 2번] 다크에서 원본(검정 선화)이 다크
-     카드 배경(`--surface-raised` 다크 #1E2226)에 묻힌다(실측, 최종 보고)
-     — 로고와 같은 대비 문제이지만 파일을 추가하는 대신(로고처럼 다크
-     전용 원본을 새로 만들지 않고) `filter: invert(1)`로 반전해 흰 선화로
-     바꾼다. **선택자(`:root[data-theme="dark"] .example-showcase-input-
-     icon`)가 아니라 `--man-icon-filter` 커스텀 프로퍼티로 켠다** — 이
-     아이콘은 Shadow DOM(`ui/example-showcase.js`) 안에 그려지는데,
-     `:root`를 겨눈 선택자는 shadow tree 경계를 넘어 안의 요소를 잡지
-     못한다(실측으로 확인 — 예전에 선택자 방식으로 짰을 때 라이트·다크
-     어디서도 걸리지 않았다). 커스텀 프로퍼티 **값**은 상속으로 shadow
-     경계를 넘으므로(도넛 `--data-pension` 등과 같은 경로), 반전 여부를
-     이 파일 위쪽 `:root`/미디어 다크/`data-theme="dark"` 3단 구조가 정한
-     `--man-icon-filter`(라이트 `none` / 다크 `invert(1)`) 값을 그대로
-     읽는다. */
-  filter: var(--man-icon-filter);
+  /* [2026-08-17, 관리자 지시(3차) 2번 → 2026-08-20, 관리자 지시로 뒤집힘]
+     **`filter: invert(1)`을 지웠다.** 그 처방은 "원본이 검정 선화"였던
+     시절 것이다 — man-icon이 컬러 일러스트로 재생성되며 반전이 색상환을
+     통째로 뒤집는 결함이 됐다(관리자 실측: 셔츠 초록→보라 등). 이 아이콘은
+     `reverse-example-showcase.js`(연금 역산기 탭 예시)가 여전히 재사용하므로
+     같은 자산·같은 결함·같은 처방을 그대로 받는다. **대신
+     `--example-icon-plate-bg`로 다크 배경에서 묻히는 검정 윤곽선만
+     구제한다**(원형 판, 근거는 `:root`의 같은 커스텀 프로퍼티 주석) —
+     Shadow DOM 경계를 넘어야 하는 이유(선택자가 아니라 커스텀 프로퍼티
+     값으로 테마를 읽는 이유)는 이전과 동일하다. */
+  background: var(--example-icon-plate-bg);
+  border-radius: var(--radius-full);
 }
 /* [2026-08-18, 관리자 지시(4차) 1번] 아이콘 밑 이름표 「김철수씨」 —
    `type-caption`과 같은 크기(12.5px)를 새로 정의하지 않고 값만 맞춰 쓴다
