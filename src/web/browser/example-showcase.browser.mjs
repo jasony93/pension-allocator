@@ -349,15 +349,16 @@ test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 �
 });
 
 /**
- * [2026-08-20, 관리자 지시 1번 — 관리자 지시(3차) 5번으로 뒤집힌 기대값]
- * 도넛 크기 — 10% 확대(160→176px)였던 옛 기대값을, "도넛 라벨도 가능한
- * 만큼 1.5배로"라는 이번 회차 지시대로 176×1.5=264px로 다시 뒤집는다.
+ * [2026-08-20, 관리자 지시(4차) 1번 — 소유자 정정으로 다시 뒤집힌 기대값]
+ * "1.5배는 도넛 위 글자만이 의도였다" — 상자 자체를 264px로 키웠던 지난
+ * 회차 판단을 되돌린다. 10% 확대(160→176px)만 남는다. 글자가 1.5배
+ * 커지는 것은 이 상자 크기와 무관하다(아래 별도 시험이 잰다).
  */
-test('도넛이 예시 폰트 50% 확대를 따라 264px다(160 × 1.1 × 1.5)', { skip: skipWithoutChrome }, async () => {
+test('도넛 상자가 10% 확대(176px)로 되돌아간다 — 상자 자체는 1.5배 대상이 아니다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const data = await page.evaluate(READ_SHOWCASE);
-  assert.equal(data.donutWidth, 264, `1행 도넛 렌더 폭이 264px(176×1.5)가 아니다: ${data.donutWidth}`);
+  assert.equal(data.donutWidth, 176, `1행 도넛 렌더 폭이 176px(160×1.1)가 아니다: ${data.donutWidth}`);
 });
 
 /**
@@ -432,12 +433,11 @@ test('1행 입력 네 줄 글자 크기가 40px보다 작다', { skip: skipWitho
 });
 
 /**
- * [2026-08-20, 관리자 지시(3차) 5번] **예시영역 폰트 50% 확대** — 대표
- * 요소(정보 줄·이름 캡션·세액공제 카드 값)의 글자 크기를 실측해 옛값의
- * 정확히 1.5배인지 잰다. 히어로 카피는 이 지시의 대상이 아니므로(직전
- * 회차에 소유자가 만든 크기) 이 검사에서 다루지 않는다.
+ * [2026-08-20, 관리자 지시(4차) 1번 — 소유자 정정] "1.5배는 도넛 위 글자만
+ * 이었다" — 정보 줄·이름 캡션·세액공제 카드 글자는 확대 대상이 아니었다.
+ * 지난 회차(관리자 지시(3차) 5번)의 1.5배를 전부 되돌린다.
  */
-test('관리자 지시(3차) 5번 — 예시영역 대표 요소 글자 크기가 옛값의 1.5배다', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(4차) 1번 — 정보 줄·이름 캡션·세액공제 카드 글자가 확대 이전 크기로 되돌아간다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const m = await page.evaluate(`(() => {
@@ -456,27 +456,78 @@ test('관리자 지시(3차) 5번 — 예시영역 대표 요소 글자 크기�
   })()`);
   const px = (s) => Number((s ?? '0px').replace('px', ''));
   const cases = [
-    ['정보 줄(.example-persona-line)', m.line, 18, 27],
-    ['이름 캡션(.example-persona-name)', m.name, 12.5, 18.75],
-    ['세액공제 카드 값(.amount-card-value)', m.amountValue, 26, 39],
-    ['세액공제 카드 라벨(.amount-card-label)', m.amountLabel, 13, 19.5],
+    ['정보 줄(.example-persona-line)', m.line, 18],
+    ['이름 캡션(.example-persona-name)', m.name, 12.5],
+    ['세액공제 카드 값(.amount-card-value)', m.amountValue, 26],
+    ['세액공제 카드 라벨(.amount-card-label)', m.amountLabel, 13],
   ];
-  for (const [label, actual, oldPx, expectedPx] of cases) {
+  for (const [label, actual, expectedPx] of cases) {
     assert.ok(actual, `${label}을 찾지 못했다`);
     assert.ok(
       Math.abs(px(actual) - expectedPx) <= 0.5,
-      `${label} 글자 크기(${actual})가 옛값(${oldPx}px)의 1.5배(${expectedPx}px)가 아니다`,
+      `${label} 글자 크기(${actual})가 확대 이전 값(${expectedPx}px)으로 돌아가지 않았다`,
     );
   }
 });
 
 /**
- * [2026-08-20, 관리자 지시(3차) 1번] 히어로 카피를 더 오른쪽으로 —
- * 소유자 표현 "스페이스바 15개 정도"(본문 폰트 기준 공백 15개 ≈ 60~75px).
- * 카드 왼쪽 안쪽 여백(예시칸 자체의 padding-left, `--space-5`) 위에 이
- * 만큼이 추가로 얹혔는지 잰다 — 카드 밖으로 넘치지 않는지도 함께.
+ * [2026-08-20, 관리자 지시(4차) 1번] **도넛 위 글자만 1.5배** — 조각
+ * 라벨(이름·금액)과 중앙 라벨(제목·값)의 글자 크기를 실측한다. 조각
+ * 라벨은 176px 상자 안에 못 들어가 고리 밖(리더선) 폴백으로 밀려날 수
+ * 있다는 것을 소유자가 명시로 허용했다 — 그 경우에도 **같은 1.5배 고정
+ * 크기**로 그려지는지(줄어들지 않는지)까지 함께 잰다.
  */
-test('관리자 지시(3차) 1번 — 히어로 카피가 60~75px 더 오른쪽으로 밀리고, 카드 밖으로 넘치지 않는다', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(4차) 1번 — 도넛 조각 라벨·중앙 라벨 글자가 1.5배다(고리 밖으로 밀려나도 줄지 않는다)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const donut = root.querySelector('.chart-donut');
+    const nameEls = [...donut.querySelectorAll('.donut-slice-label-name')];
+    const amountEls = [...donut.querySelectorAll('.donut-slice-label-amount')];
+    const centerLabel = donut.querySelector('.donut-center-label');
+    const centerValue = donut.querySelector('.donut-center-value');
+    const leaderCount = donut.querySelectorAll('.donut-slice-label-leader').length;
+    return {
+      nameFontSizes: nameEls.map((el) => getComputedStyle(el).fontSize),
+      amountFontSizes: amountEls.map((el) => getComputedStyle(el).fontSize),
+      centerLabelFontSize: centerLabel ? getComputedStyle(centerLabel).fontSize : null,
+      centerValueFontSize: centerValue ? getComputedStyle(centerValue).fontSize : null,
+      leaderCount,
+    };
+  })()`);
+  const px = (s) => Number((s ?? '0px').replace('px', ''));
+  assert.ok(m.nameFontSizes.length >= 3, `조각 이름 라벨이 3개 미만이다: ${JSON.stringify(m.nameFontSizes)}`);
+  for (const [i, size] of m.nameFontSizes.entries()) {
+    assert.ok(Math.abs(px(size) - 22.5) <= 0.5, `${i}번 조각 이름 라벨(${size})이 15px×1.5=22.5px가 아니다`);
+  }
+  for (const [i, size] of m.amountFontSizes.entries()) {
+    assert.ok(Math.abs(px(size) - 21.5) <= 0.5, `${i}번 조각 금액 라벨(${size})이 22.5-1=21.5px가 아니다`);
+  }
+  assert.ok(Math.abs(px(m.centerLabelFontSize) - 18.75) <= 0.5, `중앙 라벨(${m.centerLabelFontSize})이 12.5px×1.5=18.75px가 아니다`);
+  assert.ok(Math.abs(px(m.centerValueFontSize) - 22.5) <= 0.5, `중앙 값(${m.centerValueFontSize})이 15px×1.5=22.5px가 아니다`);
+  // 176px 상자에서는 커진 라벨이 안 들어가 고리 밖(리더선) 폴백이
+  // 걸릴 수 있다 — 소유자가 명시로 허용한 결과다. 몇 개가 걸리든 폰트
+  // 크기 자체는 위에서 이미 1.5배로 고정 확인했다.
+  console.log(`[도넛 라벨 실측] 고리 밖 폴백(리더선) ${m.leaderCount}개 — 176px 상자에서 1.5배 라벨이 안 들어가면 걸리는 정상 동작이다.`);
+});
+
+/**
+ * [2026-08-20, 관리자 지시(3차) 1번, 관리자 지시(4차) 2번으로 재확인]
+ * 히어로 카피를 더 오른쪽으로 — 소유자 표현 "스페이스바 15개 정도"(본문
+ * 폰트 기준 공백 15개 ≈ 60~75px). 카드 왼쪽 안쪽 여백(예시칸 자체의
+ * padding-left, `--space-5`) 위에 이 만큼이 추가로 얹혔는지 잰다 — 카드
+ * 밖으로 넘치지 않는지도 함께.
+ *
+ * **[2026-08-20, 관리자 지시(4차) 2번] "아래로 내려가면 안 된다" — 옆에
+ * 있는지까지 확인한다.** 관리자 지시(3차) 5번(예시영역 폰트 50% 확대)이
+ * 그리드 열을 넓혀 두 행이 카드 오른쪽까지 차지하면서 카피가 `flex-wrap`
+ * 으로 아래로 밀렸던 회귀가 있었다 — 그리드 열이 되돌아온 지금, 카피의
+ * 위쪽 끝이 1행의 위쪽 끝과 같은 자리(= 옆에 나란히)인지 실측으로
+ * 고정한다.
+ */
+test('관리자 지시(3차) 1번·(4차) 2번 — 히어로 카피가 60~75px 더 오른쪽으로 밀리고, 두 행 옆(아래가 아니라)에 서며, 카드 밖으로 넘치지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
@@ -486,12 +537,18 @@ test('관리자 지시(3차) 1번 — 히어로 카피가 60~75px 더 오른쪽�
     const root = host.shadowRoot;
     const section = root.querySelector('.example-showcase');
     const copy = root.querySelector('.example-hero-copy');
+    const row1 = root.querySelector('.example-persona-row');
     const cs = getComputedStyle(copy);
     const sectionRect = section.getBoundingClientRect();
     const copyRect = copy.getBoundingClientRect();
+    const row1Rect = row1.getBoundingClientRect();
     return {
       marginLeft: parseFloat(cs.marginLeft),
+      copyTop: copyRect.top,
+      copyLeft: copyRect.left,
       copyRight: copyRect.right,
+      row1Top: row1Rect.top,
+      row1Right: row1Rect.right,
       sectionRight: sectionRect.right,
       docOverflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     };
@@ -505,6 +562,16 @@ test('관리자 지시(3차) 1번 — 히어로 카피가 60~75px 더 오른쪽�
     `히어로 카피 오른쪽 끝(${m.copyRight})이 카드 오른쪽 끝(${m.sectionRight})을 넘는다`,
   );
   assert.equal(m.docOverflowsX, false, '히어로 카피가 오른쪽으로 밀리며 문서 가로 스크롤이 생겼다');
+  // "옆" — 카피 위쪽 끝이 1행 위쪽 끝과 같은 높이(세로로 안 밀렸다), 카피
+  // 왼쪽 끝이 1행 오른쪽 끝보다 오른쪽(가로로 옆에 있다).
+  assert.ok(
+    Math.abs(m.copyTop - m.row1Top) <= 2,
+    `히어로 카피가 1행과 같은 높이에서 시작하지 않는다(아래로 내려간 것으로 보인다) — 카피 top ${m.copyTop}, 1행 top ${m.row1Top}`,
+  );
+  assert.ok(
+    m.copyLeft > m.row1Right,
+    `히어로 카피가 1행 오른쪽(${m.row1Right})보다 왼쪽(${m.copyLeft})에 있다 — 옆이 아니다`,
+  );
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
@@ -584,25 +651,25 @@ test('1440×900에서 물음이 한 줄이다(Range 실측), 문서 가로 스�
 
 /**
  * 화살표가 1440×900 첫 화면 안에 스크롤 없이 보인다는 기준(2026-08-17
- * 소유자 지시 5번이 세운 기준) — [2026-08-20, 관리자 지시(3차) 5번으로
- * 뒤집힌 기대값] **"1440×900 화살표 유지가 목표지만, 폰트 50% 확대와
- * 충돌해 도저히 안 되면 확대를 우선하고 화살표 바닥 실측값을 보고에
- * 남겨라"는 소유자 지시가 이 검사의 강제력 자체를 없앴다.** 실측 결과
- * 화살표 아래 끝이 900px를 크게 넘는다(두 행이 폰트 50% 확대로 훨씬
- * 커지고, 히어로 카피도 옆이 아니라 아래로 내려가 세로로 쌓인다) —
- * 지우지 않고 뒤집는다: 강제 통과 조건에서 `1366×768 실측`(artifact-
- * build.browser.mjs)과 같은 "사실만 기록" 형태로 바꾼다.
+ * 소유자 지시 5번이 세운 기준). **[2026-08-20, 관리자 지시(4차) — 다시
+ * 원방향으로 되돌린다]** 관리자 지시(3차) 5번(예시영역 폰트 50% 확대)이
+ * 이 예산을 깼었지만, 소유자가 그 5번을 정정했다 — "1.5배는 도넛 위
+ * 글자만"이었고 정보 줄·그리드 열·히어로 카피 위치는 전부 되돌린다.
+ * 그 결과 카드 높이가 다시 줄어(정보/절세액 칸이 확대 이전 크기로
+ * 돌아가고, 히어로 카피도 옆으로 복귀해 세로로 쌓이지 않는다) 화살표가
+ * 다시 900px 첫 화면 안으로 들어온다(실측: bottom≈706px) — 강제 통과
+ * 조건을 되돌린다.
  */
-test('1440×900 실측(강제하지 않는다, 사실만 기록 — 관리자 지시(3차) 5번으로 화살표 예산이 깨졌다)', { skip: skipWithoutChrome }, async () => {
+test('1440×900 첫 화면 안에 화살표가 스크롤 없이 보인다(관리자 지시(4차)로 예산이 되돌아왔다)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   await sleep(200);
   const data = await page.evaluate(READ_SHOWCASE);
   assert.ok(data.arrowRect, '화살표를 찾지 못했다');
-  const fits = data.arrowRect.bottom <= 900;
-  console.log(
-    `[1440×900 실측] 화살표 bottom=${data.arrowRect.bottom.toFixed(1)}px, 뷰포트=900px, ${fits ? '들어간다' : `넘친다(${(data.arrowRect.bottom - 900).toFixed(1)}px)`}`,
+  assert.ok(
+    data.arrowRect.bottom <= 900,
+    `화살표 아래 끝(${data.arrowRect.bottom})이 900px 첫 화면을 벗어난다 — 스크롤해야 보인다`,
   );
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
@@ -807,12 +874,19 @@ test('예시 도넛의 기하를 실측한다(1행) — 각도 합 360°, 조각
 });
 
 /**
- * [2026-08-17, D72(관리자 지시 4번)] 도넛 조각 위 이름+비율 라벨 — 1행
- * (김철수씨)의 실제 배분(33%/17%/50%, `example-showcase.test.mjs`가 계산
- * 값으로 고정한 그 비율)이 정확히 그려지는지, **특히 최소값인 17%(IRP)
- * 조각에 이름+비율이 실제로 들어가는지**를 잰다. READ_SHOWCASE가 이 라벨
- * 필드를 1행 도넛에 스코프하므로(위 머리말 (4)) 2행(이승은씨) 라벨과 섞이지
- * 않는다.
+ * [2026-08-17, D72(관리자 지시 4번), 2026-08-20 관리자 지시(4차) 1번으로
+ * 재확인] 도넛 조각 위 이름+비율 라벨 — 1행(김철수씨)의 실제 배분
+ * (33%/17%/50%, `example-showcase.test.mjs`가 계산 값으로 고정한 그
+ * 비율)이 정확히 그려지는지, **특히 최소값인 17%(IRP) 조각에 이름+비율이
+ * 실제로 들어가는지**를 잰다. READ_SHOWCASE가 이 라벨 필드를 1행 도넛에
+ * 스코프하므로(위 머리말 (4)) 2행(이승은씨) 라벨과 섞이지 않는다.
+ *
+ * **[뒤집힌 기대값]** 옛 검사는 "리더선 폴백이 걸리지 않는다"(고리 안에
+ * 다 들어간다)를 기대했다 — 그때는 라벨이 기본 크기였다. 이제 라벨
+ * 폰트가 1.5배 고정(관리자 지시(4차) 1번)이라 176px 도넛에서는 셋 다
+ * 리더선 밖으로 밀려나는 것이 **정상**이다(소유자가 명시로 허용한 "기존
+ * 관행"). 리더선 개수 자체는 더 이상 단정하지 않고, 이름·비율 짝짓기와
+ * 겹침 없음만 확인한다.
  */
 test('D72 4번 — 1행 도넛 조각 위에 계좌 이름 + 실제 배분 비율(연금저축 33%·IRP 17%·ISA 50%)이 그려진다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
@@ -827,8 +901,6 @@ test('D72 4번 — 1행 도넛 조각 위에 계좌 이름 + 실제 배분 비�
   const irpIndex = data.sliceLabelNameTexts.findIndex((t) => t === 'IRP');
   assert.ok(irpIndex >= 0, `"IRP" 이름 라벨을 찾지 못했다: ${JSON.stringify(data.sliceLabelNameTexts)}`);
   assert.equal(data.sliceLabelPctTexts[irpIndex], '17%', `IRP와 같은 자리(인덱스 ${irpIndex})의 비율이 17%가 아니다: ${data.sliceLabelPctTexts[irpIndex]}`);
-
-  assert.equal(data.sliceLabelLeaderCount, 0, '이 예시의 실제 조각(최소 17%)에서는 리더선 폴백이 걸리지 않아야 하는데 걸렸다');
 
   for (const [i, r] of data.sliceLabelRects.entries()) {
     assert.ok(r.width > 1 && r.height > 1, `조각 라벨 ${i}이 0크기다: ${JSON.stringify(r)}`);
@@ -845,12 +917,19 @@ test('D72 4번 — 1행 도넛 조각 위에 계좌 이름 + 실제 배분 비�
 });
 
 /**
- * [2026-08-17, D72(관리자 지시 4번)] 글자 색 대비 — 1행 도넛에 스코프해
- * (두 도넛이 있으므로 라벨을 도넛 자신의 서브트리로 좁혀 잰다 — 안 그러면
- * 2행 라벨까지 섞여 `tops[i]`(1행 3개)와 `labelEls[i]`(옛날엔 root 전역
- * 질의라 이제 6개)의 인덱스가 어긋나 엉뚱한 배경·글자색을 짝짓는다).
+ * [2026-08-17, D72(관리자 지시 4번), 2026-08-20 관리자 지시(4차) 1번으로
+ * 갱신] 글자 색 대비 — 1행 도넛에 스코프한다(두 도넛이 있으므로 라벨을
+ * 도넛 자신의 서브트리로 좁혀 잰다).
+ *
+ * **라벨마다 실제 배경이 다르다.** 고리 안(옛 기본 경로)이면 배경은 조각
+ * 자신의 채움색이고 글자색은 `bestTextColorOn`이 고른 흰/검이다. 고리
+ * 밖(리더선 폴백, 관리자 지시(4차) 1번으로 지금은 이쪽이 기본이다)이면
+ * 배경은 카드 표면(`--surface-raised`)이고 글자색은 `--text-primary`
+ * 고정이다 — 옛 검사처럼 무조건 조각 채움색을 배경으로 재면 리더선
+ * 라벨에서는 애초에 성립하지 않는 비교(실제로 그 색 위에 앉아 있지
+ * 않다)를 하게 된다. 리더선 유무로 배경을 갈라 정확히 잰다.
  */
-test('D72 4번 — 1행 도넛 조각 위 이름+비율 라벨 글자색이 배경과 최소 4.5:1 대비를 낸다(실측)', { skip: skipWithoutChrome }, async () => {
+test('D72 4번 — 1행 도넛 조각 위 이름+비율 라벨 글자색이 실제 배경과 최소 4.5:1 대비를 낸다(실측)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
 
@@ -860,21 +939,23 @@ test('D72 4번 — 1행 도넛 조각 위 이름+비율 라벨 글자색이 배�
     const svg = root.querySelector('.chart-donut'); // 1행 — 첫 매치.
     const tops = [...svg.querySelectorAll('path[role="img"]')];
     const labelEls = [...svg.querySelectorAll('.donut-slice-label')]; // 1행 도넛에 스코프.
+    const cardBg = getComputedStyle(root.querySelector('.example-showcase')).backgroundColor;
     function srgbToLinear(c) { c/=255; return c <= 0.03928 ? c/12.92 : ((c+0.055)/1.055)**2.4; }
     function luminance([r,g,b]) { return 0.2126*srgbToLinear(r)+0.7152*srgbToLinear(g)+0.0722*srgbToLinear(b); }
     function parseRgb(s) { const m = /rgba?\\(([\\d.]+)[,\\s]+([\\d.]+)[,\\s]+([\\d.]+)/.exec(s); return m ? [+m[1],+m[2],+m[3]] : [0,0,0]; }
     function contrast(l1,l2) { const [hi,lo] = l1>=l2?[l1,l2]:[l2,l1]; return (hi+0.05)/(lo+0.05); }
     return labelEls.map((el, i) => {
-      const bg = getComputedStyle(tops[i]).fill;
+      const isOutside = !!el.previousElementSibling && el.previousElementSibling.classList.contains('donut-slice-label-leader');
+      const bg = isOutside ? cardBg : getComputedStyle(tops[i]).fill;
       const fg = getComputedStyle(el).fill;
       const ratio = contrast(luminance(parseRgb(bg)), luminance(parseRgb(fg)));
-      return { text: el.textContent, bg, fg, ratio };
+      return { text: el.textContent, bg, fg, ratio, isOutside };
     });
   })()`);
 
   assert.ok(m.length >= 3, `1행 조각 라벨이 3개 미만이다: ${JSON.stringify(m)}`);
   for (const row of m) {
-    assert.ok(row.ratio >= 4.5, `퍼센티지 "${row.text}" 대비가 4.5:1 미만이다(fg=${row.fg}, bg=${row.bg}): ${row.ratio.toFixed(2)}`);
+    assert.ok(row.ratio >= 4.5, `퍼센티지 "${row.text}"(${row.isOutside ? '고리 밖' : '고리 안'}) 대비가 4.5:1 미만이다(fg=${row.fg}, bg=${row.bg}): ${row.ratio.toFixed(2)}`);
   }
 });
 
@@ -1119,11 +1200,11 @@ test('관리자 지시 — man-icon·female-icon 높이가 각 행의 입력 네
   const data = await page.evaluate(READ_SHOWCASE);
   assert.equal(data.iconRects.length, 2, '아이콘이 2개(행마다 하나)여야 한다');
 
-  // [2026-08-20, 관리자 지시(3차) 5번] 글자 크기가 1.5배(18→27px, 12.5→18.75px)로
-  // 커지며 이 계산식도 같은 비율로 다시 푼다 — "네 줄 높이 = 아이콘 높이"
-  // 규칙 자체는 그대로다.
-  const LINES_HEIGHT = 27 * 1.35 * 4 + 4 * 3;
-  const NAME_TAG_SHARE = 18.75 * 1.4 + 4;
+  // [2026-08-20, 관리자 지시(4차) 1번] 관리자 지시(3차) 5번의 1.5배 계산식을
+  // 되돌린다 — 소유자 정정("1.5배는 도넛 위 글자만")대로 정보 줄·이름
+  // 캡션은 확대 대상이 아니었다.
+  const LINES_HEIGHT = 18 * 1.35 * 4 + 4 * 3;
+  const NAME_TAG_SHARE = 12.5 * 1.4 + 4;
   const EXPECTED = LINES_HEIGHT - NAME_TAG_SHARE;
   for (const [i, r] of data.iconRects.entries()) {
     assert.ok(

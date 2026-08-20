@@ -456,12 +456,14 @@ test('관리자 지시(3차) 4번 — 배포 번들, 1440px — 이동 화살표
  * 1440×900 뷰포트 안에 있는지를 `getBoundingClientRect().bottom <=
  * 뷰포트 높이`로 잰다 — **번들**(`dist/index.html`)에서, 개발 서버가 아니라.
  *
- * **[2026-08-20, 관리자 지시(3차) 5번으로 뒤집힌 기대값]** 예시영역 폰트
- * 50% 확대(두 행이 훨씬 커지고, 히어로 카피가 옆이 아니라 아래로 쌓인다)와
- * 충돌하면 확대를 우선하라는 소유자 지시로 이 검사의 강제력이 사라졌다 —
- * 지우지 않고 "사실만 기록"으로 뒤집는다(아래 1366×768 실측과 같은 형태).
+ * **[2026-08-20, 관리자 지시(4차) — 다시 원방향으로 되돌린다]** 관리자
+ * 지시(3차) 5번(예시영역 폰트 50% 확대)이 이 검사를 "사실만 기록"으로
+ * 한 차례 뒤집었으나, 소유자가 그 5번을 정정했다 — "1.5배는 도넛 위
+ * 글자만"이었다. 정보 줄·그리드 열·히어로 카피 위치를 전부 되돌리면서
+ * 카드 높이도 되돌아가 화살표가 다시 900px 안에 들어온다(실측:
+ * bottom≈706px) — 강제 통과 조건을 되돌린다.
  */
-test('소유자 지시 5번 — 배포 번들, 1440×900 실측(강제하지 않는다, 사실만 기록 — 관리자 지시(3차) 5번으로 예산이 깨졌다)', { skip: skipWithoutChrome }, async () => {
+test('소유자 지시 5번 — 배포 번들, 1440×900에서 화살표 전체가 스크롤 없이 첫 화면 안에 보인다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.waitFor(`(() => {
@@ -476,9 +478,9 @@ test('소유자 지시 5번 — 배포 번들, 1440×900 실측(강제하지 않
     const r = arrow.getBoundingClientRect();
     return { bottom: r.bottom, top: r.top, viewportH: window.innerHeight };
   })()`);
-  const fits = m.bottom <= m.viewportH;
-  console.log(
-    `[배포 번들 1440×900 실측] 화살표 bottom=${m.bottom.toFixed(1)}px, 뷰포트=${m.viewportH}px, ${fits ? '들어간다' : `넘친다(${(m.bottom - m.viewportH).toFixed(1)}px)`}`,
+  assert.ok(
+    m.bottom <= m.viewportH,
+    `배포 번들 1440×900 — 화살표 아래쪽(${m.bottom})이 뷰포트 높이(${m.viewportH})를 넘는다 — 스크롤해야 보인다`,
   );
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
@@ -609,14 +611,15 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
       })()`);
 
       // [2026-08-20, 관리자 지시(2차) 1번 — 뒤집힌 기대값, 관리자 지시(3차)
-      // 5번으로 다시 뒤집힘] 옛 검사는 범례 스타일(list-style: none·스와치
-      // 크기)로 CSS 로드를 확인했다 — 레전드 자체가 없어졌으므로 도넛 렌더
-      // 폭으로 신호를 바꿨다(176px). 예시영역 폰트 50% 확대로 도넛도
-      // 176×1.5=264px가 됐다 — 지우지 않고 뒤집는다.
+      // 5번으로 다시 뒤집힘, 관리자 지시(4차) 1번으로 다시 원래대로]
+      // 옛 검사는 범례 스타일(list-style: none·스와치 크기)로 CSS 로드를
+      // 확인했다 — 레전드 자체가 없어졌으므로 도넛 렌더 폭으로 신호를
+      // 바꿨다(176px). 소유자가 "1.5배는 도넛 위 글자만"으로 정정하며
+      // 상자 자체는 다시 176px로 돌아간다.
       assert.equal(
         m.donutWidth,
-        264,
-        `아티팩트처럼 감싼 조건 — 도넛 렌더 폭이 264px가 아니다(width: ${m.donutWidth}px) — 스타일이 실리지 않았을 수 있다`,
+        176,
+        `아티팩트처럼 감싼 조건 — 도넛 렌더 폭이 176px가 아니다(width: ${m.donutWidth}px) — 스타일이 실리지 않았을 수 있다`,
       );
       assert.ok(
         m.heroCopyGap && m.heroCopyGap !== '0px',
@@ -719,14 +722,12 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         1,
         `아티팩트처럼 감싼 조건, 1440px — 물음이 한 줄이 아니다(${wrapped1440.questionLineCount}줄로 꺾였다)`,
       );
-      // [2026-08-20, 관리자 지시(3차) 5번으로 강제력이 사라졌다] 예시영역
-      // 폰트 50% 확대와 충돌하면 확대를 우선하라는 소유자 지시로, 감싼
-      // 조건에서도 이 화살표 예산은 더는 강제하지 않는다 — 사실만 기록한다
-      // (위 별도 시험 "1440×900 실측"과 같은 원칙).
-      console.log(
-        `[감싼 조건, 1440×900 실측] 화살표 bottom=${wrapped1440.arrowBottom?.toFixed(1)}px, 뷰포트=${wrapped1440.viewportH}px, ${
-          wrapped1440.arrowBottom != null && wrapped1440.arrowBottom <= wrapped1440.viewportH ? '들어간다' : '넘친다'
-        }`,
+      // [2026-08-20, 관리자 지시(4차) — 다시 원방향으로 되돌린다] 관리자
+      // 지시(3차) 5번이 이 강제력을 없앴었지만, 소유자가 그 5번을 정정해
+      // 카드 높이가 되돌아왔다 — 감싼 조건에서도 다시 강제한다.
+      assert.ok(
+        wrapped1440.arrowBottom != null && wrapped1440.arrowBottom <= wrapped1440.viewportH,
+        `아티팩트처럼 감싼 조건, 1440×900 — 화살표 아래쪽(${wrapped1440.arrowBottom}px)이 뷰포트 높이(${wrapped1440.viewportH}px)를 넘는다`,
       );
       assert.equal(wrapped1440.docOverflowsX, false, '아티팩트처럼 감싼 조건, 1440px — 가로 스크롤이 생겼다');
       await page.send('Emulation.clearDeviceMetricsOverride');

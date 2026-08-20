@@ -831,6 +831,61 @@ test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두�
 });
 
 /**
+ * [2026-08-20, 관리자 지시(4차) 3번] **그림자를 주황 그라데이션으로.**
+ * 세 카드의 `box-shadow` 색이 무채색(회색)에서 `--accent-warm`(주황)
+ * 계열로 바뀌었는지 라이트·다크 둘 다 실측한다 — `getComputedStyle(...)
+ * .boxShadow` 문자열에 `rgb(230, 115, 0)`이 실제로 들어 있는지를 잰다
+ * (색만 바꾸고 흐림·번짐 값은 그대로 두는 지시였으므로 문자열 포함 여부로
+ * 충분하다). 역산기 탭 카드도 같은 클래스를 공유하므로 함께 확인한다.
+ */
+test('관리자 지시(4차) 3번 — 세 카드 그림자가 주황 계열이다 — 라이트·다크, 두 탭 모두', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
+  await page.waitFor(`!!document.querySelector('.example-showcase-slot')?.shadowRoot?.querySelector('.example-showcase')`, { timeoutMs: 8000 });
+  await sleep(150);
+
+  const READ_SHADOWS = `(() => {
+    const exampleHost = document.querySelector('.example-showcase-slot');
+    const reverseExampleHost = document.querySelector('.reverse-example-showcase-slot');
+    const exampleSection = exampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
+    const reverseExampleSection = reverseExampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
+    const inputPanels = [...document.querySelectorAll('.input-panel')];
+    const resultPanels = [...document.querySelectorAll('.result-panel-inner')];
+    return {
+      exampleShadow: exampleSection ? getComputedStyle(exampleSection).boxShadow : null,
+      reverseExampleShadow: reverseExampleSection ? getComputedStyle(reverseExampleSection).boxShadow : null,
+      inputPanelShadows: inputPanels.map((el) => getComputedStyle(el).boxShadow),
+      resultPanelShadows: resultPanels.map((el) => getComputedStyle(el).boxShadow),
+    };
+  })()`;
+
+  // 그림자는 알파가 있어 브라우저가 `rgba(230, 115, 0, 0.xx)`로 정규화한다
+  // (`rgb(230, 115, 0)`과 문자열이 다르다 — 테두리처럼 완전 불투명이
+  // 아니다) — 그래서 RGB 세 값(230, 115, 0)만 부분 일치로 잰다.
+  const WARM_RGB_TUPLE = '230, 115, 0';
+  const check = (data, themeLabel) => {
+    assert.ok(data.exampleShadow?.includes(WARM_RGB_TUPLE), `${themeLabel} — 첫 탭 예시 카드 그림자가 주황이 아니다: ${data.exampleShadow}`);
+    assert.ok(data.reverseExampleShadow?.includes(WARM_RGB_TUPLE), `${themeLabel} — 역산기 탭 예시 카드 그림자가 주황이 아니다: ${data.reverseExampleShadow}`);
+    for (const [i, s] of data.inputPanelShadows.entries()) {
+      assert.ok(s.includes(WARM_RGB_TUPLE), `${themeLabel} — ${i}번 입력 패널 그림자가 주황이 아니다: ${s}`);
+    }
+    for (const [i, s] of data.resultPanelShadows.entries()) {
+      assert.ok(s.includes(WARM_RGB_TUPLE), `${themeLabel} — ${i}번 결과 카드 그림자가 주황이 아니다: ${s}`);
+    }
+  };
+
+  const light = await page.evaluate(READ_SHADOWS);
+  check(light, '라이트');
+
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
+  await sleep(150);
+  const dark = await page.evaluate(READ_SHADOWS);
+  check(dark, '다크');
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+});
+
+/**
  * 다크 배경 대비 실측 — `--accent-warm`(rgb(230,115,0)) 대 다크
  * `--surface-raised`(#1e2226)의 WCAG 대비비를 이 검사가 독립적으로 다시
  * 계산해 3:1(WCAG 1.4.11 비텍스트 컴포넌트 최소 기준)을 넘는지 확인한다 —

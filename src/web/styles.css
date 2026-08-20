@@ -119,6 +119,15 @@
   --shadow-1: 0 1px 2px rgba(16, 18, 20, 0.06), 0 4px 12px rgba(16, 18, 20, 0.08);
   --shadow-2: 0 4px 12px rgba(16, 18, 20, 0.14);
   --shadow-3: 0 12px 32px rgba(16, 18, 20, 0.22);
+  /* [2026-08-20, 관리자 지시(4차) 3번] 세 카드(예시·입력·결과)의 그림자 —
+     기존 `--shadow-1`/`-2`(무채색 회색)와 같은 흐림·번짐(blur/spread) 값을
+     그대로 두고 **색만** `--accent-warm`(rgb(230,115,0))로 바꾼다("테두리
+     주황에서 바깥으로 점점 연해지는" — 이미 그림자 자체가 그 모양이므로
+     색만 바꾸는 것으로 충분하다는 소유자 판단대로). 라이트는 옛 알파값보다
+     살짝 올린다(회색보다 채도 있는 색은 낮은 알파에서 잘 안 보인다,
+     실측). */
+  --shadow-warm-1: 0 1px 2px rgba(230, 115, 0, 0.12), 0 4px 14px rgba(230, 115, 0, 0.18);
+  --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.22);
 
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
@@ -216,6 +225,12 @@
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
     --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
     --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
+    /* [2026-08-20, 관리자 지시(4차) 3번] 다크는 라이트보다 알파를 낮췄다 —
+       어두운 배경 위 채도 있는 색은 같은 알파에서 훨씬 도드라져("글로우"가
+       과해 보인다, 실측) 라이트값(0.12/0.18/0.22)을 그대로 쓰면 카드가
+       빛나는 것처럼 보였다. */
+    --shadow-warm-1: 0 1px 2px rgba(230, 115, 0, 0.08), 0 4px 14px rgba(230, 115, 0, 0.12);
+    --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.14);
     /* 위 :root 주석 참고 — 검정 윤곽선용 옅은 원형 판. */
     --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
   }
@@ -244,6 +259,8 @@
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.16);
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28);
   --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.44);
+  --shadow-warm-1: 0 1px 2px rgba(230, 115, 0, 0.08), 0 4px 14px rgba(230, 115, 0, 0.12);
+  --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.14);
   --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
 }
 
@@ -271,12 +288,15 @@
     --shadow-1: 0 1px 2px rgba(16, 18, 20, 0.06), 0 4px 12px rgba(16, 18, 20, 0.08);
     --shadow-2: 0 4px 12px rgba(16, 18, 20, 0.14);
     --shadow-3: 0 12px 32px rgba(16, 18, 20, 0.22);
-    /* 이 자리(화살표·탭 밑줄·히어로 카피)는 인쇄물에 나오지 않지만
-       (예시·탭 바·화살표 전부 `@media print`에서 숨는다), 리터럴 색 토큰은
+    /* 이 자리(화살표·탭 밑줄·히어로 카피·카드 그림자)는 인쇄물에 나오지
+       않지만(예시·탭 바·화살표 전부 `@media print`에서 숨고, 인쇄용
+       `.result-panel-inner`는 그림자 자체를 지운다, 아래) 리터럴 색 토큰은
        테마·매체와 무관하게 항상 같은 값이라 여기도 같은 값을 적는다
        (`styles-tokens.test.mjs` 8.5절 규칙). */
     --accent-warm: rgb(230, 115, 0);
     --accent-warm-underline: rgba(230, 115, 0, 0.45);
+    --shadow-warm-1: 0 1px 2px rgba(230, 115, 0, 0.12), 0 4px 14px rgba(230, 115, 0, 0.18);
+    --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.22);
   }
 }
 
@@ -563,13 +583,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    (예시·입력·결과) 테두리를 `--accent-warm`으로.** 이 규칙은 첫 탭·역산기
    탭 둘 다 적용된다 — `reverse-example-showcase.js`가 이 클래스를 그대로
    재사용하기 때문이다(대표 색은 서비스 전체라는 관리자 지시대로, 별도
-   분기 없이 자동으로 두 탭에 퍼진다). 그림자(`--shadow-1`)는 손대지
-   않는다 — 지시가 "지금 있는 은은한 그림자는 유지"라고 명시했다.
+   분기 없이 자동으로 두 탭에 퍼진다).
    **다크 모드 대비 실측** — `--accent-warm`(rgb(230,115,0)) 대 다크
    카드 배경(`--surface-raised` 다크 `#1e2226`)의 WCAG 대비비는 이미
    ≈5.20:1(`--accent-warm` 선언 옆 주석, 화살표 색과 같은 계산)로 3:1을
    넉넉히 넘는다 — 별도 다크 전용 톤이 필요 없다(라이트도 ≈3.08:1로
-   충분). 그래서 `--accent-warm` 하나를 두 테마 모두에서 그대로 쓴다. */
+   충분). 그래서 `--accent-warm` 하나를 두 테마 모두에서 그대로 쓴다.
+   [2026-08-20, 관리자 지시(4차) 3번] **그림자를 주황 그라데이션으로.**
+   흐림·번짐(blur/spread) 값은 그대로 두고 색만 `--shadow-1`(무채색)에서
+   `--shadow-warm-1`(주황, `:root` 선언 옆 주석)로 바꾼다 — "테두리 주황에서
+   바깥으로 점점 연해지는 그림자"라는 지시를 그림자 색 하나만 바꿔 만족한다. */
 .example-showcase {
   position: relative;
   display: grid;
@@ -582,7 +605,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   background: var(--surface-raised);
   border: 1px solid var(--accent-warm);
   border-radius: var(--radius-l);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-warm-1);
 }
 
 /* [2026-08-20, 관리자 지시 — 첫 탭 예시 블록 개편] **첫 탭 전용 수정자.**
@@ -617,19 +640,14 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    (컨텐츠 폭과 무관하게 항상 같은 세 트랙) 두 행이 같은 x좌표에서
    시작한다. 열 사이 간격도 옛값(`space-5`, 24px)의 **정확히 두 배**
    (`space-7`, 48px)로 넓힌다(소유자 지시 원문).
-   **[2026-08-20, 관리자 지시(3차) 5번] 폰트 50% 확대로 열 폭을 다시
-   조정했다.** 열 사이 간격(`space-7`, 48px)은 "직전 회차 규칙 유지"
-   지시대로 그대로 둔다 — 바뀐 것은 세 트랙의 폭뿐이다(정보 330→500,
-   도넛 190→280, 절세액 200→300 — 실측으로 글자·아이콘·카드가 잘리지
-   않는 값을 찾았다, `example-showcase.browser.mjs`). 이 폭 확장으로 두
-   행(rowsStack)이 예시칸 오른쪽까지 거의 다 차지하게 되어, 히어로 카피
-   (`.example-persona-rows-and-copy`, 아래)가 옆이 아니라 **아래로
-   내려간다**(flex-wrap) — 소유자가 이 경우를 명시로 허용했다("확대가
-   충돌하면 확대를 우선"). 1440×900 화살표 예산은 이 트레이드오프로
-   깨진다 — 실측치는 최종 보고에 남긴다. */
+   **[2026-08-20, 관리자 지시(4차) 1번 — 정정, 관리자 지시(3차) 5번 전체를
+   되돌린다] 소유자가 직전 회차를 정정했다 — "1.5배는 도넛 위 글자만이
+   의도였다."** 정보 줄·이름 캡션·세액공제 카드 글자·그리드 열 폭은 전부
+   이 정정 이전 값(330/190/200)으로 되돌린다 — 도넛 조각·중앙 라벨
+   폰트만 1.5배로 남긴다(아래 두 항목 참고). */
 .example-persona-row {
   display: grid;
-  grid-template-columns: 500px 280px 300px;
+  grid-template-columns: 330px 190px 200px;
   column-gap: var(--space-7);
   align-items: center;
   min-width: 0;
@@ -638,15 +656,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .example-persona-icon-col { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); flex: 0 0 auto; }
 /* 아이콘 열 전체(아이콘+이름표)가 네 줄 전체 높이와 같아야 두 열을 나란히
    놓아도 위쪽이 맞는다 — 옛 `.example-showcase-input-icon`(세 줄 기준)과
-   같은 계산 방식이되 이제 네 줄이라 상수가 다르다.
-   [2026-08-20, 관리자 지시(3차) 5번] **글자 크기가 1.5배(18px→27px,
-   12.5px→18.75px)로 커지며 이 calc도 같은 비율로 다시 계산했다** —
-   네 줄 몫(27px × 1.35 × 4 + 줄 사이 gap 세 개 4px×3=12 = 157.8px)에서
-   이름표 몫(18.75px × 1.4 + 열 안 gap 4px = 30.25px)을 뺀 값이 아이콘
-   자신의 높이다. "네 줄 높이 = 아이콘 높이" 규칙 자체는 바뀌지 않는다 —
-   입력 글자 크기만 대입해 다시 푼 것이다. */
+   같은 계산 방식이되 이제 네 줄이라 상수가 다르다. 네 줄 몫
+   (18px × 1.35 × 4 + 줄 사이 gap 세 개 4px×3=12 = 109.2px)에서 이름표 몫
+   (12.5px × 1.4 + 열 안 gap 4px = 21.5px)을 뺀 값이 아이콘 자신의 높이다.
+   [2026-08-20, 관리자 지시(4차) 1번] 관리자 지시(3차) 5번의 1.5배 calc를
+   되돌린다 — 아이콘 자신은 확대 대상이 아니었다. */
 .example-persona-icon {
-  height: calc(27px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 18.75px * 1.4);
+  height: calc(18px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 12.5px * 1.4);
   width: auto; display: block; flex: 0 0 auto;
   /* [2026-08-20, 관리자 지시 — 다크 모드 색반전 결함] 컬러 일러스트라
      `filter: invert(...)`를 걸지 않는다(위 `:root`의 `--example-icon-plate-bg`
@@ -655,15 +671,15 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   background: var(--example-icon-plate-bg);
   border-radius: var(--radius-full);
 }
-/* [2026-08-20, 관리자 지시(3차) 5번] 12.5px × 1.5 = 18.75px. */
+/* [2026-08-20, 관리자 지시(4차) 1번] 12.5px로 되돌린다. */
 .example-persona-name {
-  margin: 0; font-size: 18.75px; line-height: 1.4; font-weight: 600;
+  margin: 0; font-size: 12.5px; line-height: 1.4; font-weight: 600;
   color: var(--text-secondary); text-align: center; white-space: nowrap;
 }
 .example-persona-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); }
-/* [2026-08-20, 관리자 지시(3차) 5번] 18px × 1.5 = 27px. */
+/* [2026-08-20, 관리자 지시(4차) 1번] 18px로 되돌린다. */
 .example-persona-line {
-  margin: 0; font-size: 27px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;
+  margin: 0; font-size: 18px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;
   color: var(--text-primary); word-break: keep-all; white-space: nowrap;
 }
 
@@ -674,18 +690,30 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    (160px→176px, `160*1.1=176`) — SVG는 `viewBox` 좌표계라 CSS 렌더 폭만
    키워도 안의 조각·라벨 글자가 함께 비례로 커진다("도넛과 그 위 글자들을
    10% 확대"라는 지시를 한 값으로 만족한다).
-   [2026-08-20, 관리자 지시(3차) 5번] **도넛 라벨도 "가능한 만큼" 1.5배로.**
-   조각 라벨 글자 크기는 `charts.js`의 `SLICE_LABEL_*` 상수(결과 패널과
-   공유하는 코드)라 이 컴포넌트만 따로 못 바꾼다 — 대신 이전 회차와 같은
-   방식(SVG `viewBox` 좌표계 전체를 CSS 렌더 폭으로 스케일)으로 도넛
-   전체(고리+라벨+중앙값)를 176px×1.5=264px로 키운다. 이 방법이 "가능한
-   만큼"의 최댓값이다 — 라벨만 확대하고 고리는 그대로 두는 것은 이
-   구조에서 불가능하다(라벨은 고리 실측 결과에 기대어 그려진다). */
+   [2026-08-20, 관리자 지시(4차) 1번] **도넛 상자는 176px로 되돌린다** —
+   264px(176×1.5)는 소유자가 정정한 "1.5배는 도넛 위 글자만" 지시와
+   맞지 않는다(상자까지 키우면 정보·절세액 칸과 비례가 깨진다는 것이
+   정정 취지). **라벨 폰트는 `charts.js`(아래) 안에서 별도로 1.5배 한다** —
+   상자가 작아지며 viewBox 좌표계 비례 확대(옛 처방)로는 라벨을 키울 수
+   없어졌으므로, 글자 크기 자체를 계산에서 키우는 방식으로 바꿨다. */
 .example-persona-donut-col {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-width: 0;
 }
-.example-persona-donut-col .chart-donut { width: 264px; max-width: 100%; }
+/* [2026-08-20, 관리자 지시(4차) 1번] `overflow: visible` — 조각 라벨을
+   1.5배 고정 크기로 바꾸면서(위 `charts.js` `applyAmountSliceLabel`) 고리
+   밖 폴백(리더선) 자리로 밀려나는 라벨이 늘었다. SVG는 기본으로 자기
+   `viewBox` 밖을 잘라내는데, 그 상자는 원래(1.5배 이전) 작은 라벨 기준
+   여유(gutter)로 계산돼 있어 커진 라벨이 가장자리에서 잘렸다(실측
+   스크린샷으로 확인 — "연금저축"이 "연금"으로 잘려 보였다). */
+.example-persona-donut-col .chart-donut { width: 176px; max-width: 100%; overflow: visible; }
+/* [2026-08-20, 관리자 지시(4차) 1번] 중앙 라벨("월 총 납입액"·금액)도
+   도넛 위 글자다 — 1.5배 대상. `.donut-center-label`/`-value`는 결과
+   패널 도넛과 공유하는 전역 클래스라 그 규칙 자체는 바꾸지 않고, 이
+   컨테이너 아래에서만(특이도가 더 높은 선택자로) 덮어쓴다 — 옛값
+   12.5px→18.75px(라벨), 15px→22.5px(값). */
+.example-persona-donut-col .donut-center-label { font-size: 18.75px; }
+.example-persona-donut-col .donut-center-value { font-size: 22.5px; }
 
 /* 세액공제액 — 소유자가 축소를 허용했다(두 행이 한 카드 안에 들어가야
    한다, 관리자 지시 2번). 옛 `.example-showcase-amount`(61px 값, 전폭
@@ -700,9 +728,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 }
 .example-persona-amount .amount-card-direction,
 .example-persona-amount .amount-card-composition { align-items: center; text-align: center; }
-/* [2026-08-20, 관리자 지시(3차) 5번] 13px × 1.5 = 19.5px, 26px × 1.5 = 39px. */
-.example-persona-amount .amount-card-label { font-size: 19.5px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
-.example-persona-amount .amount-card-value { font-size: 39px; line-height: 1.15; }
+/* [2026-08-20, 관리자 지시(4차) 1번] 13px/26px로 되돌린다 — 세액공제
+   카드는 도넛 위 글자가 아니다. */
+.example-persona-amount .amount-card-label { font-size: 13px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
+.example-persona-amount .amount-card-value { font-size: 26px; line-height: 1.15; }
 
 /* [2026-08-20, 관리자 지시(2차) 3번 — 명시적 번복] **두 행 사이 회색
    구분선을 지웠다.** 지난 회차가 새로 넣으라고 지시했던 바로 그
@@ -1473,7 +1502,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    (근거·다크 대비 실측은 `.example-showcase` 옆 주석과 같다). 이 클래스는
    역산기 탭의 입력 패널도 그대로 재사용한다(`reverse-input-panel.js`) —
    자동으로 두 탭 모두에 퍼진다. */
-.input-panel { background: var(--surface-raised); border: 1px solid var(--accent-warm); border-radius: var(--radius-l); padding: var(--space-5); box-shadow: var(--shadow-1); }
+.input-panel { background: var(--surface-raised); border: 1px solid var(--accent-warm); border-radius: var(--radius-l); padding: var(--space-5); box-shadow: var(--shadow-warm-1); }
 .input-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
 /* [2026-08-17, 관리자 지시(2차) 9번] 제목 앞 아이콘(`icons.js`)이 들어오면서
    `flex`+`gap`으로 바꾼다 — 아이콘과 글자를 나란히, 세로 가운데로 맞춘다. */
@@ -1640,7 +1669,7 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 /* [2026-08-20, 관리자 지시(3차) 2번] 대표 색 — 테두리를 `--accent-warm`으로
    (근거는 `.example-showcase` 옆 주석). `reverse-result-panel.js`도 이
    클래스를 그대로 쓴다 — 역산기 탭 결과 카드도 자동으로 같은 테두리를 받는다. */
-.result-panel-inner { background: var(--surface-raised); border: 1px solid var(--accent-warm); border-radius: var(--radius-l); box-shadow: var(--shadow-2); min-width: 0; }
+.result-panel-inner { background: var(--surface-raised); border: 1px solid var(--accent-warm); border-radius: var(--radius-l); box-shadow: var(--shadow-warm-2); min-width: 0; }
 .result-loading-overlay .result-body { opacity: 0.92; }
 .result-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 

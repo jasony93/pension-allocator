@@ -949,27 +949,39 @@ function applyDonutSliceInlineLabelsToSvg(svg, sliceContent = 'name_percent') {
 }
 
 /**
- * [2026-08-20, 관리자 지시 — 첫 탭 예시 도넛 개편] 조각 위에 **계좌명 + 월
- * 금액(만원 단위)**을 그린다("연금저축 50만원" — 소유자 지시 원문. 숫자
- * 전체 표기 금지). **비율(%)은 셋째 줄로 곁들이되, 겹치면(안 들어가면)
- * 뺀다** — 이름+금액 두 줄은 항상 필수, 비율은 "여유가 있을 때만"이라는
- * 지시를 그대로 코드로 옮긴다. 순서 — (1) 이름+금액+비율 세 줄로 시도하며
- * 글자 크기를 바닥까지 줄인다, (2) 그래도 안 들어가면 비율을 빼고 이름+금액
- * 두 줄을 **원래 크기부터 다시** 시도한다(줄어든 크기를 물려받지 않는다 —
- * 두 줄은 세 줄보다 여유가 있으므로 처음부터 다시 잴 자격이 있다), (3) 그래도
- * 안 들어가면 고리 밖 폴백(지시선) — 이 자리는 안(고리) 제약이 없으므로
- * 세 줄(이름+금액+비율)을 고정 크기로 그린다(옛 이름+비율 폴백과 같은 원칙 —
- * "밖에는 여유가 있다").
+ * [2026-08-20, 관리자 지시 — 첫 탭 예시 도넛 개편, 관리자 지시(4차) 1번으로
+ * 정정] 조각 위에 **계좌명 + 월 금액(만원 단위)**을 그린다("연금저축
+ * 50만원" — 소유자 지시 원문. 숫자 전체 표기 금지). **비율(%)은 셋째 줄로
+ * 곁들이되, 겹치면(안 들어가면) 뺀다.**
+ *
+ * **[정정] 글자 크기를 줄여서 맞추지 않는다 — 고정 크기(1.5배)를 그대로
+ * 쓴다.** 옛 구현(관리자 지시 직전 회차)은 1.5배를 "시작값"으로 두고 안
+ * 들어가면 계속 줄여 맞췄는데, 그러면 도넛이 작을 때(176px) 최종 렌더
+ * 크기가 **줄어든 대로** 수렴해 "1.5배로 커 보이게" 하려던 목적 자체가
+ * 무의미해진다(실측 — 176px 도넛에서 결국 옛 기본값보다도 작은 12.5px로
+ * 수렴했다). 소유자 정정("도넛 라벨은... 라벨 폰트 크기 자체를 1.5배 해서
+ * 176px 도넛 위에서 커 보이게 하라")대로 **줄이지 않고 고정한다** — 순서는
+ * (1) 이름+금액+비율 세 줄을 1.5배 고정 크기로 시도, (2) 안 들어가면
+ * 비율만 빼고 이름+금액 두 줄을 **같은 고정 크기**로 시도, (3) 그래도 안
+ * 들어가면 고리 밖 폴백(지시선) — 소유자가 명시로 허용한 "기존 관행"이다.
+ * 밖은 제약이 없으므로 세 줄 모두 이 고정 크기로 그린다.
  */
 function applyAmountSliceLabel({ group, top, name, pctText, insideColor, px, py, cx, cy, mid, ry, rOuter, chordAtMid, bandThickness }) {
   const monthlyAmount = Number(top.dataset.monthlyAmount);
   const amountText = formatKrwAbbreviated(Number.isFinite(monthlyAmount) ? monthlyAmount : 0);
 
-  const buildLines = (fontPx, includePct) => {
+  // 도넛 위 글자만 1.5배(관리자 지시(4차) 1번 — 결과 패널이 쓰는 기본
+  // 퍼센트 모드는 `SLICE_LABEL_NAME_FONT_PX`를 그대로 쓰므로 영향받지
+  // 않는다 — 이 상수는 이 함수 지역 변수다). **줄이지 않는 고정값이다.**
+  const fontPx = SLICE_LABEL_NAME_FONT_PX * 1.5;
+  const amountFontPx = fontPx - 1;
+  const pctFontPx = fontPx - 3;
+
+  const buildLines = (includePct) => {
     const nameLine = svgEl('tspan', { class: 'donut-slice-label-name', x: px, dy: includePct ? '-1.1em' : '-0.55em', style: `font-size:${fontPx}px` }, [name]);
     const amountLine = svgEl(
       'tspan',
-      { class: 'donut-slice-label-amount', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(SLICE_LABEL_MIN_FONT_PX, fontPx - 1)}px` },
+      { class: 'donut-slice-label-amount', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${amountFontPx}px` },
       [amountText],
     );
     const lines = [nameLine, amountLine];
@@ -977,65 +989,48 @@ function applyAmountSliceLabel({ group, top, name, pctText, insideColor, px, py,
       lines.push(
         svgEl(
           'tspan',
-          { class: 'donut-slice-label-pct', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(SLICE_LABEL_MIN_FONT_PX, fontPx - 3)}px` },
+          { class: 'donut-slice-label-pct', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${pctFontPx}px` },
           [pctText],
         ),
       );
     }
     return lines;
   };
-  const buildText = (fontPx, includePct) =>
+  const buildText = (includePct) =>
     svgEl(
       'text',
       { class: 'donut-slice-label', x: px, y: py, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: insideColor },
-      buildLines(fontPx, includePct),
+      buildLines(includePct),
     );
   const fits = (text) => {
     const box = text.getBBox();
     return box.width <= chordAtMid * SLICE_LABEL_FIT_MARGIN && box.height <= bandThickness * SLICE_LABEL_FIT_MARGIN;
   };
 
-  // (1) 이름+금액+비율 세 줄.
-  let includePct = true;
-  let fontPx = SLICE_LABEL_NAME_FONT_PX;
-  let text = buildText(fontPx, includePct);
+  // (1) 이름+금액+비율 세 줄, 고정 크기.
+  let text = buildText(true);
   group.appendChild(text);
-  while (!fits(text) && fontPx > SLICE_LABEL_MIN_FONT_PX) {
-    fontPx -= 1;
-    const next = buildText(fontPx, includePct);
-    group.replaceChild(next, text);
-    text = next;
-  }
 
-  // (2) 세 줄이 바닥값에서도 안 들어가면 — 비율을 빼고 이름+금액 두 줄을
-  // **원래 크기부터** 다시 시도한다.
+  // (2) 안 들어가면 — 비율만 빼고 이름+금액 두 줄, 같은 고정 크기.
   if (!fits(text)) {
-    includePct = false;
-    fontPx = SLICE_LABEL_NAME_FONT_PX;
-    const twoLine = buildText(fontPx, includePct);
+    const twoLine = buildText(false);
     group.replaceChild(twoLine, text);
     text = twoLine;
-    while (!fits(text) && fontPx > SLICE_LABEL_MIN_FONT_PX) {
-      fontPx -= 1;
-      const next = buildText(fontPx, includePct);
-      group.replaceChild(next, text);
-      text = next;
-    }
   }
 
   if (fits(text)) return;
 
   // (3) 폴백 — 고리 밖, 지시선과 함께. 밖은 안(조각) 제약이 없으므로 이름+
-  // 금액+비율 세 줄을 고정 크기로 그린다(옛 이름+비율 폴백과 같은 원칙).
+  // 금액+비율 세 줄을 같은 고정 크기로 그린다(옛 이름+비율 폴백과 같은 원칙).
   const outerRadius = rOuter + SLICE_LABEL_OUTSIDE_GAP;
   const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
   const fallback = svgEl(
     'text',
     { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
     [
-      svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-1.1em', style: `font-size:${SLICE_LABEL_NAME_FONT_PX}px` }, [name]),
-      svgEl('tspan', { class: 'donut-slice-label-amount', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${SLICE_LABEL_NAME_FONT_PX - 1}px` }, [amountText]),
-      svgEl('tspan', { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${SLICE_LABEL_NAME_FONT_PX - 3}px` }, [pctText]),
+      svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-1.1em', style: `font-size:${fontPx}px` }, [name]),
+      svgEl('tspan', { class: 'donut-slice-label-amount', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${amountFontPx}px` }, [amountText]),
+      svgEl('tspan', { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${pctFontPx}px` }, [pctText]),
     ],
   );
   group.replaceChild(fallback, text);
