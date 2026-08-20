@@ -245,6 +245,49 @@ test('헤더와 입력/결과 사이에 예시 섹션이 실제로 렌더된다(
 });
 
 /**
+ * [2026-08-20, 관리자 지시 — 번들 실측 회귀] **히어로 카피 헤드라인이 음절
+ * 중간에서 꺾인다**("받는 게 아니"+"라", "받는 것입"+"니다") — `word-break:
+ * keep-all`(`.example-hero-copy`)을 걸고, 그래도 1440px 열 폭에 안 들어가면
+ * clamp 상한을 줄여 원본 HTML의 3줄 구성(각 `<span class="line">`이 정확히
+ * 한 줄)이 그대로 나오게 한다. **`example-showcase.browser.mjs`의 "물음이
+ * 1440px에서 한 줄이다" 검사와 같은 방식**(Range.getClientRects — 요소
+ * 자체가 아니라 텍스트 조각을 감싼 Range라야 내부 줄바꿈과 무관하게 항상
+ * 박스 하나만 내는 함정을 피한다)을 헤드라인 세 줄 각각에 적용한다.
+ */
+test('관리자 지시 — 1440px에서 히어로 카피 헤드라인 세 줄이 각각 한 줄로 렌더된다(어절 경계에서만 꺾인다)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
+  await sleep(200);
+
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.example-showcase-slot');
+    const root = host.shadowRoot;
+    const lines = [...root.querySelectorAll('.example-hero-headline-line')];
+    return lines.map((line) => {
+      const range = document.createRange();
+      range.selectNodeContents(line);
+      // 텍스트 조각(strike·mark 하위 span 경계)이 같은 줄 안에서도 rect를
+      // 여러 개 낼 수 있다 — "한 줄"의 진짜 신호는 rect 개수가 아니라
+      // **서로 다른 top 값의 개수**다(다른 top이 둘 이상이면 실제로
+      // 꺾인 것이다).
+      const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+      return { text: line.textContent, distinctLineCount: tops.size };
+    });
+  })()`);
+
+  assert.equal(m.length, 3, `헤드라인 줄이 3개가 아니다: ${JSON.stringify(m)}`);
+  for (const [i, line] of m.entries()) {
+    assert.equal(
+      line.distinctLineCount,
+      1,
+      `1440px — 헤드라인 ${i}번 줄("${line.text}")이 한 줄이 아니다(${line.distinctLineCount}줄로 꺾였다)`,
+    );
+  }
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+/**
  * [2026-08-20, 관리자 지시] 행 안 가로 순서 — 왼쪽부터 기본 정보 → 도넛 →
  * 세액공제액(관리자 지시 원문 그대로). 두 행 모두에서 확인한다.
  */

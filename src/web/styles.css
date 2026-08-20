@@ -700,13 +700,26 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    hex였다 — 아래 각 규칙 참고). `flex: 1 1 320px`로 남는 폭을 채우되
    최소 320px 밑으로는 줄지 않는다(그 아래로 줄면 `flex-wrap`이 다음 줄로
    넘긴다 — 모바일 처방과 같은 메커니즘). */
+/* [2026-08-20, 관리자 지시 — 번들 실측 회귀] **음절 중간에서 꺾인다**
+   ("받는 게 아니"+"라", "받는 것입"+"니다") — 이 저장소가 예시 입력 줄·
+   금액 덩어리에서 이미 세운 관행(`.example-persona-line` 등)대로
+   `word-break: keep-all`을 카피 전체(헤드라인·본문·promise·caption)에
+   건다. 자식(`.example-hero-headline` 등) 전부가 이 값을 상속하므로
+   한 선언으로 충분하다 — `word-break`은 상속 속성이다. */
 .example-hero-copy {
   flex: 1 1 320px; min-width: 320px; max-width: 560px;
   display: flex; flex-direction: column; gap: 1.75rem;
+  word-break: keep-all;
 }
 .example-hero-headline {
   margin: 0; font-weight: 800; letter-spacing: -0.02em;
-  font-size: clamp(1.875rem, 1.1rem + 2.6vw, 3.0625rem);
+  /* [2026-08-20, 관리자 지시 — 번들 실측 회귀] 상한을 3.0625rem(49px)에서
+     2.25rem(36px)으로 줄였다 — `word-break: keep-all`만으로는 1440px 열 폭
+     (463px)에서 두 줄(각 span)이 여전히 두 줄로 꺾였다(실측). 36px에서는
+     세 줄(각 span) 모두 한 줄로 들어간다(실측, `example-showcase.browser.mjs`
+     "히어로 카피 헤드라인 세 줄이 각각 한 줄로 렌더된다"). 최솟값(1.875rem,
+     모바일 하한)은 건드리지 않는다 — 이번 결함은 넓은 화면 쪽이었다. */
+  font-size: clamp(1.875rem, 1.1rem + 2.6vw, 2.25rem);
   line-height: 1.28;
   color: var(--text-primary);
 }
