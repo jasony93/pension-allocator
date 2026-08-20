@@ -194,13 +194,13 @@ test('헤더와 입력/결과 사이에 예시 섹션이 실제로 렌더된다(
   assert.equal(data.amountValueTexts[0], '1,485,000원');
   assert.ok(!data.amountValueTexts[0].includes('~'));
 
-  // [2026-08-20, 관리자 지시 1번] 도넛 조각 라벨 — 이름+금액(만원 단위,
-  // 숫자 전체 표기 금지). "50만원" 형태여야 하고, "500,000원"처럼 쉼표
-  // 3자리 전체 표기가 있으면 안 된다.
-  assert.ok(data.sliceLabelAmountTexts.length >= 3, `1행 조각의 금액 줄이 3개 미만이다: ${JSON.stringify(data.sliceLabelAmountTexts)}`);
-  for (const amountText of data.sliceLabelAmountTexts) {
-    assert.match(amountText, /만원$/, `조각 금액 줄이 만원 단위가 아니다: "${amountText}"`);
-    assert.ok(!/\d{1,3}(,\d{3})+원/.test(amountText), `조각 금액 줄에 숫자 전체 표기(원 단위)가 남아 있다: "${amountText}"`);
+  // [2026-08-20, D79 판정 4] 도넛 조각 라벨 — 이름+비율(퍼센트)로 되돌아갔다
+  // (금액 라벨은 지웠다). "33%" 형태의 퍼센트 줄이 있어야 하고, 옛 금액 줄
+  // (`.donut-slice-label-amount`)은 이제 하나도 없어야 한다.
+  assert.equal(data.sliceLabelAmountTexts.length, 0, `조각에 금액 줄이 남아 있다(D79로 삭제됐어야 한다): ${JSON.stringify(data.sliceLabelAmountTexts)}`);
+  assert.ok(data.sliceLabelPctTexts.length >= 3, `1행 조각의 비율 줄이 3개 미만이다: ${JSON.stringify(data.sliceLabelPctTexts)}`);
+  for (const pctText of data.sliceLabelPctTexts) {
+    assert.match(pctText, /%$/, `조각 비율 줄이 %로 끝나지 않는다: "${pctText}"`);
   }
   // 중앙 값도 만원 단위("150만원") — 1행 총 납입액 150만원.
   const centerValueText = await page.evaluate(
@@ -317,9 +317,11 @@ test('두 행 모두 왼쪽부터 기본 정보 → 도넛 → 세액공제액 �
  * 열 x 좌표가 정확히 일치한다.** 기본 정보 문구 길이가 행마다 달라도
  * (1행 "소득: 4,000만원" vs 2행 "소득 : 8,000만원 (사업소득)") 고정
  * 그리드 열(`example-persona-row`, styles.css)이 x좌표를 강제로 맞춘다.
- * 열 사이 간격도 옛값(24px)의 정확히 두 배(48px)인지 함께 잰다.
+ * **[2026-08-20, D79 판정 4] 열 사이 간격도 예시 2케이스 블록 전체 −10%
+ * 대상이라 48px→43.2px로 줄었다** — 옛 "24px의 두 배" 관계는 이제 성립하지
+ * 않는다(48×0.9=43.2). 절댓값만 잰다.
  */
-test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 정확히 일치하고, 열 사이 간격이 옛값의 두 배(48px)다', { skip: skipWithoutChrome }, async () => {
+test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 정확히 일치하고, 열 사이 간격이 43.2px다(D79 −10%)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
@@ -339,11 +341,11 @@ test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 �
     `기본 정보 열 왼쪽 끝이 두 행에서 어긋난다: 1행 ${data.infoRects[0].left}, 2행 ${data.infoRects[1].left}`,
   );
 
-  // 열 사이 간격 — 옛값(space-5, 24px)의 정확히 두 배(space-7, 48px).
+  // 열 사이 간격 — D79 판정 4로 48px×0.9=43.2px.
   const gap1 = data.donutColRects[0].left - data.infoRects[0].right;
   const gap2 = data.amountColRects[0].left - data.donutColRects[0].right;
   for (const [label, gap] of [['정보→도넛', gap1], ['도넛→세액공제액', gap2]]) {
-    assert.ok(Math.abs(gap - 48) <= 1, `${label} 간격(${gap}px)이 48px(옛 24px의 두 배)이 아니다`);
+    assert.ok(Math.abs(gap - 43.2) <= 1, `${label} 간격(${gap}px)이 43.2px(48px×0.9, D79)가 아니다`);
   }
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
@@ -351,14 +353,17 @@ test('열 정렬 — 1행·2행의 도넛 열·세액공제액 열 x좌표가 �
 /**
  * [2026-08-20, 관리자 지시(4차) 1번 — 소유자 정정으로 다시 뒤집힌 기대값]
  * "1.5배는 도넛 위 글자만이 의도였다" — 상자 자체를 264px로 키웠던 지난
- * 회차 판단을 되돌린다. 10% 확대(160→176px)만 남는다. 글자가 1.5배
- * 커지는 것은 이 상자 크기와 무관하다(아래 별도 시험이 잰다).
+ * 회차 판단을 되돌린다. 10% 확대(160→176px)만 남는다.
+ * **[2026-08-20, D79 판정 4]** 예시 2케이스 블록 전체 −10%가 이 상자에도
+ * 적용돼 176×0.9=158.4px로 다시 줄었다 — 조각 라벨의 1.5배 고정 크기
+ * 처방(옛 `applyAmountSliceLabel`)은 이번 회차로 통째로 지웠다(라벨이
+ * 이름+비율 기본 모드로 돌아갔다, `charts.js`).
  */
-test('도넛 상자가 10% 확대(176px)로 되돌아간다 — 상자 자체는 1.5배 대상이 아니다', { skip: skipWithoutChrome }, async () => {
+test('도넛 상자가 예시 2케이스 축소로 158.4px가 된다(176×0.9, D79 판정 4)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const data = await page.evaluate(READ_SHOWCASE);
-  assert.equal(data.donutWidth, 176, `1행 도넛 렌더 폭이 176px(160×1.1)가 아니다: ${data.donutWidth}`);
+  assert.ok(Math.abs(data.donutWidth - 158.4) < 0.5, `1행 도넛 렌더 폭이 158.4px(176×0.9, D79)가 아니다: ${data.donutWidth}`);
 });
 
 /**
@@ -436,8 +441,11 @@ test('1행 입력 네 줄 글자 크기가 40px보다 작다', { skip: skipWitho
  * [2026-08-20, 관리자 지시(4차) 1번 — 소유자 정정] "1.5배는 도넛 위 글자만
  * 이었다" — 정보 줄·이름 캡션·세액공제 카드 글자는 확대 대상이 아니었다.
  * 지난 회차(관리자 지시(3차) 5번)의 1.5배를 전부 되돌린다.
+ * **[2026-08-20, D79 판정 4] 그 뒤로 예시 2케이스 블록 전체 글자가 추가
+ * −10%(합계 ×0.81)** — 이 네 값도 그 배수를 받는다: 18→14.58,
+ * 12.5→10.125, 26→21.06, 13→10.53.
  */
-test('관리자 지시(4차) 1번 — 정보 줄·이름 캡션·세액공제 카드 글자가 확대 이전 크기로 되돌아간다', { skip: skipWithoutChrome }, async () => {
+test('D79 판정 4 — 정보 줄·이름 캡션·세액공제 카드 글자가 예시 2케이스 축소(×0.81)를 받는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const m = await page.evaluate(`(() => {
@@ -456,28 +464,33 @@ test('관리자 지시(4차) 1번 — 정보 줄·이름 캡션·세액공제 �
   })()`);
   const px = (s) => Number((s ?? '0px').replace('px', ''));
   const cases = [
-    ['정보 줄(.example-persona-line)', m.line, 18],
-    ['이름 캡션(.example-persona-name)', m.name, 12.5],
-    ['세액공제 카드 값(.amount-card-value)', m.amountValue, 26],
-    ['세액공제 카드 라벨(.amount-card-label)', m.amountLabel, 13],
+    ['정보 줄(.example-persona-line)', m.line, 14.58],
+    ['이름 캡션(.example-persona-name)', m.name, 10.125],
+    ['세액공제 카드 값(.amount-card-value)', m.amountValue, 21.06],
+    ['세액공제 카드 라벨(.amount-card-label)', m.amountLabel, 10.53],
   ];
   for (const [label, actual, expectedPx] of cases) {
     assert.ok(actual, `${label}을 찾지 못했다`);
     assert.ok(
       Math.abs(px(actual) - expectedPx) <= 0.5,
-      `${label} 글자 크기(${actual})가 확대 이전 값(${expectedPx}px)으로 돌아가지 않았다`,
+      `${label} 글자 크기(${actual})가 D79 축소값(${expectedPx}px)이 아니다`,
     );
   }
 });
 
 /**
- * [2026-08-20, 관리자 지시(4차) 1번] **도넛 위 글자만 1.5배** — 조각
- * 라벨(이름·금액)과 중앙 라벨(제목·값)의 글자 크기를 실측한다. 조각
- * 라벨은 176px 상자 안에 못 들어가 고리 밖(리더선) 폴백으로 밀려날 수
- * 있다는 것을 소유자가 명시로 허용했다 — 그 경우에도 **같은 1.5배 고정
- * 크기**로 그려지는지(줄어들지 않는지)까지 함께 잰다.
+ * [2026-08-20, D79 판정 4 — 관리자 지시(4차) 1번을 뒤집는다] **"1.5배는
+ * 도넛 위 글자만"이었던 지난 회차 처방을 소유자가 다시 좁혔다** — 조각
+ * 라벨은 금액을 지우고 이름+비율(퍼센트) 기본 모드로 되돌아가며, 결과
+ * 패널·역산기 탭과 같은 절댓값 폰트(`SLICE_LABEL_NAME_FONT_PX`=15px,
+ * 비율 줄은 -2=13px)를 쓴다 — 더는 1.5배가 아니다. **항상 고리 밖(리더선)
+ * 에 그린다**(`forceOutside: true`) — 안에 들어가는지 실측조차 하지 않는다.
+ * 중앙 라벨·값은 여전히 예시 2케이스 블록의 글자 배수(×0.81)를 받는다
+ * (18.75px→15.1875px, 22.5px→18.225px) — 도넛 상자 자체가 그 블록
+ * 안에 있기 때문이다(조각 라벨은 카드 표면 위로 나가는 별도 절댓값이라
+ * 이 배수 밖이다, `styles.css` 주석 참고).
  */
-test('관리자 지시(4차) 1번 — 도넛 조각 라벨·중앙 라벨 글자가 1.5배다(고리 밖으로 밀려나도 줄지 않는다)', { skip: skipWithoutChrome }, async () => {
+test('D79 판정 4 — 도넛 조각 라벨이 이름+비율이고 항상 고리 밖(리더선)이며, 중앙 라벨은 예시 축소 배수를 받는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const m = await page.evaluate(`(() => {
@@ -485,32 +498,39 @@ test('관리자 지시(4차) 1번 — 도넛 조각 라벨·중앙 라벨 글자
     const root = host.shadowRoot;
     const donut = root.querySelector('.chart-donut');
     const nameEls = [...donut.querySelectorAll('.donut-slice-label-name')];
+    const pctEls = [...donut.querySelectorAll('.donut-slice-label-pct')];
     const amountEls = [...donut.querySelectorAll('.donut-slice-label-amount')];
     const centerLabel = donut.querySelector('.donut-center-label');
     const centerValue = donut.querySelector('.donut-center-value');
     const leaderCount = donut.querySelectorAll('.donut-slice-label-leader').length;
+    // 실제 조각 수는 role=img path로 센다 — chart-donut-slice 클래스는
+    // 그림자(extrude depth) 보조 path까지 함께 잡혀 조각당 둘로 겹셀 수 있다
+    // (실측 — 3조각인데 6이 나왔다).
+    const sliceCount = donut.querySelectorAll('path[role="img"]').length;
     return {
       nameFontSizes: nameEls.map((el) => getComputedStyle(el).fontSize),
-      amountFontSizes: amountEls.map((el) => getComputedStyle(el).fontSize),
+      pctFontSizes: pctEls.map((el) => getComputedStyle(el).fontSize),
+      amountCount: amountEls.length,
       centerLabelFontSize: centerLabel ? getComputedStyle(centerLabel).fontSize : null,
       centerValueFontSize: centerValue ? getComputedStyle(centerValue).fontSize : null,
       leaderCount,
+      sliceCount,
     };
   })()`);
   const px = (s) => Number((s ?? '0px').replace('px', ''));
   assert.ok(m.nameFontSizes.length >= 3, `조각 이름 라벨이 3개 미만이다: ${JSON.stringify(m.nameFontSizes)}`);
   for (const [i, size] of m.nameFontSizes.entries()) {
-    assert.ok(Math.abs(px(size) - 22.5) <= 0.5, `${i}번 조각 이름 라벨(${size})이 15px×1.5=22.5px가 아니다`);
+    assert.ok(Math.abs(px(size) - 15) <= 0.5, `${i}번 조각 이름 라벨(${size})이 기본값 15px가 아니다(D79로 1.5배가 없어졌다)`);
   }
-  for (const [i, size] of m.amountFontSizes.entries()) {
-    assert.ok(Math.abs(px(size) - 21.5) <= 0.5, `${i}번 조각 금액 라벨(${size})이 22.5-1=21.5px가 아니다`);
+  for (const [i, size] of m.pctFontSizes.entries()) {
+    assert.ok(Math.abs(px(size) - 13) <= 0.5, `${i}번 조각 비율 라벨(${size})이 15-2=13px가 아니다`);
   }
-  assert.ok(Math.abs(px(m.centerLabelFontSize) - 18.75) <= 0.5, `중앙 라벨(${m.centerLabelFontSize})이 12.5px×1.5=18.75px가 아니다`);
-  assert.ok(Math.abs(px(m.centerValueFontSize) - 22.5) <= 0.5, `중앙 값(${m.centerValueFontSize})이 15px×1.5=22.5px가 아니다`);
-  // 176px 상자에서는 커진 라벨이 안 들어가 고리 밖(리더선) 폴백이
-  // 걸릴 수 있다 — 소유자가 명시로 허용한 결과다. 몇 개가 걸리든 폰트
-  // 크기 자체는 위에서 이미 1.5배로 고정 확인했다.
-  console.log(`[도넛 라벨 실측] 고리 밖 폴백(리더선) ${m.leaderCount}개 — 176px 상자에서 1.5배 라벨이 안 들어가면 걸리는 정상 동작이다.`);
+  assert.equal(m.amountCount, 0, '조각에 금액 줄이 남아 있다(D79로 삭제됐어야 한다)');
+  // [D79 판정 4] "도넛 밖에(리더선 관행)" — 항상 고리 밖이다. 조각 수만큼
+  // 리더선이 있어야 한다(전부 밖으로 나갔다).
+  assert.equal(m.leaderCount, m.sliceCount, `리더선 개수(${m.leaderCount})가 조각 수(${m.sliceCount})와 같아야 한다 — 항상 고리 밖이어야 한다(forceOutside)`);
+  assert.ok(Math.abs(px(m.centerLabelFontSize) - 15.1875) <= 0.5, `중앙 라벨(${m.centerLabelFontSize})이 18.75px×0.81=15.1875px가 아니다`);
+  assert.ok(Math.abs(px(m.centerValueFontSize) - 18.225) <= 0.5, `중앙 값(${m.centerValueFontSize})이 22.5px×0.81=18.225px가 아니다`);
 });
 
 /**
@@ -718,13 +738,28 @@ test('조각 라벨(이름+금액)·조각 자체가 DOM에만 있는 게 아니
   }
 });
 
-test('예시 섹션이 문서 전체 질의(.amount-card, .chart-donut)와 충돌하지 않는다', { skip: skipWithoutChrome }, async () => {
+/**
+ * [2026-08-20, D79로 전제 갱신] 이 검사의 원래 취지는 "예시(Shadow DOM
+ * 안)가 문서 전체 질의(빛 DOM)로 새지 않는다"이다. **계산기2(D79)가
+ * 생기면서 전제가 바뀌었다** — 계산기2는 예시 없이 항상 프리필+즉시 계산
+ * 상태로 시작하므로(판정 2), 빛 DOM `.chart-donut`/`.amount-card`가 이제
+ * 하나씩 있는 것이 **정상**이다(계산기2 자신의 결과, 예시가 아니다).
+ * 그래서 "0개"가 아니라 "빛 DOM에 있는 모든 `.chart-donut`/`.amount-card`가
+ * 전부 `#tabpanel-calc2` 안에 있다"로 검사를 좁힌다 — 예시가 새면 그
+ * 새어나온 노드는 `#tabpanel-calc2` 밖에 있을 것이므로 이 검사가 여전히
+ * 잡는다.
+ */
+test('예시 섹션이 문서 전체 질의(.amount-card, .chart-donut)와 충돌하지 않는다(D79 — 계산기2 자신의 결과는 제외)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
-  const count = await page.evaluate(`document.querySelectorAll('.chart-donut').length`);
-  assert.equal(count, 0, 'Shadow DOM 밖에서 .chart-donut이 보인다 — 예시가 문서 전체 질의에 새고 있다');
-  const amountCount = await page.evaluate(`document.querySelectorAll('.amount-card').length`);
-  assert.equal(amountCount, 0, 'Shadow DOM 밖에서 .amount-card가 보인다 — 예시가 문서 전체 질의에 새고 있다');
+  const m = await page.evaluate(`(() => {
+    const calc2 = document.getElementById('tabpanel-calc2');
+    const donutsOutsideCalc2 = [...document.querySelectorAll('.chart-donut')].filter((el) => !calc2.contains(el));
+    const amountsOutsideCalc2 = [...document.querySelectorAll('.amount-card')].filter((el) => !calc2.contains(el));
+    return { donutsOutsideCalc2: donutsOutsideCalc2.length, amountsOutsideCalc2: amountsOutsideCalc2.length };
+  })()`);
+  assert.equal(m.donutsOutsideCalc2, 0, 'Shadow DOM·계산기2 밖에서 .chart-donut이 보인다 — 예시가 문서 전체 질의에 새고 있다');
+  assert.equal(m.amountsOutsideCalc2, 0, 'Shadow DOM·계산기2 밖에서 .amount-card가 보인다 — 예시가 문서 전체 질의에 새고 있다');
 });
 
 /**
@@ -1203,8 +1238,11 @@ test('관리자 지시 — man-icon·female-icon 높이가 각 행의 입력 네
   // [2026-08-20, 관리자 지시(4차) 1번] 관리자 지시(3차) 5번의 1.5배 계산식을
   // 되돌린다 — 소유자 정정("1.5배는 도넛 위 글자만")대로 정보 줄·이름
   // 캡션은 확대 대상이 아니었다.
-  const LINES_HEIGHT = 18 * 1.35 * 4 + 4 * 3;
-  const NAME_TAG_SHARE = 12.5 * 1.4 + 4;
+  // [2026-08-20, D79 판정 4] 예시 2케이스 블록 전체 글자 −10% 추가(×0.81)
+  // — 18px→14.58px, 12.5px→10.125px(`styles.css`의 `.example-persona-icon`
+  // calc와 같은 값).
+  const LINES_HEIGHT = 14.58 * 1.35 * 4 + 4 * 3;
+  const NAME_TAG_SHARE = 10.125 * 1.4 + 4;
   const EXPECTED = LINES_HEIGHT - NAME_TAG_SHARE;
   for (const [i, r] of data.iconRects.entries()) {
     assert.ok(

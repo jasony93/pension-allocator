@@ -292,9 +292,22 @@ export function maskBirthDate(raw) {
  * `autocomplete="off"`, 값 되비추기 없음, 첫 진입 자동 포커스 없음,
  * 오류 문구에 입력값 되풀이 없음(문구는 `validation.js`가 만든다).
  */
-function birthDateField({ value, error, onInput, onBlur, renderGuard }) {
+/**
+ * [2026-08-20, D79] `export`로 연다 — 계산기2(`ui/calc2-input-panel.js`)가
+ * 밑줄 스타일 CSS로 재도색해 그대로 재사용한다(D79 판정 1: "모양만 차용,
+ * 문구·계산은 가져오지 않는다" — 이 필드의 라벨·도움말·검증은 첫 탭과
+ * 완전히 같은 값이어야 하므로 컴포넌트 자체를 재사용하는 것이 새로 베껴
+ * 적는 것보다 어긋날 여지가 없다).
+ *
+ * **`id`는 선택 인자다(기본값 `'birthDate'`).** 계산기2는 첫 탭과 **같은
+ * 문서**에 동시 마운트된 자기 폼을 갖는다(2.1.2절 (3), 표시 전환이지
+ * 마운트/언마운트가 아니다) — 두 폼이 똑같이 `id="birthDate"`를 쓰면 문서
+ * 안에 id가 중복돼 `label[for]`·`getElementById`가 어느 탭의 것인지 갈리지
+ * 못한다. `ui/calc2-input-panel.js`는 `id: 'calc2BirthDate'`를 넘긴다.
+ */
+export function birthDateField({ value, error, onInput, onBlur, renderGuard, id = 'birthDate' }) {
   const inputEl = el('input', {
-    id: 'birthDate',
+    id,
     class: `field-input${error ? ' field-input-error' : ''}`,
     type: 'text',
     inputmode: 'numeric',
@@ -306,19 +319,19 @@ function birthDateField({ value, error, onInput, onBlur, renderGuard }) {
     placeholder: BIRTH_DATE_PLACEHOLDER,
     value,
     'aria-invalid': Boolean(error),
-    'aria-describedby': error ? 'birthDate-error' : 'birthDate-help',
+    'aria-describedby': error ? `${id}-error` : `${id}-help`,
     oninput: (e) => onInput(maskBirthDate(e.target.value)),
     onblur: (e) => {
       if (!renderGuard?.active) onBlur(e);
     },
   });
   return el('div', { class: 'field' }, [
-    el('label', { for: 'birthDate', class: 'field-label' }, [BIRTH_DATE_LABEL]),
+    el('label', { for: id, class: 'field-label' }, [BIRTH_DATE_LABEL]),
     el('div', { class: 'field-control' }, [inputEl]),
     // 만 나이를 옆에 되비추지 않는다. 도움말은 항상 표시하고 비울 수 없다.
     error
-      ? el('p', { id: 'birthDate-error', class: 'field-error-msg', role: 'alert' }, [error])
-      : el('p', { id: 'birthDate-help', class: 'field-help' }, [BIRTH_DATE_HELP]),
+      ? el('p', { id: `${id}-error`, class: 'field-error-msg', role: 'alert' }, [error])
+      : el('p', { id: `${id}-help`, class: 'field-help' }, [BIRTH_DATE_HELP]),
   ]);
 }
 
@@ -349,7 +362,15 @@ let youthBlockOpen = false;
  * [2026-08-11 D39 §2] 기본 접힘 `<details>` 안에 둔다(screens.md 3.9.3.1절).
  * **펼치면 안의 내용은 그대로다** — 바뀌는 것은 기본 상태(펼침 → 접힘)뿐이다.
  */
-function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
+/** [2026-08-20, D79] `export`로 연다 — 계산기2도 청년 우대 블록을 「추가
+ * 정보」 접힘 안에 그대로 재사용한다(위 `birthDateField` 주석과 같은 이유).
+ * `idPrefix`는 안의 체크박스 id(`declaredYouth`) 중복을 막는다.
+ *
+ * **알려진 트레이드오프 — 펼침 상태(`youthBlockOpen`)는 모듈 전역이라 두
+ * 탭이 공유한다.** 한쪽에서 펼치면 다른 쪽도 다음에 그릴 때 펼쳐진 채로
+ * 시작할 수 있다 — 계산에는 영향이 없고(펼침은 표시 상태일 뿐이다),
+ * 화면마다 독립된 상태가 필요해지면 그때 인자로 뺀다. */
+export function youthBlock({ form, store, provisionalYouth, derivedAgeYears, idPrefix = '' }) {
   // 규칙을 못 읽으면 그리지 않는다 — 룰셋에 근거가 없는 세법 서술을 화면에
   // 두지 않는다는 원칙은 그대로다(design-system 5.28절). **D46 2·3번(관리자
   // 판정) 이후로는 그 근거를 `LawChip`으로 화면에 인쇄하지 않는다** — 게이트
@@ -380,7 +401,7 @@ function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
         el('label', { class: 'checkbox-row' }, [
           el('input', {
             type: 'checkbox',
-            id: 'declaredYouth',
+            id: `${idPrefix}declaredYouth`,
             checked: form.declaredYouth,
             onchange: (e) => store.setField('declaredYouth', e.target.checked, { immediate: true }),
           }),
@@ -388,6 +409,79 @@ function youthBlock({ form, store, provisionalYouth, derivedAgeYears }) {
         ]),
         el('p', { class: 'field-help' }, [YOUTH_SCENARIO_SCOPE_CAPTION]),
       ]),
+    ],
+  );
+}
+
+/**
+ * [2026-08-20, D79] `renderInputPanel`에서 뽑아낸 「이 돈을 언제 쓸
+ * 계획인가요?」 그룹 — `export`로 열어 계산기2의 「추가 정보」 접힘 안에서도
+ * 그대로 재사용한다(위 `birthDateField` 주석과 같은 이유: 라벨·캡션·검증이
+ * 한 곳에서만 정의돼야 두 화면이 어긋나지 않는다). 동작은 옮기기 전과
+ * 한 글자도 다르지 않다 — 순수하게 함수 경계만 그은 리팩터다.
+ *
+ * **`idPrefix`(기본값 `''`)** — 안의 라디오 버튼 id(`fundUseHorizon-${value}`)가
+ * 두 탭에 동시에 있으면 문서 안에서 중복된다(`birthDateField`와 같은
+ * 이유). 계산기2는 `idPrefix: 'calc2'`를 넘겨 `calc2fundUseHorizon-unknown`
+ * 처럼 접두를 붙인다.
+ */
+export function fundUseHorizonGroup({ form, store, boundariesInfo, errors, idPrefix = '' }) {
+  const horizonOptions = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
+  return el(
+    'div',
+    { class: 'field', role: 'radiogroup', 'aria-label': '이 돈을 언제 쓸 계획인가요?' },
+    [
+      el('span', { class: 'field-label' }, ['이 돈을 언제 쓸 계획인가요?']),
+      el(
+        'div',
+        { class: 'horizon-choice-group' },
+        horizonOptions.map((value, index) => {
+          const selected = form.fundUseHorizon === value;
+          // 캡션의 연수는 **엔진이 룰셋에서 읽어 낸, 이 사용자의 실제 계산값**이다
+          // (`fund_use_horizon_boundaries`) — 예시가 아니다. 값이 오지 않으면
+          // 캡션 줄 자체를 그리지 않는다 — 라벨만으로 선택이 완결된다(3.4절).
+          // **"입력하신 값 기준"을 항상 붙인다** — 아직 고르지 않은 선택지에도
+          // 같은 형식의 숫자가 붙어 "가상의 경우"처럼 읽혔던 것을, 말을 지어내지
+          // 않고 사실(입력에서 계산됐다는 것)을 캡션 자체에 새겨 바로잡는다.
+          //
+          // **소유자 3번(D52 3번) — 범위의 위 끝은 이제 라벨 자체에 있다**
+          // (`fundUseHorizonLabel`). `within_isa_lock_in`의 캡션은 그래도 남긴다 —
+          // 라벨의 숫자(고정된 의무가입기간 총 연수)와 이 캡션의 숫자(**남은**
+          // 연수, 이미 계좌를 갖고 있으면 총 연수보다 작을 수 있다)가 다른 사실을
+          // 말하기 때문이다. `before_pension_age`는 라벨이 이미 같은 숫자(그
+          // 나이까지 남은 연수)를 말하므로 캡션을 중복해 그리지 않는다.
+          const caption =
+            value === 'within_isa_lock_in' && boundariesInfo?.isa_lock_in_years_remaining != null
+              ? `${HORIZON_CAPTION_BASIS_PREFIX} · 남은 의무가입기간 ${formatYears(boundariesInfo.isa_lock_in_years_remaining)}`
+              : null;
+          return el(
+            'button',
+            {
+              type: 'button',
+              role: 'radio',
+              id: `${idPrefix}fundUseHorizon-${value}`,
+              'aria-checked': selected,
+              class: `horizon-option${selected ? ' horizon-option-selected' : ''}`,
+              onclick: () => store.setField('fundUseHorizon', value, { immediate: true }),
+            },
+            [
+              el('span', { class: 'horizon-option-head' }, [
+                // 숫자 아이콘 — 소유자 지시. 순서만 나타내고 값을 나르지 않으므로
+                // `aria-hidden`이다(선택 상태는 `aria-checked`가 이미 말한다).
+                el('span', { class: 'horizon-option-index', 'aria-hidden': 'true' }, [String(index + 1)]),
+                el('span', { class: 'horizon-option-label' }, [fundUseHorizonLabel(value, boundariesInfo)]),
+              ]),
+              FUND_USE_HORIZON_DESCRIPTION[value]
+                ? el('span', { class: 'horizon-option-desc' }, [FUND_USE_HORIZON_DESCRIPTION[value]])
+                : null,
+              caption ? el('span', { class: 'horizon-option-caption' }, [`└ ${caption}`]) : null,
+            ],
+          );
+        }),
+      ),
+      fieldError(errors, 'fundUseHorizon')
+        ? el('p', { class: 'field-error-msg', role: 'alert' }, [fieldError(errors, 'fundUseHorizon')])
+        : el('p', { class: 'field-help' }, [HORIZON_EFFECT_CAPTION]),
     ],
   );
 }
@@ -530,64 +624,7 @@ export function renderInputPanel({ state, store, boundariesInfo, renderGuard }) 
         ])
       : null;
 
-  const horizonOptions = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
-  const horizonGroup = el(
-    'div',
-    { class: 'field', role: 'radiogroup', 'aria-label': '이 돈을 언제 쓸 계획인가요?' },
-    [
-      el('span', { class: 'field-label' }, ['이 돈을 언제 쓸 계획인가요?']),
-      el(
-        'div',
-        { class: 'horizon-choice-group' },
-        horizonOptions.map((value, index) => {
-          const selected = form.fundUseHorizon === value;
-          // 캡션의 연수는 **엔진이 룰셋에서 읽어 낸, 이 사용자의 실제 계산값**이다
-          // (`fund_use_horizon_boundaries`) — 예시가 아니다. 값이 오지 않으면
-          // 캡션 줄 자체를 그리지 않는다 — 라벨만으로 선택이 완결된다(3.4절).
-          // **"입력하신 값 기준"을 항상 붙인다** — 아직 고르지 않은 선택지에도
-          // 같은 형식의 숫자가 붙어 "가상의 경우"처럼 읽혔던 것을, 말을 지어내지
-          // 않고 사실(입력에서 계산됐다는 것)을 캡션 자체에 새겨 바로잡는다.
-          //
-          // **소유자 3번(D52 3번) — 범위의 위 끝은 이제 라벨 자체에 있다**
-          // (`fundUseHorizonLabel`). `within_isa_lock_in`의 캡션은 그래도 남긴다 —
-          // 라벨의 숫자(고정된 의무가입기간 총 연수)와 이 캡션의 숫자(**남은**
-          // 연수, 이미 계좌를 갖고 있으면 총 연수보다 작을 수 있다)가 다른 사실을
-          // 말하기 때문이다. `before_pension_age`는 라벨이 이미 같은 숫자(그
-          // 나이까지 남은 연수)를 말하므로 캡션을 중복해 그리지 않는다.
-          const caption =
-            value === 'within_isa_lock_in' && boundariesInfo?.isa_lock_in_years_remaining != null
-              ? `${HORIZON_CAPTION_BASIS_PREFIX} · 남은 의무가입기간 ${formatYears(boundariesInfo.isa_lock_in_years_remaining)}`
-              : null;
-          return el(
-            'button',
-            {
-              type: 'button',
-              role: 'radio',
-              id: `fundUseHorizon-${value}`,
-              'aria-checked': selected,
-              class: `horizon-option${selected ? ' horizon-option-selected' : ''}`,
-              onclick: () => store.setField('fundUseHorizon', value, { immediate: true }),
-            },
-            [
-              el('span', { class: 'horizon-option-head' }, [
-                // 숫자 아이콘 — 소유자 지시. 순서만 나타내고 값을 나르지 않으므로
-                // `aria-hidden`이다(선택 상태는 `aria-checked`가 이미 말한다).
-                el('span', { class: 'horizon-option-index', 'aria-hidden': 'true' }, [String(index + 1)]),
-                el('span', { class: 'horizon-option-label' }, [fundUseHorizonLabel(value, boundariesInfo)]),
-              ]),
-              FUND_USE_HORIZON_DESCRIPTION[value]
-                ? el('span', { class: 'horizon-option-desc' }, [FUND_USE_HORIZON_DESCRIPTION[value]])
-                : null,
-              caption ? el('span', { class: 'horizon-option-caption' }, [`└ ${caption}`]) : null,
-            ],
-          );
-        }),
-      ),
-      fieldError(errors, 'fundUseHorizon')
-        ? el('p', { class: 'field-error-msg', role: 'alert' }, [fieldError(errors, 'fundUseHorizon')])
-        : el('p', { class: 'field-help' }, [HORIZON_EFFECT_CAPTION]),
-    ],
-  );
+  const horizonGroup = fundUseHorizonGroup({ form, store, boundariesInfo, errors });
 
   const groupTwo = el('section', { class: 'input-group' }, [
     groupTitleNode(iconWallet, '② 월 납입액'),

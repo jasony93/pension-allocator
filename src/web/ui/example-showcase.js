@@ -503,12 +503,13 @@ function exampleShowcaseScrollArrow() {
  * 재사용하면 두 탭이 서로의 레이아웃을 밟는다).
  *
  * **[2026-08-20, 관리자 지시(2차) — 도넛 개편] 아래 레전드를 통째로 뺐다** —
- * `donutLegend(donutArgs)` 호출 자체를 지웠다. 조각 위에 이미 이름+금액
- * (`applyDonutSliceInlineLabels(..., { sliceContent: 'name_amount' })`,
+ * `donutLegend(donutArgs)` 호출 자체를 지웠다. 조각 위에 이미 이름+비율
+ * (`applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true })`,
  * `mountExampleShowcase`)이 있으므로 아래 목록이 같은 정보를 되풀이했다.
- * 도넛은 10% 확대한다 — SVG는 `viewBox` 좌표계라 CSS 렌더 폭만 키워도
- * 안의 조각·글자가 함께 비례로 커진다(`styles.css`의
- * `.example-persona-donut-col .chart-donut`, 160px→176px).
+ * 도넛은 10% 확대했다(160px→176px, `styles.css`) — **[2026-08-20, D79
+ * 판정 4]로 다시 10% 축소해 158.4px**(예시 2케이스 블록 전체 축소, 이 파일
+ * 머리말 최신 항목 참고). SVG는 `viewBox` 좌표계라 CSS 렌더 폭만 바꿔도
+ * 안의 조각·글자가 함께 비례로 바뀐다.
  */
 function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
   const excluded = excludedAccounts(scenario);
@@ -836,12 +837,13 @@ export async function mountExampleShowcase(hostEl, { engineClient }) {
     ]);
     shadowRoot.appendChild(exampleShowcaseSection({ persona1, persona2 }));
 
-    // [2026-08-20, 관리자 지시] 조각 라벨 — 이름+월 금액(만원 단위), 비율은
-    // 겹치지 않을 때만. 결과 패널·역산기 탭은 이 옵션 없이 부르므로(기본값
-    // 'name_percent') 영향받지 않는다.
+    // [2026-08-20, D79 판정 4] 조각 라벨 — 이름+비율(퍼센트), **항상 고리
+    // 밖 지시선**(`forceOutside: true`, 금액 라벨은 삭제했다). 결과 패널·
+    // 역산기 탭은 이 옵션 없이 부르므로(기본값 `forceOutside: false`) 영향받지
+    // 않는다 — 그 도넛들은 조각 안에 들어가면 계속 안에 그린다.
     const refresh = () => {
       fitAmountValueToCard(shadowRoot);
-      applyDonutSliceInlineLabels(shadowRoot, { sliceContent: 'name_amount' });
+      applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true });
     };
     // **동기로, 바로 잰다 — `requestAnimationFrame`을 쓰지 않는다.** 다음
     // 프레임까지 미루면 그 사이(첫 페인트가 CSS 기본값 그대로 나가는) 한
@@ -860,7 +862,7 @@ export async function mountExampleShowcase(hostEl, { engineClient }) {
         resizeTimer = setTimeout(refresh, 150);
       });
     }
-    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { sliceContent: 'name_amount' }));
+    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true }));
   } catch (err) {
     console.error('[example-showcase] 예시를 계산하지 못했습니다', err);
   }

@@ -464,7 +464,13 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      (`.app-tab`의 `white-space: nowrap`이 그대로 유지된다) — 바뀌는 것은
      탭 **행**의 위치뿐이다. */
   .app-header-brand { flex-wrap: wrap; row-gap: var(--space-2); }
-  .app-tabs { width: 100%; }
+  .app-tabs { width: 100%; gap: var(--space-1); }
+  /* [2026-08-20, D79] 탭이 셋으로 늘면서(「절세계좌 계산기2」) 옛 18px·16px
+     간격 조합이 375px에서 다시 넘쳤다(실측 403px > 343px 가용폭). 라벨은
+     여전히 한 줄이다(`white-space: nowrap`, 안 바꾼다) — 글자·간격만 줄여
+     320px(최소 지원 폭 실측 기준, `theme.browser.mjs`)에서도 세 탭이 한
+     줄에 들어가게 한다. */
+  .app-tab { font-size: 13px; }
 }
 /* [2026-08-17, 관리자 지시(2차) 1번] **고정 바가 스크롤 목적지 위쪽을 가리는
    고전 결함.** 헤더가 다시 sticky가 되면서, 화살표(예시 구역)를 눌러
@@ -644,11 +650,18 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    되돌린다] 소유자가 직전 회차를 정정했다 — "1.5배는 도넛 위 글자만이
    의도였다."** 정보 줄·이름 캡션·세액공제 카드 글자·그리드 열 폭은 전부
    이 정정 이전 값(330/190/200)으로 되돌린다 — 도넛 조각·중앙 라벨
-   폰트만 1.5배로 남긴다(아래 두 항목 참고). */
+   폰트만 1.5배로 남긴다(아래 두 항목 참고).
+   **[2026-08-20, D79 판정 4] 예시 2케이스 부분 전체 −10%, 글자는 추가
+   −10%(합계 ×0.81) — 히어로 카피는 건드리지 않는다.** 이 규칙의 그리드
+   열(상자 치수)은 ×0.9(330/190/200 → 297/171/180), 아래 글자 규칙은
+   전부 ×0.81(도넛 조각 라벨은 이번 회차로 이름+비율 기본 모드로
+   되돌아가 이 배수 대상이 아니다 — `charts.js` D79 판정 4 주석 참고).
+   열 사이 간격도 같은 ×0.9(48px→43.2px, 토큰 대신 리터럴 값을 쓴다 —
+   이 규칙은 애초에 이 블록 전용 수치이지 전역 간격 눈금이 아니다). */
 .example-persona-row {
   display: grid;
-  grid-template-columns: 330px 190px 200px;
-  column-gap: var(--space-7);
+  grid-template-columns: 297px 171px 180px;
+  column-gap: 43.2px;
   align-items: center;
   min-width: 0;
 }
@@ -660,9 +673,14 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    (18px × 1.35 × 4 + 줄 사이 gap 세 개 4px×3=12 = 109.2px)에서 이름표 몫
    (12.5px × 1.4 + 열 안 gap 4px = 21.5px)을 뺀 값이 아이콘 자신의 높이다.
    [2026-08-20, 관리자 지시(4차) 1번] 관리자 지시(3차) 5번의 1.5배 calc를
-   되돌린다 — 아이콘 자신은 확대 대상이 아니었다. */
+   되돌린다 — 아이콘 자신은 확대 대상이 아니었다.
+   [2026-08-20, D79 판정 4] 글자 배수(×0.81)를 그대로 물려받는다 — 이
+   높이 자체가 글자 두 줄(정보 줄·이름표)의 실제 렌더 크기에서 나온
+   식이므로, 그 식 안의 두 상수(18px·12.5px)를 글자와 같은 ×0.81로
+   바꾼다(14.58px·10.125px) — 상자를 별도로 ×0.9 하지 않는다, 이 상자
+   자체가 "글자"다. */
 .example-persona-icon {
-  height: calc(18px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 12.5px * 1.4);
+  height: calc(14.58px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 10.125px * 1.4);
   width: auto; display: block; flex: 0 0 auto;
   /* [2026-08-20, 관리자 지시 — 다크 모드 색반전 결함] 컬러 일러스트라
      `filter: invert(...)`를 걸지 않는다(위 `:root`의 `--example-icon-plate-bg`
@@ -671,20 +689,22 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   background: var(--example-icon-plate-bg);
   border-radius: var(--radius-full);
 }
-/* [2026-08-20, 관리자 지시(4차) 1번] 12.5px로 되돌린다. */
+/* [2026-08-20, 관리자 지시(4차) 1번] 12.5px로 되돌린다.
+   [2026-08-20, D79 판정 4] 글자 추가 −10%(×0.81) — 10.125px. */
 .example-persona-name {
-  margin: 0; font-size: 12.5px; line-height: 1.4; font-weight: 600;
+  margin: 0; font-size: 10.125px; line-height: 1.4; font-weight: 600;
   color: var(--text-secondary); text-align: center; white-space: nowrap;
 }
 .example-persona-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); }
-/* [2026-08-20, 관리자 지시(4차) 1번] 18px로 되돌린다. */
+/* [2026-08-20, 관리자 지시(4차) 1번] 18px로 되돌린다.
+   [2026-08-20, D79 판정 4] 글자 추가 −10%(×0.81) — 14.58px. */
 .example-persona-line {
-  margin: 0; font-size: 18px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;
+  margin: 0; font-size: 14.58px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;
   color: var(--text-primary); word-break: keep-all; white-space: nowrap;
 }
 
 /* [2026-08-20, 관리자 지시(2차) 1번] **아래 레전드를 통째로 뺐다** — 조각
-   위에 이미 이름+금액이 있어(`applyDonutSliceInlineLabels`) 같은 정보를
+   위에 이미 이름+비율이 있어(`applyDonutSliceInlineLabels`) 같은 정보를
    되풀이하지 않는다(`ui/example-showcase.js`가 더는 `donutLegend`를
    부르지 않는다 — 이 칸에는 도넛 하나만 남는다). **도넛을 10% 확대**
    (160px→176px, `160*1.1=176`) — SVG는 `viewBox` 좌표계라 CSS 렌더 폭만
@@ -695,25 +715,38 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    맞지 않는다(상자까지 키우면 정보·절세액 칸과 비례가 깨진다는 것이
    정정 취지). **라벨 폰트는 `charts.js`(아래) 안에서 별도로 1.5배 한다** —
    상자가 작아지며 viewBox 좌표계 비례 확대(옛 처방)로는 라벨을 키울 수
-   없어졌으므로, 글자 크기 자체를 계산에서 키우는 방식으로 바꿨다. */
+   없어졌으므로, 글자 크기 자체를 계산에서 키우는 방식으로 바꿨다.
+   [2026-08-20, D79 판정 4] **도넛 상자도 예시 2케이스 블록의 일부다** —
+   전체 −10%를 적용해 176px→158.4px. 조각 라벨의 1.5배 고정 크기 처방
+   (`charts.js` `applyAmountSliceLabel`)은 이번 회차로 함수째 지웠다 —
+   라벨이 이름+비율 기본 모드로 돌아가고 `forceOutside: true`로 항상
+   고리 밖에 그려지므로, 조각 라벨 글자 크기는 이 컨테이너의 글자
+   배수(×0.81)와 무관하게 `charts.js`의 전역 상수(`SLICE_LABEL_NAME_FONT_PX`,
+   결과 패널과 공유)를 그대로 쓴다 — 도넛 밖(카드 표면 위)으로 나가는
+   글자라 도넛 상자 확대·축소의 비례 스케일링 대상이 아니다(SVG
+   `viewBox` 밖 지시선 라벨은 그 부모 상자 크기와 무관하게 항상 같은
+   절댓값 폰트다). */
 .example-persona-donut-col {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-width: 0;
 }
-/* [2026-08-20, 관리자 지시(4차) 1번] `overflow: visible` — 조각 라벨을
-   1.5배 고정 크기로 바꾸면서(위 `charts.js` `applyAmountSliceLabel`) 고리
-   밖 폴백(리더선) 자리로 밀려나는 라벨이 늘었다. SVG는 기본으로 자기
+/* [2026-08-20, 관리자 지시(4차) 1번] `overflow: visible` — 조각 라벨이
+   고리 밖 폴백(리더선) 자리로 밀려날 수 있다. SVG는 기본으로 자기
    `viewBox` 밖을 잘라내는데, 그 상자는 원래(1.5배 이전) 작은 라벨 기준
    여유(gutter)로 계산돼 있어 커진 라벨이 가장자리에서 잘렸다(실측
-   스크린샷으로 확인 — "연금저축"이 "연금"으로 잘려 보였다). */
-.example-persona-donut-col .chart-donut { width: 176px; max-width: 100%; overflow: visible; }
+   스크린샷으로 확인 — "연금저축"이 "연금"으로 잘려 보였다).
+   [2026-08-20, D79 판정 4] `forceOutside: true`로 **항상** 고리 밖에
+   그리므로 이 여유는 여전히, 오히려 더 필요하다 — 그대로 둔다. */
+.example-persona-donut-col .chart-donut { width: 158.4px; max-width: 100%; overflow: visible; }
 /* [2026-08-20, 관리자 지시(4차) 1번] 중앙 라벨("월 총 납입액"·금액)도
    도넛 위 글자다 — 1.5배 대상. `.donut-center-label`/`-value`는 결과
    패널 도넛과 공유하는 전역 클래스라 그 규칙 자체는 바꾸지 않고, 이
    컨테이너 아래에서만(특이도가 더 높은 선택자로) 덮어쓴다 — 옛값
-   12.5px→18.75px(라벨), 15px→22.5px(값). */
-.example-persona-donut-col .donut-center-label { font-size: 18.75px; }
-.example-persona-donut-col .donut-center-value { font-size: 22.5px; }
+   12.5px→18.75px(라벨), 15px→22.5px(값).
+   [2026-08-20, D79 판정 4] 예시 2케이스 블록 전체 글자 배수(×0.81)를
+   이 값에도 적용한다 — 18.75px→15.1875px, 22.5px→18.225px. */
+.example-persona-donut-col .donut-center-label { font-size: 15.1875px; }
+.example-persona-donut-col .donut-center-value { font-size: 18.225px; }
 
 /* 세액공제액 — 소유자가 축소를 허용했다(두 행이 한 카드 안에 들어가야
    한다, 관리자 지시 2번). 옛 `.example-showcase-amount`(61px 값, 전폭
@@ -729,9 +762,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .example-persona-amount .amount-card-direction,
 .example-persona-amount .amount-card-composition { align-items: center; text-align: center; }
 /* [2026-08-20, 관리자 지시(4차) 1번] 13px/26px로 되돌린다 — 세액공제
-   카드는 도넛 위 글자가 아니다. */
-.example-persona-amount .amount-card-label { font-size: 13px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
-.example-persona-amount .amount-card-value { font-size: 26px; line-height: 1.15; }
+   카드는 도넛 위 글자가 아니다.
+   [2026-08-20, D79 판정 4] 예시 2케이스 블록 전체 글자 배수(×0.81) —
+   13px→10.53px, 26px→21.06px. */
+.example-persona-amount .amount-card-label { font-size: 10.53px; line-height: 1.4; font-weight: 700; word-break: keep-all; }
+.example-persona-amount .amount-card-value { font-size: 21.06px; line-height: 1.15; }
 
 /* [2026-08-20, 관리자 지시(2차) 3번 — 명시적 번복] **두 행 사이 회색
    구분선을 지웠다.** 지난 회차가 새로 넣으라고 지시했던 바로 그
@@ -1356,7 +1391,8 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   }
   .example-persona-info { flex-direction: column; align-items: center; }
   .example-persona-lines { align-items: center; }
-  .example-persona-line { font-size: 16px; white-space: normal; }
+  /* [2026-08-20, D79 판정 4] 글자 추가 −10%(×0.81) — 16px→12.96px. */
+  .example-persona-line { font-size: 12.96px; white-space: normal; }
   /* [2026-08-20, 관리자 지시(2차) 4번 (d)] 모바일에서는 카피가 예시 아래로
      내려간다 — `.example-persona-rows-and-copy`의 `flex-wrap: wrap`(기본
      CSS, 위)이 이미 좁은 폭에서 자동으로 줄바꿈하지만, 가운데 정렬과 전체
@@ -1475,10 +1511,10 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      "입력칸"은 그대로 작아 보인다 — 소유자가 "입력칸과 결과칸들이"라고 둘 다
      지목했다(design-system 4.4.1절 실측: 이 값이 유일하게 뷰포트 대비 비중을
      움직인 레버였다). */
-  .input-slot, .reverse-input-slot { flex: 5 1 0; min-width: 440px; max-width: 640px; }
+  .input-slot, .reverse-input-slot, .calc2-input-slot { flex: 5 1 0; min-width: 440px; max-width: 640px; }
   /* sticky·max-height·overflow-y를 없앴으므로 평범한 flex 항목이다 — 폭
      상한이 없어(`flex: 7 1 0`) 컨테이너가 넓어지면 자동으로 넓어진다. */
-  .result-slot, .reverse-result-slot { flex: 7 1 0; }
+  .result-slot, .reverse-result-slot, .calc2-result-slot { flex: 7 1 0; }
   /* [2026-08-19, 관리자 지시 — 번들 실측 결함] `.reverse-result-slot`에만
      `min-width: 0`을 더한다 — 첫 탭(`.result-slot`)은 안의 도넛이 항상 한
      열을 혼자 차지해 자연스러운 내용 폭이 이미 컨테이너보다 좁으므로 이
@@ -1489,8 +1525,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
      1440px에서 문서 가로 스크롤 1896px. `min-width: 0`은 이 항목이
      플렉스 배분값(`flex-basis`)까지 줄어들 수 있게 하고, 안에서 넘치는
      내용은 각 컴포넌트의 자체 처리(도넛 크기 축소·표의
-     `overflow-x: auto`)가 흡수한다. */
-  .reverse-result-slot { min-width: 0; }
+     `overflow-x: auto`)가 흡수한다. **[2026-08-20, D79] 계산기2 결과
+     칸도 같은 이유로 같은 처방을 받는다** — `renderResultPanel`을 그대로
+     재사용하므로 넘칠 수 있는 내용의 모양이 첫 탭과 같다(도넛 하나가
+     한 열을 혼자 차지). 방어적으로 함께 준다. */
+  .reverse-result-slot, .calc2-result-slot { min-width: 0; }
 }
 
 /* ---- 입력 패널 ---- */
@@ -1608,6 +1647,58 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .provisional-note-details .provisional-note { margin-bottom: 0; }
 .provisional-note-trigger { min-height: 44px; display: flex; align-items: center; font-size: 14px; color: var(--text-link); cursor: pointer; }
 .provisional-note-details[open] .provisional-note-trigger { margin-bottom: var(--space-2); }
+
+/* ---------------------------------------------------------------------
+   [2026-08-20, D79 판정 1] 「절세계좌 계산기2」 입력 패널 — snowball72.com
+   참고 화면의 **구성 방식만** 차용한다: 밑줄만 있는 입력칸(상자 없음),
+   2열 그리드, 작은 아이콘+가운데 정렬 섹션 제목. **색은 전부 이 저장소의
+   토큰**(흰색+주황, `--accent-warm` 등) — 참고 사이트의 파란색·문구·수치는
+   하나도 가져오지 않았다. 밑아 `.input-panel`(위)이 이미 주는 주황 테두리·
+   그림자를 `.calc2-input-panel`도 같은 클래스로 그대로 물려받는다 — 대표
+   색은 서비스 전체다(관리자 지시(2차) 5번의 계보).
+
+   **필드 컴포넌트 자체(`numberField`·`segmentToggle` 등)는 첫 탭과 똑같다**
+   (`ui/calc2-input-panel.js` 머리말) — 여기서 다시 그리는 것은 그 컴포넌트가
+   이미 내는 `.field-control`의 겉모습뿐이다: 테두리 상자를 지우고 아래줄
+   하나만 남긴다. --------------------------------------------------------- */
+/* [D79 판정 1] 필수 최소 그룹 — 「추가 정보」 접힘 위, 항상 보이는 하나뿐인
+   그룹이다. 첫 탭 `.input-group`(아래줄 구분선)과 달리 이 그룹 자체가
+   전체 패널의 첫머리라 아래 여백만 준다. */
+.calc2-essential-group { border-bottom: none; padding-top: 0; }
+
+.calc2-input-panel .field-control {
+  border: none; border-bottom: 1.5px solid var(--border-strong); border-radius: 0;
+  background: transparent; padding: 0 0 var(--space-1); height: auto; min-height: 40px;
+}
+.calc2-input-panel .field-control:focus-within {
+  border-bottom-color: var(--accent-warm); box-shadow: none; background: transparent;
+}
+.calc2-input-panel .field-input-error ~ .field-suffix,
+.calc2-input-panel .field-control:has(.field-input-error) { background: transparent; border-bottom-color: var(--state-error); }
+.calc2-input-panel .field-control:has(.field-input-warning) { background: transparent; border-bottom-color: var(--state-warning); }
+
+/* 2열 그리드 — 필수 최소 입력(생년월일·총급여액·월 납입 여력·다른 종합소득
+   여부)이 이 안에 짝지어 들어간다(`ui/calc2-input-panel.js`). 좁은 화면은
+   아래 모바일 미디어쿼리가 1열로 되돌린다. */
+.calc2-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-4); align-items: start; }
+
+/* 작은 아이콘 + 가운데 정렬 섹션 제목 — 첫 탭(`input-group-title`, 왼쪽
+   정렬·번호 접두)과 다른 배치를 이 스코프 안에서만 준다. */
+.calc2-input-panel .input-group-title { justify-content: center; margin-bottom: var(--space-4); }
+.calc2-input-panel .input-group-title .section-icon { width: 16px; height: 16px; color: var(--accent-warm); }
+
+/* [D79 판정 2] 프리필 안내 한 줄 — "그 결과가 미리 채운 인물의 것"임을
+   화면에 남긴다. 경고가 아니라 사실 안내라 `--text-secondary`를 쓴다. */
+.calc2-prefill-note {
+  margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3);
+  background: var(--accent-subtle); border-radius: var(--radius-m);
+  font-size: 13px; color: var(--text-secondary); text-align: center;
+}
+
+/* 「추가 정보」 접힘 — 옛 청년 블록과 같은 `<details>` 관행을 재사용한다
+   (`.provisional-note-details`, 위). 계산기2 전용 트리거만 색을 강조한다. */
+.calc2-more-info .provisional-note-trigger { color: var(--accent-warm); font-weight: 600; justify-content: center; }
+.calc2-more-info-body .input-group:first-child { padding-top: 0; }
 
 .segment-group { display: flex; gap: var(--space-2); align-items: stretch; }
 /* `min-height`(고정 `height`가 아니다) — 터치 타깃 44px는 지키되, 이번 회차
@@ -2078,6 +2169,8 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 @media (max-width: 767px) {
   .donut-labels { display: none; }
   .donut-legend { display: flex; }
+  /* [D79 판정 1] 계산기2 2열 그리드 — 좁은 화면에서는 1열로 되돌린다. */
+  .calc2-field-grid { grid-template-columns: 1fr; }
   /* 1열이라 폼 길이가 곧 스크롤 길이다(3.11.4절 (d) 1). 그룹 헤더를 sticky로
      두어 스크롤 중에도 지금 어느 그룹에 있는지 보이게 한다. **답한 그룹을
      자동으로 접지 않는다** — 사용자가 만들지 않은 변화를 화면에서 일으키지 않는다.
@@ -2319,7 +2412,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   /* `.example-showcase-slot`(관리자 지시 2026-08-14 4번) — 이 사용자의 결과가
      아닌 예시다. "인쇄물에는 결과와 고지만 남는다"는 이 블록의 원칙이 그대로
      적용된다. shadow root 안 내용은 host를 숨기면 함께 사라진다. */
-  .app-header, .app-footer, .input-slot, .reverse-input-slot, .save-share, .example-showcase-slot, .reverse-example-showcase-slot { display: none; }
+  .app-header, .app-footer, .input-slot, .reverse-input-slot, .calc2-input-slot, .save-share, .example-showcase-slot, .reverse-example-showcase-slot { display: none; }
   .app-main { display: block; padding: 0; gap: 0; }
   /* [D74] `.result-body`의 자식 중 요약 시트가 아닌 것은 전부 숨긴다 —
      헤드라인 카드(`.amount-card`)·도넛+계좌별 세제혜택 막대(`.chart-area`)·
@@ -2334,7 +2427,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   .summary-sheet { display: block !important; }
   details:not([open]) > *:not(summary) { display: block !important; }
   details:not([open])::details-content { content-visibility: visible !important; display: block !important; }
-  .result-slot {
+  .result-slot, .calc2-result-slot {
     position: static; max-height: none; overflow: visible; width: 100%;
   }
   .result-panel-inner { box-shadow: none; border: none; }

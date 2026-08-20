@@ -25,21 +25,24 @@ after(async () => {
   if (app) await app.close();
 });
 
-test('탭 바에 두 탭이 있고, 「연금 역산기」가 「절세계좌 계산기」 오른쪽이다(AC-R1)', { skip: skipWithoutChrome }, async () => {
+/** [2026-08-20, D79] 탭이 셋으로 늘었다 — 「절세계좌 계산기 | 절세계좌 계산기2 | 연금 역산기」. */
+test('탭 바에 세 탭이 있고, 순서가 「절세계좌 계산기 | 절세계좌 계산기2 | 연금 역산기」다(D79)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const tabs = await page.evaluate(`[...document.querySelectorAll('[role="tab"]')].map((t) => t.innerText.trim())`);
-  assert.deepEqual(tabs, ['절세계좌 계산기', '연금 역산기']);
+  assert.deepEqual(tabs, ['절세계좌 계산기', '절세계좌 계산기2', '연금 역산기']);
 });
 
-test('두 탭 패널이 동시에 DOM에 있다 — 표시 전환이지 마운트/언마운트가 아니다(2.1.2절 (3))', { skip: skipWithoutChrome }, async () => {
+test('세 탭 패널이 동시에 DOM에 있다 — 표시 전환이지 마운트/언마운트가 아니다(2.1.2절 (3), D79로 셋)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const count = await page.evaluate(`document.querySelectorAll('.app-main').length`);
-  assert.equal(count, 2, '.app-main이 정확히 둘 있어야 한다(탭마다 하나씩, 동시 마운트)');
+  assert.equal(count, 3, '.app-main이 정확히 셋 있어야 한다(탭마다 하나씩, 동시 마운트)');
   const initial = await page.evaluate(`(() => ({
     calculatorHidden: document.getElementById('tabpanel-calculator').classList.contains('tab-panel-hidden'),
+    calc2Hidden: document.getElementById('tabpanel-calc2').classList.contains('tab-panel-hidden'),
     reverseHidden: document.getElementById('tabpanel-pension-reverse').classList.contains('tab-panel-hidden'),
   }))()`);
   assert.equal(initial.calculatorHidden, false, '첫 진입 기본 탭은 절세계좌 계산기다');
+  assert.equal(initial.calc2Hidden, true);
   assert.equal(initial.reverseHidden, true);
 });
 

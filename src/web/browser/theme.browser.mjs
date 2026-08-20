@@ -797,7 +797,7 @@ const READ_BRAND_COLOR = `(() => {
 
 const ACCENT_WARM_RGB = 'rgb(230, 115, 0)';
 
-test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두리가 대표 색이다 — 라이트·다크, 두 탭 모두', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두리가 대표 색이다 — 라이트·다크, 세 탭 모두(D79로 셋)', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
@@ -807,11 +807,14 @@ test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두�
   const light = await page.evaluate(READ_BRAND_COLOR);
   assert.equal(light.exampleBorder, ACCENT_WARM_RGB, `라이트 — 첫 탭 예시 카드 테두리가 대표 색이 아니다: ${light.exampleBorder}`);
   assert.equal(light.reverseExampleBorder, ACCENT_WARM_RGB, `라이트 — 역산기 탭 예시 카드 테두리가 대표 색이 아니다: ${light.reverseExampleBorder}`);
-  assert.equal(light.inputPanelCount, 2, `입력 패널이 2개(두 탭)가 아니다: ${light.inputPanelCount}`);
+  // [2026-08-20, D79] 탭이 셋으로 늘었다 — 계산기2도 같은 `.input-panel`/
+  // `.result-panel-inner` 클래스를 쓰므로(첫 탭 컴포넌트를 그대로 재사용,
+  // D79 머리말) 3개가 정상이다.
+  assert.equal(light.inputPanelCount, 3, `입력 패널이 3개(세 탭)가 아니다: ${light.inputPanelCount}`);
   for (const [i, c] of light.inputPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
   }
-  assert.equal(light.resultPanelCount, 2, `결과 카드가 2개(두 탭)가 아니다: ${light.resultPanelCount}`);
+  assert.equal(light.resultPanelCount, 3, `결과 카드가 3개(세 탭)가 아니다: ${light.resultPanelCount}`);
   for (const [i, c] of light.resultPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 결과 카드 테두리가 대표 색이 아니다: ${c}`);
   }

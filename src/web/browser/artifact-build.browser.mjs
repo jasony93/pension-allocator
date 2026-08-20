@@ -589,9 +589,10 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
           sectionDisplay: section ? getComputedStyle(section).display : null,
           // [2026-08-20, 관리자 지시(2차) 1번] 레전드를 통째로 뺐다 — 그
           // 스타일 로드 신호(list-style: none·스와치 크기)도 함께 없어졌다.
-          // 대신 도넛 자체의 렌더 폭(176px, .example-persona-donut-col
-          // .chart-donut)을 신호로 쓴다 — 스타일이 안 실리면 SVG 고유
-          // viewBox 크기(220px 안팎)로 남아 이 값과 다르다.
+          // 대신 도넛 자체의 렌더 폭(158.4px, .example-persona-donut-col
+          // .chart-donut, D79로 176px에서 다시 −10%)을 신호로 쓴다 —
+          // 스타일이 안 실리면 SVG 고유 viewBox 크기(220px 안팎)로 남아
+          // 이 값과 다르다.
           donutWidth: donut ? donut.getBoundingClientRect().width : null,
           heroCopyGap: heroCopy ? getComputedStyle(heroCopy).gap : null,
           arrowBtnWidth: arrowBtn ? arrowBtn.getBoundingClientRect().width : null,
@@ -611,15 +612,13 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
       })()`);
 
       // [2026-08-20, 관리자 지시(2차) 1번 — 뒤집힌 기대값, 관리자 지시(3차)
-      // 5번으로 다시 뒤집힘, 관리자 지시(4차) 1번으로 다시 원래대로]
-      // 옛 검사는 범례 스타일(list-style: none·스와치 크기)로 CSS 로드를
-      // 확인했다 — 레전드 자체가 없어졌으므로 도넛 렌더 폭으로 신호를
-      // 바꿨다(176px). 소유자가 "1.5배는 도넛 위 글자만"으로 정정하며
-      // 상자 자체는 다시 176px로 돌아간다.
-      assert.equal(
-        m.donutWidth,
-        176,
-        `아티팩트처럼 감싼 조건 — 도넛 렌더 폭이 176px가 아니다(width: ${m.donutWidth}px) — 스타일이 실리지 않았을 수 있다`,
+      // 5번으로 다시 뒤집힘, 관리자 지시(4차) 1번으로 다시 원래대로, D79
+      // 판정 4로 다시 −10%] 옛 검사는 범례 스타일(list-style: none·스와치
+      // 크기)로 CSS 로드를 확인했다 — 레전드 자체가 없어졌으므로 도넛 렌더
+      // 폭으로 신호를 바꿨다. 예시 2케이스 블록 전체 −10%로 176px→158.4px.
+      assert.ok(
+        Math.abs(m.donutWidth - 158.4) < 0.5,
+        `아티팩트처럼 감싼 조건 — 도넛 렌더 폭이 158.4px(D79)가 아니다(width: ${m.donutWidth}px) — 스타일이 실리지 않았을 수 있다`,
       );
       assert.ok(
         m.heroCopyGap && m.heroCopyGap !== '0px',

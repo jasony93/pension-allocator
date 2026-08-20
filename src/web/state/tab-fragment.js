@@ -13,7 +13,9 @@
  * 나른다(2.1.2절 (4) "값을 전달하는 경로가 아니다"). 그래서 `data`가 없다.
  */
 
-export const TAB_IDS = ['calculator', 'pension-reverse'];
+// [2026-08-20, D79] 「절세계좌 계산기2」 — 첫 탭과 같은 엔진, 다른 입력
+// UX를 시험하는 실험 탭. id는 소유자/관리자 지시 원문 그대로 `calc2`.
+export const TAB_IDS = ['calculator', 'calc2', 'pension-reverse'];
 export const DEFAULT_TAB_ID = 'calculator';
 
 /** `hash`(선행 `#` 없이)가 탭 id 프래그먼트인가. */

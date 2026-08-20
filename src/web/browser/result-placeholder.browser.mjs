@@ -71,10 +71,21 @@ const MEASURE_RING = `(() => {
 const WATCH_SEAT = `(() => {
   window.__seatSamples = [];
   window.__seatWatching = true;
+  // [2026-08-20, D79] **첫 탭(.result-slot) 안으로 스코프를 좁힌다.**
+  // 계산기2(D79)가 생기면서 그 결과 슬롯(.calc2-result-slot)도 항상
+  // 문서에 있다 — 아직 그 탭을 연 적이 없으면 그 자리도 자리표시자
+  // (.placeholder-ring)를 그리고 있다(입력 미완성 상태의 기본 화면).
+  // 전역 querySelectorAll은 그 자리표시자까지 같이 세어, 첫 탭 쪽 전환이
+  // 끝난 뒤에도 "링이 남아 있다"는 오탐을 낸다(실측 — 마지막 프레임이
+  // [1,1]로 멈췄다, 1은 계산기2의 자리표시자다). 이 시험의 관심사는
+  // 처음부터 첫 탭 하나였다(.result-slot을 스코프로 이미 관찰하던
+  // MutationObserver와 같은 전제) — 세는 자리도 같은 스코프로 맞춘다.
+  const scope = () => document.querySelector('.result-slot');
   const visibleDonutCount = () =>
-    [...document.querySelectorAll('.chart-donut')].filter((el) => !el.closest('.summary-sheet')).length;
+    [...scope().querySelectorAll('.chart-donut')].filter((el) => !el.closest('.summary-sheet')).length;
+  const ringCount = () => scope().querySelectorAll('.placeholder-ring').length;
   const sample = () => {
-    const rings = document.querySelectorAll('.placeholder-ring').length;
+    const rings = ringCount();
     const donuts = visibleDonutCount();
     const last = window.__seatSamples[window.__seatSamples.length - 1];
     if (!last || last[0] !== rings || last[1] !== donuts) window.__seatSamples.push([rings, donuts]);
@@ -82,9 +93,7 @@ const WATCH_SEAT = `(() => {
   };
   // DOM이 바뀌는 순간마다도 본다 — rAF 사이에 끼어든 교체를 놓치지 않는다.
   window.__seatObserver = new MutationObserver(() => {
-    const rings = document.querySelectorAll('.placeholder-ring').length;
-    const donuts = visibleDonutCount();
-    window.__seatSamples.push([rings, donuts]);
+    window.__seatSamples.push([ringCount(), visibleDonutCount()]);
   });
   window.__seatObserver.observe(document.querySelector('.result-slot'), { childList: true, subtree: true });
   requestAnimationFrame(sample);

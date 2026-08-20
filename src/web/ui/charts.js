@@ -480,13 +480,6 @@ export function donutChart({
       // 넘길 필요가 없게 하려는 것이다(계약 두 번 구현하면 하나는 낡는다).
       'data-account': a.isUnallocated ? 'unallocated' : a.account,
       'data-amount': a.amount,
-      // [2026-08-20, 관리자 지시] 예시 도넛의 조각 라벨(이름+금액, 아래
-      // `applyDonutSliceInlineLabels`)이 **월** 금액을 만원 단위로 쓴다 —
-      // `data-amount`(연 금액, 조각 각도 산식이 쓰는 축)와는 다른 값이라
-      // 별도 속성으로 싣는다. 결과 패널 등 다른 호출부는 이 속성을 읽지
-      // 않으므로(기존 `sliceContent` 기본값이 이 속성을 쓰지 않는다) 추가해도
-      // 다른 도넛의 동작은 그대로다.
-      'data-monthly-amount': monthlyOf(a),
       tabindex: '0',
       role: 'img',
       'aria-label': `${nameOf(a)}, 월 ${formatKrw(monthlyOf(a))}, 연 ${formatKrw(a.amount)}, 전체의 ${formatPercent(total > 0 ? a.amount / total : 0)}`,
@@ -825,19 +818,26 @@ const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(
  *   shadow root) — 이 안에서 `.chart-donut[data-label-mode="legend"]`를 전부 찾는다.
  */
 /**
- * [2026-08-20, 관리자 지시 — 첫 탭 예시 도넛 개편] `sliceContent` 옵션 —
- * `'name_percent'`(기본, 이름+비율, 기존 동작 그대로 — 결과 패널·역산기
- * 탭이 인자 없이 부르므로 아무것도 바뀌지 않는다) 또는 `'name_amount'`
- * (이름+월 금액(만원 단위), 예시 전용). 예시(`example-showcase.js`)만
- * `{ sliceContent: 'name_amount' }`를 넘긴다.
+ * [2026-08-20, 관리자 지시 — 첫 탭 예시 도넛 개편, D79 판정 4로 정정] 라벨은
+ * 이제 이름+비율(퍼센트) 하나뿐이다 — 옛 `sliceContent: 'name_amount'`
+ * (이름+월 금액) 모드는 예시 전용이었는데, 소유자가 예시 도넛 라벨을 다시
+ * 퍼센트로 좁혔다(D79 판정 4, "금액 삭제"). 그 모드와 전용 렌더 함수
+ * (`applyAmountSliceLabel`)를 통째로 지웠다 — 부르는 곳이 더는 없다(다른
+ * 어디서도 쓰지 않는 값을 코드에 남기지 않는다는 이 저장소의 관행).
+ *
+ * `forceOutside`(D79 판정 4, "도넛 밖에(리더선 관행)") — 조각 안에 들어가는지
+ * 실측하지 않고 **항상** 고리 밖 지시선 라벨로 그린다. 예시
+ * (`example-showcase.js`)만 켠다 — 결과 패널·역산기 탭은 인자 없이 부르므로
+ * (`forceOutside: false` 기본) 조각 안에 들어가면 안에 그리는 기존 동작이
+ * 그대로다.
  */
-export function applyDonutSliceInlineLabels(root, { sliceContent = 'name_percent' } = {}) {
+export function applyDonutSliceInlineLabels(root, { forceOutside = false } = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
   const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"]')];
-  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, sliceContent);
+  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside);
 }
 
-function applyDonutSliceInlineLabelsToSvg(svg, sliceContent = 'name_percent') {
+function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
   if (!svg || typeof svg.querySelectorAll !== 'function') return;
   const cx = Number(svg.dataset.cx);
   const rOuter = Number(svg.dataset.rOuter);
@@ -880,15 +880,6 @@ function applyDonutSliceInlineLabelsToSvg(svg, sliceContent = 'name_percent') {
     const insideColor = bestTextColorOn(getComputedStyle(top).fill);
     const [px, py] = polar(cx, cy, rLabel, rLabel * ry, mid);
 
-    if (sliceContent === 'name_amount') {
-      applyAmountSliceLabel({
-        group, top, name, pctText, insideColor,
-        px, py, cx, cy, mid, ry, rOuter,
-        chordAtMid, bandThickness,
-      });
-      continue;
-    }
-
     let fontPx = SLICE_LABEL_NAME_FONT_PX;
     const buildText = () =>
       svgEl(
@@ -916,16 +907,22 @@ function applyDonutSliceInlineLabelsToSvg(svg, sliceContent = 'name_percent') {
       const box = text.getBBox();
       return box.width <= chordAtMid * SLICE_LABEL_FIT_MARGIN && box.height <= bandThickness * SLICE_LABEL_FIT_MARGIN;
     };
-    while (!fitsInsideSlice() && fontPx > SLICE_LABEL_MIN_FONT_PX) {
-      fontPx -= 1;
-      const next = buildText();
-      group.replaceChild(next, text);
-      text = next;
+    // [D79 판정 4] `forceOutside`면 안(조각)에 들어가는지 실측조차 하지 않고
+    // 곧장 아래 고리 밖 폴백으로 넘어간다 — "도넛 밖에(리더선 관행)"는 안에
+    // 들어갈 때만 밖으로 밀리는 조건부 동작이 아니라 예시의 항상-켜짐
+    // 규칙이다.
+    if (!forceOutside) {
+      while (!fitsInsideSlice() && fontPx > SLICE_LABEL_MIN_FONT_PX) {
+        fontPx -= 1;
+        const next = buildText();
+        group.replaceChild(next, text);
+        text = next;
+      }
+      if (fitsInsideSlice()) continue;
     }
-    if (fitsInsideSlice()) continue;
 
-    // 폴백 — 고리 밖, 지시선과 함께. 배경이 카드 표면이 되므로 대비를 다시
-    // 잴 필요 없이 검증된 토큰(text-primary)을 쓴다.
+    // 폴백(또는 `forceOutside`) — 고리 밖, 지시선과 함께. 배경이 카드
+    // 표면이 되므로 대비를 다시 잴 필요 없이 검증된 토큰(text-primary)을 쓴다.
     const outerRadius = rOuter + SLICE_LABEL_OUTSIDE_GAP;
     const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
     const fallback = svgEl(
@@ -946,97 +943,6 @@ function applyDonutSliceInlineLabelsToSvg(svg, sliceContent = 'name_percent') {
     const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
     group.insertBefore(leader, text);
   }
-}
-
-/**
- * [2026-08-20, 관리자 지시 — 첫 탭 예시 도넛 개편, 관리자 지시(4차) 1번으로
- * 정정] 조각 위에 **계좌명 + 월 금액(만원 단위)**을 그린다("연금저축
- * 50만원" — 소유자 지시 원문. 숫자 전체 표기 금지). **비율(%)은 셋째 줄로
- * 곁들이되, 겹치면(안 들어가면) 뺀다.**
- *
- * **[정정] 글자 크기를 줄여서 맞추지 않는다 — 고정 크기(1.5배)를 그대로
- * 쓴다.** 옛 구현(관리자 지시 직전 회차)은 1.5배를 "시작값"으로 두고 안
- * 들어가면 계속 줄여 맞췄는데, 그러면 도넛이 작을 때(176px) 최종 렌더
- * 크기가 **줄어든 대로** 수렴해 "1.5배로 커 보이게" 하려던 목적 자체가
- * 무의미해진다(실측 — 176px 도넛에서 결국 옛 기본값보다도 작은 12.5px로
- * 수렴했다). 소유자 정정("도넛 라벨은... 라벨 폰트 크기 자체를 1.5배 해서
- * 176px 도넛 위에서 커 보이게 하라")대로 **줄이지 않고 고정한다** — 순서는
- * (1) 이름+금액+비율 세 줄을 1.5배 고정 크기로 시도, (2) 안 들어가면
- * 비율만 빼고 이름+금액 두 줄을 **같은 고정 크기**로 시도, (3) 그래도 안
- * 들어가면 고리 밖 폴백(지시선) — 소유자가 명시로 허용한 "기존 관행"이다.
- * 밖은 제약이 없으므로 세 줄 모두 이 고정 크기로 그린다.
- */
-function applyAmountSliceLabel({ group, top, name, pctText, insideColor, px, py, cx, cy, mid, ry, rOuter, chordAtMid, bandThickness }) {
-  const monthlyAmount = Number(top.dataset.monthlyAmount);
-  const amountText = formatKrwAbbreviated(Number.isFinite(monthlyAmount) ? monthlyAmount : 0);
-
-  // 도넛 위 글자만 1.5배(관리자 지시(4차) 1번 — 결과 패널이 쓰는 기본
-  // 퍼센트 모드는 `SLICE_LABEL_NAME_FONT_PX`를 그대로 쓰므로 영향받지
-  // 않는다 — 이 상수는 이 함수 지역 변수다). **줄이지 않는 고정값이다.**
-  const fontPx = SLICE_LABEL_NAME_FONT_PX * 1.5;
-  const amountFontPx = fontPx - 1;
-  const pctFontPx = fontPx - 3;
-
-  const buildLines = (includePct) => {
-    const nameLine = svgEl('tspan', { class: 'donut-slice-label-name', x: px, dy: includePct ? '-1.1em' : '-0.55em', style: `font-size:${fontPx}px` }, [name]);
-    const amountLine = svgEl(
-      'tspan',
-      { class: 'donut-slice-label-amount', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${amountFontPx}px` },
-      [amountText],
-    );
-    const lines = [nameLine, amountLine];
-    if (includePct) {
-      lines.push(
-        svgEl(
-          'tspan',
-          { class: 'donut-slice-label-pct', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${pctFontPx}px` },
-          [pctText],
-        ),
-      );
-    }
-    return lines;
-  };
-  const buildText = (includePct) =>
-    svgEl(
-      'text',
-      { class: 'donut-slice-label', x: px, y: py, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: insideColor },
-      buildLines(includePct),
-    );
-  const fits = (text) => {
-    const box = text.getBBox();
-    return box.width <= chordAtMid * SLICE_LABEL_FIT_MARGIN && box.height <= bandThickness * SLICE_LABEL_FIT_MARGIN;
-  };
-
-  // (1) 이름+금액+비율 세 줄, 고정 크기.
-  let text = buildText(true);
-  group.appendChild(text);
-
-  // (2) 안 들어가면 — 비율만 빼고 이름+금액 두 줄, 같은 고정 크기.
-  if (!fits(text)) {
-    const twoLine = buildText(false);
-    group.replaceChild(twoLine, text);
-    text = twoLine;
-  }
-
-  if (fits(text)) return;
-
-  // (3) 폴백 — 고리 밖, 지시선과 함께. 밖은 안(조각) 제약이 없으므로 이름+
-  // 금액+비율 세 줄을 같은 고정 크기로 그린다(옛 이름+비율 폴백과 같은 원칙).
-  const outerRadius = rOuter + SLICE_LABEL_OUTSIDE_GAP;
-  const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
-  const fallback = svgEl(
-    'text',
-    { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
-    [
-      svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-1.1em', style: `font-size:${fontPx}px` }, [name]),
-      svgEl('tspan', { class: 'donut-slice-label-amount', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${amountFontPx}px` }, [amountText]),
-      svgEl('tspan', { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${pctFontPx}px` }, [pctText]),
-    ],
-  );
-  group.replaceChild(fallback, text);
-  const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
-  const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
-  group.insertBefore(leader, fallback);
 }
 
 /**

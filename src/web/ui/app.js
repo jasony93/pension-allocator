@@ -58,6 +58,8 @@
 import { el, mount, patch, significantCount, indexAfterSignificant } from './dom.js';
 import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
+import { renderCalc2InputPanel } from './calc2-input-panel.js';
+import { buildCalc2PrefillForm } from './calc2-prefill.js';
 import { renderReverseInputPanel } from './reverse-input-panel.js';
 import { renderReverseResultPanel } from './reverse-result-panel.js';
 import { renderTabBar } from './tab-bar.js';
@@ -68,6 +70,7 @@ import { createStore } from '../state/store.js';
 import { createReverseStore, wonToManwonInputString } from '../state/reverse-store.js';
 import { readShareFragmentFromLocation } from '../state/share-link.js';
 import { readTabIdFromLocation, writeActiveTabToLocation, DEFAULT_TAB_ID } from '../state/tab-fragment.js';
+import { deriveAnnuityStartedFromBoundaries } from '../state/annuity-start-derivation.js';
 import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange, prefersReducedMotion } from './charts.js';
 import { createThemeController, themeControl } from './theme.js';
 import { LOGO_LIGHT_DATA_URI, LOGO_DARK_DATA_URI, LOGO_INTRINSIC_WIDTH, LOGO_INTRINSIC_HEIGHT } from '../assets/logo.js';
@@ -186,6 +189,36 @@ export function mountApp(root, { engineClient, analytics }) {
   // 12절 머리말). 계측은 이번 회차에 만들지 않는다(D77 "계측·지표" 절) —
   // `analytics`를 넘기지 않는다.
   const reverseStore = createReverseStore({ engineClient, onChange: () => scheduleRender() });
+  // [2026-08-20, D79] 계산기2 store — **첫 탭과 같은 엔진·같은 요청 스키마**
+  // (`createStore`를 그대로 재사용한다, `state/store.js`)를 쓰지만 **독립된
+  // 인스턴스**다 — 첫 탭 store와 상태를 공유하면 계산기2의 김철수씨 프리필이
+  // 첫 탭(빈 상태로 시작해야 한다)에도 번진다. 계측은 첫 탭과 같은 이벤트
+  // 사전을 공유한다(D79 머리말 "계측 분리는 계산기2가 살아남을 때 붙인다" —
+  // 지금은 분리하지 않고 그대로 재사용한다).
+  const calc2Store = createStore({
+    engineClient,
+    analytics,
+    onChange: (calc2State) => {
+      maybeAutoDeriveCalc2AnnuityStarted(calc2State);
+      scheduleRender();
+    },
+  });
+  /**
+   * [D79 판정 3] 조문상 확실히 미개시(만 55세 미만)면 물음 없이 값을
+   * 채운다. `calc2-input-panel.js`(순수 뷰)가 아니라 여기(store 오케스트
+   * 레이션 계층)에서 한다 — `maybeFetchBoundaries`(state/store.js)가 이미
+   * 여기(app.js 바깥, store 내부)에서처럼 "값 변화에 반응해 store를
+   * 고치는" 부수효과를 지는 자리이므로, 같은 성격의 이 부수효과도 렌더
+   * 함수 밖에 둔다. `applySharedForm`을 쓴다(`setField`가 아니다) — 이
+   * 값은 사용자가 타이핑한 것이 아니라 조문에서 도출한 값이므로
+   * `input_start` 계측을 걸지 않는다.
+   */
+  function maybeAutoDeriveCalc2AnnuityStarted(calc2State) {
+    const derived = deriveAnnuityStartedFromBoundaries(calc2State.boundaries);
+    if (derived === false && calc2State.form.annuityStarted !== false) {
+      calc2Store.applySharedForm({ annuityStarted: false });
+    }
+  }
   const renderGuard = { active: false };
 
   const layout = el('div', { class: 'app-layout' });
@@ -236,6 +269,19 @@ export function mountApp(root, { engineClient, analytics }) {
     resultSlot,
   ]);
 
+  // [2026-08-20, D79] 계산기2 — **예시 블록이 없다**(판정 2, "예시 블록
+  // 없이 김철수씨 값이 프리필된 편집 가능한 폼으로 시작한다"). 그래서 이
+  // 탭에는 `exampleSlot`/`reverseExampleSlot`에 대응하는 예시 슬롯이 아예
+  // 없다 — 헤더 바로 아래 자리(`exampleSlot`·`reverseExampleSlot`)를
+  // 셋 다 공유하되 이 탭이 활성일 때는 그 둘을 함께 숨긴다(`setActiveTab`).
+  const calc2InputSlot = el('div', { class: 'calc2-input-slot' });
+  const calc2ResultSlot = el('div', { class: 'calc2-result-slot' });
+  const calc2Panel = el(
+    'div',
+    { class: 'app-main', id: 'tabpanel-calc2', role: 'tabpanel', 'aria-labelledby': 'tab-calc2' },
+    [calc2InputSlot, calc2ResultSlot],
+  );
+
   const reverseInputSlot = el('div', { class: 'reverse-input-slot' });
   const reverseResultSlot = el('div', { class: 'reverse-result-slot' });
   const reversePanel = el(
@@ -244,7 +290,7 @@ export function mountApp(root, { engineClient, analytics }) {
     [reverseInputSlot, reverseResultSlot],
   );
 
-  const mainGroup = el('div', { class: 'app-main-group' }, [calculatorPanel, reversePanel]);
+  const mainGroup = el('div', { class: 'app-main-group' }, [calculatorPanel, calc2Panel, reversePanel]);
 
   // 12.2(b) — "현재 제휴·광고 없음"을 푸터에서 뗀 것은 원래 `LimitNote`가
   // 같은 스크롤에서 이미 그 사실을 말하고 있었기 때문이다. **D61(관리자
@@ -266,13 +312,36 @@ export function mountApp(root, { engineClient, analytics }) {
    * (`history.replaceState`, 2.1.2절 (4)) — 탭 전환마다 히스토리가 쌓이면
    * "뒤로 가기"가 값 입력 취소처럼 오작동하기 때문이다.
    */
+  // [2026-08-20, D79 판정 2] 계산기2 프리필은 **이 탭을 처음 열 때** 채운다 —
+  // 앱을 마운트하는 시점에 곧바로 채우지 않는다. 이유는 순전히 구조적이다:
+  // 세 탭(첫 탭·계산기2·역산기)이 `screens.md` 2.1.2절 (3)에 따라 **항상
+  // 동시에 DOM에 있으므로**, 마운트 시점에 곧장 채워 계산까지 실행하면
+  // 사용자가 계산기2를 한 번도 열지 않아도 그 결과 DOM(도넛·표 등)이 문서에
+  // 항상 존재하게 된다. 이 저장소의 여러 브라우저 검사가 결과 패널의 클래스
+  // (`.chart-donut`·`.benefit-reference-table` 등)를 **문서 전체**에서
+  // `querySelectorAll`로 세는데(첫 탭 하나만 결과를 낼 수 있던 시절의 전제),
+  // 계산기2가 처음부터 계산돼 있으면 그 개수가 배로 잡혀 검사가 깨진다
+  // (실측 — 세율표 7행 기대에 14행이 나왔다). **탭을 처음 열 때만** 채우면
+  // 그 탭을 한 번도 열지 않는 기존 검사 전부가 이 결함을 피해 간다 —
+  // "결과가 바로 서 있다"(D79 판정 2)는 사용자가 이 탭을 열었을 때의
+  // 약속이지, 앱이 뜨는 순간의 약속이 아니다.
+  let calc2Prefilled = false;
+  function ensureCalc2Prefilled() {
+    if (calc2Prefilled) return;
+    calc2Prefilled = true;
+    calc2Store.applySharedForm(buildCalc2PrefillForm());
+  }
+
   function setActiveTab(tabId) {
     if (tabId === activeTabId) return;
     activeTabId = tabId;
+    if (activeTabId === 'calc2') ensureCalc2Prefilled();
     calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
+    calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
     reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
-    // 예시 블록은 각 탭 전용이다(위 `exampleSlot`/`reverseExampleSlot` 주석) —
-    // 두 패널과 같은 클래스로 표시만 전환한다.
+    // 예시 블록은 첫 탭·역산기 탭 전용이다(위 `exampleSlot`/`reverseExampleSlot`
+    // 주석) — 계산기2는 예시 블록이 아예 없다(D79 판정 2)이므로 이 탭이
+    // 활성일 때는 둘 다 숨긴다.
     exampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
     reverseExampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
     writeActiveTabToLocation(activeTabId);
@@ -308,6 +377,10 @@ export function mountApp(root, { engineClient, analytics }) {
   const tabIdFromUrl = readTabIdFromLocation();
   if (tabIdFromUrl) {
     activeTabId = tabIdFromUrl;
+    // [D79 판정 2] `#calc2` 링크로 곧장 들어온 경우도 "이 탭을 처음 연다"에
+    // 해당한다 — `setActiveTab`을 거치지 않는 이 초기화 경로에서도 같은
+    // 프리필을 채운다(위 `ensureCalc2Prefilled` 머리말).
+    if (activeTabId === 'calc2') ensureCalc2Prefilled();
   } else {
     const sharedFragment = readShareFragmentFromLocation();
     if (sharedFragment) {
@@ -319,6 +392,7 @@ export function mountApp(root, { engineClient, analytics }) {
     }
   }
   calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
+  calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
   reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
   exampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
   reverseExampleSlot.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
@@ -337,6 +411,7 @@ export function mountApp(root, { engineClient, analytics }) {
 
   renderNow = function renderImpl() {
     const state = store.getState();
+    const calc2State = calc2Store.getState();
     const reverseState = reverseStore.getState();
     const focusInfo = captureFocus(mainGroup);
     // 재진입 가드 — 렌더가 지금 초점을 가진 노드를 지우는 동안 브라우저가
@@ -351,6 +426,7 @@ export function mountApp(root, { engineClient, analytics }) {
     // 경로는 여전히 남아 있고 그 자리에서 같은 연쇄가 시작될 수 있다.
     renderGuard.active = true;
     patch(inputSlot, renderInputPanel({ state, store, boundariesInfo: state.boundaries, renderGuard }));
+    patch(calc2InputSlot, renderCalc2InputPanel({ state: calc2State, store: calc2Store, renderGuard }));
     patch(reverseInputSlot, renderReverseInputPanel({ state: reverseState, store: reverseStore, renderGuard }));
     renderGuard.active = false;
     restoreFocus(focusInfo);
@@ -362,6 +438,10 @@ export function mountApp(root, { engineClient, analytics }) {
     // 브라우저에서 `mousedown`·`mouseup`은 오는데 `click`이 오지 않는 것을
     // 확인했다(`browser/share-modal.browser.mjs`).
     patch(resultSlot, renderResultPanel({ state, store }));
+    // [D79 머리말] 계산기2는 **같은 결과 패널**을 그대로 재사용한다 — 새
+    // 컴포넌트를 만들지 않는다. `renderResultPanel`은 `state`·`store`
+    // 모양만 보므로 `calc2State`·`calc2Store`를 넘겨도 그대로 동작한다.
+    patch(calc2ResultSlot, renderResultPanel({ state: calc2State, store: calc2Store, resultKey: 'calc2' }));
     patch(reverseResultSlot, renderReverseResultPanel({ state: reverseState, onPrefill: prefillMonthlyCapacity }));
     // 도넛 진입 애니메이션은 여기, **patch가 끝난 뒤** 실제로 화면에 붙은
     // 노드를 다시 찾아 돌린다. `patch`는 구조가 같으면 새로 만든 노드를 버리고
@@ -375,6 +455,10 @@ export function mountApp(root, { engineClient, analytics }) {
     // `render` 시점에 재면 버려질 사본을 잰다) — 데스크톱(labelled) 도넛에는
     // `data-label-mode="legend"`가 없어 이 함수가 조용히 아무것도 하지 않는다.
     applyDonutSliceInlineLabels(resultSlot);
+    // [2026-08-20, D79] 계산기2 결과 슬롯에도 같은 후처리 — 같은 컴포넌트를
+    // 재사용하므로 도넛 진입 애니메이션·조각 라벨 후처리도 그대로 건다.
+    runDonutEntrance(calc2ResultSlot);
+    applyDonutSliceInlineLabels(calc2ResultSlot);
     // [2026-08-19, D78 ③] 역산기 결과에도 `AccountDonut`이 생겼다 — 같은
     // 이유로 같은 후처리를 그 슬롯에도 건다.
     runDonutEntrance(reverseResultSlot);
@@ -390,6 +474,7 @@ export function mountApp(root, { engineClient, analytics }) {
   // 따로 건다(예시 쪽과 같은 두 경로를 듣는 `watchDonutThemeChange`, `charts.js`).
   watchDonutThemeChange(() => {
     applyDonutSliceInlineLabels(resultSlot);
+    applyDonutSliceInlineLabels(calc2ResultSlot);
     applyDonutSliceInlineLabels(reverseResultSlot);
   });
 
@@ -444,5 +529,5 @@ export function mountApp(root, { engineClient, analytics }) {
 
   renderNow();
 
-  return { render: scheduleRender, store, reverseStore };
+  return { render: scheduleRender, store, calc2Store, reverseStore };
 }

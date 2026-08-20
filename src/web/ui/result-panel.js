@@ -1834,7 +1834,21 @@ function scenarioTabs(response, activeScenarioId, onSelect) {
 // 상태 오케스트레이션 — 다섯 상태를 여기서 갈라 렌더한다.
 // ---------------------------------------------------------------------------
 
-let uiSelection = { scenarioId: 'current', planId: null };
+// [2026-08-20, D79] **키로 나뉜 상태다 — 모듈 전역 값 하나가 아니다.**
+// 계산기2가 이 파일을 첫 탭과 동시에(같은 문서, 같은 렌더 사이클 안에서)
+// 부르면서, 옛 "모듈에 하나뿐인 전역"이 두 번째 소비자에게 첫 소비자의
+// 상태를 덮어씌우는 결함이 실제로 났다(실측: 계산기2 결과가 `placeholder-
+// leaving` 단계에 영원히 멈춰 도넛이 끝내 그려지지 않았다 — 두 `planSeat`
+// 호출이 서로의 `phase`/`shape`를 밟았다). `resultKey`(기본값 `'default'`,
+// 첫 탭이 넘기지 않으면 옛 동작과 완전히 같다)로 `Map`을 나눠 이 결함을
+// 구조로 막는다. **`uiSelection`(시나리오/대안 탭 선택)도 같은 이유로
+// 같이 나눈다** — 안 나누면 계산기2에서 시나리오 탭을 누르면 첫 탭 결과의
+// 선택도 함께 바뀐다.
+const uiSelectionByKey = new Map();
+function getUiSelection(key) {
+  if (!uiSelectionByKey.has(key)) uiSelectionByKey.set(key, { scenarioId: 'current', planId: null });
+  return uiSelectionByKey.get(key);
+}
 
 // ---------------------------------------------------------------------------
 // 결과 자리의 전환 상태 (design-system 5.29절)
@@ -1845,36 +1859,40 @@ let uiSelection = { scenarioId: 'current', planId: null };
 // 계산인지 열 번째인지 상태만으로는 알 수 없다).
 // ---------------------------------------------------------------------------
 
-let seatShape = null; // 직전에 실제로 그린 도형
-let seatPhase = 'idle';
+const seatStateByKey = new Map(); // resultKey -> { shape, phase }
+function getSeatState(key) {
+  if (!seatStateByKey.has(key)) seatStateByKey.set(key, { shape: null, phase: 'idle' });
+  return seatStateByKey.get(key);
+}
 
-function planSeat(desired) {
-  const step = nextSeatStep({ desired, lastShape: seatShape, phase: seatPhase, reducedMotion: prefersReducedMotion() });
-  seatPhase = step.phase;
-  seatShape = shapeOf(step.draw);
+function planSeat(desired, resultKey) {
+  const s = getSeatState(resultKey);
+  const step = nextSeatStep({ desired, lastShape: s.shape, phase: s.phase, reducedMotion: prefersReducedMotion() });
+  s.phase = step.phase;
+  s.shape = shapeOf(step.draw);
   if (step.scheduleFadeMs != null) {
     // 링이 사라진 **다음 프레임에** 도넛을 그린다. 겹치는 프레임이 없다.
     setTimeout(() => {
-      seatPhase = 'entering';
+      s.phase = 'entering';
       rerenderHook();
     }, step.scheduleFadeMs);
   }
   return step.draw;
 }
 
-export function renderResultPanel({ state, store }) {
+export function renderResultPanel({ state, store, resultKey = 'default' }) {
   const { status, result, fatalError } = state;
 
   if (status === 'fatal_error') {
-    planSeat('none');
+    planSeat('none', resultKey);
     return fatalErrorPanel(fatalError);
   }
   if (status === 'blocked') {
-    planSeat('none');
+    planSeat('none', resultKey);
     return blockedPanel(fatalError, store);
   }
   if (status === 'blank' || status === 'input_incomplete') {
-    planSeat('placeholder');
+    planSeat('placeholder', resultKey);
     return inputIncompletePanel(state);
   }
 
@@ -1883,7 +1901,7 @@ export function renderResultPanel({ state, store }) {
     // 첫 계산이 아직 끝나지 않은 로딩 상태. **자리표시자를 그대로 둔다** — 결과
     // 자리를 비우면 ① 레이아웃이 한 번 접혔다 펴지고 ② 자리표시자 → 결과 전환의
     // 두 끝이 붙어 있지 않게 되어 5.29절의 전환 자체가 성립하지 않는다.
-    planSeat('placeholder');
+    planSeat('placeholder', resultKey);
     return el('div', { class: `result-panel-inner ${loadingOverlayClass(false)}` }, [
       el('div', { class: 'result-body' }, [
         resultPlaceholder(),
@@ -1892,17 +1910,18 @@ export function renderResultPanel({ state, store }) {
     ]);
   }
 
+  const uiSelection = getUiSelection(resultKey);
   const scenarioId = result.scenarios.some((s) => s.scenario_id === uiSelection.scenarioId) ? uiSelection.scenarioId : 'current';
   const scenario = result.scenarios.find((s) => s.scenario_id === scenarioId);
   const planId = scenario.plans.some((p) => p.plan_id === uiSelection.planId) ? uiSelection.planId : scenario.plans[0].plan_id;
 
   const onSelectScenario = (id) => {
-    uiSelection = { scenarioId: id, planId: null };
+    uiSelectionByKey.set(resultKey, { scenarioId: id, planId: null });
     rerenderHook();
   };
   const onSelectPlan = (id) => {
     if (id !== scenario.plans[0].plan_id) store.reportAlternativeClick();
-    uiSelection = { scenarioId, planId: id };
+    uiSelectionByKey.set(resultKey, { scenarioId, planId: id });
     rerenderHook();
   };
 
@@ -1912,7 +1931,7 @@ export function renderResultPanel({ state, store }) {
   // 않았다는 표시를 함께 둔다. 오류 색이 아니라 info다 — 사용자가 무언가를
   // 망가뜨린 것이 아니라 아직 덜 채운 것이다.
   const conditionalPending = Boolean(state.validation?.conditionalPending);
-  const seatDraw = planSeat('donut');
+  const seatDraw = planSeat('donut', resultKey);
   const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
     conditionalPending,
     form: state.form,
