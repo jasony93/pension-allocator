@@ -28,10 +28,28 @@
  * 그리지 않고, `null`(아직 모른다 / 이미 개시 연령에 닿았거나 지났다)이면
  * 「추가 정보」 안에 그 물음을 그린다 — 필요할 때만 나타나는 물음이지,
  * 물음의 삭제가 아니다.
+ *
+ * **[2026-08-21, D80] 더 벗겼다 — 셋.**
+ * 1. **중항목 라벨 굵게**(판정 3, 스타일 지시) — `.calc2-input-panel
+ *    .field-label { font-weight: 700 }`(styles.css) 한 규칙으로 끝난다,
+ *    이 파일은 손대지 않는다.
+ * 2. **「올해 이미 넣은 돈」 입력 전부 삭제 + 0 가정**(판정 1) — 연금저축·
+ *    IRP 당해연도 누적, ISA 가입 이후 누적·당해연도 누적 넷을 없앴다.
+ *    이 필드들의 입력 자체가 없으므로 `form.*`가 `initialForm()`의 빈
+ *    문자열을 벗어날 길이 없고, `state/store.js`의 `manwonToWonOrZero`가
+ *    그 값을 그대로 0으로 본다 — 화면 캡션은 두지 않는다(이 주석이 기록).
+ *    **연쇄로 「ISA 만기 자금 전환」 블록도 없앴다** — 전환 금액은 ISA
+ *    가입 이후 누적 이하여야 하는데(state/validation.js), 그 누적이 항상
+ *    0이면 0보다 큰 전환 금액은 영원히 검증에 걸린다 — 채울 수 없는
+ *    질문을 남기지 않는다.
+ * 3. **조건절·근거 문구 넷 삭제**(판정 2) — 프리필 안내줄(이 파일이
+ *    더는 그리지 않는다), 헤드라인 밑 조건절·이월 개정안 경고·「두
+ *    연금계좌 중 왜 이 순서인가」(전부 `ui/result-panel.js`의 공유
+ *    컴포넌트 — `resultKey === 'calc2'`일 때만 끈다, 그 파일 주석 참고).
  */
 
 import { el } from './dom.js';
-import { iconProfile, iconWallet, iconBank, iconTransfer, iconTrend } from './icons.js';
+import { iconProfile, iconWallet, iconBank, iconTrend } from './icons.js';
 import {
   numberField,
   percentField,
@@ -55,8 +73,6 @@ import {
   FINANCIAL_INCOME_LABEL,
   FINANCIAL_INCOME_EFFECT_CAPTION,
   isaAccountTypeLabel,
-  ISA_YEARS_SINCE_OPENING_LABEL,
-  ISA_YEARS_SINCE_OPENING_HELP,
   ISA_RETURN_SECTION_TITLE,
   ISA_RETURN_TOGGLE_LABEL,
   ISA_RETURN_SECTION_HELP,
@@ -70,8 +86,8 @@ import {
   ISA_INCOME_CHARACTER_LABEL,
   ISA_INCOME_CHARACTER_EXAMPLE,
 } from '../copy.js';
-import { CALC2_MORE_INFO_TRIGGER, CALC2_ESSENTIAL_GROUP_TITLE, CALC2_PREFILL_NOTE } from '../calc2-copy.js';
-import { ISA_INCOME_CHARACTERS, isaYearsSinceOpeningVisible } from '../state/validation.js';
+import { CALC2_MORE_INFO_TRIGGER, CALC2_ESSENTIAL_GROUP_TITLE } from '../calc2-copy.js';
+import { ISA_INCOME_CHARACTERS } from '../state/validation.js';
 import { deriveAnnuityStartedFromBoundaries } from '../state/annuity-start-derivation.js';
 
 /** 「추가 정보」는 옛 청년 블록(`youthBlockOpen`)과 같은 규약 — 한 번 열면 그 세션 동안 열려 있다. */
@@ -204,24 +220,15 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
     'calc2PriorSalaryGroup',
   );
 
-  const annuityField = numberField({
-    id: 'calc2AnnuitySavingsYtd',
-    label: '연금저축 (2026년 누적)',
-    value: form.annuitySavingsYtd,
-    error: fieldError(errors, 'annuitySavingsYtd'),
-    onInput: (v) => store.setField('annuitySavingsYtd', v),
-    onBlur: () => store.flush(),
-    renderGuard,
-  });
-  const retirementField = numberField({
-    id: 'calc2RetirementPensionYtd',
-    label: 'IRP (2026년 누적)',
-    value: form.retirementPensionYtd,
-    error: fieldError(errors, 'retirementPensionYtd'),
-    onInput: (v) => store.setField('retirementPensionYtd', v),
-    onBlur: () => store.flush(),
-    renderGuard,
-  });
+  // [2026-08-21, D80 판정 1] 「올해 이미 넣은 돈」 필드를 전부 없앤다 —
+  // 연금저축·IRP의 당해연도 누적 입력(`annuityField`·`retirementField`,
+  // 옛 구현)을 지운다. 이 필드가 없으면 `form.annuitySavingsYtd`·
+  // `form.retirementPensionYtd`는 계산기2에서 어떤 경로로도 초기값(`''`)을
+  // 벗어나지 않고, `state/store.js`의 `manwonToWonOrZero`가 빈 문자열을
+  // `0`으로 본다 — 그래서 엔진 요청은 프리필·사용자 편집 어느 경로든 항상
+  // `ytd_contribution_krw: 0`을 싣는다(소유자가 "결과는 어느 정도 가정을
+  // 해서 보여줘"로 이 0 가정을 명시 승인했다). **화면 캡션은 두지 않는다**
+  // — 이 주석이 그 판정을 기록한다.
 
   const isaExistsToggle = segmentToggle({
     id: 'calc2IsaExists',
@@ -243,40 +250,14 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
     ],
     onChange: (v) => store.setField('isaAccountType', v, { immediate: true }),
   });
-  const isaCumulativeField = numberField({
-    id: 'calc2IsaCumulative',
-    label: 'ISA 납입액 (가입 이후 누적)',
-    value: form.isaCumulative,
-    error: fieldError(errors, 'isaCumulative'),
-    onInput: (v) => store.setField('isaCumulative', v),
-    onBlur: () => store.flush(),
-    renderGuard,
-  });
-  const isaYtdField = numberField({
-    id: 'calc2IsaYtd',
-    label: 'ISA 납입액 (2026년 당해연도 누적)',
-    value: form.isaYtd,
-    error: fieldError(errors, 'isaYtd'),
-    onInput: (v) => store.setField('isaYtd', v),
-    onBlur: () => store.flush(),
-    renderGuard,
-  });
-  const isaYearsSinceOpeningField = conditionalGroup(
-    isaYearsSinceOpeningVisible(form),
-    [
-      yearsField({
-        id: 'calc2IsaYearsSinceOpening',
-        label: ISA_YEARS_SINCE_OPENING_LABEL,
-        value: form.isaYearsSinceOpening,
-        error: fieldError(errors, 'isaYearsSinceOpening'),
-        help: ISA_YEARS_SINCE_OPENING_HELP,
-        onInput: (v) => store.setField('isaYearsSinceOpening', v),
-        onBlur: () => store.flush(),
-        renderGuard,
-      }),
-    ],
-    'calc2IsaYearsSinceOpeningGroup',
-  );
+  // [2026-08-21, D80 판정 1] ISA 누적 입력 둘(가입 이후 누적·당해연도 누적)도
+  // 같은 이유로 없앤다 — `form.isaCumulative`·`form.isaYtd`가 계산기2에서
+  // 초기값(`''`)을 벗어날 길이 없어 엔진 요청은 항상 두 값 다 0을 싣는다.
+  // **`isaYearsSinceOpeningField`(경과연수 칸)도 함께 사라진다** —
+  // `isaYearsSinceOpeningVisible`(state/validation.js)이 "누적 납입액이
+  // 0보다 클 때만" 그 칸을 보이는데, 누적 입력 자체가 없어져 그 조건이
+  // 계산기2에서는 항상 거짓이다 — 화면에 나타날 수 없는 칸을 코드에
+  // 남기지 않는다.
   const financialIncomeToggle = segmentToggle({
     id: 'calc2IsaFinancialIncomeTaxpayer',
     label: FINANCIAL_INCOME_LABEL,
@@ -289,65 +270,14 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
     onChange: (v) => store.setField('isaFinancialIncomeTaxpayer', v, { immediate: true }),
     help: FINANCIAL_INCOME_EFFECT_CAPTION,
   });
-  const isaBlock = conditionalGroup(
-    form.isaExists,
-    [isaCumulativeField, isaYearsSinceOpeningField, isaYtdField, financialIncomeToggle],
-    'calc2IsaBlock',
-  );
+  const isaBlock = conditionalGroup(form.isaExists, [financialIncomeToggle], 'calc2IsaBlock');
 
-  // ---- ISA 만기 자금 전환 (ISA 보유 시에만, 첫 탭 groupFour와 같은 조건) ----
-  let transferBlock = null;
-  if (form.isaExists) {
-    const transferToggle = segmentToggle({
-      id: 'calc2IsaTransferEnabled',
-      label: '만기 자금을 연금계좌로 전환합니까?',
-      value: form.isaTransferEnabled,
-      options: [
-        { value: false, label: '아니오' },
-        { value: true, label: '예' },
-      ],
-      onChange: (v) => store.setField('isaTransferEnabled', v, { immediate: true }),
-    });
-    const transferAmountField = numberField({
-      id: 'calc2IsaTransferAmount',
-      label: '전환 금액',
-      value: form.isaTransferAmount,
-      error: fieldError(errors, 'isaTransferAmount', { showMissing: true }),
-      onInput: (v) => store.setField('isaTransferAmount', v),
-      onBlur: () => store.flush(),
-      renderGuard,
-    });
-    const destinationToggle = segmentToggle({
-      id: 'calc2IsaTransferDestination',
-      label: '전환한 자금을 받을 계좌',
-      value: form.isaTransferDestination,
-      options: [
-        { value: 'retirement_pension', label: 'IRP' },
-        { value: 'annuity_savings', label: '연금저축' },
-      ],
-      onChange: (v) => store.setField('isaTransferDestination', v, { immediate: true }),
-    });
-    const destinationHelp = el('p', { class: 'field-help' }, ['받는 계좌에 따라 적용되는 한도가 달라 결과가 바뀝니다.']);
-    const priorAppliedField = numberField({
-      id: 'calc2IsaTransferPriorApplied',
-      label: '직전 과세기간에 이미 적용받은 추가공제액',
-      value: form.isaTransferPriorApplied,
-      error: fieldError(errors, 'isaTransferPriorApplied'),
-      onInput: (v) => store.setField('isaTransferPriorApplied', v),
-      onBlur: () => store.flush(),
-      renderGuard,
-    });
-    const transferInner = conditionalGroup(
-      form.isaTransferEnabled,
-      [transferAmountField, destinationToggle, destinationHelp, priorAppliedField],
-      'calc2IsaTransferGroup',
-    );
-    transferBlock = el('section', { class: 'input-group input-group-conditional', 'data-key': 'calc2TransferBlock' }, [
-      groupTitleNode(iconTransfer, 'ISA 만기 자금 전환'),
-      transferToggle,
-      transferInner,
-    ]);
-  }
+  // [2026-08-21, D80 판정 1] 「ISA 만기 자금 전환」 블록도 함께 없앤다 —
+  // 전환 금액은 검증상 반드시 `isaCumulative`(가입 이후 누적) 이하여야
+  // 하는데(`state/validation.js`의 `exceeds_cumulative`), 그 누적 입력이
+  // 없어져 값이 항상 0으로 고정되면 0보다 큰 전환 금액은 어떤 값을 넣어도
+  // 영원히 "누적 납입액을 넘었다" 오류가 난다 — 채울 수 없는 질문을 남기지
+  // 않는다.
 
   // ---- ISA 예상 수익률(선택, D28·D29·D31 — 첫 탭 groupFive와 같은 필드) ----
   const returnToggle = segmentToggle({
@@ -433,22 +363,18 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
         ]),
         el('section', { class: 'input-group', 'data-key': 'calc2AccountGroup' }, [
           groupTitleNode(iconBank, '계좌 현황'),
-          el('div', { class: 'calc2-field-grid' }, [annuityField, retirementField]),
           isaExistsToggle,
           isaTypeToggle,
           isaBlock,
         ]),
-        transferBlock,
         returnGroup,
         youthBlock({ form, store, provisionalYouth, derivedAgeYears, idPrefix: 'calc2' }),
       ]),
     ],
   );
 
-  // [D79 판정 2] "그 결과가 미리 채운 인물의 것임이 화면에 있어야 한다" —
-  // 직접 고치면 이 줄이 사라지는 것까지는 요구하지 않는다(관리자 지시 원문
-  // "단순하게"). 항상 그린다.
-  const prefillNote = el('p', { class: 'calc2-prefill-note', role: 'status' }, [CALC2_PREFILL_NOTE]);
-
-  return el('div', { class: 'input-panel calc2-input-panel' }, [prefillNote, essentialGroup, moreInfo]);
+  // [2026-08-21, D80 판정 2] 프리필 안내줄을 지운다 — 소유자가 조건절·근거
+  // 문구 넷 중 하나로 명시로 지목했다(D59~D61 계보와 같은 성질). D79
+  // 판정 2가 요구했던 자리였지만, 이번 회차가 그 요구를 뒤집는다.
+  return el('div', { class: 'input-panel calc2-input-panel' }, [essentialGroup, moreInfo]);
 }

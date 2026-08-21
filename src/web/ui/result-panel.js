@@ -1761,7 +1761,7 @@ function resultPanelForScenario(
   activePlanId,
   store,
   onSelectPlan,
-  { conditionalPending = false, form = {}, seatDraw = 'donut' } = {},
+  { conditionalPending = false, form = {}, seatDraw = 'donut', hideConditionalCopy = false } = {},
 ) {
   if (proposedScenarioMatchesCurrent(response, scenario)) {
     return proposedSameAsCurrentBody(scenario);
@@ -1776,14 +1776,19 @@ function resultPanelForScenario(
     // 5.1.0(D28) — "무엇을 주었는가"(echo)를 헤드라인 구성 줄②의 조건절에도
     // 그대로 쓴다. 화면이 수익률을 제안하거나 미리 채우지 않는다(0.10절) —
     // 여기서도 사용자가 준 값을 되비출 뿐 새 값을 만들지 않는다.
-    amountCard(plan, scenario, annualReturnRate),
+    // [2026-08-21, D80 판정 2] `hideConditionalCopy`(계산기2 전용) —
+    // `showCaption: false`로 헤드라인 밑 조건절만 뺀다. "잘림" 사실 문단
+    // (`amount-card-direction`)은 `showCaption`과 무관하게 그대로 남는다
+    // (`amountCard` 머리말) — D80이 지운 것은 조건절뿐이다.
+    amountCard(plan, scenario, annualReturnRate, { showCaption: !hideConditionalCopy }),
     // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
     // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
     creditRateFallbackBanner(response.echo?.credit_rate_bracket),
     showAllExitBanner ? allExitPenaltyBanner() : null,
     proposedScenarioCaption(scenario),
-    isaCarryoverRepealDivergenceNote(response, scenario),
+    // [2026-08-21, D80 판정 2] 이월 개정안 경고 — 계산기2에서는 뺀다.
+    hideConditionalCopy ? null : isaCarryoverRepealDivergenceNote(response, scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
       seatDraw,
       // 5.1.0(D28) — "무엇을 주었는가"(echo)와 "무엇을 썼는가"(estimate)를 한
@@ -1791,7 +1796,9 @@ function resultPanelForScenario(
       // echo에서 읽어 같은 캡션에 함께 적는다(계약 4.2절).
       isaReturnAssumption: response.echo.isa_return_assumption,
     }),
-    fillOrderNote(plan, scenario),
+    // [2026-08-21, D80 판정 2] 「두 연금계좌 중 왜 이 순서인가」 블록 —
+    // 계산기2에서는 뺀다.
+    hideConditionalCopy ? null : fillOrderNote(plan, scenario),
     reorderNote ? el('p', { class: 'field-help' }, [comparisonNoteMessage('baseline_reordered_by_fund_use_horizon')]) : null,
     stackBarComparison(scenario, plan.plan_id, onSelectPlan),
     accountTable(plan, scenario),
@@ -1932,10 +1939,17 @@ export function renderResultPanel({ state, store, resultKey = 'default' }) {
   // 망가뜨린 것이 아니라 아직 덜 채운 것이다.
   const conditionalPending = Boolean(state.validation?.conditionalPending);
   const seatDraw = planSeat('donut', resultKey);
+  // [2026-08-21, D80 판정 2] 계산기2(`resultKey === 'calc2'`) 마운트에서만
+  // 조건절 문구 넷 중 셋(캡션 조건절·이월 개정안 경고·순서 근거 블록)을
+  // 뺀다 — 첫 탭은 `resultKey`를 넘기지 않으므로(기본값 `'default'`) 전혀
+  // 영향받지 않는다. 프리필 안내줄(넷째)은 `ui/calc2-input-panel.js`가
+  // 이미 그리지 않는다(이 파일과 무관).
+  const hideConditionalCopy = resultKey === 'calc2';
   const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
     conditionalPending,
     form: state.form,
     seatDraw,
+    hideConditionalCopy,
   });
 
   const wrapperClass =

@@ -1687,13 +1687,15 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .calc2-input-panel .input-group-title { justify-content: center; margin-bottom: var(--space-4); }
 .calc2-input-panel .input-group-title .section-icon { width: 16px; height: 16px; color: var(--accent-warm); }
 
-/* [D79 판정 2] 프리필 안내 한 줄 — "그 결과가 미리 채운 인물의 것"임을
-   화면에 남긴다. 경고가 아니라 사실 안내라 `--text-secondary`를 쓴다. */
-.calc2-prefill-note {
-  margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3);
-  background: var(--accent-subtle); border-radius: var(--radius-m);
-  font-size: 13px; color: var(--text-secondary); text-align: center;
-}
+/* **`.calc2-prefill-note`가 여기 있었다**(D79 판정 2로 도입, D80 판정 2로
+   폐기) — 프리필 안내줄 자체를 지웠다(`ui/calc2-input-panel.js`). 이
+   규칙을 겨눌 요소가 더는 없다. */
+
+/* [2026-08-21, D80 판정 3] 중항목 라벨 굵게 — 스타일 지시, 판정 불요.
+   `.field-label`은 segmentToggle의 `<span>` 라벨도 함께 쓰는 클래스라
+   (`ui/input-panel.js`) 이 한 규칙으로 생년월일·총급여액·월 납입 여력 등
+   모든 필드 라벨이 같이 굵어진다. */
+.calc2-input-panel .field-label { font-weight: 700; }
 
 /* 「추가 정보」 접힘 — 옛 청년 블록과 같은 `<details>` 관행을 재사용한다
    (`.provisional-note-details`, 위). 계산기2 전용 트리거만 색을 강조한다. */
