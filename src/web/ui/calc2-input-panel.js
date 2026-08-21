@@ -59,7 +59,6 @@ import {
   fieldError,
   birthDateField,
   fundUseHorizonGroup,
-  youthBlock,
 } from './input-panel.js';
 import {
   HAS_NON_WAGE_INCOME_LABEL,
@@ -77,7 +76,11 @@ import {
   ISA_RETURN_SECTION_HELP,
   ISA_RETURN_RATE_LABEL,
 } from '../copy.js';
-import { CALC2_MORE_INFO_TRIGGER, CALC2_ESSENTIAL_GROUP_TITLE } from '../calc2-copy.js';
+import {
+  CALC2_MORE_INFO_TRIGGER,
+  CALC2_ESSENTIAL_GROUP_TITLE,
+  CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL,
+} from '../calc2-copy.js';
 import { ISA_INCOME_CHARACTERS } from '../state/validation.js';
 import { deriveAnnuityStartedFromBoundaries } from '../state/annuity-start-derivation.js';
 
@@ -109,9 +112,8 @@ function calc2AnnuityStartQuestion({ form, store, derivedAnnuityStarted }) {
 }
 
 export function renderCalc2InputPanel({ state, store, renderGuard }) {
-  const { form, validation, provisionalYouth, result, boundaries } = state;
+  const { form, validation, boundaries } = state;
   const errors = validation.errors;
-  const derivedAgeYears = result?.echo?.derived_age?.age_years ?? null;
   // [D79 판정 3] 도출("확실히 미개시") 자체는 `ui/app.js`가 store의
   // `onChange` 경로에서 `applySharedForm`으로 채운다(`maybeAutoDeriveCalc2AnnuityStarted`)
   // — 이 함수(순수 뷰)는 그 결과를 **읽기만** 해서 물음을 그릴지 말지
@@ -184,7 +186,16 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
   ]);
 
   // ---- 「추가 정보」 접힘 ------------------------------------------------
-  const horizonGroup = fundUseHorizonGroup({ form, store, boundariesInfo: boundaries, errors, idPrefix: 'calc2' });
+  const horizonGroup = fundUseHorizonGroup({
+    form,
+    store,
+    boundariesInfo: boundaries,
+    errors,
+    idPrefix: 'calc2',
+    // [신규 회차 — 소유자 지시 3번] 답변 2(`before_pension_age`)만 계산기2
+    // 문구로 바꾼다 — 값(엔진 매핑)은 그대로다(`calc2-copy.js` 주석 참고).
+    labelOverrides: { before_pension_age: CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL },
+  });
   const annuityQuestion = calc2AnnuityStartQuestion({ form, store, derivedAnnuityStarted });
 
   const priorSalaryCheckbox = el('label', { class: 'checkbox-row' }, [
@@ -347,7 +358,12 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
           isaBlock,
         ]),
         returnGroup,
-        youthBlock({ form, store, provisionalYouth, derivedAgeYears, idPrefix: 'calc2' }),
+        // [신규 회차 — 소유자 지시 2번] 청년 우대 입력(선언 토글)을 없앤다.
+        // `form.declaredYouth`가 계산기2에서는 어떤 경로로도 `false`(기본값)
+        // 를 벗어나지 않으므로, `buildEngineRequest`(state/store.js)의
+        // `declared_youth: form.declaredYouth ? true : null`이 항상 `null`
+        // (미선언)을 보낸다 — 답을 지어내지 않는다는 원칙 그대로, 그냥
+        // 묻지 않을 뿐이다.
       ]),
     ],
   );

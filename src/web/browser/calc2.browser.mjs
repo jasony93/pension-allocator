@@ -581,3 +581,167 @@ test('납입 잔여 한도 대비 막대 — 계좌 이름·금액 줄이 각각
     assert.equal(row.numLines, 1, `금액 줄("${row.num}")이 한 줄이 아니다(${row.numLines}줄) — "/ 월"이 홀로 꺾였을 수 있다`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// [신규 회차, 소유자 지시 5항목, 전부 계산기2 한정] 팝업 재배치·청년 우대
+// 제거·자금 사용 시점 답변 2 문구+디자인·섹션 제목 배율·하단 표 헤더 정렬.
+// ---------------------------------------------------------------------------
+
+test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행만 아래, 두 버튼이 900px 높이에서도 스크롤 없이 보인다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.evaluate(`localStorage.clear()`);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 8000 });
+  await sleep(1200);
+
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.calc2-example-modal-host');
+    const root = host.shadowRoot;
+    const body = root.querySelector('.calc2-example-modal-body');
+    const heroCopy = body.querySelector('.example-hero-copy');
+    const rows = [...body.querySelectorAll('.example-persona-row')];
+    const names = [...root.querySelectorAll('.example-persona-name')].map((n) => n.textContent);
+    const dismiss = document.querySelector('.calc2-example-modal-dismiss');
+    const close = document.querySelector('.calc2-example-modal-close');
+    // DOMRect는 구조화 복제로 직렬화되지 않는 값이 있어(returnByValue) 필요한
+    // 필드만 뽑아 평범한 객체로 만든다.
+    const asRect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
+    return {
+      heroTop: heroCopy ? heroCopy.getBoundingClientRect().top : null,
+      rowTop: rows[0] ? rows[0].getBoundingClientRect().top : null,
+      rowCount: rows.length,
+      names,
+      dismissRect: asRect(dismiss),
+      closeRect: asRect(close),
+      viewportH: window.innerHeight,
+    };
+  })()`);
+  assert.equal(m.rowCount, 1, `예시 행이 정확히 1개(김철수씨만)여야 한다: ${m.rowCount}`);
+  assert.deepEqual(m.names, ['김철수씨'], `이승은씨 행이 남아 있다: ${JSON.stringify(m.names)}`);
+  assert.ok(m.heroTop != null && m.rowTop != null, '히어로 카피 또는 예시 행을 찾지 못했다');
+  assert.ok(m.heroTop < m.rowTop, `히어로 카피(위 끝 ${m.heroTop})가 예시 행(위 끝 ${m.rowTop})보다 위에 있지 않다`);
+  for (const [label, rect] of [['「오늘 하루 보지 않음」', m.dismissRect], ['닫기(X)', m.closeRect]]) {
+    assert.ok(rect.bottom <= m.viewportH && rect.top >= 0, `${label} 버튼이 900px 뷰포트 안에 없다(스크롤 필요): ${JSON.stringify(rect)}`);
+  }
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+test('청년 우대 입력 제거 — 계산기2에는 청년 블록이 없고, 첫 탭에는 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  // 첫 탭 — 룰셋에서 청년 규칙을 읽을 시간을 준다.
+  await sleep(500);
+  const firstTabHas = await page.evaluate(
+    `[...document.getElementById('tabpanel-calculator').querySelectorAll('.provisional-note-trigger')].some((el) => el.textContent.includes('청년'))`,
+  );
+  assert.equal(firstTabHas, true, '첫 탭에서까지 청년 우대 블록이 없어졌다 — 계산기2 한정이어야 한다');
+
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  await page.evaluate(`(() => { document.querySelector('#tabpanel-calc2 .calc2-more-info').open = true; })()`);
+  await sleep(300);
+  const calc2Has = await page.evaluate(
+    `[...document.getElementById('tabpanel-calc2').querySelectorAll('*')].some((el) => el.textContent === '▸ 청년 우대 (개정안, 선택)')`,
+  );
+  assert.equal(calc2Has, false, '계산기2에 청년 우대 블록이 남아 있다');
+});
+
+test('자금 사용 시점 답변 2 — 계산기2 문구가 「10년 안에 쓸 계획이다」이고, 첫 탭 문구·엔진 값은 그대로다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  await page.evaluate(`(() => { document.querySelector('#tabpanel-calc2 .calc2-more-info').open = true; })()`);
+  await sleep(150);
+  const calc2Label = await page.evaluate(
+    `document.getElementById('calc2fundUseHorizon-before_pension_age').querySelector('.horizon-option-label').textContent`,
+  );
+  assert.equal(calc2Label, '10년 안에 쓸 계획이다', `계산기2 답변 2 문구가 다르다: ${calc2Label}`);
+
+  const firstTabLabel = await page.evaluate(
+    `document.getElementById('fundUseHorizon-before_pension_age').querySelector('.horizon-option-label').textContent`,
+  );
+  assert.notEqual(firstTabLabel, '10년 안에 쓸 계획이다', '첫 탭 문구까지 바뀌었다 — 계산기2 한정이어야 한다');
+});
+
+test('자금 사용 시점 답변들 — 계산기2에서는 테두리·hover·주황 채움 번호 동그라미다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  await page.evaluate(`(() => { document.querySelector('#tabpanel-calc2 .calc2-more-info').open = true; })()`);
+  await sleep(200);
+
+  const before = await page.evaluate(`(() => {
+    const btn = document.getElementById('calc2fundUseHorizon-before_pension_age');
+    const index = btn.querySelector('.horizon-option-index');
+    const btnCs = getComputedStyle(btn);
+    const idxCs = getComputedStyle(index);
+    return {
+      border: btnCs.borderStyle,
+      cursor: btnCs.cursor,
+      background: btnCs.backgroundColor,
+      indexBg: idxCs.backgroundColor,
+    };
+  })()`);
+  assert.notEqual(before.border, 'none', `답변 버튼에 테두리가 없다: ${before.border}`);
+  assert.equal(before.cursor, 'pointer', `답변 버튼 커서가 pointer가 아니다: ${before.cursor}`);
+  assert.equal(before.indexBg, 'rgb(230, 115, 0)', `번호 동그라미가 주황(--accent-warm) 채움이 아니다: ${before.indexBg}`);
+
+  const box = await page.evaluate(`(() => {
+    const btn = document.getElementById('calc2fundUseHorizon-before_pension_age');
+    btn.scrollIntoView({ block: 'center' });
+    const r = btn.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 10, y: 10 });
+  await sleep(30);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y });
+  await sleep(200);
+  const after = await page.evaluate(`getComputedStyle(document.getElementById('calc2fundUseHorizon-before_pension_age')).backgroundColor`);
+  assert.notEqual(after, before.background, `마우스를 올려도 답변 버튼 배경색이 바뀌지 않았다(전 ${before.background}, 후 ${after})`);
+});
+
+test('섹션 제목 글자 +25% — 계산기2 입력 섹션 제목이 첫 탭보다 1.25배 크다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  const calc2Size = await page.evaluate(
+    `parseFloat(getComputedStyle(document.getElementById('tabpanel-calc2').querySelector('.input-group-title')).fontSize)`,
+  );
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  const firstTabSize = await page.evaluate(
+    `parseFloat(getComputedStyle(document.getElementById('tabpanel-calculator').querySelector('.input-group-title')).fontSize)`,
+  );
+  assert.ok(
+    Math.abs(calc2Size - firstTabSize * 1.25) <= 0.5,
+    `계산기2 제목(${calc2Size}px)이 첫 탭(${firstTabSize}px)의 1.25배가 아니다(기대 ${firstTabSize * 1.25}px)`,
+  );
+});
+
+test('하단 배분표 — 계산기2에서는 월 배분·연 환산 헤더가 오른쪽 정렬로 데이터와 맞는다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .account-table')`, { timeoutMs: 8000 });
+  await sleep(200);
+  const m = await page.evaluate(`(() => {
+    const table = document.querySelector('.calc2-result-slot .account-table');
+    const headers = [...table.querySelectorAll('thead th')];
+    return headers.map((h) => ({ text: h.textContent, align: getComputedStyle(h).textAlign }));
+  })()`);
+  const monthly = m.find((h) => h.text === '월 배분');
+  const annual = m.find((h) => h.text === '연 환산');
+  assert.ok(monthly && annual, `헤더를 찾지 못했다: ${JSON.stringify(m)}`);
+  assert.equal(monthly.align, 'right', `「월 배분」 헤더가 오른쪽 정렬이 아니다: ${monthly.align}`);
+  assert.equal(annual.align, 'right', `「연 환산」 헤더가 오른쪽 정렬이 아니다: ${annual.align}`);
+});

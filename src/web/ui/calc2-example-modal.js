@@ -1,12 +1,22 @@
 /**
- * [신규 회차, 계산기2 한정] 예시 팝업 — 첫 탭 예시영역의 두 페르소나(김철수씨·
- * 이승은씨) + 히어로 카피를, 계산기2 탭을 클릭할 때 모달로 띄운다(소유자 지시).
+ * [신규 회차, 계산기2 한정] 예시 팝업 — 첫 탭 예시영역의 히어로 카피 + 김철수씨
+ * 한 사람을, 계산기2 탭을 클릭할 때 모달로 띄운다(소유자 지시).
+ *
+ * **[번들 실측 마감 회차] 재배치 셋.**
+ * 1. **히어로 카피가 위, 예시(김철수씨)가 아래.** 옛 순서(예시 → 카피)를
+ *    뒤집는다 — "무엇을 보여줄지"보다 "왜 봐야 하는지"를 먼저 말한다는
+ *    소유자 판단이다.
+ * 2. **이승은씨 행을 뺀다 — 김철수씨 한 사람만.** `computeExamplePersona2Scenario`
+ *    호출 자체를 지웠다(계산 안 한다, 계산기2 본 계산과 무관).
+ * 3. **버튼(오늘 하루 보지 않음·X)이 스크롤 없이 항상 보인다** —
+ *    `.modal:has(.calc2-example-modal-host)`(styles.css)가 모달 자체의
+ *    높이를 제한하고 `.modal-actions`를 sticky 바닥으로 고정한다. 스크롤은
+ *    내용(`.calc2-example-modal-host`) 안에서만 난다.
  *
  * **컴포넌트를 그대로 재사용한다.** `examplePersonaRow`·`exampleHeroCopy`·
- * `attachHostStyles`·`fitAmountValueToCard`·`computeExampleScenario`·
- * `computeExamplePersona2Scenario`는 전부 `ui/example-showcase.js`가 이미
- * 갖고 있던 바로 그 함수다(첫 탭 예시와 같은 값, 같은 계산 경로) — 이 파일이
- * 새로 계산하거나 문구를 다시 짓지 않는다.
+ * `attachHostStyles`·`fitAmountValueToCard`·`computeExampleScenario`는 전부
+ * `ui/example-showcase.js`가 이미 갖고 있던 바로 그 함수다(첫 탭 예시와 같은
+ * 값, 같은 계산 경로) — 이 파일이 새로 계산하거나 문구를 다시 짓지 않는다.
  *
  * **Shadow DOM 안에서 그린다** — 첫 탭 예시와 같은 이유(`example-showcase.js`
  * 머리말): `.chart-donut`·`.amount-card`를 문서 전체 질의로 짚는 여러 브라우저
@@ -30,15 +40,11 @@ import {
   attachHostStyles,
   fitAmountValueToCard,
   computeExampleScenario,
-  computeExamplePersona2Scenario,
   EXAMPLE_PERSONA_NAME,
-  EXAMPLE_PERSONA_2_NAME,
   exampleInputLineTexts,
-  examplePersona2InputLineTexts,
 } from './example-showcase.js';
 import { applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { MAN_ICON_DATA_URI, MAN_ICON_INTRINSIC_WIDTH, MAN_ICON_INTRINSIC_HEIGHT } from '../assets/man-icon.js';
-import { FEMALE_ICON_DATA_URI, FEMALE_ICON_INTRINSIC_WIDTH, FEMALE_ICON_INTRINSIC_HEIGHT } from '../assets/female-icon.js';
 
 /** `localStorage` 키 — 값은 그 날짜(`YYYY-MM-DD`, 로컬) 하나뿐이다. */
 export const CALC2_EXAMPLE_MODAL_STORAGE_KEY = 'calc2ExampleModalDismissedDate';
@@ -81,8 +87,13 @@ function safeLocalStorage() {
   }
 }
 
-/** 두 페르소나 행 + 히어로 카피 — 첫 탭 예시의 같은 자리(`rowsAndCopy`)와 같은 구조다. */
-function exampleRowsAndCopy({ persona1, persona2 }) {
+/**
+ * 히어로 카피(위) + 김철수씨 한 행(아래) — [번들 실측 마감 회차] 순서를
+ * 뒤집고 이승은씨 행을 뺐다. 첫 탭의 `rowsAndCopy`(카피가 옆)와는 다른
+ * 배치라 클래스를 새로 준다(`calc2-example-modal-body`) — 첫 탭 레이아웃
+ * 규칙(가로 배치)이 이 모달에 새지 않는다.
+ */
+function exampleCopyAndRow({ persona1 }) {
   const row1 = examplePersonaRow({
     name: EXAMPLE_PERSONA_NAME,
     iconDataUri: MAN_ICON_DATA_URI,
@@ -92,17 +103,7 @@ function exampleRowsAndCopy({ persona1, persona2 }) {
     scenario: persona1.scenario,
     plan: persona1.plan,
   });
-  const row2 = examplePersonaRow({
-    name: EXAMPLE_PERSONA_2_NAME,
-    iconDataUri: FEMALE_ICON_DATA_URI,
-    iconWidth: FEMALE_ICON_INTRINSIC_WIDTH,
-    iconHeight: FEMALE_ICON_INTRINSIC_HEIGHT,
-    lines: examplePersona2InputLineTexts(),
-    scenario: persona2.scenario,
-    plan: persona2.plan,
-  });
-  const rowsStack = el('div', { class: 'example-persona-rows-stack' }, [row1, row2]);
-  return el('div', { class: 'example-persona-rows-and-copy calc2-example-modal-body' }, [rowsStack, exampleHeroCopy()]);
+  return el('div', { class: 'calc2-example-modal-body' }, [exampleHeroCopy(), row1]);
 }
 
 /**
@@ -164,13 +165,8 @@ export async function maybeShowCalc2ExampleModal({ engineClient, now = new Date(
   // 있다(실측 — 모달을 열기 전에 이 함수를 부르면 영원히 뜨지 않았다) —
   // 그래서 스타일·계산은 모달을 연 **다음에** 시작한다.
   let persona1;
-  let persona2;
   try {
-    [persona1, persona2] = await Promise.all([
-      computeExampleScenario(engineClient),
-      computeExamplePersona2Scenario(engineClient),
-      attachHostStyles(shadowRoot),
-    ]);
+    [persona1] = await Promise.all([computeExampleScenario(engineClient), attachHostStyles(shadowRoot)]);
   } catch (err) {
     // 예시 계산 실패는 팝업을 닫는 것으로 조용히 넘어간다 — 첫 탭 예시
     // (`mountExampleShowcase`)와 같은 처리(계산기2 본 계산과는 무관하다).
@@ -180,7 +176,7 @@ export async function maybeShowCalc2ExampleModal({ engineClient, now = new Date(
   }
 
   loadingNode.remove();
-  shadowRoot.appendChild(exampleRowsAndCopy({ persona1, persona2 }));
+  shadowRoot.appendChild(exampleCopyAndRow({ persona1 }));
   fitAmountValueToCard(shadowRoot);
   applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true });
   stopWatchingTheme = watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true }));

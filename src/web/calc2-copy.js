@@ -29,3 +29,26 @@ export const CALC2_MORE_INFO_TRIGGER = '▸ 추가 정보 (선택)';
 
 /** 필수 최소 입력 그룹 제목. */
 export const CALC2_ESSENTIAL_GROUP_TITLE = '기본 정보';
+
+/**
+ * [신규 회차 — 소유자 지시 3번] 「이 돈을 언제 쓸 계획인가요?」 답변 2번
+ * (`fund_use_horizon: 'before_pension_age'`)의 계산기2 전용 문구 — 첫 탭은
+ * `copy.js`의 `fundUseHorizonLabel(value, boundariesInfo)`가 계산한 문구
+ * (경계값을 알면 "N년 후 ~ M년 이내 쓸 계획이다", 모르면 "중간에 쓸
+ * 계획이다")를 그대로 쓰지만, 계산기2는 경계값 유무와 무관하게 **항상**
+ * 이 고정 문장 하나로 바꾼다(`ui/calc2-input-panel.js`의
+ * `fundUseHorizonGroup({ labelOverrides })` 호출).
+ *
+ * **엔진 매핑은 그대로다.** 이 답을 고르면 여전히 같은 `fund_use_horizon:
+ * 'before_pension_age'`가 요청에 실리고, 엔진은 여전히 같은 로직대로
+ * IRP 배분을 피한다 — 소유자가 로직 유지까지 명시했다. 이 문구-값
+ * 매핑(「10년 안에 쓸 계획이다」 = `before_pension_age`)은 **계산기2
+ * 사전에만 있다** — 첫 탭·역산기는 옛 문구를 그대로 쓴다.
+ *
+ * **주의(관리자 판정).** 이 답은 원래 "연금 개시 전"이라는 뜻이라 실제
+ * 연금 개시까지 10년이 채 안 남은 고령 사용자에게는 "10년 안에"라는
+ * 새 문구가 그 사람의 실제 시점과 어긋날 수 있다 — 그래도 소유자가
+ * 문구만 바꾸고 로직은 유지하라고 명시했으므로 그대로 시행한다. 계산기2가
+ * "간결한 판"이라는 실험 축(D80 판정 2 계보)이라는 것이 그 판단의 근거다.
+ */
+export const CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL = '10년 안에 쓸 계획이다';

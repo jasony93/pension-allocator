@@ -425,7 +425,13 @@ export function youthBlock({ form, store, provisionalYouth, derivedAgeYears, idP
  * 이유). 계산기2는 `idPrefix: 'calc2'`를 넘겨 `calc2fundUseHorizon-unknown`
  * 처럼 접두를 붙인다.
  */
-export function fundUseHorizonGroup({ form, store, boundariesInfo, errors, idPrefix = '' }) {
+/**
+ * `labelOverrides`(선택, 기본값 `{}`) — [신규 회차, 계산기2 한정] 답변 하나의
+ * **문구만** 계산기2 사전으로 바꾸고, 엔진에 보내는 값(`value`)·판정 로직은
+ * 손대지 않는다. `{ [value]: '대체 문구' }` 모양이다 — 첫 탭은 인자를
+ * 생략해 옛 문구(`fundUseHorizonLabel`)를 그대로 쓴다.
+ */
+export function fundUseHorizonGroup({ form, store, boundariesInfo, errors, idPrefix = '', labelOverrides = {} }) {
   const horizonOptions = ['within_isa_lock_in', 'before_pension_age', 'at_or_after_pension_age', 'unknown'];
   return el(
     'div',
@@ -469,7 +475,7 @@ export function fundUseHorizonGroup({ form, store, boundariesInfo, errors, idPre
                 // 숫자 아이콘 — 소유자 지시. 순서만 나타내고 값을 나르지 않으므로
                 // `aria-hidden`이다(선택 상태는 `aria-checked`가 이미 말한다).
                 el('span', { class: 'horizon-option-index', 'aria-hidden': 'true' }, [String(index + 1)]),
-                el('span', { class: 'horizon-option-label' }, [fundUseHorizonLabel(value, boundariesInfo)]),
+                el('span', { class: 'horizon-option-label' }, [labelOverrides[value] ?? fundUseHorizonLabel(value, boundariesInfo)]),
               ]),
               FUND_USE_HORIZON_DESCRIPTION[value]
                 ? el('span', { class: 'horizon-option-desc' }, [FUND_USE_HORIZON_DESCRIPTION[value]])
