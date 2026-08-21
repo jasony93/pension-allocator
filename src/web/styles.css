@@ -1702,6 +1702,39 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .calc2-more-info .provisional-note-trigger { color: var(--accent-warm); font-weight: 600; justify-content: center; }
 .calc2-more-info-body .input-group:first-child { padding-top: 0; }
 
+/* ---------------------------------------------------------------------
+   [신규 회차, 계산기2 한정] 결과 패널 — 첫 탭·역산기는 그대로다. 컴포넌트는
+   `ui/result-panel.js`를 그대로 재사용하므로(D79 머리말) 여기서는 클래스
+   이름을 그대로 물려받아 `.calc2-result-slot` 조상 스코프로만 다시 그린다.
+   --------------------------------------------------------------------- */
+/* 4번 — 납입 잔여 한도 대비 막대: 계좌 이름을 막대 왼쪽에, 행 사이 세로
+   간격을 줄인다. 라벨 열(이름+금액)을 왼쪽 고정폭 열로 옮기고, 그 아래
+   나머지(막대·캡션들)를 오른쪽 열에 쌓는다. */
+.calc2-result-slot .allocation-bars { gap: var(--space-2); }
+.calc2-result-slot .allocation-bar-row {
+  display: grid; grid-template-columns: 96px 1fr; column-gap: var(--space-3); align-items: start;
+}
+.calc2-result-slot .allocation-bar-labels {
+  grid-column: 1; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 0;
+}
+.calc2-result-slot .allocation-bar-row > *:not(.allocation-bar-labels) { grid-column: 2; }
+
+/* 5번 — 다른 배분 비교 행: hover 반응 + 버튼 테두리(클릭 가능성이 보이지
+   않는다는 지적). `.stackbar-row`는 이미 `<button>`(cursor: pointer는
+   기본값)이라 커서는 손대지 않는다. */
+.calc2-result-slot .stackbar-row { border: 1px solid var(--border-subtle); }
+.calc2-result-slot .stackbar-row:hover { background: var(--surface-sunken); box-shadow: var(--shadow-1); }
+
+/* 6번 — 하단 배분표(계좌/월 배분/연 환산/납입 잔여 한도 대비) 열 정렬.
+   `table-layout: fixed` + 열마다 고정 폭을 주면, 배제·안내 같은 특수 행
+   (`colspan`)이 섞여도 일반 행끼리는 항상 같은 x좌표에서 시작한다 — 내용
+   길이로 폭이 흔들리는 기본 `auto` 레이아웃과 다르다. */
+.calc2-result-slot .account-table { table-layout: fixed; }
+.calc2-result-slot .account-table th:nth-child(1), .calc2-result-slot .account-table td:nth-child(1) { width: 22%; }
+.calc2-result-slot .account-table th:nth-child(2), .calc2-result-slot .account-table td:nth-child(2) { width: 26%; }
+.calc2-result-slot .account-table th:nth-child(3), .calc2-result-slot .account-table td:nth-child(3) { width: 26%; }
+.calc2-result-slot .account-table th:nth-child(4), .calc2-result-slot .account-table td:nth-child(4) { width: 26%; }
+
 .segment-group { display: flex; gap: var(--space-2); align-items: stretch; }
 /* `min-height`(고정 `height`가 아니다) — 터치 타깃 44px는 지키되, 이번 회차
    (D28 수익 성격 3택)처럼 라벨이 한 줄을 넘으면 버튼이 늘어나 아래 요소와
@@ -2347,6 +2380,33 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   max-height: 90vh; overflow-y: auto; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4);
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--space-3); }
+
+/* [신규 회차, 계산기2 한정] 예시 팝업 — 두 페르소나 행 + 히어로 카피는
+   `.modal`의 옛 480px 상한에 들어가지 않는다(카드 자체가 그 폭보다 넓다).
+   `openModal`(ui/modal.js)이 클래스를 인자로 받지 않으므로, 안(body)에
+   실제로 들어온 내용으로 이 모달만 넓힌다 — `:has()`는 이미 이 파일
+   다른 곳(`.field-control:has(...)`)에서 쓰는 관행이다. */
+.modal:has(.calc2-example-modal-host) { max-width: min(900px, 95vw); }
+/* 원본(`.example-persona-rows-and-copy`)은 넓은 뷰포트를 전제로 두 행 |
+   히어로 카피를 가로로 나란히 놓는다(자연 폭 실측 ≈ 1566px, 1920 뷰포트
+   기준) — 모달 상자 자체는 그 폭을 못 받는다. `flex-wrap`은 컨테이너
+   폭이 아니라 각 항목의 최소 폭(고정 그리드 열을 쓰는 두 행)에 걸려
+   실제로는 줄지 않고 가로 스크롤만 생겼다(실측 스크린샷). 그래서 이
+   모달 전용 클래스에서는 아예 세로로 쌓는다. */
+.calc2-example-modal-body { flex-direction: column; align-items: stretch; }
+/* 오른쪽 하단 — 「오늘 하루 보지 않음」을 주황 계열로 눈에 띄게(소유자 지시),
+   일반 닫기(X)는 옆의 수수한 아이콘 버튼. */
+.calc2-example-modal-close {
+  width: 40px; height: 40px; border-radius: var(--radius-m);
+  border: 1px solid var(--border-strong); background: transparent; color: var(--text-secondary);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.calc2-example-modal-close:hover { background: var(--surface-sunken); }
+.calc2-example-modal-dismiss {
+  border: none; border-radius: var(--radius-m); background: var(--accent-warm); color: #fff;
+  padding: 0 var(--space-4); height: 40px; font-weight: 700; cursor: pointer;
+}
+.calc2-example-modal-dismiss:hover { filter: brightness(0.92); }
 
 /* `[4-H]` PDF 내보내기(`ui/print.js`) — 2026-08-10, 캔버스로 새로 그리던
    공유 이미지를 걷어내고 브라우저 인쇄로 바꾸며 옛 `.share-*` 규칙(모달 미리보기

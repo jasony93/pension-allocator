@@ -661,7 +661,7 @@ export function donutOptimalKicker(planNameCaptionText) {
   return el('p', { class: 'donut-optimal-kicker type-caption' }, [DONUT_OPTIMAL_KICKER_LABEL]);
 }
 
-function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssumption = null } = {}) {
+function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssumption = null, hideConditionalCopy = false } = {}) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
@@ -803,7 +803,7 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
       // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
       // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
       // 정렬, 절반 크기.
-      accountBenefitStrip(scenario, plan, isaReturnAssumption),
+      accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
     ]),
     singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
     // 12.2(c) — 같은 사실을 더 짧게.
@@ -875,7 +875,13 @@ function isaTaxFreeBlock(scenario, view) {
  * ceiling`·`plan.assumption_based_isa_estimate`·`scenario.pension_withdrawal_
  * tax_reference`가 계약이 이미 낸 값만 고르고, 이 함수는 그것을 그리기만 한다.
  */
-function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
+/**
+ * [2026-08-21, D80 이후 회차] `hideConditionalCopy`(계산기2 전용) — 부연설명
+ * (`benefit-strip-ref-caption`)과 「연금저축·IRP를 나중에 받을 때」(과세이연
+ * 축, `pensionReferenceSection`)를 뺀다. `resultKey === 'calc2'`일 때만
+ * `true`(`renderResultPanel` 참고) — 첫 탭·역산기는 인자 없이 불러 그대로다.
+ */
+function accountBenefitStrip(scenario, plan, isaReturnAssumption = null, hideConditionalCopy = false) {
   const rows = accountBenefitRows(scenario, plan);
 
   return el('div', { class: 'account-benefit-strip' }, [
@@ -884,11 +890,11 @@ function accountBenefitStrip(scenario, plan, isaReturnAssumption = null) {
     // 되돌린다(`.account-benefit-strip h4`, styles.css). `<h4>`는 스크린리더
     // 랜드마크로 유지한다.
     el('h4', {}, [ACCOUNT_BENEFIT_STRIP_TITLE]),
-    el('p', { class: 'benefit-strip-ref-caption' }, [ACCOUNT_BENEFIT_STRIP_REF_CAPTION]),
+    hideConditionalCopy ? null : el('p', { class: 'benefit-strip-ref-caption' }, [ACCOUNT_BENEFIT_STRIP_REF_CAPTION]),
     confirmedAxisSection(scenario, plan, rows.pension),
     el('hr', { class: 'benefit-axis-divider' }),
     assumptionAxisSection(rows.isa, isaReturnAssumption),
-    pensionReferenceSection(scenario),
+    hideConditionalCopy ? null : pensionReferenceSection(scenario),
   ]);
 }
 
@@ -1791,6 +1797,7 @@ function resultPanelForScenario(
     hideConditionalCopy ? null : isaCarryoverRepealDivergenceNote(response, scenario),
     chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
       seatDraw,
+      hideConditionalCopy,
       // 5.1.0(D28) — "무엇을 주었는가"(echo)와 "무엇을 썼는가"(estimate)를 한
       // 칸에 뭉치지 않는다. 정산 기간은 estimate에서, 수익률·소득 성격은
       // echo에서 읽어 같은 캡션에 함께 적는다(계약 4.2절).

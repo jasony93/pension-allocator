@@ -53,7 +53,6 @@ import { iconProfile, iconWallet, iconBank, iconTrend } from './icons.js';
 import {
   numberField,
   percentField,
-  yearsField,
   segmentToggle,
   conditionalGroup,
   groupTitleNode,
@@ -77,14 +76,6 @@ import {
   ISA_RETURN_TOGGLE_LABEL,
   ISA_RETURN_SECTION_HELP,
   ISA_RETURN_RATE_LABEL,
-  ISA_RETURN_INCOME_CHARACTER_LABEL,
-  ISA_RETURN_INCOME_CHARACTER_HELP,
-  ISA_RETURN_SETTLEMENT_YEARS_LABEL,
-  ISA_RETURN_SETTLEMENT_YEARS_HELP,
-  ISA_RETURN_LOSS_LABEL,
-  ISA_RETURN_LOSS_HELP,
-  ISA_INCOME_CHARACTER_LABEL,
-  ISA_INCOME_CHARACTER_EXAMPLE,
 } from '../copy.js';
 import { CALC2_MORE_INFO_TRIGGER, CALC2_ESSENTIAL_GROUP_TITLE } from '../calc2-copy.js';
 import { ISA_INCOME_CHARACTERS } from '../state/validation.js';
@@ -279,7 +270,25 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
   // 영원히 "누적 납입액을 넘었다" 오류가 난다 — 채울 수 없는 질문을 남기지
   // 않는다.
 
-  // ---- ISA 예상 수익률(선택, D28·D29·D31 — 첫 탭 groupFive와 같은 필드) ----
+  // ---- ISA 예상 수익률(선택 — 계산기2는 이 한 칸까지만 묻는다) --------------
+  // [신규 회차] ISA 입력 축소 — 소유자 지시. 첫 탭 groupFive는 다섯 필드
+  // (토글·수익률·소득 성격·정산 기간·손실액)를 묻지만, 계산기2는 **수익률
+  // 까지만** 묻는다. 뒤 셋(소득 성격·정산 기간·손실액)을 뺐다.
+  //
+  // **엔진 계약 확인 결과.** `state/store.js`의 `buildIsaReturnAssumption`은
+  // `income_character`가 `ISA_INCOME_CHARACTERS`(세 값) 중 하나가 아니면
+  // 정산액 추정 객체 전체를 `null`로 접는다 — 이 필드에는 "기본 경로"가
+  // 없다(계약이 필수로 요구한다). 정산 기간·손실액은 다르다 — 계약이 이미
+  // "모르면 채우지 않는다 → 룰셋 하한/0으로 본다"는 최소가정 기본 경로를
+  // 정의해 뒀다(`buildIsaReturnAssumption` 주석). 그래서 이 둘은 화면에서
+  // 지워도 자동으로 가장 보수적인 값으로 계산된다 — 손댈 코드가 없다.
+  //
+  // **소득 성격만 골라야 했다.** 셋 중 `'mixed_or_unknown'`("수익 성격을
+  // 모른다/섞였다")을 골랐다 — 계약 3.6절이 이미 정의한 "모른다" 값이지
+  // 화면이 새로 지어낸 답이 아니다(D80 계보 — 가장 가정이 적은 쪽). 물음
+  // 자체를 없앴으므로 이 값은 **토글을 켤 때 조용히 채운다**(사용자가
+  // 답한 것처럼 보이면 안 되지만, 안 채우면 수익률을 입력해도 추정 자체가
+  // 서지 않아 이 칸을 두는 의미가 없어진다).
   const returnToggle = segmentToggle({
     id: 'calc2IsaReturnEnabled',
     label: ISA_RETURN_TOGGLE_LABEL,
@@ -288,7 +297,12 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
       { value: false, label: '아니오' },
       { value: true, label: '예' },
     ],
-    onChange: (v) => store.setField('isaReturnEnabled', v, { immediate: true }),
+    onChange: (v) => {
+      store.setField('isaReturnEnabled', v, { immediate: true });
+      if (v && !ISA_INCOME_CHARACTERS.includes(form.isaIncomeCharacter)) {
+        store.setField('isaIncomeCharacter', 'mixed_or_unknown', { immediate: true });
+      }
+    },
     help: ISA_RETURN_SECTION_HELP,
   });
   const rateField = percentField({
@@ -300,42 +314,7 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
     onBlur: () => store.flush(),
     renderGuard,
   });
-  const characterToggle = segmentToggle({
-    id: 'calc2IsaIncomeCharacter',
-    label: ISA_RETURN_INCOME_CHARACTER_LABEL,
-    value: form.isaIncomeCharacter,
-    options: ISA_INCOME_CHARACTERS.map((id) => ({ value: id, label: ISA_INCOME_CHARACTER_LABEL[id] })),
-    onChange: (v) => store.setField('isaIncomeCharacter', v, { immediate: true }),
-    help: ISA_RETURN_INCOME_CHARACTER_HELP,
-  });
-  const characterExample = form.isaIncomeCharacter
-    ? el('p', { class: 'field-help' }, [ISA_INCOME_CHARACTER_EXAMPLE[form.isaIncomeCharacter]])
-    : null;
-  const settlementYearsFieldNode = yearsField({
-    id: 'calc2IsaSettlementYears',
-    label: ISA_RETURN_SETTLEMENT_YEARS_LABEL,
-    value: form.isaSettlementYears,
-    error: fieldError(errors, 'isaSettlementYears'),
-    help: ISA_RETURN_SETTLEMENT_YEARS_HELP,
-    onInput: (v) => store.setField('isaSettlementYears', v),
-    onBlur: () => store.flush(),
-    renderGuard,
-  });
-  const lossField = numberField({
-    id: 'calc2IsaLossAmount',
-    label: ISA_RETURN_LOSS_LABEL,
-    value: form.isaLossAmount,
-    error: fieldError(errors, 'isaLossAmount'),
-    help: ISA_RETURN_LOSS_HELP,
-    onInput: (v) => store.setField('isaLossAmount', v),
-    onBlur: () => store.flush(),
-    renderGuard,
-  });
-  const returnInner = conditionalGroup(
-    form.isaReturnEnabled,
-    [rateField, characterToggle, characterExample, settlementYearsFieldNode, lossField],
-    'calc2IsaReturnGroup',
-  );
+  const returnInner = conditionalGroup(form.isaReturnEnabled, [rateField], 'calc2IsaReturnGroup');
   const returnGroup = el('section', { class: 'input-group', 'data-key': 'calc2ReturnGroup' }, [
     groupTitleNode(iconTrend, ISA_RETURN_SECTION_TITLE),
     returnToggle,

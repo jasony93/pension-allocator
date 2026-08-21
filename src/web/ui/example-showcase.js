@@ -511,7 +511,10 @@ function exampleShowcaseScrollArrow() {
  * 머리말 최신 항목 참고). SVG는 `viewBox` 좌표계라 CSS 렌더 폭만 바꿔도
  * 안의 조각·글자가 함께 비례로 바뀐다.
  */
-function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
+/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업(`ui/calc2-example-modal.js`)이
+ * 첫 탭과 완전히 같은 행 컴포넌트를 그대로 재사용한다(소유자 지시: "첫 탭
+ * 예시영역 내용(두 페르소나 + 히어로 카피)을 팝업으로"). */
+export function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
     allocations: plan.allocations,
@@ -604,7 +607,8 @@ export const EXAMPLE_HERO_BODY_LINE_2_REST = ', IRP는 애초에 가입도 안 �
 export const EXAMPLE_HERO_PROMISE_TEXT = '넣어야 할 때와, 넣지 말아야 할 때를 알려드립니다.';
 export const EXAMPLE_HERO_CAPTION_TEXT = '증권사 계산기가 하지 않는 이야기까지.';
 
-function exampleHeroCopy() {
+/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업이 같은 히어로 카피를 재사용한다. */
+export function exampleHeroCopy() {
   const headline = el('h2', { class: 'example-hero-headline' }, [
     el('span', { class: 'example-hero-headline-line' }, [EXAMPLE_HERO_HEADLINE_LINE_1]),
     el('span', { class: 'example-hero-headline-line' }, [
@@ -742,7 +746,8 @@ function fitSingleAmountValue(value) {
   }
 }
 
-function fitAmountValueToCard(root) {
+/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업도 절세액 카드 글자를 카드 폭에 맞춘다. */
+export function fitAmountValueToCard(root) {
   const values = [...root.querySelectorAll('.example-persona-amount .amount-card-value')];
   for (const value of values) fitSingleAmountValue(value);
 }
@@ -771,7 +776,9 @@ function fitAmountValueToCard(root) {
  * 순서로 그대로 보존된다** — 어떤 호스트가 무엇을 얼마나 주입하든 우리
  * 규칙이 항상 마지막에 적용된다.
  */
-function attachHostStyles(shadowRoot) {
+/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업의 shadow root도 같은
+ * 방식으로 메인 문서 스타일을 복제해 붙인다. */
+export function attachHostStyles(shadowRoot) {
   const nodes = [...document.querySelectorAll('style, link[rel="stylesheet"]')];
   const loadWaits = [];
   for (const node of nodes) {

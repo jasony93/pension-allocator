@@ -13,6 +13,11 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [신규 회차] 예시 팝업(소유자 지시 1항목)이 이 파일의 다른(팝업을 검사
+  // 하지 않는) 시험까지 덮지 않도록, 파일 시작 시점에 미리 "오늘 하루
+  // 보지 않음" 상태로 만들어 둔다 — 팝업 자체를 검사하는 두 시험은 자기
+  // 안에서 `localStorage.clear()`로 이 상태를 직접 되돌린다.
+  await dismissCalc2ExampleModalPreemptively(app.page);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -21,6 +26,22 @@ after(async () => {
 
 const set = (id, v) =>
   `(() => { const el = document.getElementById(${JSON.stringify(id)}); el.focus(); el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+
+/**
+ * [신규 회차] 예시 팝업(소유자 지시 1항목)을 미리 "오늘 하루 보지 않음" 상태로
+ * 만들어 둔다 — 이 팝업은 `.modal-scrim`(position: fixed; inset: 0; z-index:
+ * 100)으로 뷰포트 전체를 덮으므로, 팝업 자체를 검사하지 않는 다른 시험이
+ * `page.goto` 새로고침 뒤 `tab-calc2`를 클릭하면 그 뒤에 이어지는 좌표 기반
+ * 클릭(`page.clickElement`)이 팝업 위(스크림)에서 일어나 원래 누르려던
+ * 요소를 놓친다(실측 — ISA 토글 클릭이 아무 효과도 못 냈다). 팝업 자체를
+ * 검사하는 두 시험(아래)만 이 함수를 부르지 않는다.
+ */
+async function dismissCalc2ExampleModalPreemptively(page) {
+  await page.evaluate(`localStorage.setItem('calc2ExampleModalDismissedDate', (() => {
+    const n = new Date();
+    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+  })())`);
+}
 
 test('계산기2 탭으로 전환하면 URL 프래그먼트가 #calc2다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
@@ -167,6 +188,7 @@ test('D79 판정 3 — 만 55세 이상으로 생년월일을 바꾸면 「추�
 test('D80 판정 3 — 계산기2 필드 라벨이 굵다(font-weight 700), 스타일 스코프 밖(첫 탭)은 그대로다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
   await page.clickElement(`document.getElementById('tab-calc2')`);
   await sleep(150);
   const m = await page.evaluate(`(() => {
@@ -226,6 +248,7 @@ test('D80 판정 1 — 계산기2에 올해 납입액/누적액 입력이 전부
 test('D80 판정 2 — 조건절 문구 넷이 계산기2에는 없고, 첫 탭에는 그대로 있다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
 
   // 첫 탭 — 「두 연금계좌 중 왜 이 순서인가」는 두 연금계좌가 동점 배분일
   // 때만 뜬다(`fillOrderTieBreak`). 계산기2의 김철수씨 프리필 값(만 30세·
@@ -258,4 +281,261 @@ test('D80 판정 2 — 조건절 문구 넷이 계산기2에는 없고, 첫 탭�
   assert.ok(!calc2Text.includes('이 한도에는 미납입분 이월이 포함돼 있는데'), '계산기2 — 이월 개정안 경고가 남아 있다(D80 판정 2)');
   assert.ok(!calc2Text.includes('두 연금계좌 중 왜 이 순서인가'), '계산기2 — 「두 연금계좌 중 왜 이 순서인가」 블록이 남아 있다(D80 판정 2)');
   assert.ok(!calc2PanelText.includes('김철수씨의 예시 값으로 시작합니다'), '계산기2 — 프리필 안내줄이 남아 있다(D80 판정 2)');
+});
+
+// ---------------------------------------------------------------------------
+// [신규 회차, 소유자 지시 6항목, 전부 계산기2 한정] 예시 팝업·ISA 입력 축소·
+// 계좌별 세제혜택 정리·막대 라벨 위치·다른 배분 비교 hover·표 열 정렬.
+// ---------------------------------------------------------------------------
+
+test('예시 팝업 — 계산기2 탭을 처음 클릭하면 뜨고, 「오늘 하루 보지 않음」 뒤 같은 날 재클릭하면 안 뜬다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.waitFor(`!!document.getElementById('tab-calc2')`, { timeoutMs: 8000 });
+  await page.evaluate(`localStorage.clear()`);
+
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 6000 });
+  const first = await page.evaluate(`(() => {
+    const dismiss = document.querySelector('.calc2-example-modal-dismiss');
+    const close = document.querySelector('.calc2-example-modal-close');
+    return { hasModal: true, hasDismiss: !!dismiss, dismissText: dismiss?.textContent, hasClose: !!close, closeText: close?.textContent };
+  })()`);
+  assert.equal(first.hasModal, true);
+  assert.equal(first.hasDismiss, true, '「오늘 하루 보지 않음」 버튼이 없다');
+  assert.equal(first.dismissText, '오늘 하루 보지 않음');
+  assert.equal(first.hasClose, true, '일반 닫기(X) 버튼이 없다');
+  assert.equal(first.closeText, '×');
+
+  // 「오늘 하루 보지 않음」을 누른다 — 모달이 닫히고 localStorage에 오늘 날짜가 남는다.
+  await page.clickElement(`document.querySelector('.calc2-example-modal-dismiss')`);
+  await sleep(150);
+  const afterDismiss = await page.evaluate(`(() => ({
+    hasModal: !!document.querySelector('.modal[role="dialog"]'),
+    stored: localStorage.getItem('calc2ExampleModalDismissedDate'),
+  }))()`);
+  assert.equal(afterDismiss.hasModal, false, '「오늘 하루 보지 않음」을 눌렀는데 모달이 안 닫혔다');
+  assert.ok(afterDismiss.stored, 'localStorage에 오늘 날짜가 저장되지 않았다');
+
+  // 다른 탭으로 갔다가 계산기2로 재클릭 — 같은 날이므로 다시 뜨면 안 된다.
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(400);
+  const afterReclick = await page.evaluate(`!!document.querySelector('.modal[role="dialog"]')`);
+  assert.equal(afterReclick, false, '같은 날 재클릭인데 팝업이 다시 떴다');
+});
+
+test('예시 팝업 — 저장된 날짜가 오늘이 아니면(날짜가 바뀌면) 다시 뜬다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await page.waitFor(`!!document.getElementById('tab-calc2')`, { timeoutMs: 8000 });
+  // 어제 날짜로 저장해 둔다 — 오늘과 다르므로 억제되면 안 된다.
+  await page.evaluate(`localStorage.setItem('calc2ExampleModalDismissedDate', '2000-01-01')`);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 6000 });
+  assert.ok(true, '옛 날짜가 저장돼 있어도 오늘과 다르면 다시 떴다');
+  await page.clickElement(`document.querySelector('.calc2-example-modal-close')`);
+  await sleep(150);
+  const stillStoredOld = await page.evaluate(`localStorage.getItem('calc2ExampleModalDismissedDate')`);
+  assert.equal(stillStoredOld, '2000-01-01', '일반 닫기(X)는 날짜를 오늘로 바꾸면 안 된다 — 「오늘 하루 보지 않음」만 저장한다');
+});
+
+test('ISA 입력 축소 — 계산기2에는 수익 성격·정산 기간·손실액 칸이 없다(수익률까지만), 첫 탭에는 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  await page.evaluate(`(() => { document.querySelector('#tabpanel-calc2 .calc2-more-info').open = true; })()`);
+  await sleep(100);
+  await page.clickElement(`document.getElementById('calc2IsaReturnEnabled-true')`);
+  await sleep(150);
+  const removedIds = ['calc2IsaIncomeCharacter', 'calc2IsaSettlementYears', 'calc2IsaLossAmount'];
+  const calc2Found = await page.evaluate(`(() => {
+    const panel = document.getElementById('tabpanel-calc2');
+    return ${JSON.stringify(removedIds)}.filter((id) => !!panel.querySelector('#' + id));
+  })()`);
+  assert.deepEqual(calc2Found, [], `계산기2에 남아 있으면 안 되는 ISA 필드: ${JSON.stringify(calc2Found)}`);
+  const rateStillThere = await page.evaluate(`!!document.getElementById('tabpanel-calc2').querySelector('#calc2IsaReturnRatePercent')`);
+  assert.equal(rateStillThere, true, 'ISA 예상 수익률 칸까지 없어지면 안 된다');
+
+  // 첫 탭에는 그대로 있다 — 첫 탭도 이 칸은 `isaReturnEnabled`를 켜야
+  // 나타난다(조건부 노출, 계산기2와 같은 조건).
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  await page.clickElement(`document.getElementById('isaReturnEnabled-true')`);
+  await sleep(150);
+  const firstTabHas = await page.evaluate(
+    `!!document.getElementById('tabpanel-calculator').querySelector('#isaIncomeCharacter-interest_dividend')`,
+  );
+  assert.equal(firstTabHas, true, '첫 탭에서까지 ISA 소득 성격 칸이 없어졌다 — 계산기2 한정이어야 한다');
+});
+
+test('ISA 입력 축소 — 수익률을 켜면 소득 성격을 묻지 않고도 정산액 추정이 선다(mixed_or_unknown 자동 채움)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  await page.evaluate(`(() => { document.querySelector('#tabpanel-calc2 .calc2-more-info').open = true; })()`);
+  await sleep(100);
+  await page.clickElement(`document.getElementById('calc2IsaReturnEnabled-true')`);
+  await sleep(150);
+  const set = (id, v) => `(() => { const el = document.getElementById(${JSON.stringify(id)}); el.focus(); el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+  await page.evaluate(set('calc2IsaReturnRatePercent', '5'));
+  await sleep(500);
+  // 소득 성격을 한 번도 묻지 않았는데도(그 칸이 없다) 결과가 여전히 정상
+  // 계산 상태(오류 패널로 빠지지 않는다, 도넛이 그대로 그려진다)로
+  // 이어진다면, `isaReturnEnabled` 켤 때 `mixed_or_unknown`을 조용히 채우는
+  // 자동 채움이 실제로 동작해 계약의 필수 짝(수익률+소득 성격)이 채워졌다는
+  // 뜻이다 — 안 채워졌다면 `buildIsaReturnAssumption`이 `null`을 내고
+  // (계산 자체는 계속 성립하지만) 이 사실만으로 자동 채움 여부를 화면
+  // 밖에서 가려낼 수는 없으므로, 최소한 "계산이 깨지지 않는다"는 이
+  // 회귀만은 여기서 고정한다.
+  const state = await page.evaluate(`(() => ({
+    hasFatalError: !!document.querySelector('#tabpanel-calc2 .inline-alert-error'),
+    hasDonut: !!document.querySelector('.calc2-result-slot .chart-donut path'),
+  }))()`);
+  assert.equal(state.hasFatalError, false, 'ISA 수익률만 켰는데 결과 패널이 오류 상태로 빠졌다');
+  assert.equal(state.hasDonut, true, 'ISA 수익률만 켰는데 결과 도넛이 사라졌다');
+});
+
+test('계좌별 세제혜택 블록 정리 — 부연설명·「나중에 받을 때」가 계산기2에는 없고, 첫 탭에는 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+
+  // 첫 탭 — 필수 항목을 채운다.
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut path')`, { timeoutMs: 6000 });
+  await sleep(200);
+  const firstTab = await page.evaluate(`(() => ({
+    hasRefCaption: !!document.querySelector('.result-slot .benefit-strip-ref-caption'),
+    hasPensionReference: !!document.querySelector('.result-slot .benefit-reference'),
+  }))()`);
+  assert.equal(firstTab.hasRefCaption, true, '첫 탭 — 부연설명(benefit-strip-ref-caption)이 없어졌다(계산기2 한정이어야 한다)');
+  assert.equal(firstTab.hasPensionReference, true, '첫 탭 — 「연금저축·IRP를 나중에 받을 때」 블록이 없어졌다');
+
+  // 계산기2 — 프리필로 이미 결과가 서 있다.
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(200);
+  const calc2 = await page.evaluate(`(() => ({
+    hasRefCaption: !!document.querySelector('.calc2-result-slot .benefit-strip-ref-caption'),
+    hasPensionReference: !!document.querySelector('.calc2-result-slot .benefit-reference'),
+    hasStripTitle: !!document.querySelector('.calc2-result-slot .account-benefit-strip h4'),
+  }))()`);
+  assert.equal(calc2.hasRefCaption, false, '계산기2 — 부연설명이 남아 있다');
+  assert.equal(calc2.hasPensionReference, false, '계산기2 — 「연금저축·IRP를 나중에 받을 때」 블록이 남아 있다');
+  assert.equal(calc2.hasStripTitle, true, '계산기2 — 계좌별 세제혜택 블록 자체(제목)까지 없어지면 안 된다');
+});
+
+test('납입 잔여 한도 대비 막대 — 계산기2에서는 계좌 이름이 막대 왼쪽에 있고, 행 사이 간격이 첫 탭보다 좁다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const m = await page.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.calc2-result-slot .allocation-bar-row')];
+    const first = rows[0];
+    const label = first.querySelector('.allocation-bar-labels');
+    const track = first.querySelector('.alloc-bar-track');
+    const labelRect = label.getBoundingClientRect();
+    const trackRect = (track ?? first.children[1]).getBoundingClientRect();
+    // 행 사이 간격은 기하 측정(행 위/아래 끝 차)이 아니라 실제 CSS
+    // gap 값을 직접 잰다 — 행이 하나뿐이거나 캡션 유무로 세로 흐름이
+    // 달라지면 기하 측정이 0이나 음수로 흔들릴 수 있다(실측).
+    const rowsGapPx = parseFloat(getComputedStyle(document.querySelector('.calc2-result-slot .allocation-bars')).rowGap
+      || getComputedStyle(document.querySelector('.calc2-result-slot .allocation-bars')).gap);
+    return { labelLeft: labelRect.left, trackLeft: trackRect.left, rowCount: rows.length, rowsGapPx };
+  })()`);
+  assert.ok(m.rowCount >= 2, `막대 행이 2개 미만이다: ${m.rowCount}`);
+  assert.ok(m.labelLeft < m.trackLeft, `계좌 이름(왼쪽 끝 ${m.labelLeft})이 막대(왼쪽 끝 ${m.trackLeft})보다 왼쪽에 있지 않다`);
+
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut path')`, { timeoutMs: 6000 });
+  await sleep(200);
+  const firstTabGapPx = await page.evaluate(`(() => {
+    const bars = document.querySelector('.result-slot .allocation-bars');
+    const cs = getComputedStyle(bars);
+    return parseFloat(cs.rowGap || cs.gap);
+  })()`);
+  assert.ok(m.rowsGapPx < firstTabGapPx, `계산기2 행 간격(${m.rowsGapPx}px)이 첫 탭 행 간격(${firstTabGapPx}px)보다 좁지 않다`);
+});
+
+test('다른 배분 비교 — 계산기2에서는 각 행에 버튼 테두리가 있고 hover 배경이 바뀐다, 커서는 pointer다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .stackbar-row')`, { timeoutMs: 8000 });
+  await sleep(200);
+  // **선택된(기본안) 첫 행은 고른다**(`.stackbar-row-selected`)가 이미
+  // `--accent-subtle` 배경을 깔고 있어, hover 배경 변화를 이 행에서 재면
+  // "이미 칠해진 색 위에 또 칠한다"가 돼 눈에 보이는 변화가 실측에서
+  // 가려질 수 있다(실측 — 선택 행에서는 hover 전후 색이 같았다). 선택
+  // 되지 않은 행에서 잰다.
+  const before = await page.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.calc2-result-slot .stackbar-row')];
+    const row = rows.find((r) => !r.className.includes('selected')) ?? rows[0];
+    const cs = getComputedStyle(row);
+    return { borderStyle: cs.borderStyle, borderWidth: cs.borderWidth, cursor: cs.cursor, background: cs.backgroundColor };
+  })()`);
+  assert.notEqual(before.borderStyle, 'none', `다른 배분 비교 행에 테두리가 없다: ${before.borderStyle}`);
+  assert.ok(parseFloat(before.borderWidth) > 0, `테두리 두께가 0이다: ${before.borderWidth}`);
+  assert.equal(before.cursor, 'pointer', `행의 커서가 pointer가 아니다: ${before.cursor}`);
+
+  // 이 행이 뷰포트 밖에 있을 수 있다(결과가 길다) — `page.clickElement`와
+  // 달리 이 시험은 좌표를 직접 계산해 CDP로 마우스를 보내므로, 스크롤로
+  // 눈에 보이는 위치로 옮겨 두지 않으면 좌표가 뷰포트 밖을 가리켜
+  // `elementFromPoint`가 아무것도 못 짚는다(실측 — y≈1700px, 기본
+  // 뷰포트보다 훨씬 아래).
+  const box = await page.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.calc2-result-slot .stackbar-row')];
+    const row = rows.find((r) => !r.className.includes('selected')) ?? rows[0];
+    row.scrollIntoView({ block: 'center' });
+    const r = row.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 10, y: 10 });
+  await sleep(30);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y });
+  await sleep(200);
+  const after = await page.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.calc2-result-slot .stackbar-row')];
+    const row = rows.find((r) => !r.className.includes('selected')) ?? rows[0];
+    return getComputedStyle(row).backgroundColor;
+  })()`);
+  assert.notEqual(after, before.background, `마우스를 올려도 배경색이 바뀌지 않았다(hover 전 ${before.background}, 후 ${after})`);
+});
+
+test('하단 배분표 — 계산기2에서는 각 열의 x좌표가 행마다 정확히 일치한다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .account-table')`, { timeoutMs: 8000 });
+  await sleep(200);
+  const m = await page.evaluate(`(() => {
+    const table = document.querySelector('.calc2-result-slot .account-table');
+    const rows = [...table.querySelectorAll('tbody tr')].filter((r) => r.children.length === 4 && !r.className.includes('table-row'));
+    const lefts = rows.map((r) => [...r.children].map((td) => td.getBoundingClientRect().left));
+    return { rowCount: rows.length, lefts };
+  })()`);
+  assert.ok(m.rowCount >= 2, `일반 행(4칸)이 2개 미만이라 정렬을 비교할 수 없다: ${m.rowCount}`);
+  const TOLERANCE_PX = 0.5;
+  for (let col = 0; col < 4; col++) {
+    const first = m.lefts[0][col];
+    for (let row = 1; row < m.lefts.length; row++) {
+      assert.ok(
+        Math.abs(m.lefts[row][col] - first) <= TOLERANCE_PX,
+        `${col}번째 열의 x좌표가 행마다 어긋난다: 0행 ${first}, ${row}행 ${m.lefts[row][col]}`,
+      );
+    }
+  }
 });

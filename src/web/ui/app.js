@@ -60,6 +60,7 @@ import { renderInputPanel } from './input-panel.js';
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { renderCalc2InputPanel } from './calc2-input-panel.js';
 import { buildCalc2PrefillForm } from './calc2-prefill.js';
+import { maybeShowCalc2ExampleModal } from './calc2-example-modal.js';
 import { renderReverseInputPanel } from './reverse-input-panel.js';
 import { renderReverseResultPanel } from './reverse-result-panel.js';
 import { renderTabBar } from './tab-bar.js';
@@ -335,7 +336,13 @@ export function mountApp(root, { engineClient, analytics }) {
   function setActiveTab(tabId) {
     if (tabId === activeTabId) return;
     activeTabId = tabId;
-    if (activeTabId === 'calc2') ensureCalc2Prefilled();
+    if (activeTabId === 'calc2') {
+      ensureCalc2Prefilled();
+      // [신규 회차, 소유자 지시] 계산기2 탭을 클릭할 때 예시 팝업 — 「오늘
+      // 하루 보지 않음」으로 오늘 이미 닫았으면 `maybeShowCalc2ExampleModal`
+      // 자신이 조용히 아무것도 하지 않는다(`ui/calc2-example-modal.js`).
+      maybeShowCalc2ExampleModal({ engineClient });
+    }
     calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
     calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
     reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
@@ -379,8 +386,12 @@ export function mountApp(root, { engineClient, analytics }) {
     activeTabId = tabIdFromUrl;
     // [D79 판정 2] `#calc2` 링크로 곧장 들어온 경우도 "이 탭을 처음 연다"에
     // 해당한다 — `setActiveTab`을 거치지 않는 이 초기화 경로에서도 같은
-    // 프리필을 채운다(위 `ensureCalc2Prefilled` 머리말).
-    if (activeTabId === 'calc2') ensureCalc2Prefilled();
+    // 프리필을 채운다(위 `ensureCalc2Prefilled` 머리말). 예시 팝업도 같은
+    // 이유로 같이 켠다.
+    if (activeTabId === 'calc2') {
+      ensureCalc2Prefilled();
+      maybeShowCalc2ExampleModal({ engineClient });
+    }
   } else {
     const sharedFragment = readShareFragmentFromLocation();
     if (sharedFragment) {
