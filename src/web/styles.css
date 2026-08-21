@@ -1711,12 +1711,18 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    간격을 줄인다. 라벨 열(이름+금액)을 왼쪽 고정폭 열로 옮기고, 그 아래
    나머지(막대·캡션들)를 오른쪽 열에 쌓는다. */
 .calc2-result-slot .allocation-bars { gap: var(--space-2); }
+/* [번들 실측 마감] 라벨 열이 96px일 때 금액 줄("250,000원 / 월")이 "/ 월"
+   만 홀로 셋째 줄로 꺾였다 — 이름 한 줄 + 금액 한 줄, 최대 두 줄로 되돌린다.
+   폭을 130px로 넓히고(가장 긴 실제 금액도 한 줄에 들어간다), 금액 자체도
+   `nowrap`을 건다(`.amount-value-chunk`가 이미 쓰는 관행 — "원 단위 홀로
+   꺾임"을 막던 바로 그 처방). 열이 넓어져도 되풀이 겹침 없음을 실측했다. */
 .calc2-result-slot .allocation-bar-row {
-  display: grid; grid-template-columns: 96px 1fr; column-gap: var(--space-3); align-items: start;
+  display: grid; grid-template-columns: 130px 1fr; column-gap: var(--space-3); align-items: start;
 }
 .calc2-result-slot .allocation-bar-labels {
   grid-column: 1; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 0;
 }
+.calc2-result-slot .allocation-bar-labels .type-num { white-space: nowrap; }
 .calc2-result-slot .allocation-bar-row > *:not(.allocation-bar-labels) { grid-column: 2; }
 
 /* 5번 — 다른 배분 비교 행: hover 반응 + 버튼 테두리(클릭 가능성이 보이지

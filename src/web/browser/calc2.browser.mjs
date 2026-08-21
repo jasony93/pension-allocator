@@ -539,3 +539,45 @@ test('하단 배분표 — 계산기2에서는 각 열의 x좌표가 행마다 �
     }
   }
 });
+
+/**
+ * [번들 실측 마감] 납입 잔여 한도 대비 막대의 왼쪽 라벨 열이 96px일 때
+ * 금액 줄("250,000원 / 월")의 "/ 월"만 홀로 셋째 줄로 꺾였다 — 라벨 열을
+ * 130px로 넓히고 금액에 `nowrap`을 걸었다(`.amount-value-chunk`가 이미
+ * 쓰던 "원 단위 홀로 꺾임" 처방과 같은 관행). 실제 렌더 줄 수를
+ * `Range.getClientRects`로 잰다(distinct top 개수 — 다른 파일의 헤드라인
+ * 줄바꿈 검사와 같은 관행) — 이름 한 줄 + 금액 한 줄, 각각 정확히 1줄이어야
+ * 한다(합쳐 최대 두 줄).
+ */
+test('납입 잔여 한도 대비 막대 — 계좌 이름·금액 줄이 각각 한 줄이다(금액이 「/ 월」만 홀로 꺾이지 않는다)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalPreemptively(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const rows = await page.evaluate(`(() => {
+    const lineCount = (el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+      return tops.size;
+    };
+    return [...document.querySelectorAll('.calc2-result-slot .allocation-bar-row')].map((row) => {
+      const label = row.querySelector('.allocation-bar-labels');
+      const nameEl = label.querySelector('.type-body-strong');
+      const numEl = label.querySelector('.type-num');
+      return {
+        name: nameEl?.textContent ?? null,
+        nameLines: nameEl ? lineCount(nameEl) : null,
+        num: numEl?.textContent ?? null,
+        numLines: numEl ? lineCount(numEl) : null,
+      };
+    });
+  })()`);
+  assert.ok(rows.length >= 2, `막대 행이 2개 미만이다: ${rows.length}`);
+  for (const row of rows) {
+    assert.equal(row.nameLines, 1, `계좌 이름("${row.name}")이 한 줄이 아니다(${row.nameLines}줄)`);
+    assert.equal(row.numLines, 1, `금액 줄("${row.num}")이 한 줄이 아니다(${row.numLines}줄) — "/ 월"이 홀로 꺾였을 수 있다`);
+  }
+});
