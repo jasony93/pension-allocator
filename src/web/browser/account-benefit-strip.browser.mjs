@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * `AccountBenefitStrip` — D35→D36 재개정(design-system 5.31.2·5.31.3절 ·
@@ -26,6 +26,12 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   const { page } = app;
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 로드부터 예시 팝업이
+  // 뜰 수 있어(스크림이 아래 좌표 클릭을 가릴 수 있다) 먼저 치운다. 그 다음
+  // 이 파일이 재는 첫 탭(`calculator`) 위젯이 숨어(`display:none`) 있으면
+  // 실측 px가 전부 0이 되므로 명시로 켠다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   // **한 번에 몰아 치지 않는다.** ISA 조건부 블록은 `isaExists`가 켜져야
   // DOM에 나타난다 — 같은 동기 스크립트 안에서 클릭 직후 그 자식 필드를
   // 바로 찾으면 아직 렌더되지 않은 노드를 잡아 `null`이 된다(실측으로 잡은

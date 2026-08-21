@@ -333,16 +333,21 @@ export function mountApp(root, { engineClient, analytics }) {
     calc2Store.applySharedForm(buildCalc2PrefillForm());
   }
 
+  // [2026-08-21, D81] 계산기2가 이 탭을 활성화하는 **모든** 경로(탭 클릭,
+  // URL 프래그먼트로 곧장 진입, 이제는 기본 랜딩까지)에서 같은 일일 규칙을
+  // 타야 한다 — 경로마다 따로 부르면 부르는 것을 잊은 경로 하나가 조용히
+  // 어긋난다. 한 곳에 모은다.
+  function activateCalc2Extras() {
+    ensureCalc2Prefilled();
+    // 「오늘 하루 보지 않음」으로 오늘 이미 닫았으면 `maybeShowCalc2ExampleModal`
+    // 자신이 조용히 아무것도 하지 않는다(`ui/calc2-example-modal.js`).
+    maybeShowCalc2ExampleModal({ engineClient });
+  }
+
   function setActiveTab(tabId) {
     if (tabId === activeTabId) return;
     activeTabId = tabId;
-    if (activeTabId === 'calc2') {
-      ensureCalc2Prefilled();
-      // [신규 회차, 소유자 지시] 계산기2 탭을 클릭할 때 예시 팝업 — 「오늘
-      // 하루 보지 않음」으로 오늘 이미 닫았으면 `maybeShowCalc2ExampleModal`
-      // 자신이 조용히 아무것도 하지 않는다(`ui/calc2-example-modal.js`).
-      maybeShowCalc2ExampleModal({ engineClient });
-    }
+    if (activeTabId === 'calc2') activateCalc2Extras();
     calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
     calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
     reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');
@@ -364,7 +369,10 @@ export function mountApp(root, { engineClient, analytics }) {
    * 탭 전환과 별개의 약속이다.
    */
   function goToFirstLanding() {
-    setActiveTab('calculator');
+    // [2026-08-21, D81] 「첫 탭」이 이제 `calc2`다 — 소유자가 계산기2를
+    // 첫 자리로 옮겼다. 내부 id가 바뀐 것이지 "로고를 누르면 첫 자리로"라는
+    // 약속 자체는 그대로다.
+    setActiveTab('calc2');
     window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   }
 
@@ -384,24 +392,30 @@ export function mountApp(root, { engineClient, analytics }) {
   const tabIdFromUrl = readTabIdFromLocation();
   if (tabIdFromUrl) {
     activeTabId = tabIdFromUrl;
-    // [D79 판정 2] `#calc2` 링크로 곧장 들어온 경우도 "이 탭을 처음 연다"에
-    // 해당한다 — `setActiveTab`을 거치지 않는 이 초기화 경로에서도 같은
-    // 프리필을 채운다(위 `ensureCalc2Prefilled` 머리말). 예시 팝업도 같은
-    // 이유로 같이 켠다.
-    if (activeTabId === 'calc2') {
-      ensureCalc2Prefilled();
-      maybeShowCalc2ExampleModal({ engineClient });
-    }
   } else {
     const sharedFragment = readShareFragmentFromLocation();
     if (sharedFragment) {
       if (sharedFragment.ok) {
         store.applySharedForm(sharedFragment.form);
+        // [2026-08-21, D81] 이 옛(v:1) 공유 데이터는 언제나 `calculator`
+        // store를 채운다(생성 시점부터 그 탭 전용 — `share-link.js` 머리말).
+        // **탭 순서가 바뀌어 기본 활성 탭이 `calc2`가 된 지금, 활성 탭을
+        // 여기서 명시로 `calculator`로 돌리지 않으면** 사용자는 자신이 연
+        // 링크의 결과(calculator store)를 못 보고 계산기2의 프리필 예시를
+        // 대신 보게 된다 — "옛 링크가 계속 동작한다"는 약속의 실질(공유한
+        // 결과가 실제로 보인다)이 깨진다. 탭 id 프래그먼트가 아예 없던
+        // 옛 링크에도 이 약속이 적용되도록, 여기서 활성 탭을 정한다.
+        activeTabId = 'calculator';
       } else {
         mainGroup.before(sharedFragmentInvalidNotice());
       }
     }
   }
+  // [2026-08-21, D81] 계산기2가 활성 탭이 되는 **모든** 경로 — 탭 id
+  // 프래그먼트로 곧장 들어온 경우(`#calc2`)뿐 아니라 **기본 랜딩**(프래그먼트가
+  // 아예 없는, 가장 흔한 첫 방문)까지 — 에서 같은 일일 팝업 규칙을 태운다.
+  // `activeTabId`가 최종적으로 정해진 뒤(위 두 분기 모두 지난 뒤) 한 번만 본다.
+  if (activeTabId === 'calc2') activateCalc2Extras();
   calculatorPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'calculator');
   calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
   reversePanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-reverse');

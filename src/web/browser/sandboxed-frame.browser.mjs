@@ -24,6 +24,17 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   frame = await attachSandboxedFrame(app.page);
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일이 재는 초기화
+  // 버튼은 첫 탭(calculator) 것이다. 그 탭이 숨어 있으면 좌표 클릭이
+  // 빗나간다. 먼저 켠다.
+  // **예시 팝업은 여기서 따로 치울 필요가 없다** — 이 iframe은
+  // `allow-same-origin`이 없는 불투명 출처라 `localStorage` 접근 자체가
+  // SecurityError를 던진다(위 첫 시험이 그 사실 자체를 못박는다). 모달을
+  // 띄우는 코드(`safeLocalStorage()`)가 그 예외를 이미 삼키고 `null`을
+  // 돌려주므로, 이 환경에서는 애초에 모달이 뜨지 않는다 —
+  // `dismissCalc2ExampleModalIfOpen`을 불렀다가는 그 함수 자신의
+  // `localStorage.setItem` 호출이 여기서 대신 던져 이 훅을 깬다.
+  await frame.click(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {

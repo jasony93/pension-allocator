@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * ExampleShowcase(관리자 지시 2026-08-14 4·5번, D70, [2026-08-17] 소유자
@@ -38,6 +38,16 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 예시 블록(`.example-showcase-slot`)은 여전히 내부
+  // `calculator` 탭 전용이다 — 그 탭의 표시 이름이 「절세계좌 계산기2」로
+  // 바뀌었을 뿐이다(D81). **기본 활성 탭이 이제 `calc2`라** 이 파일의 모든
+  // 시험이 전제하는 "예시 블록이 곧바로 보인다"가 더 이상 새 페이지
+  // 로드만으로는 참이 아니다 — 파일 전체에서 단 한 번, 여기서 그 탭으로
+  // 명시로 전환해 옛 전제를 되살린다(이 파일은 탭을 다시 바꾸지 않는다).
+  // 전환에 앞서, 첫 로드부터 뜰 수 있는 예시 팝업(스크림이 이 좌표 클릭을
+  // 가릴 수 있다)을 먼저 치운다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -1060,10 +1070,16 @@ test('인쇄 레이아웃에는 예시 섹션이 없다 — 인쇄물에는 결�
 
 // [2026-08-17, 관리자 지시(2차) 1번, D72] 옛 `.app-title`(가명칭 텍스트)이
 // 로고+탭 바로 바뀌면서 없어졌다 — 서비스 이름은 이제 활성 탭의 글자다.
-test('활성 탭 문구가 "절세계좌 계산기"이고 [가칭]이 없다', { skip: skipWithoutChrome }, async () => {
+// [2026-08-21, D81 — 뒤집힌 기대값] 이 파일의 `before` 훅이 이제 예시
+// 블록을 보려고 내부 `calculator` 탭으로 전환해 둔다(위 주석) — 그 탭의
+// 표시 라벨이 D81로 「절세계좌 계산기」에서 「절세계좌 계산기2」로 바뀌었다.
+// "[가칭]이 없다"는 취지는 그대로이므로 부재 검사는 남기고, 기대 문자열만
+// 뒤집는다.
+test('활성 탭 문구가 "절세계좌 계산기2"이고 [가칭]이 없다(D81)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const title = await page.evaluate(`document.querySelector('.app-tab-active').textContent`);
-  assert.equal(title, '절세계좌 계산기');
+  assert.equal(title, '절세계좌 계산기2');
+  assert.ok(!title.includes('가칭'), '탭 라벨에 [가칭] 흔적이 남아 있다');
 });
 
 test('모바일 폭(375px)에서도 두 행의 도넛·절세액이 함께 렌더된다(레이아웃이 세로로 쌓인다), 가로 스크롤이 없다', { skip: skipWithoutChrome }, async () => {
@@ -1279,6 +1295,9 @@ test('관리자 지시 — 다크 모드에서도 두 아이콘(man·female) 색
   })()`;
 
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침(goto)은 기본 탭(이제 calc2)으로 되돌아간다 —
+  // 위 `before` 훅과 같은 이유로 여기서도 다시 명시로 전환해야 한다.
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
   await page.waitFor(`!!${READ_SHOWCASE}`, { timeoutMs: 8000 });
   const light = await page.evaluate(READ_ICON_STYLE);

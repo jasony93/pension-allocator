@@ -13,6 +13,7 @@ import {
   startStaticServer,
   launchChrome,
   openPage,
+  dismissCalc2ExampleModalIfOpen,
 } from './harness.mjs';
 
 /**
@@ -41,6 +42,11 @@ before(async () => {
   });
   if (skipWithoutChrome) return;
   app = await openApp({ url: '/dist/index.html' });
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 로드부터 예시 팝업이
+  // 뜰 수 있어 먼저 치운다. 그 다음 이 파일이 재는 첫 탭(`calculator`)
+  // 위젯이 숨어 있으면 실측 px가 0이 되므로 명시로 켠다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -571,6 +577,12 @@ test('아티팩트 뷰어처럼 감싼 조건에서도 예시 구역이 실제�
         })()`,
         { timeoutMs: 10000 },
       );
+      // [2026-08-21, D81] 이 감싼 사본도 같은 앱이라 기본 탭이 calc2다 —
+      // 예시 구역(`.example-showcase-slot`)은 여전히 내부 `calculator` 탭
+      // 전용이라 그 탭으로 명시 전환해야 실제로(0폭이 아니게) 그려진다.
+      // 전환에 앞서, 첫 로드부터 뜰 수 있는 예시 팝업(스크림)을 먼저 치운다.
+      await dismissCalc2ExampleModalIfOpen(page);
+      await page.clickElement(`document.getElementById('tab-calculator')`);
       await sleep(400);
 
       const m = await page.evaluate(`(() => {

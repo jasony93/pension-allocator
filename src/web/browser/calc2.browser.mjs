@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 「절세계좌 계산기2」(D79) 실측 — 관리자 지시(신규 회차) 검사 목록:
@@ -35,16 +35,21 @@ const set = (id, v) =>
  * 클릭(`page.clickElement`)이 팝업 위(스크림)에서 일어나 원래 누르려던
  * 요소를 놓친다(실측 — ISA 토글 클릭이 아무 효과도 못 냈다). 팝업 자체를
  * 검사하는 두 시험(아래)만 이 함수를 부르지 않는다.
+ * [2026-08-21, D81] 이 파일에만 있던 이 로직을 `harness.mjs`의
+ * `dismissCalc2ExampleModalIfOpen`으로 옮겼다 — 기본 탭이 calc2가 되며
+ * 같은 문제가 다른 파일(`tab-switch.browser.mjs`)에도 생겨 공유가 필요해
+ * 졌다. 이 파일 안 호출부(15곳)를 그대로 두려고 이름만 다시 내보낸다.
  */
-async function dismissCalc2ExampleModalPreemptively(page) {
-  await page.evaluate(`localStorage.setItem('calc2ExampleModalDismissedDate', (() => {
-    const n = new Date();
-    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
-  })())`);
-}
+const dismissCalc2ExampleModalPreemptively = dismissCalc2ExampleModalIfOpen;
 
 test('계산기2 탭으로 전환하면 URL 프래그먼트가 #calc2다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
+  // [2026-08-21, D81] 기본 활성 탭이 이제 calc2라 파일 첫 로드부터 이미
+  // calc2가 활성이다 — 그 상태로 `tab-calc2`를 눌러도 `setActiveTab`의
+  // "이미 그 탭이면 아무 일도 안 한다" 이른 반환에 걸려 이 시험이 재려는
+  // "전환" 자체가 안 일어난다. 먼저 다른 탭으로 비켜 실제 전환을 만든다.
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
   await page.clickElement(`document.getElementById('tab-calc2')`);
   await sleep(150);
   const state = await page.evaluate(`(() => ({
@@ -249,6 +254,12 @@ test('D80 판정 2 — 조건절 문구 넷이 계산기2에는 없고, 첫 탭�
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await dismissCalc2ExampleModalPreemptively(page);
+  // [2026-08-21, D81] 기본 탭이 이제 calc2라 첫 탭 필드가 `tab-panel-hidden`
+  // (display:none)으로 숨어 있다 — 숨은 원소는 사각형이 0×0이라, 아래
+  // 좌표 기반 클릭(`page.clickElement`)이 엉뚱한 좌표를 때려 라디오가 조용히
+  // 안 눌린다(실측 — 결과가 영영 안 섰다). 먼저 명시로 그 탭을 켠다.
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
 
   // 첫 탭 — 「두 연금계좌 중 왜 이 순서인가」는 두 연금계좌가 동점 배분일
   // 때만 뜬다(`fillOrderTieBreak`). 계산기2의 김철수씨 프리필 값(만 30세·
@@ -292,6 +303,12 @@ test('예시 팝업 — 계산기2 탭을 처음 클릭하면 뜨고, 「오늘 
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await page.waitFor(`!!document.getElementById('tab-calc2')`, { timeoutMs: 8000 });
+  // [2026-08-21, D81] 새로고침 자체가 이제 기본으로 calc2에 내려앉는다 —
+  // "탭을 클릭해 전환"을 실제로 관측하려면 먼저 다른 탭으로 비켜 둬야
+  // 한다(그렇지 않으면 아래 `tab-calc2` 클릭이 이미 활성인 탭이라
+  // `setActiveTab`의 이른 반환에 걸려 아무 일도 안 한다).
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
   await page.evaluate(`localStorage.clear()`);
 
   await page.clickElement(`document.getElementById('tab-calc2')`);
@@ -330,6 +347,10 @@ test('예시 팝업 — 저장된 날짜가 오늘이 아니면(날짜가 바뀌
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await page.waitFor(`!!document.getElementById('tab-calc2')`, { timeoutMs: 8000 });
+  // [2026-08-21, D81] 위 시험과 같은 이유로, 클릭이 실제 전환을 일으키도록
+  // 먼저 다른 탭으로 비켜 둔다.
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
   // 어제 날짜로 저장해 둔다 — 오늘과 다르므로 억제되면 안 된다.
   await page.evaluate(`localStorage.setItem('calc2ExampleModalDismissedDate', '2000-01-01')`);
   await page.clickElement(`document.getElementById('tab-calc2')`);
@@ -587,10 +608,15 @@ test('납입 잔여 한도 대비 막대 — 계좌 이름·금액 줄이 각각
 // 제거·자금 사용 시점 답변 2 문구+디자인·섹션 제목 배율·하단 표 헤더 정렬.
 // ---------------------------------------------------------------------------
 
-test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행만 아래, 두 버튼이 900px 높이에서도 스크롤 없이 보인다', { skip: skipWithoutChrome }, async () => {
+test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행만 아래, 왼쪽 시작선이 카피와 정확히 맞고, 두 버튼이 900px 높이에서도 스크롤 없이 보인다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침이 기본으로 calc2에 내려앉는다 — "탭 클릭으로
+  // 팝업을 연다"를 실제로 관측하려면 먼저 다른 탭으로 비켜야 한다(안 그러면
+  // 아래 `tab-calc2` 클릭이 이미 활성 탭이라 아무 일도 안 한다).
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
   await page.evaluate(`localStorage.clear()`);
   await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 8000 });
@@ -610,7 +636,9 @@ test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행�
     const asRect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
     return {
       heroTop: heroCopy ? heroCopy.getBoundingClientRect().top : null,
+      heroLeft: heroCopy ? heroCopy.getBoundingClientRect().left : null,
       rowTop: rows[0] ? rows[0].getBoundingClientRect().top : null,
+      rowLeft: rows[0] ? rows[0].getBoundingClientRect().left : null,
       rowCount: rows.length,
       names,
       dismissRect: asRect(dismiss),
@@ -622,6 +650,16 @@ test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행�
   assert.deepEqual(m.names, ['김철수씨'], `이승은씨 행이 남아 있다: ${JSON.stringify(m.names)}`);
   assert.ok(m.heroTop != null && m.rowTop != null, '히어로 카피 또는 예시 행을 찾지 못했다');
   assert.ok(m.heroTop < m.rowTop, `히어로 카피(위 끝 ${m.heroTop})가 예시 행(위 끝 ${m.rowTop})보다 위에 있지 않다`);
+  // [2026-08-21, 소유자 지시 — 팝업 정렬] 예시 행의 왼쪽 시작선이 위 히어로
+  // 카피 텍스트의 왼쪽 시작선과 정확히 일치한다(x좌표 일치). 옛(원본
+  // 페이지의 가로 배치용) `.example-hero-copy { margin-left: 64px }`가 이
+  // 모달의 세로 배치에 새어 들어와 64px 어긋났던 것을 `styles.css`의
+  // `.calc2-example-modal-body .example-hero-copy { margin-left: 0 }`로
+  // 잡았다 — 그 결과를 여기서 실측으로 고정한다.
+  assert.ok(
+    Math.abs(m.heroLeft - m.rowLeft) <= 1,
+    `히어로 카피 왼쪽 시작선(${m.heroLeft})이 예시 행 왼쪽 시작선(${m.rowLeft})과 어긋난다`,
+  );
   for (const [label, rect] of [['「오늘 하루 보지 않음」', m.dismissRect], ['닫기(X)', m.closeRect]]) {
     assert.ok(rect.bottom <= m.viewportH && rect.top >= 0, `${label} 버튼이 900px 뷰포트 안에 없다(스크롤 필요): ${JSON.stringify(rect)}`);
   }

@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 도넛의 **실제 기하** 실측 — 회귀 재발 방지.
@@ -83,6 +83,11 @@ const measurements = {};
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 로드부터 예시 팝업이
+  // 뜰 수 있어 먼저 치운다. 그 다음 `.result-slot`(첫 탭 전용)이 숨어
+  // 있으면 SVG `getBBox()`가 0을 내므로 명시로 켠다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -125,6 +130,11 @@ test('조각 중간 각도의 실제 화면 픽셀에 그 조각이 그려져 �
 test('`requestAnimationFrame`이 없어도 도넛은 즉시 최종 모양이다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
+  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
+  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(`window.requestAnimationFrame = undefined;`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   // [2026-08-18, D74] **단순 존재 확인에서 실제 bbox 확인으로 좁혔다.** 옛
@@ -159,6 +169,11 @@ test('prefers-reduced-motion이면 진입 표시 없이 바로 최종 모양이�
   const { page, origin } = app;
   await page.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
+  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
+  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   const m = await page.evaluate(`(() => {
@@ -174,6 +189,11 @@ test('prefers-reduced-motion이면 진입 표시 없이 바로 최종 모양이�
 test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도넛이 비지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
+  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
+  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   // 진입(240ms) 도중에 값을 한 번 더 바꿔 디바운스 재계산을 건다 — 재렌더가
@@ -209,6 +229,11 @@ test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도
 test('실제 결과 도넛 — 데스크톱에서는 도넛 옆 직접 라벨이 실제로 보인다(범례가 아니라)', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
+  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
+  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(400);
@@ -245,6 +270,11 @@ test('실제 결과 도넛 — 데스크톱에서는 도넛 옆 직접 라벨이
 test('실제 결과 도넛 — 모바일(375px)에서는 범례·조각 안 이름+비율 라벨이 실제로 보인다(0크기가 아니다)', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
+  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
+  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 900, deviceScaleFactor: 1, mobile: true });
   await sleep(150);
   await page.evaluate(FILL_REQUIRED_FIELDS);

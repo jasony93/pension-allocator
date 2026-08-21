@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 import { encodeShareFragment } from '../state/share-link.js';
 import { initialForm } from '../state/store.js';
 
@@ -26,6 +26,14 @@ after(async () => {
 test('D74 — 「내 결과 공유하기」를 누르면 「이 링크에는 입력하신 값이 들어 있습니다」가 반드시 함께 보인다', { skip: skipWithoutChrome }, async () => {
   const app = await openTracked();
   const { page } = app;
+  // [2026-08-21, D81] 기본 탭이 이제 calc2다 — `FILL_REQUIRED_FIELDS`는
+  // 첫 탭(`calculator`) 필드를 채우지만, 그 탭 패널이 숨어 있으면(D81 전
+  // 에는 기본이라 숨을 일이 없었다) `.save-share button`을 문서 전체
+  // 질의로 찾을 때 계산기2 쪽(이미 프리필로 결과가 서 있다)이 먼저 걸리거나,
+  // 첫 탭 버튼이 숨은 채(0×0) 좌표 클릭을 놓친다. 첫 로드부터 뜰 수 있는
+  // 예시 팝업(스크림)도 먼저 치운 뒤, 명시로 이 탭을 켠다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.save-share button')`);
   await sleep(400);
@@ -48,6 +56,9 @@ test('D74 — 「내 결과 공유하기」를 누르면 「이 링크에는 입
 test('D74 — 공유 URL은 프래그먼트(#)에 실린다. 네트워크 쿼리로 나갈 방법이 없다(location.search가 비어 있다)', { skip: skipWithoutChrome }, async () => {
   const app = await openTracked();
   const { page } = app;
+  // [2026-08-21, D81] 위 시험과 같은 이유로 먼저 팝업을 치우고 첫 탭을 켠다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.save-share button')`);
   await sleep(400);

@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, attachSandboxedFrame, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, attachSandboxedFrame, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * PDF 내보내기(`ui/print.js` + `styles.css`의 `@media print`) — 2026-08-10,
@@ -61,6 +61,12 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일이 재는 것은
+  // 첫 탭(calculator)의 인쇄 레이아웃이다. 그 탭이 숨어 있으면 좌표 클릭이
+  // 빗나가고, `.save-share button`을 문서 전체로 찾을 때도 계산기2 쪽이
+  // 먼저 걸릴 수 있다. 먼저 켠다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
   await app.page.evaluate(FILL_REQUIRED_FIELDS);
   await app.page.waitFor(`!!document.querySelector('.save-share button')`);
   await sleep(400);
@@ -75,7 +81,10 @@ test('[뒤집힘, D74] 「요약 저장」 버튼 둘(이미지·PDF) + 「내 �
   // 이미지 만들기"를 걷어낸 직후였다. D74로 이미지가 요약 전용으로
   // 되돌아왔고, 공유 링크(관리자 지시 7번)도 이 블록에 함께 붙는다.
   const { page } = app;
-  const labels = await page.evaluate(`[...document.querySelectorAll('.save-share button')].map((b) => b.textContent.trim())`);
+  // [2026-08-21, D81] 계산기2도 같은 `.save-share` 블록을 공유해 기본
+  // 탭으로 이미 떠 있다 — 문서 전체 질의는 두 탭 몫이 겹쳐 6개가 나온다.
+  // 첫 탭(`calculator`)으로 좁힌다.
+  const labels = await page.evaluate(`[...document.getElementById('tabpanel-calculator').querySelectorAll('.save-share button')].map((b) => b.textContent.trim())`);
   assert.deepEqual(labels, ['이미지로 저장', 'PDF로 저장', '내 결과 공유하기']);
 });
 
@@ -627,6 +636,12 @@ test('버튼을 누르면 save_share_action(method: pdf)이 나간다', { skip: 
 
 test('아티팩트 샌드박스(sandbox="allow-scripts")에서는 window.print()가 조용히 막히고, 화면이 그 사실을 알린다', { skip: skipWithoutChrome }, async () => {
   const frame = await attachSandboxedFrame(app.page);
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 탭(calculator)의
+  // 저장 버튼을 누르려면 먼저 그 탭을 켜야 한다(숨은 채면 좌표 클릭이
+  // 빗나간다). 이 iframe은 `allow-same-origin`이 없어 localStorage가
+  // 막히므로(위 sandboxed-frame.browser.mjs와 같은 이유) 예시 팝업 자체가
+  // 애초에 뜨지 않는다 — 탭 전환만 하면 된다.
+  await frame.click(`document.getElementById('tab-calculator')`);
   await frame.evaluate(FILL_REQUIRED_FIELDS);
   await app.page.waitFor(`!!document.querySelector('.save-share button')`, { sessionId: frame.sessionId });
   await sleep(400);

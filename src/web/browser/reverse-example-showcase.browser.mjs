@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 연금 역산기 탭의 예시 블록(게이트 5 D78 ②, `screens.md` 14.1.1절,
@@ -16,6 +16,9 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 로드부터 예시 팝업이
+  // 뜰 수 있어(스크림이 아래 좌표 클릭을 가릴 수 있다) 먼저 치운다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
 }, { skip: skipWithoutChrome });
 
 after(async () => {

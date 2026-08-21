@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 자리표시자의 **실측** — design-system 5.29절 · screens.md 8.1절.
@@ -106,6 +106,12 @@ const measurements = {};
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일이 재는 자리
+  // (`.result-placeholder`, `.result-slot`)는 첫 탭(`calculator`) 전용인데,
+  // 그 탭이 숨어(`display:none`) 있으면 SVG `getBBox()`가 레이아웃이 안
+  // 도는 트리에서 0을 낼 수 있다. 명시로 켠다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -258,13 +264,17 @@ test('결과 → 자리표시자 복귀가 즉시 교체다 — 역재생하지 
   // 되돌아가는 길은 초기화다. **필수 칸을 비우는 것만으로는 결과가 사라지지
   // 않는다** — 직전 결과를 지우지 않는다는 규약(6.1절 4번) 때문에 store가
   // `readyToCompute`가 아니어도 이미 있는 결과의 상태를 유지한다.
-  await page.clickElement(`[...document.querySelectorAll('.input-panel-header button')].find((b) => b.textContent.includes('초기화'))`);
+  // [2026-08-21, D81] 계산기2도 프리필로 이미 도넛을 그려 두므로, 아래
+  // 「초기화」·「도넛 부재」 질의를 첫 탭(`#tabpanel-calculator`)으로 좁힌다
+  // — 안 그러면 계산기2의 도넛이 영원히 남아 "도넛이 사라졌다"가 거짓으로
+  // 나온다.
+  await page.clickElement(`[...document.getElementById('tabpanel-calculator').querySelectorAll('.input-panel-header button')].find((b) => b.textContent.includes('초기화'))`);
   await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`, { timeoutMs: 4000 });
   await page.clickElement(`[...document.querySelectorAll('.modal-actions button')].find((b) => b.textContent.includes('모두 지우기'))`);
-  await page.waitFor(`!!document.querySelector('.result-placeholder .placeholder-ring')`, { timeoutMs: 6000 });
+  await page.waitFor(`!!document.getElementById('tabpanel-calculator').querySelector('.result-placeholder .placeholder-ring')`, { timeoutMs: 6000 });
   const seen = await page.evaluate(`(() => { window.__revObserver.disconnect(); return window.__leavingSeen; })()`);
   assert.equal(seen, 0, '복귀 방향에 사라지는 링이 나타났습니다 — 역재생입니다');
-  assert.equal(await page.evaluate(`!!document.querySelector('.chart-donut')`), false, '도넛은 즉시 사라진다');
+  assert.equal(await page.evaluate(`!!document.getElementById('tabpanel-calculator').querySelector('.chart-donut')`), false, '도넛은 즉시 사라진다');
 });
 
 test('prefers-reduced-motion이면 전환이 0ms다 — 사라지는 링 단계가 아예 없다', { skip: skipWithoutChrome }, async () => {

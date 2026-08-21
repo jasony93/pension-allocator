@@ -2439,6 +2439,14 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    쌓는다. 원본 첫 탭 배치(카피가 옆)와 다른 자리라 클래스 자체를
    새로 쓴다(`ui/calc2-example-modal.js` 머리말). */
 .calc2-example-modal-body { display: flex; flex-direction: column; gap: var(--space-5); align-items: stretch; }
+/* [2026-08-21, D81] **정렬 마감** — `.example-hero-copy`의 `margin-left: 64px`
+   (관리자 지시(3차) 1번, styles.css 위쪽)은 원본 페이지에서 카피가 예시
+   행 **옆**(가로)에 설 때 오른쪽으로 밀던 값이다. 이 모달은 카피를 행
+   **위**(세로)에 쌓으므로 그 여백이 그대로 남으면 카피만 오른쪽으로
+   밀려 김철수씨 행의 왼쪽 시작선과 어긋난다(실측 — 행 266px, 카피
+   330px, 64px 어긋남 = 정확히 그 margin-left 값). 이 스코프에서만 0으로
+   되돌려 두 왼쪽 시작선을 맞춘다. */
+.calc2-example-modal-body .example-hero-copy { margin-left: 0; }
 /* 오른쪽 하단 — 「오늘 하루 보지 않음」을 주황 계열로 눈에 띄게(소유자 지시),
    일반 닫기(X)는 옆의 수수한 아이콘 버튼. */
 .calc2-example-modal-close {

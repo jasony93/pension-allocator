@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 패널의 실측 — 클릭이 삼켜지던 자리와, 노드를 고쳐 쓰는 렌더가 내용을
@@ -28,6 +28,12 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 탭(`calculator`)이
+  // 숨어 있으면 (1) 이 탭 필드에 좌표 클릭이 안 먹고, (2) `.save-share
+  // button`을 문서 전체로 찾을 때 계산기2 쪽(프리필로 이미 결과가 서
+  // 있다)이 먼저 걸릴 수 있다. 먼저 명시로 켠다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
   await app.page.evaluate(FILL_REQUIRED_FIELDS);
   // 디바운스(400ms) + 계산 + 경계값 조회가 끝나 결과 패널이 안정될 때까지 기다린다.
   await app.page.waitFor(`!!document.querySelector('.save-share button')`);

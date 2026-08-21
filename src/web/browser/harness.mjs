@@ -219,6 +219,16 @@ export async function openPage(browserWsUrl, url) {
     evaluate,
     send: (method, params, sessionId = main) => cdp.send(method, params, sessionId),
 
+    /**
+     * **프래그먼트만 다른 URL로는 부르지 마라.** 현재 문서와 경로·쿼리가
+     * 같고 프래그먼트만 다르면 브라우저는 이것을 "같은 문서 안 이동"으로
+     * 처리해 `Page.loadEventFired`를 다시 쏘지 않는다 — 그러면 아래 대기가
+     * 영원히 안 끝난다(실측 — `#calculator`로만 바뀐 재호출이 그랬다).
+     * 진짜 새로고침이 필요하면 쿼리스트링을 하나 얹어 경로 자체를 다르게
+     * 만들어라. 이 함수 자체는 그 실수를 막지 않는 대신, 30초 안에
+     * `Page.loadEventFired`가 안 오면 원인을 바로 알 수 있게 타임아웃으로
+     * 던진다(예전에는 이 실수 하나가 전체 검사 프로세스를 무기한 멈췄다).
+     */
     async goto(target) {
       const loaded = new Promise((resolve) => {
         const fn = (msg) => {
@@ -230,7 +240,17 @@ export async function openPage(browserWsUrl, url) {
         cdp.listeners.push(fn);
       });
       await cdp.send('Page.navigate', { url: target }, main);
-      await loaded;
+      const timedOut = Symbol('timeout');
+      const result = await Promise.race([
+        loaded,
+        new Promise((resolve) => setTimeout(() => resolve(timedOut), 30000)),
+      ]);
+      if (result === timedOut) {
+        throw new Error(
+          `page.goto(${JSON.stringify(target)})가 30초 안에 Page.loadEventFired를 받지 못했습니다 — ` +
+            `현재 문서와 프래그먼트만 다른 URL로 부르지 않았는지 확인하세요(같은 문서 안 이동은 load를 다시 쏘지 않습니다).`,
+        );
+      }
     },
 
     /**
@@ -382,6 +402,30 @@ export async function attachSandboxedFrame(page, { path: framePath = '/src/web/i
 }
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * [2026-08-21, D81] 계산기2가 기본 탭이 되면서, 예시 팝업("계산기2 예시 인사")이
+ * **명시적 탭 클릭 없이 순전한 새 페이지 로드만으로도** 뜰 수 있게 됐다
+ * (`ui/app.js`의 초기 로드 분기 — D81 원문 "첫 방문 로드 포함"). 이 모달은
+ * 뷰포트 전체를 덮는 스크림(`.modal-scrim`, position: fixed; inset: 0)을
+ * 쓰므로, 팝업 자체를 검사하지 않는 다른 시험이 좌표 기반 클릭
+ * (`page.clickElement`)을 이어가면 그 클릭이 스크림에서 끝나 원래 누르려던
+ * 요소(탭 버튼 등)를 놓친다(실측 — 탭 전환이 조용히 무효가 됐다). `openApp()`
+ * 직후 이 함수로 미리 치워 둔다 — localStorage에 오늘 날짜를 적어 **앞으로의**
+ * 자동 재등장을 막고, 이미 열려 있을 수 있는 모달은 좌표가 아니라 DOM으로
+ * (스크림에 가릴 일이 없다) 직접 닫는다. 팝업 자체를 검사하는 시험은 이
+ * 함수를 부르지 않거나, 부른 뒤 스스로 `localStorage.clear()`로 되돌린다.
+ */
+export async function dismissCalc2ExampleModalIfOpen(page) {
+  await page.evaluate(`localStorage.setItem('calc2ExampleModalDismissedDate', (() => {
+    const n = new Date();
+    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+  })())`);
+  await page.evaluate(`(() => {
+    const closeBtn = document.querySelector('.calc2-example-modal-close');
+    if (closeBtn) closeBtn.click();
+  })()`);
+}
 
 /**
  * 필수 항목을 채워 결과가 나오는 상태로 만든다(값 대입 — 여기서는 커서가 관심사가

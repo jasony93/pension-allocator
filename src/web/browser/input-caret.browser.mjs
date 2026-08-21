@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 생년월일 입력 순서가 뒤집히던 결함의 실측.
@@ -16,6 +16,12 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌어 `#birthDate`(첫 탭 전용)가
+  // 기본으로 숨어 있다 — 숨은(`display:none`) 원소는 실제 브라우저에서
+  // `focus()`가 먹지 않는다(이 파일의 모든 시험이 그 초점에 기대므로 안
+  // 켜면 전부 깨진다). 명시로 첫 탭을 켠다.
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {

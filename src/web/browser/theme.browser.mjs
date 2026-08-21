@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 다크 모드의 **실측** — design-system 8절.
@@ -138,6 +138,14 @@ const measurements = { combos: [], disclosure: {}, live: {}, donut: {} };
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일 대부분의 시험이
+  // 첫 탭(`calculator`)의 `.result-slot`/`.assumption-block`을 좌표 클릭·
+  // 레이아웃 실측(offsetHeight 등)으로 잰다. 그 탭이 숨어 있으면 다 0이거나
+  // 클릭이 빗나간다. 먼저 켠다 — 아래에서 `page.goto()`로 새로 여는 시험
+  // (브랜드 색 두 건)은 의도로 `getComputedStyle`의 레이아웃-무관 속성만
+  // 재도록 이미 설계돼 있어 이 전환과 무관하다(그 시험들의 자체 주석 참고).
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -277,7 +285,14 @@ test('D60(관리자 판정, 소유자 지시) — 성격·자격 배너가 두 �
   // 입력 부족 상태 — 첫 진입, 아무것도 채우지 않는다.
   await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
-  await page.waitFor(`!!document.querySelector('.result-panel-inner')`);
+  // [2026-08-21, D81] "입력 부족 상태"는 첫 탭(calculator) 고유의 상태다
+  // (계산기2는 프리필이라 이 상태 자체가 없다) — 새로고침이 기본으로
+  // 내려앉는 calc2가 아니라 명시로 이 탭을 켠다. localStorage를 방금
+  // 지워 예시 팝업이 뜰 수 있으니 먼저 치운다(이 시험은 localStorage
+  // 내용 자체를 재지 않으므로 안전하다).
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calculator').querySelector('.result-panel-inner')`);
   for (const theme of ['light', 'dark']) {
     await emulate(page, { scheme: theme });
     await page.evaluate(`document.documentElement.setAttribute('data-theme','${theme}')`);
@@ -500,6 +515,13 @@ test('사용자가 누르기 전에는 저장이 일어나지 않고, 누르면 
   await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
   await page.waitFor(`!!document.querySelector('.theme-control-trigger')`);
+  // [2026-08-21, D81] 방금 localStorage를 지웠으니 새로고침 즉시 예시
+  // 팝업이 뜰 수 있다(계산기2가 기본 탭이다) — 이 시험은 "사용자가 아무것도
+  // 누르지 않으면 localStorage가 비어 있다"를 재는 것이 핵심이라, 저장을
+  // 남기는 `dismissCalc2ExampleModalIfOpen`(「오늘 하루 보지 않음」과 같은
+  // 저장 경로)을 쓰면 안 된다 — 저장을 남기지 않는 일반 닫기(X)만 DOM으로
+  // 직접 누른다(있으면).
+  await page.evaluate(`(() => { const b = document.querySelector('.calc2-example-modal-close'); if (b) b.click(); })()`);
   // 첫 방문자 — 화면을 띄우고 여기저기 눌러도 키가 없다.
   assert.equal(await page.evaluate(`localStorage.getItem('theme')`), null, '첫 방문자에게 저장이 일어났습니다');
   assert.equal(await page.evaluate(`localStorage.length`), 0);
@@ -594,6 +616,10 @@ test('모바일 폭에서도 ThemeControl이 로고·탭·과세연도 표기를
 test('테마를 바꿔도 도넛이 다시 그려지지 않는다 — 값이 바뀐 것이 아니므로 조각은 그 자리에 있다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 바로 앞 시험이 localStorage를 지워 뒀다 — 이 새로고침
+  // 도 예시 팝업을 다시 열 수 있다(스크림이 아래 `.theme-control-trigger`
+  // 클릭을 가릴 수 있다). 먼저 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut path')`, { timeoutMs: 6000 });
   // 입력 칸에서 초점을 빼고 화면이 완전히 멎기를 기다린다 — 남은 재계산이 있으면

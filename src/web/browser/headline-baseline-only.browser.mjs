@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 import { AMOUNT_CARD_LABEL_CREDIT_ONLY, AMOUNT_CARD_LABEL_COMPOSITE, AMOUNT_CARD_LABEL_DELTA } from '../copy.js';
 
 /**
@@ -27,6 +27,11 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   const { page } = app;
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 시험은 첫 탭 안에서
+  // 좌표 기반 클릭을 쓰는데(대안 미리보기 스택바 행), 그 탭이 숨어 있으면
+  // 클릭이 빗나간다. 먼저 켠다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   // 구성 두 줄(슬롯5)까지 함께 검사하려면 헤드라인이 구간 변형(가정 성분 포함)
   // 이어야 한다 — ISA 계좌를 켜서 그 상태를 만든다(account-benefit-strip.browser.mjs
   // 와 같은 픽스처).

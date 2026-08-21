@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 단일 페이지 스크롤 · 컨테이너 확대 (2026-08-12, D48) — 실제 렌더 실측.
@@ -21,6 +21,11 @@ before(async () => {
   app = await openApp();
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — `.result-slot`(첫 탭
+  // 전용)이 숨어 있으면 이 파일의 위치 실측(getBoundingClientRect)이
+  // 전부 0이 된다. 먼저 켠다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(300);

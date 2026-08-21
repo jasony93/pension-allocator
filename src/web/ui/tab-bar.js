@@ -17,9 +17,16 @@ import { REVERSE_TAB_LABEL } from '../reverse-copy.js';
 // 이유(계약 8.11절)와 같은 이유로, 탭 이름을 이 파일에 다시 박지 않는다.
 // [2026-08-20, D79] 순서는 「절세계좌 계산기 | 절세계좌 계산기2 | 연금
 // 역산기」 — 소유자 지시 원문 순서 그대로.
+// [2026-08-21, D81] **소유자가 표시 순서·라벨을 맞바꿨다** — 계산기2(간결판)
+// 가 첫 자리·이름 「절세계좌 계산기」를, 옛 첫 탭이 둘째 자리·이름
+// 「절세계좌 계산기2」를 가져간다("실험이 판가름 났다 — 간결판이 기본,
+// 근거 있는 판이 보조가 된다"). **내부 `id`(`calculator`/`calc2`)는 그대로다**
+// — `state/tab-fragment.js`가 그 문자열로 옛 공유 링크를 계속 연다. 바뀌는
+// 것은 이 배열의 `label` 값과 순서(자바스크립트 배열 순서가 그대로 표시
+// 순서다)뿐이다.
 export const TABS = [
-  { id: 'calculator', label: SERVICE_NAME },
-  { id: 'calc2', label: CALC2_TAB_LABEL },
+  { id: 'calc2', label: SERVICE_NAME },
+  { id: 'calculator', label: CALC2_TAB_LABEL },
   { id: 'pension-reverse', label: REVERSE_TAB_LABEL },
 ];
 

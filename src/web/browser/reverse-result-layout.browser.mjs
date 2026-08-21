@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * [2026-08-19, 관리자 지시 — 번들 실측 결함] 1440px에서 역산기 결과 영역이
@@ -17,6 +17,10 @@ import { openApp, skipWithoutChrome, sleep } from './harness.mjs';
 let app;
 
 async function fillReverseCore(page) {
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 로드(또는 재로드)부터
+  // 예시 팝업이 뜰 수 있어(스크림이 아래 좌표 클릭을 가릴 수 있다) 먼저
+  // 치운다.
+  await dismissCalc2ExampleModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-reverse')`);
   await sleep(200);
   const set = (id, v) => `(() => { const el = document.getElementById(${JSON.stringify(id)}); el.focus(); el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;

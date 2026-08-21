@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 import { DONUT_OPTIMAL_KICKER_LABEL } from '../copy.js';
 
 /**
@@ -19,6 +19,13 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
+  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — calc2도 프리필로 같은
+  // 클래스(`.donut-optimal-kicker` 등, 공유 컴포넌트)를 곧장 그리므로, 이
+  // 시험이 첫 탭(calculator) 것을 재려면 먼저 그 탭을 켜야 뜻이 맞는다
+  // (DOM 순서상 calculator가 먼저라 querySelector 자체는 계속 그쪽을
+  // 잡지만, 숨어 있으면 레이아웃 기반 실측이 위험하다).
+  await dismissCalc2ExampleModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calculator')`);
   await app.page.evaluate(FILL_REQUIRED_FIELDS);
   await app.page.waitFor(`!!document.querySelector('.donut-optimal-kicker')`);
   await sleep(400);

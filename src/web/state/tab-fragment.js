@@ -16,7 +16,11 @@
 // [2026-08-20, D79] 「절세계좌 계산기2」 — 첫 탭과 같은 엔진, 다른 입력
 // UX를 시험하는 실험 탭. id는 소유자/관리자 지시 원문 그대로 `calc2`.
 export const TAB_IDS = ['calculator', 'calc2', 'pension-reverse'];
-export const DEFAULT_TAB_ID = 'calculator';
+// [2026-08-21, D81] 소유자가 계산기2(간결판)를 첫 탭 자리로 옮겼다 — 기본
+// 활성 탭이 바뀐다. **내부 id·프래그먼트 문자열은 그대로**(`TAB_IDS` 위)다 —
+// 옛 공유 링크(`#calculator`)가 계속 같은 패널을 연다. 바뀌는 것은 이
+// 상수(초기 화면)와 표시 순서·라벨(`ui/tab-bar.js`)뿐이다.
+export const DEFAULT_TAB_ID = 'calc2';
 
 /** `hash`(선행 `#` 없이)가 탭 id 프래그먼트인가. */
 export function isTabIdFragment(hash) {
