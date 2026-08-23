@@ -469,7 +469,7 @@ export function amountCard(
   plan,
   scenario,
   annualReturnRate = null,
-  { compactCaption = false, showCaption = true, showComposition = true } = {},
+  { compactCaption = false, showCaption = true, showComposition = true, singleLineComposition = false } = {},
 ) {
   const baseCaption = amountCardBaseCaption(scenario, { compactCaption });
 
@@ -499,13 +499,25 @@ export function amountCard(
   // 적으려면 슬롯5가 반드시 같은 화면에 있어야 한다(design-system 5.6절). 줄①은
   // `bound_code`와 무관하게 언제나 슬롯2'의 {최소}(또는 point) 안에 든 확정
   // 성분과 같은 수다(항등식).
+  // [2026-08-23, 관리자 지시(신규 회차) 6번] `singleLineComposition` —
+  // 계산기2 한정으로 구성 두 줄을 **한 행**으로 합친다(폰트 −20%,
+  // `styles.css`). 줄② 문구가 이미 "+ "로 시작하므로(위
+  // `headlineComponentAssumptionLine`) 공백 하나로 이으면 소유자가 든
+  // 예("올해 세액공제 …원 + 앞으로 …년 동안 ISA 최대 …원 (연 …% 가정)")와
+  // 글자 그대로 같아진다 — 화면이 새 접속사를 짓지 않는다.
   const compositionBlock = includesAssumption && showComposition
-    ? el('div', { class: 'amount-card-composition' }, [
-        el('p', { class: 'amount-card-composition-line type-num' }, [headlineComponentDeterminedLine(headline)]),
-        el('p', { class: 'amount-card-composition-line type-num' }, [
-          headlineComponentAssumptionLine(headline, annualReturnRate),
-        ]),
-      ])
+    ? singleLineComposition
+      ? el('div', { class: 'amount-card-composition amount-card-composition-single' }, [
+          el('p', { class: 'amount-card-composition-line type-num' }, [
+            `${headlineComponentDeterminedLine(headline)} ${headlineComponentAssumptionLine(headline, annualReturnRate)}`,
+          ]),
+        ])
+      : el('div', { class: 'amount-card-composition' }, [
+          el('p', { class: 'amount-card-composition-line type-num' }, [headlineComponentDeterminedLine(headline)]),
+          el('p', { class: 'amount-card-composition-line type-num' }, [
+            headlineComponentAssumptionLine(headline, annualReturnRate),
+          ]),
+        ])
     : null;
 
   if (isReduced) {
@@ -670,7 +682,30 @@ export function donutOptimalKicker(planNameCaptionText, labelText = DONUT_OPTIMA
   return el('p', { class: 'donut-optimal-kicker type-caption' }, [labelText]);
 }
 
-function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssumption = null, hideConditionalCopy = false } = {}) {
+/**
+ * [2026-08-23, 관리자 지시(신규 회차) 3·4번] 계산기2 결과 위계 최상단 —
+ * 「최적 월 배분」제목 한 줄(아이콘+kicker)만. 예전에는 `chartArea` 안에서
+ * 도넛과 한 덩어리(`calc2DonutHeader`)로 그렸으나, 이번 지시로 위계가
+ * 「제목 → 시나리오 탭 → 헤드라인 → 구성 → 도넛」으로 다시 갈리면서 제목이
+ * 도넛보다 훨씬 앞(시나리오 탭보다도 위)에 홀로 서게 됐다 — 그래서 `chartArea`
+ * 밖으로 완전히 뺐다. `donutOptimalKicker`의 가드(캡션 없이 못 쓴다)는
+ * 그대로 지킨다.
+ */
+function calc2DonutTitleOnly(planNameCaptionText) {
+  return el('div', { class: 'donut-section-header donut-section-header-calc2' }, [
+    el('div', { class: 'donut-section-header-title-row' }, [
+      iconChart(),
+      donutOptimalKicker(planNameCaptionText, CALC2_DONUT_OPTIMAL_KICKER_LABEL),
+    ]),
+  ]);
+}
+
+function chartArea(
+  plan,
+  scenario,
+  months,
+  { seatDraw = 'donut', isaReturnAssumption = null, hideConditionalCopy = false, saveShareEl = null } = {},
+) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
@@ -805,10 +840,12 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
   // 같은 값을 준다. 여기서 비면 둘 다 그 사실을 반영한다.
   const planNameCaptionText = donutPlanNameCaption(plan.plan_id, plan.is_baseline);
 
-  // [2026-08-23, D82 판정(불요, 소유자 지시 3·4번) — 계산기2 한정] 「월 납입
-  // 여력…나눕니다」 제목과 「…기본」 배분안 이름 캡션을 뺀다. 「최적 월
-  // 배분표」(kicker)를 그 자리(결과 영역 최상단)로 올리고, 아이콘도 함께
-  // 옮겨 주황으로 칠한다.
+  // [2026-08-23, D82 판정(불요, 소유자 지시 3·4번) — 계산기2 한정, 관리자
+  // 지시(신규 회차) 3·4번으로 자리를 다시 옮김] 「월 납입 여력…나눕니다」
+  // 제목과 「…기본」 배분안 이름 캡션을 뺀다. 「최적 월 배분」(kicker)은
+  // **이제 이 함수 밖에서** 그린다(`calc2DonutTitleOnly`, `resultPanelForScenario`가
+  // 결과 위계 최상단에 별도로 꽂는다) — 그래서 이 함수 자신은 계산기2일 때
+  // 제목 행을 아예 만들지 않는다(`null`).
   //
   // **flag — D45 5번(헌장) 긴장.** `donutOptimalKicker`의 가드는 "「최적」은
   // 무엇에 대해 최적인지 말하는 캡션이 **같은 화면에 실제로 보일 때만**
@@ -819,12 +856,6 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
   // (D82 게이트 기록 — 판정 1~4에 이 자리는 없다) 문면 그대로 구현했지만,
   // "무엇에 대해 최적인지"가 계산기2 화면 어디에도 문장으로 남지 않는다는
   // 점은 최종 보고에 열린 물음으로 올린다.
-  const calc2DonutHeader = el('div', { class: 'donut-section-header donut-section-header-calc2' }, [
-    el('div', { class: 'donut-section-header-title-row' }, [
-      iconChart(),
-      donutOptimalKicker(planNameCaptionText, CALC2_DONUT_OPTIMAL_KICKER_LABEL),
-    ]),
-  ]);
   const defaultDonutHeader = el('div', { class: 'donut-section-header' }, [
     // D45 5번 — 「최적」은 이 한 자리에만 쓴다. 조건(무엇에 대해 최적인지)은
     // 바로 아래 배분안 이름 캡션이 진다 — `donutOptimalKicker`가 그 캡션
@@ -842,18 +873,36 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
     el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
   ]);
 
+  // [2026-08-23, 관리자 지시(신규 회차) 7번] 이미지·공유 아이콘 — 계산기2
+  // 한정으로 도넛이 있는 영역의 우측 하단에 둔다(`saveShareEl`, 호출부
+  // `resultPanelForScenario`가 만들어 넘긴다). `.donut-with-strip`은
+  // 이미 가로 배치(도넛+범례+계좌별 세제혜택)라 그 형제로 세로로 쌓고
+  // (`flex-direction: column`), `saveShareEl` 자신은 오른쪽으로
+  // 붙인다(`align-self: flex-end`, `styles.css`) — 절대 위치를 쓰지
+  // 않아 아래 계좌별 세제혜택 내용과 겹칠 일이 없다.
+  const donutSectionBody = saveShareEl
+    ? el('div', { class: 'calc2-donut-section' }, [
+        el('div', { class: 'donut-with-strip' }, [
+          el('div', { class: 'donut-wrap' }, [donut]),
+          donutLegend(donutArgs),
+          accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
+        ]),
+        saveShareEl,
+      ])
+    : el('div', { class: 'donut-with-strip' }, [
+        el('div', { class: 'donut-wrap' }, [donut]),
+        // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
+        // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
+        donutLegend(donutArgs),
+        // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
+        // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
+        // 정렬, 절반 크기.
+        accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
+      ]);
+
   return el('div', { class: 'chart-area' }, [
-    hideConditionalCopy ? calc2DonutHeader : defaultDonutHeader,
-    el('div', { class: 'donut-with-strip' }, [
-      el('div', { class: 'donut-wrap' }, [donut]),
-      // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
-      // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
-      donutLegend(donutArgs),
-      // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
-      // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
-      // 정렬, 절반 크기.
-      accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
-    ]),
+    hideConditionalCopy ? null : defaultDonutHeader,
+    donutSectionBody,
     singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
     // 12.2(c) — 같은 사실을 더 짧게.
     el('p', { class: 'field-help chart-note' }, ['납입 잔여 한도 대비']),
@@ -1870,14 +1919,17 @@ function proposedSameAsCurrentBody(scenario) {
 }
 
 /**
- * [2026-08-23, D83 판정 3 — 계산기2 한정] 결과 위계 변경 — 「최적 월 배분」
- * (`chart-area`, 도넛+배분표)이 시나리오 탭보다 위로 올라간다. `renderResultPanel`
- * 이 시나리오 탭을 이 함수보다 **먼저** 그리므로(고정 순서), `chart-area`
- * 자체를 이 함수 밖으로 빼서 `renderResultPanel`이 시나리오 탭 **앞**에
- * 직접 꽂을 수 있게 한다 — `resultPanelForScenario`는 그 자리에 `null`을
- * 남겨 두 번 그리지 않는다(계산도, DOM 노드도 하나뿐이다). 첫 탭
- * (`hideConditionalCopy === false`)은 이 함수 안 원래 자리에 그대로
- * 남는다 — 위계가 안 바뀐다.
+ * [2026-08-23, D83 판정 3 — 계산기2 한정, 관리자 지시(신규 회차) 3~7번으로
+ * 다시 갈림] 결과 위계 — 「제목(최적 월 배분) → 시나리오 탭 → 헤드라인 →
+ * 구성 한 줄 → 도넛(+이미지·공유 아이콘) → 나머지」. `renderResultPanel`이
+ * 시나리오 탭을 이 함수보다 **먼저** 그리므로(고정 순서), **제목만** 이
+ * 함수 밖으로 빼서(`extractedTitle`) `renderResultPanel`이 시나리오 탭
+ * **앞**에 꽂는다 — 도넛(`chartAreaEl`)은 이제 시나리오 탭 뒤, 헤드라인
+ * (`amountCard`) 바로 다음 자리에 이 함수 **안에서** 그린다(D83은 도넛
+ * 전체를 시나리오 탭 앞으로 뺐었는데, 이번 지시로 도넛은 헤드라인 뒤로
+ * 다시 내려간다 — 제목만 계속 맨 위에 남는다). 첫 탭(`hideConditionalCopy
+ * === false`)은 제목이 도넛과 한 덩어리인 원래 자리 그대로 남는다 —
+ * 위계가 안 바뀐다.
  */
 function resultPanelForScenario(
   response,
@@ -1888,13 +1940,20 @@ function resultPanelForScenario(
   { conditionalPending = false, form = {}, seatDraw = 'donut', hideConditionalCopy = false } = {},
 ) {
   if (proposedScenarioMatchesCurrent(response, scenario)) {
-    return { body: proposedSameAsCurrentBody(scenario), extractedChartArea: null };
+    return { body: proposedSameAsCurrentBody(scenario), extractedTitle: null };
   }
 
   const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
   const showAllExitBanner = scenario.comparison_note_codes.includes('all_accounts_have_early_exit_penalty');
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
   const annualReturnRate = response.echo.isa_return_assumption?.annual_return_rate ?? null;
+
+  // [2026-08-23, 관리자 지시(신규 회차) 7번] 이미지·공유 — 계산기2 한정으로
+  // 도넛이 있는 영역의 우측 하단에 둔다. `chartArea`가 이 엘리먼트를
+  // 그 안에(`.donut-with-strip` 형제로) 심는다 — `saveShareBlock` 자신은
+  // 그대로다(계산기2 분기는 이미 아이콘만 남기고 캡션·PDF 버튼을 뺐다,
+  // D82). 첫 탭은 이 함수 안 옛 자리(맨 끝)에 그대로 남는다.
+  const calc2SaveShareEl = hideConditionalCopy ? saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy) : null;
 
   const chartAreaEl = chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
     seatDraw,
@@ -1903,7 +1962,14 @@ function resultPanelForScenario(
     // 칸에 뭉치지 않는다. 정산 기간은 estimate에서, 수익률·소득 성격은
     // echo에서 읽어 같은 캡션에 함께 적는다(계약 4.2절).
     isaReturnAssumption: response.echo.isa_return_assumption,
+    saveShareEl: calc2SaveShareEl,
   });
+
+  // [2026-08-23, 관리자 지시(신규 회차) 3·4번] 제목(「최적 월 배분」)만
+  // 따로 뺀다 — `chartArea`는 계산기2일 때 이 제목 행을 만들지 않는다
+  // (`calc2DonutTitleOnly` 주석). 도넛 이름 캡션과 같은 값을 쓴다(D45
+  // 5번의 가드 조건, 위 `donutOptimalKicker` 머리말).
+  const calc2TitleEl = hideConditionalCopy ? calc2DonutTitleOnly(donutPlanNameCaption(plan.plan_id, plan.is_baseline)) : null;
 
   const body = el('div', { class: 'result-body' }, [
     // 5.1.0(D28) — "무엇을 주었는가"(echo)를 헤드라인 구성 줄②의 조건절에도
@@ -1913,7 +1979,13 @@ function resultPanelForScenario(
     // `showCaption: false`로 헤드라인 밑 조건절만 뺀다. "잘림" 사실 문단
     // (`amount-card-direction`)은 `showCaption`과 무관하게 그대로 남는다
     // (`amountCard` 머리말) — D80이 지운 것은 조건절뿐이다.
-    amountCard(plan, scenario, annualReturnRate, { showCaption: !hideConditionalCopy }),
+    // [2026-08-23, 관리자 지시(신규 회차) 6번] `singleLineComposition` —
+    // 계산기2 한정으로 구성 두 줄을 한 행으로 합친다(`amountCard` 머리말).
+    amountCard(plan, scenario, annualReturnRate, { showCaption: !hideConditionalCopy, singleLineComposition: hideConditionalCopy }),
+    // [2026-08-23, 관리자 지시(신규 회차) 3~7번] 계산기2는 도넛(+아이콘)이
+    // 헤드라인 바로 다음이다 — 시나리오 탭 앞이 아니라 여기(제목만 앞으로
+    // 뺐다, 위 `calc2TitleEl`). 첫 탭은 옛 자리(맨 아래쪽) 그대로.
+    hideConditionalCopy ? chartAreaEl : null,
     // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
     // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
@@ -1922,9 +1994,7 @@ function resultPanelForScenario(
     proposedScenarioCaption(scenario),
     // [2026-08-21, D80 판정 2] 이월 개정안 경고 — 계산기2에서는 뺀다.
     hideConditionalCopy ? null : isaCarryoverRepealDivergenceNote(response, scenario),
-    // [2026-08-23, D83 판정 3] 계산기2는 이 자리에 그리지 않는다 — 시나리오
-    // 탭보다 위(`renderResultPanel`)로 이미 옮겨졌다. 첫 탭은 원래 자리
-    // 그대로.
+    // 첫 탭은 여기가 원래 자리 그대로다 — 계산기2는 위(헤드라인 바로 다음)에 이미 그렸다.
     hideConditionalCopy ? null : chartAreaEl,
     // [2026-08-21, D80 판정 2] 「두 연금계좌 중 왜 이 순서인가」 블록 —
     // 계산기2에서는 뺀다.
@@ -1938,9 +2008,12 @@ function resultPanelForScenario(
     // 않는다(어차피 숨어 있다) — 저장·공유 버튼 바로 앞에 두어 "이 결과를
     // 어떻게 들고 나갈까"라는 흐름과 코드 순서가 같게 맞춘다.
     summarySheet(plan, scenario, annualReturnRate, form),
-    saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy),
+    // [2026-08-23, 관리자 지시(신규 회차) 7번] 계산기2는 이미 도넛 영역
+    // 안에 심었다(`calc2SaveShareEl` → `chartArea`의 `saveShareEl`) — 여기서
+    // 또 그리면 버튼이 두 번(중복) 생긴다. 첫 탭은 옛 자리 그대로.
+    hideConditionalCopy ? null : saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy),
   ]);
-  return { body, extractedChartArea: hideConditionalCopy ? chartAreaEl : null };
+  return { body, extractedTitle: calc2TitleEl };
 }
 
 function scenarioTabs(response, activeScenarioId, onSelect) {
@@ -2076,7 +2149,7 @@ export function renderResultPanel({ state, store, resultKey = 'default' }) {
   // 영향받지 않는다. 프리필 안내줄(넷째)은 `ui/calc2-input-panel.js`가
   // 이미 그리지 않는다(이 파일과 무관).
   const hideConditionalCopy = resultKey === 'calc2';
-  const { body, extractedChartArea } = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
+  const { body, extractedTitle } = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
     conditionalPending,
     form: state.form,
     seatDraw,
@@ -2089,11 +2162,12 @@ export function renderResultPanel({ state, store, resultKey = 'default' }) {
   return el('div', { class: wrapperClass }, [
     status === 'field_error' ? fieldErrorBanner(store) : null,
     conditionalPending ? conditionalPendingAlert() : null,
-    // [2026-08-23, D83 판정 3 — 계산기2 한정] 「최적 월 배분」이 시나리오
-    // 탭보다 위다 — `extractedChartArea`는 `hideConditionalCopy`일 때만
-    // 값이 있다(`resultPanelForScenario`). 첫 탭은 `null`이라 이 줄이
-    // 아무것도 안 그리고, 그 안(`body`)에 원래 자리 그대로 남는다.
-    extractedChartArea,
+    // [2026-08-23, 관리자 지시(신규 회차) 3·4번 — 계산기2 한정] 「최적 월
+    // 배분」 제목이 결과 위계 최상단, 시나리오 탭보다도 위다.
+    // `extractedTitle`은 `hideConditionalCopy`일 때만 값이 있다
+    // (`resultPanelForScenario`). 첫 탭은 `null`이라 이 줄이 아무것도 안
+    // 그리고, 제목은 도넛과 한 덩어리로 `body` 안 원래 자리에 그대로 남는다.
+    extractedTitle,
     scenarioTabs(result, scenarioId, onSelectScenario),
     body,
   ]);

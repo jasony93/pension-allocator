@@ -340,10 +340,18 @@ test('WIDE_DONUT_MEDIA_QUERY matches the breakpoint where the container widening
   assert.equal(WIDE_DONUT_MEDIA_QUERY, '(min-width: 1440px)');
 });
 
-test('the legend layout spends almost none of its box on label margin — that margin is why the mobile donut shrank', () => {
+// [2026-08-23, 소유자 지시 1번] 상한을 20→80으로 올렸다 — legend 모드는
+// 이제 "라벨을 그리지 않는" 모드가 아니라 조각 밖으로 밀려나는 인라인
+// 라벨(`applyDonutSliceInlineLabels`)을 늘 쓰는 모드다(팝업·계산기2
+// 결과·모바일 결과·예시 전부). 그 라벨이 카드 밖으로 잘리지 않으려면
+// 여백이 필요하다(`LEGEND_PAD`, `charts.js` 머리말) — 옛 20 상한은 이제
+// 없어진 조각 번호 배지 시절의 값이라 이 회차의 실제 필요(40)를 담지
+// 못한다. 그래도 무한정 늘어나지 않게 상한 자체는 남긴다(80) — 도넛이
+// 라벨 여백에 잡아먹혀 점처럼 작아지는 회귀를 여전히 막는다.
+test('the legend layout leaves enough box margin for pushed-out slice labels without letting the donut shrink to a dot', () => {
   const legend = donutGeometry('legend');
   const wasted = legend.width - legend.diameter;
-  assert.ok(wasted <= 20, `라벨을 그리지 않는데 여백이 ${wasted}px 남아 있으면 도넛만 그만큼 작아진다`);
+  assert.ok(wasted <= 80, `여백이 ${wasted}px면 도넛이 그만큼 작아진다 — 상한을 넘었다`);
 });
 
 test('the labelled box leaves room for the whole label block on both sides', () => {

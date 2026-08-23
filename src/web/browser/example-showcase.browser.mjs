@@ -529,11 +529,23 @@ test('D79 판정 4 — 도넛 조각 라벨이 이름+비율이고 항상 고리
   })()`);
   const px = (s) => Number((s ?? '0px').replace('px', ''));
   assert.ok(m.nameFontSizes.length >= 3, `조각 이름 라벨이 3개 미만이다: ${JSON.stringify(m.nameFontSizes)}`);
+  // [2026-08-23, 소유자 지시 1번으로 상한만 남기고 하한을 열었다] D79는
+  // "1.5배가 없어졌다"(더 커지지 않는다)는 것이었지, "글자 크기가 절대
+  // 안 줄어든다"는 약속이 아니었다 — 그런데 이번 회차의 "라벨이 카드 밖
+  // 으로 잘리면 안 된다" 요구(`ui/charts.js`)가 고리 밖으로 크게 밀려나야
+  // 하는 넓은 라벨(예: "연금저축" 네 글자 + 두 자리 %)에서는 15px 그대로
+  // 두면 카드 여백을 아무리 늘려도 못 맞추는 경우가 실측으로 나왔다 —
+  // 그 라벨만 조각 안 라벨(`fitsInsideSlice`)과 같은 방식으로 글자를
+  // 줄여 카드 안에 온전히 들어가게 한다(`SLICE_LABEL_MIN_FONT_PX`=9px가
+  // 바닥). 그래서 이 시험은 이제 "15px를 넘지 않는다"(D79의 핵심 —
+  // 1.5배 금지)만 지키고, 9~15px 범위를 허용한다.
   for (const [i, size] of m.nameFontSizes.entries()) {
-    assert.ok(Math.abs(px(size) - 15) <= 0.5, `${i}번 조각 이름 라벨(${size})이 기본값 15px가 아니다(D79로 1.5배가 없어졌다)`);
+    const v = px(size);
+    assert.ok(v >= 9 - 0.5 && v <= 15 + 0.5, `${i}번 조각 이름 라벨(${size})이 9~15px 범위 밖이다`);
   }
   for (const [i, size] of m.pctFontSizes.entries()) {
-    assert.ok(Math.abs(px(size) - 13) <= 0.5, `${i}번 조각 비율 라벨(${size})이 15-2=13px가 아니다`);
+    const v = px(size);
+    assert.ok(v >= 9 - 0.5 && v <= 13 + 0.5, `${i}번 조각 비율 라벨(${size})이 9~13px 범위 밖이다`);
   }
   assert.equal(m.amountCount, 0, '조각에 금액 줄이 남아 있다(D79로 삭제됐어야 한다)');
   // [D79 판정 4] "도넛 밖에(리더선 관행)" — 항상 고리 밖이다. 조각 수만큼

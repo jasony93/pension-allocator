@@ -650,6 +650,7 @@ test('예시 팝업 재배치(D82) — 카피가 카드 왼쪽에, 카드 안은
     return {
       hasCard: !!card,
       heroRect: heroCopy ? asRect(heroCopy) : null,
+      cardRect: card ? asRect(card) : null,
       infoRect: info ? asRect(info) : null,
       donutRect: donutCol ? asRect(donutCol) : null,
       amountRect: amount ? asRect(amount) : null,
@@ -686,6 +687,15 @@ test('예시 팝업 재배치(D82) — 카피가 카드 왼쪽에, 카드 안은
     `정보(위 끝 ${m.infoRect.top})가 도넛(위 끝 ${m.donutRect.top})보다 아래에서 시작하지 않는다 — D83 소유자 지시 1번("한 행쯤 아래로")이 반영되지 않았다`,
   );
   assert.ok(m.amountRect.top >= Math.max(m.infoRect.bottom, m.donutRect.bottom) - 1, `절세액(위 끝 ${m.amountRect.top})이 정보·도넛 아래(하단)에 있지 않다`);
+  // [2026-08-23, 소유자 지시 2번으로 뒤집힘] 세액공제액 카드가 카드 폭
+  // 전체가 아니라 **가운데**에 온다(D83 소유자 지시 3번은 크기만 줄이고
+  // 왼쪽에 붙였었다 — `justify-self: start`를 `center`로 바꿨다).
+  const amountCenter = (m.amountRect.left + m.amountRect.right) / 2;
+  const cardCenter = (m.cardRect.left + m.cardRect.right) / 2;
+  assert.ok(
+    Math.abs(amountCenter - cardCenter) <= 4,
+    `절세액 카드(중심 ${amountCenter})가 예시 카드(중심 ${cardCenter}) 가운데에 있지 않다`,
+  );
 
   // 카드처럼 — 주황 테두리 + 더 연한 주황 바탕(--accent-warm-subtle, 새 토큰).
   assert.equal(m.cardBorderColor, 'rgb(230, 115, 0)', `카드 테두리 색이 --accent-warm이 아니다: ${m.cardBorderColor}`);
@@ -968,25 +978,37 @@ test('D82 소유자 지시 3·4번 — 계산기2 결과 상단에 「최적 월
 });
 
 /**
- * [2026-08-23, D83 소유자 지시 4번 / 판정 3] 「최적 월 배분」(도넛+배분표,
- * `.chart-area`)이 시나리오 탭(`.scenario-tabs`, 현 세법 기준/개정안)보다
- * 위로 — 계산기2 한정. 첫 탭은 옛 배치(시나리오 탭이 최상단) 그대로다.
+ * [2026-08-23, 관리자 지시(신규 회차) 3~7번으로 D83 판정 3 재배치] 결과
+ * 위계 — 「제목(최적 월 배분) → 시나리오 탭 → 헤드라인 → 구성 한 줄 →
+ * 도넛(+아이콘) → 나머지」, 계산기2 한정. y좌표로 순서를 잰다(자리가
+ * 아니라 실제로 보이는 순서를 확인한다). 첫 탭은 옛 배치(시나리오 탭이
+ * 최상단, 제목이 도넛과 한 덩어리) 그대로다.
  */
-test('D83 판정 3 — 계산기2에서는 「최적 월 배분」이 시나리오 탭보다 위에 있다, 첫 탭은 그대로다', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(신규 회차) 3~7번 — 계산기2 결과 위계가 제목→탭→헤드라인→구성→도넛 순이다, 첫 탭은 그대로다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await dismissCalc2ExampleModalIfOpen(page);
   await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
   await sleep(300);
-  const calc2Order = await page.evaluate(`(() => {
+  const calc2Tops = await page.evaluate(`(() => {
     const scope = document.querySelector('.calc2-result-slot');
-    const chartArea = scope.querySelector('.chart-area');
-    const tabs = scope.querySelector('.scenario-tabs');
-    if (!chartArea || !tabs) return null;
-    // compareDocumentPosition: DOCUMENT_POSITION_FOLLOWING(4)면 tabs가 chartArea 뒤에 있다.
-    return !!(chartArea.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const top = (sel) => { const el = scope.querySelector(sel); return el ? el.getBoundingClientRect().top : null; };
+    return {
+      title: top('.donut-section-header-calc2'),
+      tabs: top('.scenario-tabs'),
+      headline: top('.amount-card'),
+      composition: top('.amount-card-composition-single'),
+      donut: top('.chart-area .donut-with-strip'),
+    };
   })()`);
-  assert.equal(calc2Order, true, '계산기2에서 「최적 월 배분」이 시나리오 탭보다 DOM상 앞에 있어야 한다');
+  assert.ok(
+    calc2Tops.title != null && calc2Tops.tabs != null && calc2Tops.headline != null && calc2Tops.composition != null && calc2Tops.donut != null,
+    `계산기2 결과 위계의 다섯 자리 중 하나를 찾지 못했다: ${JSON.stringify(calc2Tops)}`,
+  );
+  assert.ok(calc2Tops.title < calc2Tops.tabs, `제목(${calc2Tops.title})이 시나리오 탭(${calc2Tops.tabs})보다 위에 있지 않다`);
+  assert.ok(calc2Tops.tabs < calc2Tops.headline, `시나리오 탭(${calc2Tops.tabs})이 헤드라인(${calc2Tops.headline})보다 위에 있지 않다`);
+  assert.ok(calc2Tops.headline <= calc2Tops.composition, `헤드라인(${calc2Tops.headline})이 구성 한 줄(${calc2Tops.composition})보다 아래에 있다`);
+  assert.ok(calc2Tops.composition < calc2Tops.donut, `구성 한 줄(${calc2Tops.composition})이 도넛(${calc2Tops.donut})보다 위에 있지 않다`);
 
   await page.clickElement(`document.getElementById('tab-calculator')`);
   await page.evaluate(FILL_REQUIRED_FIELDS);
@@ -1001,6 +1023,8 @@ test('D83 판정 3 — 계산기2에서는 「최적 월 배분」이 시나리�
     return !!(chartArea.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_PRECEDING);
   })()`);
   assert.equal(firstTabOrder, true, '첫 탭에서는 시나리오 탭이 여전히 「최적 월 배분표」보다 DOM상 앞에 있어야 한다(회귀)');
+  const firstTabHasSingleLine = await page.evaluate(`!!document.querySelector('.result-slot .amount-card-composition-single')`);
+  assert.equal(firstTabHasSingleLine, false, '첫 탭에 구성 한 줄(계산기2 전용)이 생기면 안 된다(회귀) — 첫 탭은 두 줄 그대로다');
 });
 
 /**
@@ -1221,11 +1245,12 @@ test('D83 소유자 지시 5번 — 계산기2 결과 헤드라인이 왼쪽 정
 });
 
 /**
- * [2026-08-23, D83 소유자 지시 7번] 이미지·공유 버튼이 결과란 우측 하단
- * 같은 행에, 테두리 없이, +5% 크기로 — 첫 탭은 두 줄(이미지+PDF, 공유)
- * 그대로다.
+ * [2026-08-23, D83 소유자 지시 7번, 관리자 지시(신규 회차) 7번으로 위치·
+ * 간격 재조정] 이미지·공유 버튼이 **도넛 차트가 있는 영역**의 우측
+ * 하단에 한 행으로, 테두리 없이, +5% 크기, 두 아이콘 간격 −20%로 —
+ * 첫 탭은 두 줄(이미지+PDF, 공유) 그대로다.
  */
-test('D83 소유자 지시 7번 — 계산기2 이미지·공유 버튼이 한 행, 테두리 없이, +5% 크기다', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(신규 회차) 7번 — 계산기2 이미지·공유 버튼이 도넛 영역 우측 하단 한 행에, 테두리 없이, +5% 크기·−20% 간격이다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await dismissCalc2ExampleModalIfOpen(page);
@@ -1233,14 +1258,28 @@ test('D83 소유자 지시 7번 — 계산기2 이미지·공유 버튼이 한 �
   await sleep(300);
   const m = await page.evaluate(`(() => {
     const scope = document.querySelector('.calc2-result-slot');
+    const donutSection = scope.querySelector('.calc2-donut-section');
+    const donutWithStrip = scope.querySelector('.chart-area .donut-with-strip');
     const buttons = [...scope.querySelectorAll('.save-share-icon-btn')];
     const rows = new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
     const borders = buttons.map((b) => getComputedStyle(b).borderStyle);
     const icons = buttons.map((b) => { const r = b.querySelector('.save-share-icon').getBoundingClientRect(); return { w: r.width, h: r.height }; });
-    return { count: buttons.length, rowCount: rows.size, borders, icons };
+    const rects = buttons.map((b) => b.getBoundingClientRect());
+    const insideDonutSection = !!donutSection && buttons.every((b) => donutSection.contains(b));
+    const belowDonut = !!donutWithStrip && rects.every((r) => r.top >= donutWithStrip.getBoundingClientRect().top);
+    const sectionRect = donutSection ? donutSection.getBoundingClientRect() : null;
+    // 행 전체의 오른쪽 끝(마지막 버튼의 오른쪽 끝)이 도넛 영역의 오른쪽
+    // 끝과 맞아야 한다 — 버튼 하나하나가 아니라 행이 우측에 붙는다.
+    const rowRight = rects.length ? Math.max(...rects.map((r) => r.right)) : null;
+    const rightAligned = sectionRect && rowRight != null && Math.abs(rowRight - sectionRect.right) <= 2;
+    const gap = rects.length === 2 ? Math.abs(rects[1].left - rects[0].right) : null;
+    return { count: buttons.length, rowCount: rows.size, borders, icons, insideDonutSection, belowDonut, rightAligned, gap };
   })()`);
   assert.equal(m.count, 2, `계산기2 저장·공유 버튼이 2개가 아니다: ${m.count}`);
   assert.equal(m.rowCount, 1, `이미지·공유 버튼이 한 행에 있지 않다(서로 다른 top ${m.rowCount}개)`);
+  assert.equal(m.insideDonutSection, true, '이미지·공유 버튼이 도넛 영역(.calc2-donut-section) 안에 있지 않다');
+  assert.equal(m.belowDonut, true, '이미지·공유 버튼이 도넛보다 아래(하단)에 있지 않다');
+  assert.equal(m.rightAligned, true, '이미지·공유 버튼이 도넛 영역의 우측에 붙어 있지 않다');
   for (const [i, border] of m.borders.entries()) {
     assert.equal(border, 'none', `버튼 ${i}에 테두리가 남아 있다: ${border}`);
   }
@@ -1249,6 +1288,8 @@ test('D83 소유자 지시 7번 — 계산기2 이미지·공유 버튼이 한 �
     assert.ok(Math.abs(icon.w - 23.1) <= 1, `버튼 ${i} 아이콘 폭(${icon.w})이 23.1px가 아니다`);
     assert.ok(Math.abs(icon.h - 23.1) <= 1, `버튼 ${i} 아이콘 높이(${icon.h})가 23.1px가 아니다`);
   }
+  // 6.4px = 8(--space-2) × 0.8
+  assert.ok(m.gap != null && Math.abs(m.gap - 6.4) <= 1.5, `두 아이콘 간격(${m.gap}px)이 −20%(6.4px) 근처가 아니다`);
 });
 
 /**

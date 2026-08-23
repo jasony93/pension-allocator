@@ -209,6 +209,9 @@ export async function maybeShowCalc2ExampleModal({ engineClient, now = new Date(
   loadingNode.remove();
   shadowRoot.appendChild(exampleCopyAndRow({ persona1 }));
   fitAmountValueToCard(shadowRoot);
-  applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true });
-  stopWatchingTheme = watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true }));
+  // [2026-08-23, 소유자 지시 1번] `hideLeader: true` — 도넛-라벨 지시선을
+  // 없앤다. 계산기2 결과 도넛(D82 소유자 지시 5번)과 같은 이유·같은 옵션
+  // 조합이다 — 카드가 좁아 지시선까지 있으면 더 붐빈다.
+  applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true, hideLeader: true });
+  stopWatchingTheme = watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true, hideLeader: true }));
 }

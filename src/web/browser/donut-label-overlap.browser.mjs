@@ -21,7 +21,11 @@ import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen, FILL
  */
 
 /** 주어진(문서 또는 shadowRoot) 스코프 표현식 안의 `.chart-donut` svg마다
- * 라벨-고리 겹침을 잰다. `rootExpr`은 evaluate에 그대로 붙는 JS 식이다. */
+ * 라벨-고리 겹침 + [2026-08-23, 소유자 지시 1번] 라벨이 카드(svg 자신의
+ * 렌더 상자) 안에 온전히 들어가는지(잘리지 않는지)를 함께 잰다. `svg`
+ * 자신의 `getBoundingClientRect()`는 `overflow: visible`이어도 SVG
+ * 원소 자신의 상자만 낸다(넘친 내용은 포함하지 않는다) — 그 상자를
+ * "카드"의 대리로 쓴다. `rootExpr`은 evaluate에 그대로 붙는 JS 식이다. */
 const overlapCheck = (rootExpr) => `(() => {
   const root = ${rootExpr};
   if (!root) return { found: false, donuts: [] };
@@ -35,12 +39,15 @@ const overlapCheck = (rootExpr) => `(() => {
       top: Math.min(...ringBoxes.map((b) => b.top)),
       bottom: Math.max(...ringBoxes.map((b) => b.bottom)),
     };
+    const svgBox = svg.getBoundingClientRect();
     const labels = [...svg.querySelectorAll('.donut-slice-label')].map((el) => {
       const b = el.getBoundingClientRect();
       const overlaps = b.left < ring.right && b.right > ring.left && b.top < ring.bottom && b.bottom > ring.top;
-      return { text: el.textContent, overlaps, box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, ring };
+      const clipped = b.left < svgBox.left || b.right > svgBox.right || b.top < svgBox.top || b.bottom > svgBox.bottom;
+      return { text: el.textContent, overlaps, clipped, box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, ring, svgBox: { left: svgBox.left, right: svgBox.right, top: svgBox.top, bottom: svgBox.bottom } };
     });
-    return { hasRing: true, labelCount: labels.length, labels };
+    const leaderCount = svg.querySelectorAll('.donut-slice-label-leader, .donut-leader').length;
+    return { hasRing: true, labelCount: labels.length, labels, leaderCount };
   });
   return { found: svgs.length > 0, donuts };
 })()`;
@@ -51,6 +58,8 @@ function assertNoOverlap(result, where) {
     assert.ok(donut.hasRing, `${where} — 도넛 고리(path[role="img"])가 없다`);
     for (const label of donut.labels) {
       assert.equal(label.overlaps, false, `${where} — 라벨 "${label.text}"이 도넛 고리와 겹친다: ${JSON.stringify(label)}`);
+      // [2026-08-23, 소유자 지시 1번] 라벨이 카드 밖으로 잘리지 않는다.
+      assert.equal(label.clipped, false, `${where} — 라벨 "${label.text}"이 카드 밖으로 잘린다: ${JSON.stringify(label)}`);
     }
   }
 }
@@ -66,13 +75,17 @@ after(async () => {
   if (app) await app.close();
 });
 
-test('D83 판정 1 — 계산기2 예시 팝업 도넛 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
+test('D83 판정 1, 소유자 지시 1번 — 계산기2 예시 팝업 도넛 라벨이 고리와 겹치지 않고, 잘리지 않고, 지시선이 없다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   // 팝업은 새 로드에서 스스로 뜬다(D81) — 미리 치우지 않는다.
   await page.waitFor(`!!document.querySelector('.calc2-example-modal-host')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
   await sleep(200);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-example-modal-host')?.shadowRoot`));
   assertNoOverlap(result, '계산기2 예시 팝업');
+  // [2026-08-23, 소유자 지시 1번] 지시선(리더선) 제거.
+  for (const donut of result.donuts) {
+    assert.equal(donut.leaderCount, 0, `팝업 도넛에 지시선이 남아 있다: ${donut.leaderCount}개`);
+  }
 });
 
 test('D83 판정 1 — 첫 탭 예시 두 인물 도넛 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
