@@ -75,30 +75,42 @@ async function setViewport(page, width, height = 1400) {
 /** 위젯·카드·C-2 막대·두 축 트랙의 실측 치수를 한 번에 뽑는다. */
 const MEASURE = `(() => {
   const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
-  const strip = document.querySelector('.account-benefit-strip');
-  const card = document.querySelector('.donut-with-strip');
-  const allocTrack = document.querySelector('.alloc-bar-track');
-  const confirmedTrack = document.querySelector('.benefit-axis-confirmed .benefit-meter-track');
-  const confirmedFill = document.querySelector('.benefit-axis-confirmed .benefit-meter-fill');
-  const assumptionTracks = [...document.querySelectorAll('.benefit-axis-assumption .benefit-meter-track')];
-  const divider = document.querySelector('.benefit-axis-divider');
-  const header = document.querySelector('.account-benefit-strip h4');
-  const c2AccountName = document.querySelector('.allocation-bar-labels .type-body-strong');
+  // [2026-08-23, 관리자 지시 — account-benefit-strip 실측 재점검] 스코프
+  // 없는 \`document.querySelector(All)\`는 첫 탭(.result-slot)과 계산기2
+  // (.calc2-result-slot)가 늘 동시에 DOM에 있는 이 저장소의 전제(2.1.2절
+  // (3))에서 두 탭을 함께 센다 — 계산기2도 AccountBenefitStrip을 그린다
+  // (D82, 부연설명만 뺀 같은 위젯). D83 소유자 지시 9번으로 계산기2
+  // 프리필이 ISA 예상 수익률을 기본으로 켜면서, 계산기2 쪽에도 가정 축
+  // 트랙이 실제로 생겨 전역 질의의 개수가 배로 잡히기 시작했다(실측 —
+  // \`assumptionTrackRects.length\`가 1 기대에 2가 나왔다. 원인은
+  // 화면 결함이 아니라 이 스코프 없는 선택자다 — \`.result-slot\`(이 파일이
+  // \`before()\`에서 여는 그 탭)로 좁힌다. \`headline-baseline-only.
+  // browser.mjs\`가 같은 부류의 결함을 같은 이유로 겪었다.
+  const root = document.querySelector('.result-slot') || document;
+  const strip = root.querySelector('.account-benefit-strip');
+  const card = root.querySelector('.donut-with-strip');
+  const allocTrack = root.querySelector('.alloc-bar-track');
+  const confirmedTrack = root.querySelector('.benefit-axis-confirmed .benefit-meter-track');
+  const confirmedFill = root.querySelector('.benefit-axis-confirmed .benefit-meter-fill');
+  const assumptionTracks = [...root.querySelectorAll('.benefit-axis-assumption .benefit-meter-track')];
+  const divider = root.querySelector('.benefit-axis-divider');
+  const header = root.querySelector('.account-benefit-strip h4');
+  const c2AccountName = root.querySelector('.allocation-bar-labels .type-body-strong');
   const cs = strip ? getComputedStyle(strip) : null;
   // 위젯을 실제로 담고 있는 카드 — .result-panel-inner가 surface-raised
   // 배경을 그린다. 관리자가 잡은 결함은 이 배경과 위젯 배경이 라이트에서
   // 같은 색이었다는 것이다.
-  const cardSurface = document.querySelector('.result-panel-inner');
-  const assumptionChip = document.querySelector('.benefit-row-assumption-chip');
-  const assumptionTrack = document.querySelector('.benefit-axis-assumption .benefit-meter-track');
+  const cardSurface = root.querySelector('.result-panel-inner');
+  const assumptionChip = root.querySelector('.benefit-row-assumption-chip');
+  const assumptionTrack = root.querySelector('.benefit-axis-assumption .benefit-meter-track');
   // D43 — ISA 비과세 행의 채움 원소. .benefit-axis-assumption의 첫 번째
   // .benefit-meter-fill이 곧 비과세 행의 막대다(가정 축에서 막대를 갖는
   // 행이 이제 이거 하나뿐이다).
-  const assumptionFill = document.querySelector('.benefit-axis-assumption .benefit-meter-fill');
+  const assumptionFill = root.querySelector('.benefit-axis-assumption .benefit-meter-fill');
   // D43 — 가정 축 제목(조건절)이 실제로 그 자리에 렌더되는지. 자리로 세지
   // 않고 **확정 축 트랙과 가정 축 트랙 사이**에 실제로 존재하는지를 아래
   // 테스트가 y좌표로 확인한다.
-  const axisCaptionEl = document.querySelector('.benefit-axis-assumption .benefit-axis-caption');
+  const axisCaptionEl = root.querySelector('.benefit-axis-assumption .benefit-axis-caption');
   const confirmedFillCs = confirmedFill ? getComputedStyle(confirmedFill) : null;
   const assumptionFillCs = assumptionFill ? getComputedStyle(assumptionFill) : null;
   return {
@@ -110,7 +122,7 @@ const MEASURE = `(() => {
     assumptionTrackRects: assumptionTracks.map(rect),
     // 막대 없이 숫자만 내는 행(법정 상한 없음). 트랙 개수만 세면 "하나가
     // 실수로 안 그려진 것"과 구분되지 않으므로 이 행이 실제로 있는지 함께 센다.
-    noCeilingRowCount: [...document.querySelectorAll('.benefit-axis-assumption *')]
+    noCeilingRowCount: [...root.querySelectorAll('.benefit-axis-assumption *')]
       .filter((e) => e.children.length === 0 && /법정 상한 없음/.test(e.textContent ?? '')).length,
     dividerRect: rect(divider),
     stripBackground: cs ? cs.backgroundColor : null,
@@ -120,11 +132,11 @@ const MEASURE = `(() => {
     headerFontSize: header ? getComputedStyle(header).fontSize : null,
     headerFontWeight: header ? getComputedStyle(header).fontWeight : null,
     c2AccountNameFontSize: c2AccountName ? getComputedStyle(c2AccountName).fontSize : null,
-    referenceRowCount: document.querySelectorAll('.benefit-reference-table tbody tr').length,
-    axisCaptions: [...document.querySelectorAll('.benefit-axis-caption')].map((e) => e.textContent),
+    referenceRowCount: root.querySelectorAll('.benefit-reference-table tbody tr').length,
+    axisCaptions: [...root.querySelectorAll('.benefit-axis-caption')].map((e) => e.textContent),
     // 축 **안의 모든 글자.** 캡션이 행으로 합쳐지든 다시 갈라지든 같은 것을 문다.
-    confirmedAxisText: (document.querySelector('.benefit-axis-confirmed') || {}).textContent || '',
-    assumptionAxisText: (document.querySelector('.benefit-axis-assumption') || {}).textContent || '',
+    confirmedAxisText: (root.querySelector('.benefit-axis-confirmed') || {}).textContent || '',
+    assumptionAxisText: (root.querySelector('.benefit-axis-assumption') || {}).textContent || '',
     // 관리자가 지목한 두 번째 결함 — .benefit-row-body가 flex column인데
     // align-items 기본값이 stretch라 이 칩이 트랙 전체 폭으로 늘어났었다.
     assumptionChipRect: rect(assumptionChip),
