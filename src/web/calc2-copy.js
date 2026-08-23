@@ -52,3 +52,13 @@ export const CALC2_ESSENTIAL_GROUP_TITLE = '기본 정보';
  * "간결한 판"이라는 실험 축(D80 판정 2 계보)이라는 것이 그 판단의 근거다.
  */
 export const CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL = '10년 안에 쓸 계획이다';
+
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 계산기2 일일 팝업 예시의 입력 네 줄 중
+ * 마지막 줄 라벨 — 「월 납입금」→「납입금」. 값(콜론 뒤 "월 150만원")은
+ * 그대로다, 라벨 한 낱말만 짧아진다. `ui/example-showcase.js`의
+ * `exampleCapacityLineText()`(첫 탭 예시·팝업이 원래 공유하던 그 문구)는
+ * 손대지 않는다 — 이 상수는 계산기2 팝업 한 자리에서만, 그 문구를 받아
+ * 라벨만 바꿔 쓴다(`ui/calc2-example-modal.js`).
+ */
+export const CALC2_EXAMPLE_CAPACITY_LABEL = '납입금';

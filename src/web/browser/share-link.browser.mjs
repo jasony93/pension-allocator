@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
-import { encodeShareFragment } from '../state/share-link.js';
+import { encodeShareFragment, encodeShareFragmentV1 } from '../state/share-link.js';
 import { initialForm } from '../state/store.js';
 
 /**
@@ -99,6 +99,43 @@ test('D74 — 공유 링크로 열면 입력이 채워지고 계산까지 실행
   // 통과하고, "만 33세"처럼 숫자+세가 붙은 새 문구가 생기면 잡는다.
   const inputSlotText = await page.evaluate(`document.querySelector('.input-slot').innerText`);
   assert.doesNotMatch(inputSlotText, /만\s*\d+\s*세/, '입력 패널에 만 나이를 되비추는 문구가 생겼습니다 — 기존 규칙 위반');
+});
+
+/**
+ * [2026-08-23, D82 판정 3] **v1 링크는 계속 열린다** — 이미 공유된 옛
+ * 링크(위치 기반 v2 이전, JSON+base64url)를 실제 브라우저로 열어
+ * 실측한다(`state/share-link.test.mjs`는 디코더 함수만 단위로 잰다 — 이
+ * 파일은 "URL을 실제로 열면 앱이 그 값으로 뜨는가"까지 확인한다).
+ * **`encodeShareFragmentV1`을 직접 써서 v2 인코더를 거치지 않는다** —
+ * 지금(v2를 내는) `buildShareUrl`을 쓰면 이 시험이 실은 v2를 열어 보는
+ * 시험이 돼 버린다.
+ */
+test('D82 판정 3 — v1(옛 JSON+base64url) 공유 링크를 실제로 열면 입력이 채워지고 계산까지 실행된다', { skip: skipWithoutChrome }, async () => {
+  const form = {
+    ...initialForm(),
+    birthDate: '1993-04-17',
+    currentSalary: '4000',
+    hasNonWageIncome: false,
+    monthlyCapacity: '50',
+    annuityStarted: false,
+    fundUseHorizon: 'before_pension_age',
+  };
+  const v1Fragment = encodeShareFragmentV1(form);
+  assert.ok(!v1Fragment.startsWith('v2.'), 'v1 프래그먼트가 우연히 v2 접두와 겹치면 이 시험 자체가 뜻을 잃는다');
+  const app = await openTracked({ url: `/src/web/index.html#${v1Fragment}` });
+  const { page } = app;
+
+  // [2026-08-21, D81] 기본 탭이 이제 calc2다 — 옛(탭 id가 없는) 공유
+  // 링크가 성공으로 디코드되면 `ui/app.js`가 활성 탭을 명시로
+  // `calculator`로 돌린다(공유받은 결과가 실제로 보이도록) — 그래서 여기
+  // 명시 탭 클릭 없이도 결과가 이 탭에서 바로 떠야 한다.
+  await page.waitFor(`!!document.querySelector('.save-share button')`, { timeoutMs: 5000 });
+  const state = await page.evaluate(`(() => ({
+    birthDate: document.getElementById('birthDate').value,
+    calculatorHidden: document.getElementById('tabpanel-calculator').classList.contains('tab-panel-hidden'),
+  }))()`);
+  assert.ok(state.birthDate.includes('1993'), `v1 링크로 열었는데 birthDate가 채워지지 않았다: "${state.birthDate}"`);
+  assert.equal(state.calculatorHidden, false, 'v1 링크로 열었는데 그 결과가 있는 탭이 숨어 있다');
 });
 
 test('D74 — 깨진·이전 버전 공유 링크는 조용히 무시되지 않고 짧게 알려준다', { skip: skipWithoutChrome }, async () => {

@@ -35,7 +35,7 @@
 import { el } from './dom.js';
 import { openModal } from './modal.js';
 import {
-  examplePersonaRow,
+  examplePersonaCells,
   exampleHeroCopy,
   attachHostStyles,
   fitAmountValueToCard,
@@ -45,6 +45,7 @@ import {
 } from './example-showcase.js';
 import { applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { MAN_ICON_DATA_URI, MAN_ICON_INTRINSIC_WIDTH, MAN_ICON_INTRINSIC_HEIGHT } from '../assets/man-icon.js';
+import { CALC2_EXAMPLE_CAPACITY_LABEL } from '../calc2-copy.js';
 
 /** `localStorage` 키 — 값은 그 날짜(`YYYY-MM-DD`, 로컬) 하나뿐이다. */
 export const CALC2_EXAMPLE_MODAL_STORAGE_KEY = 'calc2ExampleModalDismissedDate';
@@ -88,22 +89,52 @@ function safeLocalStorage() {
 }
 
 /**
- * 히어로 카피(위) + 김철수씨 한 행(아래) — [번들 실측 마감 회차] 순서를
- * 뒤집고 이승은씨 행을 뺐다. 첫 탭의 `rowsAndCopy`(카피가 옆)와는 다른
- * 배치라 클래스를 새로 준다(`calc2-example-modal-body`) — 첫 탭 레이아웃
- * 규칙(가로 배치)이 이 모달에 새지 않는다.
+ * [2026-08-23, D82 소유자 지시 1번] 「월 납입금」→「납입금」 — 입력 네 줄 중
+ * 마지막 한 줄의 라벨만 짧아진다(값은 그대로). `exampleInputLineTexts()`가
+ * 낸 문자열을 여기서 다시 짓지 않고 접두만 바꿔 친다 — 값(만원 숫자)이나
+ * 줄 순서는 `example-showcase.js`가 계속 진다.
  */
-function exampleCopyAndRow({ persona1 }) {
-  const row1 = examplePersonaRow({
+function calc2ExampleInputLineTexts() {
+  return exampleInputLineTexts().map((line) => (line.startsWith('월 납입금') ? line.replace('월 납입금', CALC2_EXAMPLE_CAPACITY_LABEL) : line));
+}
+
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 예시 카드 — 오른쪽 공간이 비어 보인다는
+ * 지적에 따라, 정보(기본 정보 네 줄)를 카드 좌상단, 도넛을 우상단, 절세액
+ * 카드를 카드 하단(전체 폭)에 앉힌다. **계산은 새로 하지 않는다** —
+ * `examplePersonaCells`가 첫 탭과 똑같은 계산(`donutChart`·`amountCard`
+ * 호출)으로 낸 세 칸을 이 카드만의 그리드(`calc2-example-card`,
+ * styles.css)로 다시 배열할 뿐이다.
+ *
+ * **카드처럼 보이게 — 주황 테두리 + 더 연한 주황 바탕**(`--accent-warm`·
+ * `--accent-warm-subtle`, 새 토큰 — 3단 구조로 다크 값도 함께 선언했다,
+ * `styles.css` 머리말 쪽). 내용 전체(정보·도넛·절세액) −5%는 `styles.css`의
+ * `.calc2-example-card` 스코프가 진다.
+ */
+function calc2ExampleCard({ persona1 }) {
+  const { infoCol, donutCol, amountCol } = examplePersonaCells({
     name: EXAMPLE_PERSONA_NAME,
     iconDataUri: MAN_ICON_DATA_URI,
     iconWidth: MAN_ICON_INTRINSIC_WIDTH,
     iconHeight: MAN_ICON_INTRINSIC_HEIGHT,
-    lines: exampleInputLineTexts(),
+    lines: calc2ExampleInputLineTexts(),
     scenario: persona1.scenario,
     plan: persona1.plan,
   });
-  return el('div', { class: 'calc2-example-modal-body' }, [exampleHeroCopy(), row1]);
+  return el('div', { class: 'calc2-example-card' }, [infoCol, donutCol, amountCol]);
+}
+
+/**
+ * 히어로 카피(왼쪽) + 예시 카드(오른쪽, 김철수씨) — [D82 소유자 지시 1번]
+ * 오른쪽이 비어 보인다는 지적으로 가로 배치(카피 | 카드)로 되돌아간다.
+ * **"카피가 먼저" 원칙(5항목 회차 판단)은 여전히 지킨다** — 그때는
+ * 위/아래로 순서를 나타냈지만 이제는 왼쪽/오른쪽(읽기 순서)으로 나타낸다,
+ * 뜻은 같다. 클래스는 그대로 `calc2-example-modal-body`(첫 탭의
+ * `rowsAndCopy`와는 다른 그리드 규칙을 쓴다 — 두 파일이 서로의 레이아웃을
+ * 밟지 않는다는 원래 원칙 그대로).
+ */
+function exampleCopyAndRow({ persona1 }) {
+  return el('div', { class: 'calc2-example-modal-body' }, [exampleHeroCopy(), calc2ExampleCard({ persona1 })]);
 }
 
 /**

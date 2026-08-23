@@ -483,7 +483,11 @@ export function mountApp(root, { engineClient, analytics }) {
     // [2026-08-20, D79] 계산기2 결과 슬롯에도 같은 후처리 — 같은 컴포넌트를
     // 재사용하므로 도넛 진입 애니메이션·조각 라벨 후처리도 그대로 건다.
     runDonutEntrance(calc2ResultSlot);
-    applyDonutSliceInlineLabels(calc2ResultSlot);
+    // [2026-08-23, D82 소유자 지시 5번] 계산기2 결과 도넛만 지시선 없이,
+    // 조각에 더 가까운 라벨로 그린다(`ui/result-panel.js`의 `chartArea`가
+    // 계산기2 한정으로 `labelMode: 'legend'`를 강제하는 것과 짝이다 — 그
+    // 모드에서만 이 옵션이 뜻이 있다).
+    applyDonutSliceInlineLabels(calc2ResultSlot, { forceOutside: true, hideLeader: true });
     // [2026-08-19, D78 ③] 역산기 결과에도 `AccountDonut`이 생겼다 — 같은
     // 이유로 같은 후처리를 그 슬롯에도 건다.
     runDonutEntrance(reverseResultSlot);
@@ -499,7 +503,11 @@ export function mountApp(root, { engineClient, analytics }) {
   // 따로 건다(예시 쪽과 같은 두 경로를 듣는 `watchDonutThemeChange`, `charts.js`).
   watchDonutThemeChange(() => {
     applyDonutSliceInlineLabels(resultSlot);
-    applyDonutSliceInlineLabels(calc2ResultSlot);
+    // [2026-08-23, D82 소유자 지시 5번] 계산기2 결과 도넛만 지시선 없이,
+    // 조각에 더 가까운 라벨로 그린다(`ui/result-panel.js`의 `chartArea`가
+    // 계산기2 한정으로 `labelMode: 'legend'`를 강제하는 것과 짝이다 — 그
+    // 모드에서만 이 옵션이 뜻이 있다).
+    applyDonutSliceInlineLabels(calc2ResultSlot, { forceOutside: true, hideLeader: true });
     applyDonutSliceInlineLabels(reverseResultSlot);
   });
 

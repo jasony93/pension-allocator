@@ -608,7 +608,15 @@ test('납입 잔여 한도 대비 막대 — 계좌 이름·금액 줄이 각각
 // 제거·자금 사용 시점 답변 2 문구+디자인·섹션 제목 배율·하단 표 헤더 정렬.
 // ---------------------------------------------------------------------------
 
-test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행만 아래, 왼쪽 시작선이 카피와 정확히 맞고, 두 버튼이 900px 높이에서도 스크롤 없이 보인다', { skip: skipWithoutChrome }, async () => {
+/**
+ * [2026-08-23, D82 소유자 지시 1번 — 뒤집힌 기대값] "오른쪽이 비어 보인다"는
+ * 지적으로 다시 가로 배치(카피 | 카드)로 되돌아간다. 옛 검사(번들 실측
+ * 마감 회차)는 카피(위)·행(아래) 세로 쌓기와 두 왼쪽 시작선이 맞는지를
+ * 쟀다 — 이번 회차는 그 배치 자체를 접었으므로 지우지 않고 뒤집는다: 이제
+ * 카피는 카드 **왼쪽**에 서고, 카드 **안**에서 정보 좌상단·도넛 우상단·
+ * 절세액 하단(전체 폭)을 잰다.
+ */
+test('예시 팝업 재배치(D82) — 카피가 카드 왼쪽에, 카드 안은 정보 좌상단·도넛 우상단·절세액 하단이고, 카드가 주황 테두리+연한 주황 바탕이다, 두 버튼이 900px 높이에서도 스크롤 없이 보인다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await page.goto(`${origin}/src/web/index.html`);
@@ -627,43 +635,107 @@ test('예시 팝업 재배치 — 히어로 카피가 위, 김철수씨 한 행�
     const root = host.shadowRoot;
     const body = root.querySelector('.calc2-example-modal-body');
     const heroCopy = body.querySelector('.example-hero-copy');
-    const rows = [...body.querySelectorAll('.example-persona-row')];
+    const card = body.querySelector('.calc2-example-card');
+    const info = card ? card.querySelector('.example-persona-info') : null;
+    const donutCol = card ? card.querySelector('.example-persona-donut-col') : null;
+    const amount = card ? card.querySelector('.example-persona-amount') : null;
     const names = [...root.querySelectorAll('.example-persona-name')].map((n) => n.textContent);
     const dismiss = document.querySelector('.calc2-example-modal-dismiss');
     const close = document.querySelector('.calc2-example-modal-close');
     // DOMRect는 구조화 복제로 직렬화되지 않는 값이 있어(returnByValue) 필요한
     // 필드만 뽑아 평범한 객체로 만든다.
-    const asRect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
+    const asRect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+    const cardCs = card ? getComputedStyle(card) : null;
+    const lineText = card ? [...card.querySelectorAll('.example-persona-line')].map((p) => p.textContent) : [];
     return {
-      heroTop: heroCopy ? heroCopy.getBoundingClientRect().top : null,
-      heroLeft: heroCopy ? heroCopy.getBoundingClientRect().left : null,
-      rowTop: rows[0] ? rows[0].getBoundingClientRect().top : null,
-      rowLeft: rows[0] ? rows[0].getBoundingClientRect().left : null,
-      rowCount: rows.length,
+      hasCard: !!card,
+      heroRect: heroCopy ? asRect(heroCopy) : null,
+      infoRect: info ? asRect(info) : null,
+      donutRect: donutCol ? asRect(donutCol) : null,
+      amountRect: amount ? asRect(amount) : null,
       names,
+      lineText,
+      cardBorderColor: cardCs ? cardCs.borderTopColor : null,
+      cardBorderWidth: cardCs ? cardCs.borderTopWidth : null,
+      cardBg: cardCs ? cardCs.backgroundColor : null,
       dismissRect: asRect(dismiss),
       closeRect: asRect(close),
       viewportH: window.innerHeight,
     };
   })()`);
-  assert.equal(m.rowCount, 1, `예시 행이 정확히 1개(김철수씨만)여야 한다: ${m.rowCount}`);
+  assert.ok(m.hasCard, '예시 카드(.calc2-example-card)를 찾지 못했다');
   assert.deepEqual(m.names, ['김철수씨'], `이승은씨 행이 남아 있다: ${JSON.stringify(m.names)}`);
-  assert.ok(m.heroTop != null && m.rowTop != null, '히어로 카피 또는 예시 행을 찾지 못했다');
-  assert.ok(m.heroTop < m.rowTop, `히어로 카피(위 끝 ${m.heroTop})가 예시 행(위 끝 ${m.rowTop})보다 위에 있지 않다`);
-  // [2026-08-21, 소유자 지시 — 팝업 정렬] 예시 행의 왼쪽 시작선이 위 히어로
-  // 카피 텍스트의 왼쪽 시작선과 정확히 일치한다(x좌표 일치). 옛(원본
-  // 페이지의 가로 배치용) `.example-hero-copy { margin-left: 64px }`가 이
-  // 모달의 세로 배치에 새어 들어와 64px 어긋났던 것을 `styles.css`의
-  // `.calc2-example-modal-body .example-hero-copy { margin-left: 0 }`로
-  // 잡았다 — 그 결과를 여기서 실측으로 고정한다.
+  assert.ok(m.heroRect && m.infoRect && m.donutRect && m.amountRect, '카피·정보·도넛·절세액 중 하나를 찾지 못했다');
+
+  // "카피가 먼저" — 이제는 왼쪽/오른쪽(읽기 순서)으로 나타낸다.
   assert.ok(
-    Math.abs(m.heroLeft - m.rowLeft) <= 1,
-    `히어로 카피 왼쪽 시작선(${m.heroLeft})이 예시 행 왼쪽 시작선(${m.rowLeft})과 어긋난다`,
+    m.heroRect.left < m.infoRect.left,
+    `히어로 카피(왼쪽 끝 ${m.heroRect.left})가 카드(정보 왼쪽 끝 ${m.infoRect.left})보다 왼쪽에 있지 않다`,
   );
+
+  // 카드 안 — 정보 좌상단, 도넛 우상단, 절세액 하단(전체 폭).
+  assert.ok(m.infoRect.left < m.donutRect.left, `정보(왼쪽 끝 ${m.infoRect.left})가 도넛(왼쪽 끝 ${m.donutRect.left})보다 왼쪽에 있지 않다 — 정보가 좌상단이 아니다`);
+  assert.ok(Math.abs(m.infoRect.top - m.donutRect.top) <= 4, `정보(위 끝 ${m.infoRect.top})와 도넛(위 끝 ${m.donutRect.top})이 같은 줄(상단)에 있지 않다`);
+  assert.ok(m.amountRect.top >= Math.max(m.infoRect.bottom, m.donutRect.bottom) - 1, `절세액(위 끝 ${m.amountRect.top})이 정보·도넛 아래(하단)에 있지 않다`);
+
+  // 카드처럼 — 주황 테두리 + 더 연한 주황 바탕(--accent-warm-subtle, 새 토큰).
+  assert.equal(m.cardBorderColor, 'rgb(230, 115, 0)', `카드 테두리 색이 --accent-warm이 아니다: ${m.cardBorderColor}`);
+  assert.notEqual(m.cardBorderWidth, '0px', '카드에 테두리 두께가 없다');
+  assert.equal(m.cardBg, 'rgb(252, 238, 224)', `카드 바탕색이 --accent-warm-subtle(라이트)이 아니다: ${m.cardBg}`);
+
+  // 「월 납입금」→「납입금」 — 값은 그대로, 라벨만 짧아진다.
+  const capacityLine = m.lineText.find((t) => t.includes('150만원'));
+  assert.ok(capacityLine, `납입금 줄을 찾지 못했다: ${JSON.stringify(m.lineText)}`);
+  assert.ok(capacityLine.startsWith('납입금'), `납입금 줄이 "납입금"으로 시작하지 않는다: "${capacityLine}"`);
+  assert.ok(!capacityLine.includes('월 납입금'), `옛 라벨("월 납입금")이 남아 있다: "${capacityLine}"`);
+
   for (const [label, rect] of [['「오늘 하루 보지 않음」', m.dismissRect], ['닫기(X)', m.closeRect]]) {
     assert.ok(rect.bottom <= m.viewportH && rect.top >= 0, `${label} 버튼이 900px 뷰포트 안에 없다(스크롤 필요): ${JSON.stringify(rect)}`);
   }
   await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 예시 카드 내용 전체 −5% — 도넛은
+ * `width`(158.4×0.95=150.48px), 나머지(정보 줄·이름표·절세액 글자)는
+ * 각자의 확정 절댓값에 같은 배수를 직접 적용한다(SVG 밖 HTML 텍스트라
+ * 컨테이너 스케일이 안 통한다, `styles.css` 주석 참고).
+ */
+test('D82 소유자 지시 1번 — 예시 카드 내용이 원래 크기의 95%다(도넛 폭·정보 줄·이름표·절세액 글자)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  // [2026-08-21, D81] 이 새로고침도 기본으로 calc2에 내려앉아 팝업을 곧장
+  // 열 수 있다 — 앞 시험이 이미 localStorage를 지운 채로 끝났으므로(팝업을
+  // 다시 닫지 않았다) 특히 그렇다. 아래 탭 클릭이 스크림에 막히지 않도록
+  // 먼저 치운다(이 함수 자체가 다시 localStorage에 오늘 날짜를 남긴다 —
+  // 바로 다음 줄에서 또 지우므로 최종 목적과 어긋나지 않는다).
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
+  await page.evaluate(`localStorage.clear()`);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 8000 });
+  await sleep(1200);
+
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.calc2-example-modal-host');
+    const root = host.shadowRoot;
+    const card = root.querySelector('.calc2-example-card');
+    const px = (el) => el ? parseFloat(getComputedStyle(el).fontSize) : null;
+    return {
+      donutWidth: card.querySelector('.chart-donut')?.getBoundingClientRect().width ?? null,
+      lineFontSize: px(card.querySelector('.example-persona-line')),
+      nameFontSize: px(card.querySelector('.example-persona-name')),
+      amountLabelFontSize: px(card.querySelector('.amount-card-label')),
+      amountValueFontSize: px(card.querySelector('.amount-card-value')),
+    };
+  })()`);
+  const near = (actual, expected, label) => assert.ok(Math.abs(actual - expected) <= 0.5, `${label}(${actual})이 −5% 값(${expected})과 다르다`);
+  near(m.donutWidth, 150.48, '도넛 렌더 폭');
+  near(m.lineFontSize, 13.851, '정보 줄 글자');
+  near(m.nameFontSize, 9.61875, '이름표 글자');
+  near(m.amountLabelFontSize, 10.0035, '절세액 라벨 글자');
+  near(m.amountValueFontSize, 20.007, '절세액 값 글자');
 });
 
 test('청년 우대 입력 제거 — 계산기2에는 청년 블록이 없고, 첫 탭에는 있다', { skip: skipWithoutChrome }, async () => {
@@ -782,4 +854,272 @@ test('하단 배분표 — 계산기2에서는 월 배분·연 환산 헤더가 
   assert.ok(monthly && annual, `헤더를 찾지 못했다: ${JSON.stringify(m)}`);
   assert.equal(monthly.align, 'right', `「월 배분」 헤더가 오른쪽 정렬이 아니다: ${monthly.align}`);
   assert.equal(annual.align, 'right', `「연 환산」 헤더가 오른쪽 정렬이 아니다: ${annual.align}`);
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-23, D82] 소유자 지시 11항목 중 결과 영역 6개(②~⑦, 전부 계산기2
+// 마운트 한정 — 첫 탭은 그대로다, D82 판정 1).
+// ---------------------------------------------------------------------------
+
+/**
+ * [D82 판정 1] 「자금 사용 시점을 밝히지 않아 판정하지 않았습니다 —
+ * …」(D42 계열 정직성 문구)와 그 영역을 계산기2에서만 뺀다 — 첫 탭에는
+ * 그대로 산다. ISA + `fundUseHorizon: 'unknown'`(계산기2 프리필이 이미
+ * 그 값이다)이면 `early_termination_clawback_isa`(trigger:
+ * `horizon_unknown`) 경고가 서는 조건이다(`engine/mock-engine.js`).
+ */
+test('D82 판정 1 — 자금 사용 시점 미판정 문구가 계산기2에는 없고, 첫 탭에는 그대로 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  // 계산기2 — 프리필이 이미 fundUseHorizon: 'unknown'이다. ISA만 켠다.
+  await page.evaluate(`(() => { document.querySelector('#tabpanel-calc2 .calc2-more-info').open = true; })()`);
+  await sleep(100);
+  await page.clickElement(`document.getElementById('calc2IsaExists-true')`);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(400);
+  const calc2Text = await page.evaluate(`document.querySelector('.calc2-result-slot').innerText`);
+  assert.ok(
+    !calc2Text.includes('자금 사용 시점을 밝히지 않아'),
+    `계산기2에 자금 사용 시점 미판정 문구가 남아 있다: 찾은 자리 근처 "${calc2Text.slice(calc2Text.indexOf('자금 사용 시점') - 20, calc2Text.indexOf('자금 사용 시점') + 60)}"`,
+  );
+
+  // 첫 탭 — 같은 조건(ISA 있음 + 자금 사용 시점 모름)을 그대로 재현한다.
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  const set = (id, v) => `(() => { const el = document.getElementById(${JSON.stringify(id)}); el.focus(); el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
+  await page.evaluate(set('birthDate', '19960101'));
+  await page.evaluate(set('currentSalary', '4000'));
+  await page.evaluate(set('monthlyCapacity', '150'));
+  await page.clickElement(`document.getElementById('hasNonWageIncome-false')`);
+  await page.clickElement(`document.getElementById('annuityStarted-false')`);
+  await page.clickElement(`document.getElementById('fundUseHorizon-unknown')`);
+  await page.clickElement(`document.getElementById('isaExists-true')`);
+  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(400);
+  const firstTabText = await page.evaluate(`document.querySelector('.result-slot').innerText`);
+  assert.ok(firstTabText.includes('자금 사용 시점을 밝히지 않아'), '첫 탭에서까지 자금 사용 시점 미판정 문구가 없어졌다 — 계산기2 한정이어야 한다');
+});
+
+/**
+ * [D82 소유자 지시 3·4번] 「월 납입 여력…나눕니다」 제목과 「…기본」
+ * 배분안 이름 캡션을 계산기2에서 뺀다. 「최적 월 배분표」(kicker)가 결과
+ * 영역(도넛 카드) 최상단으로 올라가고, 「기본 정보」(입력 섹션 제목)와
+ * 같은 크기·굵기이며, 옆 아이콘이 주황이다.
+ */
+test('D82 소유자 지시 3·4번 — 계산기2 결과 상단에 「최적 월 배분표」만 「기본 정보」와 같은 크기로 서고, 옆 아이콘이 주황이다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(300);
+
+  const m = await page.evaluate(`(() => {
+    const scope = document.querySelector('.calc2-result-slot');
+    const header = scope.querySelector('.donut-section-header');
+    const kicker = header.querySelector('.donut-optimal-kicker');
+    const icon = header.querySelector('.section-icon');
+    const groupTitle = document.getElementById('tabpanel-calc2').querySelector('.input-group-title');
+    const resolve = (varExpr) => {
+      const probe = document.createElement('div');
+      probe.style.color = varExpr;
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    };
+    return {
+      headerText: header.textContent.trim(),
+      kickerText: kicker ? kicker.textContent : null,
+      kickerFontSize: kicker ? getComputedStyle(kicker).fontSize : null,
+      kickerFontWeight: kicker ? getComputedStyle(kicker).fontWeight : null,
+      groupTitleFontSize: groupTitle ? getComputedStyle(groupTitle).fontSize : null,
+      groupTitleFontWeight: groupTitle ? getComputedStyle(groupTitle).fontWeight : null,
+      iconColor: icon ? getComputedStyle(icon).color : null,
+      accentWarm: resolve('var(--accent-warm)'),
+    };
+  })()`);
+  assert.equal(m.kickerText, '최적 월 배분표', `kicker 문구가 다르다: ${m.kickerText}`);
+  assert.ok(!m.headerText.includes('나눕니다'), `「월 납입 여력…나눕니다」 제목이 남아 있다: "${m.headerText}"`);
+  assert.ok(!m.headerText.includes('기본'), `배분안 이름 캡션("…기본")이 남아 있다: "${m.headerText}"`);
+  assert.equal(m.kickerFontSize, m.groupTitleFontSize, `kicker 크기(${m.kickerFontSize})가 「기본 정보」 크기(${m.groupTitleFontSize})와 다르다`);
+  assert.equal(m.kickerFontWeight, m.groupTitleFontWeight, `kicker 굵기(${m.kickerFontWeight})가 「기본 정보」 굵기(${m.groupTitleFontWeight})와 다르다`);
+  assert.equal(m.iconColor, m.accentWarm, `아이콘 색이 --accent-warm이 아니다: ${m.iconColor}`);
+});
+
+/**
+ * [D82 소유자 지시 5번] 결과 도넛의 지시선(계좌 라벨↔도넛 연결선)을 없애고
+ * 라벨을 조각에 더 가깝게 붙인다 — 단 조각 위(안)에는 쓰지 않는다.
+ */
+test('D82 소유자 지시 5번 — 계산기2 결과 도넛에는 지시선이 없고, 라벨이 조각 밖에 가깝게 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(300);
+
+  const m = await page.evaluate(`(() => {
+    const donut = document.querySelector('.calc2-result-slot .chart-donut');
+    const leaderCount = donut.querySelectorAll('.donut-slice-label-leader, .donut-leader').length;
+    const rOuter = Number(donut.dataset.rOuter);
+    const label = donut.querySelector('.donut-slice-label');
+    const labelBox = label ? label.getBBox() : null;
+    const cx = Number(donut.dataset.cx);
+    const cy = Number(donut.dataset.cy ?? label?.getAttribute('y'));
+    return {
+      leaderCount,
+      hasLabel: !!label,
+      // 라벨 중심의 반지름 방향 거리 — 조각 밖(고리 밖)이면서도 너무
+      // 멀지 않아야("더 가깝게") 한다. 텍스트 y 좌표로 근사한다.
+      labelY: label ? Number(label.getAttribute('y')) : null,
+      rOuter,
+      cy,
+    };
+  })()`);
+  assert.equal(m.leaderCount, 0, `지시선이 남아 있다: ${m.leaderCount}개`);
+  assert.ok(m.hasLabel, '조각 라벨을 찾지 못했다');
+});
+
+/**
+ * [D82 소유자 지시 6번] 결과 도넛 −10% — 계산기2는 legend 모드로 고정되고
+ * (판단 근거는 5번 항목과 같다, `ui/result-panel.js` 주석), 그 자연폭
+ * (200px)의 90%(180px)로 렌더된다.
+ */
+test('D82 소유자 지시 6번 — 계산기2 결과 도넛이 180px(legend 자연폭의 90%)로 그려진다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const width = await page.evaluate(`document.querySelector('.calc2-result-slot .chart-donut').getBoundingClientRect().width`);
+  assert.ok(Math.abs(width - 180) <= 1, `계산기2 결과 도넛 렌더 폭(${width}px)이 180px가 아니다`);
+});
+
+/**
+ * [D82 소유자 지시 7번] 결과란 세로 간격을 일관된 배수(×0.75)로 줄인다 —
+ * 과감하지 않게. `.result-body`·`.chart-area`의 실제 `gap` 값을 잰다.
+ */
+test('D82 소유자 지시 7번 — 계산기2 결과 세로 간격이 첫 탭보다 좁다(일관된 배수)', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const m = await page.evaluate(`(() => {
+    const calc2Body = document.querySelector('.calc2-result-slot .result-body');
+    const calc2Chart = document.querySelector('.calc2-result-slot .chart-area');
+    return {
+      calc2BodyGap: calc2Body ? getComputedStyle(calc2Body).rowGap : null,
+      calc2ChartGap: calc2Chart ? getComputedStyle(calc2Chart).rowGap : null,
+    };
+  })()`);
+  assert.equal(m.calc2BodyGap, '18px', `계산기2 .result-body 간격이 18px(24×0.75)가 아니다: ${m.calc2BodyGap}`);
+  assert.equal(m.calc2ChartGap, '12px', `계산기2 .chart-area 간격이 12px(16×0.75)가 아니다: ${m.calc2ChartGap}`);
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-23, D82] 소유자 지시 8·9·10번 — 요약 저장·공유(계산기2 결과
+// 기준, 전부 계산기2 마운트 한정, 첫 탭에는 그대로 있다).
+// ---------------------------------------------------------------------------
+
+test('D82 소유자 지시 8번 — 계산기2 저장·공유에 캡션·소제목이 없고, 첫 탭에는 그대로 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .save-share')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const calc2Text = await page.evaluate(`document.querySelector('.calc2-result-slot .save-share').textContent`);
+  assert.ok(!calc2Text.includes('요약 저장'), `계산기2 저장·공유에 「요약 저장」 소제목이 남아 있다: "${calc2Text}"`);
+  assert.ok(!calc2Text.includes('이미지·PDF 모두 요약'), `계산기2 저장·공유에 캡션이 남아 있다: "${calc2Text}"`);
+
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .save-share')`, { timeoutMs: 8000 });
+  const firstTabText = await page.evaluate(`document.querySelector('.result-slot .save-share').textContent`);
+  assert.ok(firstTabText.includes('요약 저장'), '첫 탭에서까지 「요약 저장」 소제목이 없어졌다 — 계산기2 한정이어야 한다');
+  assert.ok(firstTabText.includes('이미지·PDF 모두 요약'), '첫 탭에서까지 캡션이 없어졌다 — 계산기2 한정이어야 한다');
+});
+
+/**
+ * [D82 판정 2] PDF 저장 버튼 — 계산기2에서만 화면에서 뺀다. 조립기·인쇄
+ * CSS는 지우지 않는다(코드 리뷰 대상 — `ui/print.js`의 `exportToPdf`는
+ * 여전히 있고, 버튼만 렌더 분기로 숨었다).
+ */
+test('D82 판정 2 — 계산기2에는 PDF 저장 버튼이 없고, 첫 탭에는 그대로 있다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .save-share')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const calc2HasPdf = await page.evaluate(
+    `[...document.querySelectorAll('.calc2-result-slot .save-share button')].some((b) => b.textContent.includes('PDF'))`,
+  );
+  assert.equal(calc2HasPdf, false, '계산기2에 PDF 저장 버튼이 남아 있다');
+
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .save-share')`, { timeoutMs: 8000 });
+  const firstTabHasPdf = await page.evaluate(
+    `[...document.querySelectorAll('.result-slot .save-share button')].some((b) => b.textContent.trim() === 'PDF로 저장')`,
+  );
+  assert.equal(firstTabHasPdf, true, '첫 탭에서까지 PDF 저장 버튼이 없어졌다 — 계산기2 한정이어야 한다(조립기는 그대로다)');
+});
+
+/**
+ * [D82 판정 4] 이미지로 저장·내 결과 공유하기 버튼이 계산기2에서는 아이콘
+ * (마스크 이미지, `--accent-warm` 단색)만 남고 글자가 없다 — 대신
+ * `aria-label`이 접근 가능한 이름을 진다. 첫 탭은 그대로 글자 버튼이다.
+ */
+test('D82 판정 4 — 계산기2 저장·공유 버튼이 아이콘(주황)만 남고 aria-label을 진다, 첫 탭은 그대로 글자 버튼이다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .save-share')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const m = await page.evaluate(`(() => {
+    const scope = document.querySelector('.calc2-result-slot .save-share');
+    const buttons = [...scope.querySelectorAll('button')];
+    const resolve = (varExpr) => {
+      const probe = document.createElement('div');
+      probe.style.color = varExpr;
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    };
+    return {
+      count: buttons.length,
+      ariaLabels: buttons.map((b) => b.getAttribute('aria-label')),
+      textContents: buttons.map((b) => b.textContent.trim()),
+      iconColors: buttons.map((b) => {
+        const icon = b.querySelector('.save-share-icon');
+        return icon ? getComputedStyle(icon).backgroundColor : null;
+      }),
+      accentWarm: resolve('var(--accent-warm)'),
+    };
+  })()`);
+  assert.equal(m.count, 2, `계산기2 저장·공유 버튼이 2개(이미지·공유)가 아니다: ${m.count}`);
+  assert.ok(m.ariaLabels.includes('이미지로 저장'), `이미지 버튼 aria-label이 없다: ${JSON.stringify(m.ariaLabels)}`);
+  assert.ok(m.ariaLabels.includes('내 결과 공유하기'), `공유 버튼 aria-label이 없다: ${JSON.stringify(m.ariaLabels)}`);
+  for (const [i, text] of m.textContents.entries()) {
+    assert.equal(text, '', `버튼 ${i}에 글자가 남아 있다(아이콘만 남아야 한다): "${text}"`);
+  }
+  for (const [i, color] of m.iconColors.entries()) {
+    assert.equal(color, m.accentWarm, `버튼 ${i} 아이콘 색이 --accent-warm이 아니다: ${color}`);
+  }
+
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(150);
+  await page.evaluate(FILL_REQUIRED_FIELDS);
+  await page.waitFor(`!!document.querySelector('.result-slot .save-share')`, { timeoutMs: 8000 });
+  const firstTabTexts = await page.evaluate(
+    `[...document.querySelectorAll('.result-slot .save-share button')].map((b) => b.textContent.trim())`,
+  );
+  assert.deepEqual(
+    firstTabTexts.sort(),
+    ['PDF로 저장', '내 결과 공유하기', '이미지로 저장'].sort(),
+    `첫 탭 저장·공유 버튼 글자가 달라졌다 — 계산기2 한정이어야 한다: ${JSON.stringify(firstTabTexts)}`,
+  );
 });

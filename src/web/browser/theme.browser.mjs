@@ -969,6 +969,25 @@ test('관리자 지시(3차) 4번 — 체크리스트 문구와 채워진 동그
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await page.waitFor(`!!document.querySelector('.requirement-checklist')`, { timeoutMs: 8000 });
+  // [2026-08-23, D82] **방어적 초기화.** 이 파일의 앞선 시험(D25 등)이 첫
+  // 탭에 `FILL_REQUIRED_FIELDS`로 값을 채운다 — 이론상 이 `page.goto()`가
+  // 완전한 새 로드라 그 값은 초기화돼야 하지만, 실측에서 간헐적으로 동그라미
+  // 하나가 이미 채워진 채로 나타났다(브라우저의 폼 값 복원 또는 뒤로가기
+  // 캐시가 원인으로 보인다 — 자바스크립트 힙까지 그대로 복원되면 `goto()`
+  // 만으로는 store의 in-memory 상태가 진짜로 비워진다는 보장이 없다). 이
+  // 검사의 전제("아무것도 입력하지 않았다")를 코드로 직접 보장한다 —
+  // 초기화 버튼 + 확인 모달을 실제로 눌러 store를 `initialForm()`으로
+  // 되돌린다(`result-placeholder.browser.mjs`가 이미 쓰는 같은 흐름).
+  // [2026-08-21, D81] 기본 탭이 이제 calc2다 — 초기화 버튼은 첫 탭
+  // (calculator) 전용이라 그 탭이 숨어 있으면 좌표 클릭이 빗나간다. 예시
+  // 팝업(스크림)도 먼저 치우고 명시로 그 탭을 켠다.
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calculator')`);
+  await sleep(100);
+  await page.clickElement(`[...document.querySelectorAll('.input-panel-header button')].find((b) => b.textContent.includes('초기화'))`);
+  await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`, { timeoutMs: 4000 });
+  await page.clickElement(`[...document.querySelectorAll('.modal-actions button')].find((b) => b.textContent.includes('모두 지우기'))`);
+  await sleep(200);
 
   const before = await page.evaluate(`(() => {
     const heading = document.querySelector('.req-progress-row .type-title-m');

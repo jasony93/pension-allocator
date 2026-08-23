@@ -784,6 +784,12 @@ const SLICE_LABEL_NAME_FONT_PX = 15; // `.donut-legend-item`(15px)와 나란한 
 const SLICE_LABEL_MIN_FONT_PX = 9; // 더 못 줄이는 바닥값 — 이 아래는 글자가 아니라 얼룩이다
 const SLICE_LABEL_FIT_MARGIN = 0.92; // 조각 안 여유 8% — 테두리에 글자가 닿지 않게
 const SLICE_LABEL_OUTSIDE_GAP = 16; // 리더선 폴백 — 고리(rOuter) 밖으로 이만큼(뷰박스 단위) 뺀다
+// [2026-08-23, D82 소유자 지시 5번 — 계산기2 결과 도넛 한정] 지시선을 없애고
+// 라벨을 조각에 더 가깝게 붙인다 — 위 간격(16)의 약 3분의 1. 0에 가깝게
+// 붙이면(리더선이 없으므로) 라벨이 조각 테두리에 닿아 보여 "안에 쓴 것"처럼
+// 오독될 수 있다 — 지시선이 있을 때보다 더 좁지만 여전히 눈에 띄는 간격을
+// 남긴다(`hideLeader` 옵션, `applyDonutSliceInlineLabelsToSvg` 참고).
+const SLICE_LABEL_OUTSIDE_GAP_CLOSE = 5;
 const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(em, 이름 글자 크기 기준)
 
 /**
@@ -830,14 +836,20 @@ const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(
  * (`example-showcase.js`)만 켠다 — 결과 패널·역산기 탭은 인자 없이 부르므로
  * (`forceOutside: false` 기본) 조각 안에 들어가면 안에 그리는 기존 동작이
  * 그대로다.
+ *
+ * `hideLeader`(D82 소유자 지시 5번, 계산기2 결과 도넛 한정) — `forceOutside`와
+ * 항상 함께 켠다(고리 밖 폴백 경로에서만 뜻이 있다). 지시선(polyline)을
+ * 아예 만들지 않고, 라벨을 고리에 더 가깝게(`SLICE_LABEL_OUTSIDE_GAP_CLOSE`)
+ * 붙인다 — "조각 위(안)에는 쓰지 않는다"는 조건은 여전히 지킨다(고리 밖에
+ * 그린다는 사실 자체는 바뀌지 않았다, 간격만 좁혔다).
  */
-export function applyDonutSliceInlineLabels(root, { forceOutside = false } = {}) {
+export function applyDonutSliceInlineLabels(root, { forceOutside = false, hideLeader = false } = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
   const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"]')];
-  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside);
+  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside, hideLeader);
 }
 
-function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
+function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader = false) {
   if (!svg || typeof svg.querySelectorAll !== 'function') return;
   const cx = Number(svg.dataset.cx);
   const rOuter = Number(svg.dataset.rOuter);
@@ -921,9 +933,12 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
       if (fitsInsideSlice()) continue;
     }
 
-    // 폴백(또는 `forceOutside`) — 고리 밖, 지시선과 함께. 배경이 카드
-    // 표면이 되므로 대비를 다시 잴 필요 없이 검증된 토큰(text-primary)을 쓴다.
-    const outerRadius = rOuter + SLICE_LABEL_OUTSIDE_GAP;
+    // 폴백(또는 `forceOutside`) — 고리 밖, 지시선과 함께(`hideLeader`가
+    // 아니면). 배경이 카드 표면이 되므로 대비를 다시 잴 필요 없이 검증된
+    // 토큰(text-primary)을 쓴다.
+    // [D82 소유자 지시 5번] `hideLeader`면 간격을 좁힌다 — 지시선이 없으므로
+    // 라벨과 조각의 관계를 거리로 대신 보여야 한다.
+    const outerRadius = rOuter + (hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP);
     const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
     const fallback = svgEl(
       'text',
@@ -939,9 +954,11 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
     );
     group.replaceChild(fallback, text);
     text = fallback;
-    const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
-    const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
-    group.insertBefore(leader, text);
+    if (!hideLeader) {
+      const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
+      const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
+      group.insertBefore(leader, text);
+    }
   }
 }
 

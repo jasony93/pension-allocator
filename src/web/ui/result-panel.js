@@ -104,6 +104,8 @@ import { formatKrw, formatPercent, formatPlanRowAmount } from '../format.js';
 import { CORE_REQUIREMENTS, formDerivedAssumptionCodes } from '../state/validation.js';
 import { taxCreditHeadlineView, anyPlanCapApplied, showsCapBelowCeilingNote, HEADLINE_MODE } from '../tax-credit-view.js';
 import { buildShareUrl } from '../state/share-link.js';
+import { SAVE_SHARE_IMAGE_ICON_DATA_URI, SAVE_SHARE_IMAGE_ICON_INTRINSIC_WIDTH, SAVE_SHARE_IMAGE_ICON_INTRINSIC_HEIGHT } from '../assets/save-share-image-icon.js';
+import { SAVE_SHARE_SHARE_ICON_DATA_URI, SAVE_SHARE_SHARE_ICON_INTRINSIC_WIDTH, SAVE_SHARE_SHARE_ICON_INTRINSIC_HEIGHT } from '../assets/save-share-share-icon.js';
 import {
   donutChart,
   donutLegend,
@@ -690,6 +692,17 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
           totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
           isProposed: !scenario.is_enacted,
           animateFromZero: seatDraw === 'donut-entering',
+          // [2026-08-23, D82 소유자 지시 5번 — 계산기2 결과 도넛 한정, 판단
+          // 근거] "지시선 제거 + 조각에 더 가까이"는 `labelled`/`labelledWide`
+          // 모드(라벨을 좌우 세로 열에 쌓고 지시선으로 잇는 설계, `charts.js`
+          // `donutLabelLayout`)의 구조 자체와 상충한다 — 그 모드는 라벨이
+          // 조각 옆이 아니라 열 안 빈자리에 앉는 것이 설계의 핵심이라, 지시선을
+          // 없애면 "이 라벨이 어느 조각 것인지" 자체가 모호해진다. `legend`
+          // 모드는 애초에 조각마다 **자기 위치**(중심각)에 라벨을 두므로
+          // "조각에 더 가깝다"는 요구와 구조가 이미 맞는다 — 계산기2는 뷰포트
+          // 폭과 무관하게 이 모드로 고정한다(아래 `applyDonutSliceInlineLabels`
+          // 호출의 `hideLeader`가 이 모드에서만 뜻이 있다, `ui/app.js`).
+          labelMode: hideConditionalCopy ? 'legend' : undefined,
         });
 
   // D16 — 공통 배율. 납입 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
@@ -733,12 +746,19 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
       const remaining = view.remainingLimitKrw;
       const percentOfLimit = remaining > 0 ? alloc.annual_krw / remaining : alloc.annual_krw > 0 ? 1 : 0;
       const trackScalePercent = computeTrackScalePercent(remaining, maxRemaining);
-      const warning = plan.warnings.find((w) => w.account === account);
+      const warning0 = plan.warnings.find((w) => w.account === account);
       // **소유자가 지목해 지운 경고**(`early_withdrawal_penalty_pension`,
       // 2026-08-13)는 `warningMessage()`가 `null`을 돌려준다 — 여기서 그
       // `null`을 문구 없는 빈 상자로 그리지 않고, 경고 자체가 없었던 것처럼
       // 아예 만들지 않는다. `warning.code`가 그대로 화면에 새는 것도 같은
       // 이유로 막는다(`copy.js`의 `warningMessage` 주석 참고).
+      // [2026-08-23, D82 판정 1] `hideConditionalCopy`(계산기2 전용) — 자금
+      // 사용 시점 미판정 정직성 문구("자금 사용 시점을 밝히지 않아 판정하지
+      // 않았습니다 — …")는 D42 계열 장치로 첫 탭에는 그대로 남는다. 계산기2
+      // 한정으로 이 트리거(`horizon_unknown`)일 때만 경고 자체를 만들지
+      // 않는다 — 같은 계좌의 다른 트리거(`declared_horizon`) 경고는 건드리지
+      // 않는다(그 경고는 "밝혔다"는 사실 위에 서 있어 이 지시와 무관하다).
+      const warning = hideConditionalCopy && warning0?.trigger === 'horizon_unknown' ? null : warning0;
       const warningText = warning ? warningMessage(warning, scenario.fund_use_horizon_boundaries) : null;
       return el('div', { class: 'allocation-bar-row' }, [
         el('div', { class: 'allocation-bar-labels' }, [
@@ -778,23 +798,45 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
   // 같은 값을 준다. 여기서 비면 둘 다 그 사실을 반영한다.
   const planNameCaptionText = donutPlanNameCaption(plan.plan_id, plan.is_baseline);
 
-  return el('div', { class: 'chart-area' }, [
-    el('div', { class: 'donut-section-header' }, [
-      // D45 5번 — 「최적」은 이 한 자리에만 쓴다. 조건(무엇에 대해 최적인지)은
-      // 바로 아래 배분안 이름 캡션이 진다 — `donutOptimalKicker`가 그 캡션
-      // 없이는 이 요소를 만들지 않는다(가드가 실제로 문다는 것은
-      // `ui/donut-optimal-kicker.test.mjs`가 확인한다).
+  // [2026-08-23, D82 판정(불요, 소유자 지시 3·4번) — 계산기2 한정] 「월 납입
+  // 여력…나눕니다」 제목과 「…기본」 배분안 이름 캡션을 뺀다. 「최적 월
+  // 배분표」(kicker)를 그 자리(결과 영역 최상단)로 올리고, 아이콘도 함께
+  // 옮겨 주황으로 칠한다.
+  //
+  // **flag — D45 5번(헌장) 긴장.** `donutOptimalKicker`의 가드는 "「최적」은
+  // 무엇에 대해 최적인지 말하는 캡션이 **같은 화면에 실제로 보일 때만**
+  // 쓴다"는 조건을 지킨다(그 문서 머리말). 이 계산기2 분기는 가드 함수
+  // 자체(`planNameCaptionText`가 비어 있으면 여전히 던진다)는 그대로 지키지만,
+  // **그 캡션 문단 자체를 화면에서 지운다** — 소유자 지시 3번을 그대로
+  // 따른 결과다. tax-domain이 이 항목을 판정 대상으로 올리지 않았으므로
+  // (D82 게이트 기록 — 판정 1~4에 이 자리는 없다) 문면 그대로 구현했지만,
+  // "무엇에 대해 최적인지"가 계산기2 화면 어디에도 문장으로 남지 않는다는
+  // 점은 최종 보고에 열린 물음으로 올린다.
+  const calc2DonutHeader = el('div', { class: 'donut-section-header donut-section-header-calc2' }, [
+    el('div', { class: 'donut-section-header-title-row' }, [
+      iconChart(),
       donutOptimalKicker(planNameCaptionText),
-      // [2026-08-17, 관리자 지시(2차) 9번] 「결과」 섹션 아이콘(도넛/파이 모양,
-      // `icons.js`의 `iconChart`) — 제목 줄 앞에 붙인다. 도넛 중앙과 같은
-      // 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
-      // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
-      el('div', { class: 'donut-section-header-title-row' }, [
-        iconChart(),
-        el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
-      ]),
-      el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
     ]),
+  ]);
+  const defaultDonutHeader = el('div', { class: 'donut-section-header' }, [
+    // D45 5번 — 「최적」은 이 한 자리에만 쓴다. 조건(무엇에 대해 최적인지)은
+    // 바로 아래 배분안 이름 캡션이 진다 — `donutOptimalKicker`가 그 캡션
+    // 없이는 이 요소를 만들지 않는다(가드가 실제로 문다는 것은
+    // `ui/donut-optimal-kicker.test.mjs`가 확인한다).
+    donutOptimalKicker(planNameCaptionText),
+    // [2026-08-17, 관리자 지시(2차) 9번] 「결과」 섹션 아이콘(도넛/파이 모양,
+    // `icons.js`의 `iconChart`) — 제목 줄 앞에 붙인다. 도넛 중앙과 같은
+    // 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
+    // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
+    el('div', { class: 'donut-section-header-title-row' }, [
+      iconChart(),
+      el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
+    ]),
+    el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
+  ]);
+
+  return el('div', { class: 'chart-area' }, [
+    hideConditionalCopy ? calc2DonutHeader : defaultDonutHeader,
     el('div', { class: 'donut-with-strip' }, [
       el('div', { class: 'donut-wrap' }, [donut]),
       // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
@@ -1602,48 +1644,91 @@ function summarySheet(plan, scenario, annualReturnRate, form) {
  * 재사용)와 공유 링크의 확인 안내(`.share-link-note`, 별도 노드 — PDF/이미지
  * 캡션을 지우지 않고 나란히 둔다)도 같은 이유로 클릭 시점에 다시 찾는다.
  */
-function saveShareBlock(store, plan, scenario, annualReturnRate) {
-  const imageButton = el(
+/**
+ * [2026-08-23, D82 판정 4] 저장·공유 버튼의 아이콘화 — 계산기2 한정
+ * (`saveShareBlock`의 `hideConditionalCopy` 분기). 소유자 제공
+ * `src/design/image.png`·`share.png`를 단색 마스크(CSS `mask-image`)로
+ * `--accent-warm`을 입힌다 — 래스터 자체를 다시 칠하지 않는다(원본은
+ * 그대로, 화면에 실제로 칠해지는 색은 토큰 하나가 진다. 테마가 바뀌어도
+ * `--accent-warm`이 갱신되면 아이콘 색도 따라간다). **버튼의 접근 가능한
+ * 이름은 `aria-label`이 진다** — 아이콘만 남아도 뜻은 텍스트가 나른다는
+ * 9절 규약 그대로다.
+ */
+function saveShareIconButton({ extraClass, dataUri, iconWidth, iconHeight, ariaLabel, onclick }) {
+  return el(
     'button',
     {
       type: 'button',
-      class: 'btn btn-secondary',
-      onclick: async () => {
-        try {
-          // [2026-08-18, 관리자 지시(6차) 2번, D75] `store.getState().form`을
-          // 클릭 시점에 다시 읽는다 — `shareButton`(아래)이 이미 같은 이유로
-          // 그렇게 한다: 클로저가 마운트 시점 값을 붙잡으면 그 뒤 입력이
-          // 바뀌어도 예전 값이 이미지에 실린다.
-          const data = buildSummaryData(plan, scenario, annualReturnRate, store.getState().form);
-          const dataUrl = await exportSummaryPng(data);
-          downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
-          store.reportSaveShare('image');
-        } catch {
-          const note = document.querySelector('.save-share-note');
-          if (note) note.textContent = IMAGE_EXPORT_BLOCKED_NOTE;
-        }
-      },
+      class: `btn btn-secondary save-share-icon-btn ${extraClass}`,
+      'aria-label': ariaLabel,
+      onclick,
     },
-    [IMAGE_EXPORT_LABEL],
+    [
+      el('span', {
+        class: 'save-share-icon',
+        'aria-hidden': 'true',
+        style: `mask-image:url(${dataUri});-webkit-mask-image:url(${dataUri});width:${iconWidth}px;height:${iconHeight}px;`,
+      }),
+    ],
   );
-  const pdfButton = el(
-    'button',
-    {
-      type: 'button',
-      class: 'btn btn-secondary',
-      onclick: () => {
-        const attempted = exportToPdf({
-          onBlocked: () => {
-            const note = document.querySelector('.save-share-note');
-            if (note) note.textContent = PDF_EXPORT_BLOCKED_NOTE;
+}
+
+function saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy = false) {
+  const imageOnClick = async () => {
+    try {
+      // [2026-08-18, 관리자 지시(6차) 2번, D75] `store.getState().form`을
+      // 클릭 시점에 다시 읽는다 — `shareButton`(아래)이 이미 같은 이유로
+      // 그렇게 한다: 클로저가 마운트 시점 값을 붙잡으면 그 뒤 입력이
+      // 바뀌어도 예전 값이 이미지에 실린다.
+      const data = buildSummaryData(plan, scenario, annualReturnRate, store.getState().form);
+      const dataUrl = await exportSummaryPng(data);
+      downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
+      store.reportSaveShare('image');
+    } catch {
+      const note = document.querySelector('.save-share-note');
+      if (note) note.textContent = IMAGE_EXPORT_BLOCKED_NOTE;
+    }
+  };
+  const imageButton = hideConditionalCopy
+    ? saveShareIconButton({
+        extraClass: 'save-share-icon-btn-image',
+        dataUri: SAVE_SHARE_IMAGE_ICON_DATA_URI,
+        iconWidth: 22,
+        iconHeight: 22,
+        ariaLabel: IMAGE_EXPORT_LABEL,
+        onclick: imageOnClick,
+      })
+    : el('button', { type: 'button', class: 'btn btn-secondary', onclick: imageOnClick }, [IMAGE_EXPORT_LABEL]);
+  // [2026-08-23, D82 판정 2] PDF 저장 버튼 — 계산기2 한정으로 화면에서만
+  // 뺀다. **조립기(`exportToPdf`, `ui/print.js`)와 인쇄 CSS는 그대로
+  // 둔다** — 브라우저 인쇄(Ctrl/Cmd+P)로는 여전히 동작하고, 버튼을
+  // 되살리려면 이 삼항 하나만 되돌리면 된다(D82 게이트 기록 원문).
+  const pdfButton = hideConditionalCopy
+    ? null
+    : el(
+        'button',
+        {
+          type: 'button',
+          class: 'btn btn-secondary',
+          onclick: () => {
+            const attempted = exportToPdf({
+              onBlocked: () => {
+                const note = document.querySelector('.save-share-note');
+                if (note) note.textContent = PDF_EXPORT_BLOCKED_NOTE;
+              },
+            });
+            if (attempted) store.reportSaveShare('pdf');
           },
-        });
-        if (attempted) store.reportSaveShare('pdf');
-      },
-    },
-    [PDF_EXPORT_LABEL],
-  );
-  const note = el('p', { class: 'type-caption save-share-note' }, [SUMMARY_EXPORT_NOTE]);
+        },
+        [PDF_EXPORT_LABEL],
+      );
+  // [2026-08-23, D82 판정(불요) — 소유자 지시 8번] 캡션 문장(SUMMARY_EXPORT_NOTE)
+  // 자체는 계산기2에서 뺀다 — 그러나 **이 문단 요소는 그대로 둔다**(빈
+  // 문자열로 시작). `.save-share-note`는 내보내기가 막혔을 때 이미지
+  // 버튼 핸들러(`imageOnClick`)가 `document.querySelector`로 다시 찾아
+  // 오류 안내를 적는 유일한 자리다 — 요소째 지우면 그 안내가 갈 곳이
+  // 없어진다(소유자 지시는 "캡션 제거"이지 "오류 안내 경로 제거"가 아니다).
+  const note = el('p', { class: 'type-caption save-share-note' }, [hideConditionalCopy ? '' : SUMMARY_EXPORT_NOTE]);
 
   /**
    * [관리자 지시(4차) 7번, D74] 공유 링크 — URL **프래그먼트**에 현재 입력을
@@ -1654,30 +1739,37 @@ function saveShareBlock(store, plan, scenario, annualReturnRate) {
    * 링크를 이어 붙인다) — "복사됐다"는 사실만 알리고 "값이 들어 있다"를
    * 빠뜨리면 D74의 판정이 무너진다.
    */
-  const shareButton = el(
-    'button',
-    {
-      type: 'button',
-      class: 'btn btn-secondary',
-      onclick: async () => {
-        const url = buildShareUrl(store.getState().form);
-        const noteEl = document.querySelector('.share-link-note');
-        try {
-          if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
-          await navigator.clipboard.writeText(url);
-          if (noteEl) noteEl.textContent = SHARE_LINK_COPIED_NOTE;
-        } catch {
-          if (noteEl) noteEl.textContent = `${SHARE_LINK_COPY_BLOCKED_NOTE} ${url}`;
-        }
-        store.reportSaveShare('link_copy');
-      },
-    },
-    [SHARE_LINK_LABEL],
-  );
+  const shareOnClick = async () => {
+    const url = buildShareUrl(store.getState().form);
+    const noteEl = document.querySelector('.share-link-note');
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
+      await navigator.clipboard.writeText(url);
+      if (noteEl) noteEl.textContent = SHARE_LINK_COPIED_NOTE;
+    } catch {
+      if (noteEl) noteEl.textContent = `${SHARE_LINK_COPY_BLOCKED_NOTE} ${url}`;
+    }
+    store.reportSaveShare('link_copy');
+  };
+  const shareButton = hideConditionalCopy
+    ? saveShareIconButton({
+        extraClass: 'save-share-icon-btn-share',
+        dataUri: SAVE_SHARE_SHARE_ICON_DATA_URI,
+        iconWidth: 22,
+        iconHeight: 22,
+        ariaLabel: SHARE_LINK_LABEL,
+        onclick: shareOnClick,
+      })
+    : el('button', { type: 'button', class: 'btn btn-secondary', onclick: shareOnClick }, [SHARE_LINK_LABEL]);
   const shareNote = el('p', { class: 'type-caption share-link-note' }, ['']);
 
-  return el('div', { class: 'save-share' }, [
-    el('p', { class: 'save-share-heading type-body-strong' }, [SAVE_SHARE_HEADING]),
+  // [2026-08-23, D82 소유자 지시 8번] 「요약 저장」 소제목 — 계산기2에서는
+  // 뺀다(캡션과 같은 지시). 버튼 묶음(`save-share-actions`)에서 PDF 버튼이
+  // 빠지면(판정 2) 이미지 버튼 하나만 남는다 — `pdfButton`이 `null`이면
+  // `el()`이 그 자식을 조용히 건너뛴다(`dom.js` — 이 파일 다른 자리에서도
+  // 쓰는 관행, 새로 만들지 않는다).
+  return el('div', { class: `save-share${hideConditionalCopy ? ' save-share-calc2' : ''}` }, [
+    hideConditionalCopy ? null : el('p', { class: 'save-share-heading type-body-strong' }, [SAVE_SHARE_HEADING]),
     el('div', { class: 'save-share-actions' }, [imageButton, pdfButton]),
     note,
     el('div', { class: 'save-share-actions save-share-actions-secondary' }, [shareButton]),
@@ -1815,7 +1907,7 @@ function resultPanelForScenario(
     // 않는다(어차피 숨어 있다) — 저장·공유 버튼 바로 앞에 두어 "이 결과를
     // 어떻게 들고 나갈까"라는 흐름과 코드 순서가 같게 맞춘다.
     summarySheet(plan, scenario, annualReturnRate, form),
-    saveShareBlock(store, plan, scenario, annualReturnRate),
+    saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy),
   ]);
 }
 

@@ -511,10 +511,15 @@ function exampleShowcaseScrollArrow() {
  * 머리말 최신 항목 참고). SVG는 `viewBox` 좌표계라 CSS 렌더 폭만 바꿔도
  * 안의 조각·글자가 함께 비례로 바뀐다.
  */
-/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업(`ui/calc2-example-modal.js`)이
- * 첫 탭과 완전히 같은 행 컴포넌트를 그대로 재사용한다(소유자 지시: "첫 탭
- * 예시영역 내용(두 페르소나 + 히어로 카피)을 팝업으로"). */
-export function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 정보·도넛·절세액 세 칸을 낱개로 낸다 —
+ * `examplePersonaRow`(아래, 가로 한 줄 배치)와 계산기2 팝업의 새 카드 배치
+ * (`ui/calc2-example-modal.js`, 정보 좌상단·도넛 우상단·절세액 하단)가 같은
+ * 계산·같은 셀을 서로 다른 그리드로 배열할 수 있게 낱개로 뗐다 — 계산은
+ * 한 곳(`donutChart`·`amountCard` 호출)에만 있고, 두 배치는 그 결과를
+ * 감싸는 그리드 규칙만 다르다.
+ */
+export function examplePersonaCells({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
     allocations: plan.allocations,
@@ -568,6 +573,22 @@ export function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, li
   const amountCol = el('div', { class: 'example-persona-amount' }, [
     amountCard(plan, scenario, null, { compactCaption: true, showCaption: false, showComposition: false }),
   ]);
+
+  return { infoCol, donutCol, amountCol };
+}
+
+/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업(`ui/calc2-example-modal.js`)이
+ * 첫 탭과 완전히 같은 행 컴포넌트를 그대로 재사용한다(소유자 지시: "첫 탭
+ * 예시영역 내용(두 페르소나 + 히어로 카피)을 팝업으로").
+ *
+ * **[2026-08-23, D82] 계산기2 팝업은 더는 이 함수를 부르지 않는다** — 그
+ * 팝업은 이제 `examplePersonaCells`의 세 칸을 자기만의 카드 그리드(정보
+ * 좌상단·도넛 우상단·절세액 하단, `ui/calc2-example-modal.js`)로 배열한다
+ * (소유자 지시 1번). 이 함수(첫 탭의 가로 한 줄 배치)는 그대로 첫 탭
+ * 전용으로 남는다 — 이름·동작 전부 이전과 같다(첫 탭 회귀 없음).
+ */
+export function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
+  const { infoCol, donutCol, amountCol } = examplePersonaCells({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan });
 
   // [2026-08-20, 관리자 지시 2번] **고정 그리드 열**(`example-persona-row`,
   // styles.css) — 세 칸(정보/도넛/절세액)의 폭이 두 행에서 정확히 같은
