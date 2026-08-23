@@ -790,6 +790,13 @@ const SLICE_LABEL_OUTSIDE_GAP = 16; // 리더선 폴백 — 고리(rOuter) 밖�
 // 오독될 수 있다 — 지시선이 있을 때보다 더 좁지만 여전히 눈에 띄는 간격을
 // 남긴다(`hideLeader` 옵션, `applyDonutSliceInlineLabelsToSvg` 참고).
 const SLICE_LABEL_OUTSIDE_GAP_CLOSE = 5;
+// [2026-08-23, D83 판정 1] 라벨-링 비겹침 재시도 — 겹치면 이 만큼(뷰박스
+// 단위)씩 더 밀어내며 다시 잰다. 큰 라벨(긴 계좌 이름 등)도 몇 번 안에
+// 안전히 벗어나도록 8을 썼다(`SLICE_LABEL_OUTSIDE_GAP`의 절반) — 너무
+// 작으면 겹치는 조각마다 반복 횟수가 늘어 계산이 느려지고, 너무 크면
+// 필요 이상으로 멀리 밀려나 도넛과의 시각적 연결이 옅어진다.
+const SLICE_LABEL_OVERLAP_STEP = 8;
+const SLICE_LABEL_OVERLAP_MAX_ATTEMPTS = 12;
 const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(em, 이름 글자 크기 기준)
 
 /**
@@ -847,6 +854,48 @@ export function applyDonutSliceInlineLabels(root, { forceOutside = false, hideLe
   if (!root || typeof root.querySelectorAll !== 'function') return;
   const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"]')];
   for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside, hideLeader);
+  // [2026-08-23, D83 판정 1] **숨은 도넛 보정 — 진짜 원인을 실측으로 찾았다.**
+  // `getBBox()`는 SVG 명세상 그 원소(또는 조상)가 `display:none`이면 폭·높이
+  // 0을 낸다. 첫 탭 예시·역산기 예시는 **기본 랜딩 탭이 계산기2로 바뀐
+  // 뒤(D81)로 앱이 뜨자마자 숨은 탭 패널(`tab-panel-hidden`) 안에서
+  // 그려진다** — 이 함수가 그 순간 라벨을 배치하면 `getBBox()`가 늘 0×0을
+  // 내므로 `overlapsRing({width:0,height:0})`이 항상 거짓이 되어(0×0 상자는
+  // 사실상 무엇과도 안 겹친다) **첫 시도(가장 좁은 간격)에서 곧장 "안 겹친다"고
+  // 잘못 확정한다.** 나중에 사용자가 그 탭을 눌러 실제로 보이면, 라벨은 이미
+  // 정해진(너무 좁은) 자리에 실제 크기로 그려져 고리와 겹친다 — 실측으로 잡은
+  // 정확한 재현 경로다(`requestAnimationFrame`을 겹쳐 불러도 탭이 계속 숨어
+  // 있으면 재보정 자체가 또 0×0을 재므로 소용없었다 — 값의 문제가 아니라
+  // "숨어 있다"는 조건 자체를 잡아야 했다).
+  //
+  // **`ResizeObserver`로 "실제로 보이는 순간"을 기다려 다시 그린다 — 매번,
+  // 조건 없이 붙인다.** 미리 `getBoundingClientRect()`로 "지금 숨었는지"를
+  // 스냅샷으로 재고 그 결과로 붙일지 말지 가르면, 그 스냅샷을 재는 순간과
+  // 실제 숨김·보임이 갈리는 자리 사이에 경합이 생길 수 있다(예: 역산기
+  // 예시에서 실측으로 이 경합을 직접 봤다 — 스냅샷은 "이미 보인다"로 읽혔지만
+  // 그 안쪽 텍스트 배치 자체는 여전히 숨은 상태를 쟀다). `ResizeObserver`는
+  // `observe()`를 부르는 즉시 **현재 크기로 최소 한 번은 반드시 콜백을
+  // 낸다**(명세) — 조건문으로 미리 걸러내지 않고 **항상** 붙이면, 이미
+  // 보이는 상태였어도 그 첫 콜백에서 한 번 더 정확히 다시 그려 자가
+  // 확인하고, 숨은 상태였다면 나중에 실제로 커지는 그 순간의 콜백에서
+  // 다시 그린다 — 두 경우 모두 스냅샷 타이밍에 기대지 않는다. 크기가
+  // 있는 값으로 한 번 다시 그리면 스스로 끊는다(자원이 새지 않는다). 이
+  // 함수는 멱등이다(매번 `.donut-slice-label-group`을 지우고 새로 그린다)
+  // — 다시 불러도 중복이 생기지 않는다.
+  if (typeof ResizeObserver === 'function') {
+    for (const svg of svgs) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const box = entry.contentRect;
+          if (box.width > 0 && box.height > 0) {
+            applyDonutSliceInlineLabelsToSvg(svg, forceOutside, hideLeader);
+            observer.disconnect();
+            return;
+          }
+        }
+      });
+      observer.observe(svg);
+    }
+  }
 }
 
 function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader = false) {
@@ -917,6 +966,13 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
 
     const fitsInsideSlice = () => {
       const box = text.getBBox();
+      // [2026-08-23, D83 판정 1] svg(또는 조상)가 `display:none`이면
+      // `getBBox()`는 명세상 0×0을 낸다 — 0×0은 어떤 상한 검사도 항상
+      // 통과하므로("들어간다"고 잘못 확정), 숨은 순간엔 실측 없이 무조건
+      // "안에 들어간다"고 속아 폴백(고리 밖) 경로 자체를 건너뛴다. 숨은
+      // 동안은 반대로 판정한다(안 들어간다) — 위 `applyDonutSliceInlineLabels`의
+      // `ResizeObserver`가 실제로 보이는 순간 이 함수를 포함해 전부 다시 그린다.
+      if (box.width === 0 && box.height === 0) return false;
       return box.width <= chordAtMid * SLICE_LABEL_FIT_MARGIN && box.height <= bandThickness * SLICE_LABEL_FIT_MARGIN;
     };
     // [D79 판정 4] `forceOutside`면 안(조각)에 들어가는지 실측조차 하지 않고
@@ -938,22 +994,44 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
     // 토큰(text-primary)을 쓴다.
     // [D82 소유자 지시 5번] `hideLeader`면 간격을 좁힌다 — 지시선이 없으므로
     // 라벨과 조각의 관계를 거리로 대신 보여야 한다.
-    const outerRadius = rOuter + (hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP);
-    const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
-    const fallback = svgEl(
-      'text',
-      { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
-      [
-        svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${SLICE_LABEL_NAME_FONT_PX}px` }, [name]),
-        svgEl(
-          'tspan',
-          { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${SLICE_LABEL_NAME_FONT_PX - 2}px` },
-          [pctText],
-        ),
-      ],
-    );
-    group.replaceChild(fallback, text);
-    text = fallback;
+    // [2026-08-23, D83 판정 1 — 상설 규칙] "도넛 계좌별 라벨은 어떤 화면
+    // 에서도 차트와 겹치지 않는다." 처음 간격(위)만으로는 라벨 텍스트
+    // 사각형이 여전히 고리 사각형에 닿을 수 있다(실측 — 팝업의 연금저축
+    // 33%·ISA 50%가 닿았다) — 중심점 하나만 밀어내는 방식은 텍스트
+    // 자신의 폭·높이를 고려하지 않기 때문이다. **실제로 겹치지 않을
+    // 때까지 간격을 늘려가며 다시 잰다**(최대
+    // `SLICE_LABEL_OVERLAP_MAX_ATTEMPTS`회) — 이 회차부터 이 함수를 쓰는
+    // 모든 도넛(예시·팝업·결과·역산기)이 이 보장을 공짜로 받는다.
+    const ringLeft = cx - rOuter;
+    const ringRight = cx + rOuter;
+    const ringTop = cy - rOuter * ry;
+    const ringBottom = cy + rOuter * ry;
+    const overlapsRing = (box) => box.x < ringRight && box.x + box.width > ringLeft && box.y < ringBottom && box.y + box.height > ringTop;
+
+    let gap = hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP;
+    let ox;
+    let oy;
+    let fallback;
+    for (let attempt = 0; attempt < SLICE_LABEL_OVERLAP_MAX_ATTEMPTS; attempt++) {
+      const outerRadius = rOuter + gap;
+      [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
+      fallback = svgEl(
+        'text',
+        { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
+        [
+          svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${SLICE_LABEL_NAME_FONT_PX}px` }, [name]),
+          svgEl(
+            'tspan',
+            { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${SLICE_LABEL_NAME_FONT_PX - 2}px` },
+            [pctText],
+          ),
+        ],
+      );
+      group.replaceChild(fallback, text);
+      text = fallback;
+      if (!overlapsRing(text.getBBox())) break;
+      gap += SLICE_LABEL_OVERLAP_STEP;
+    }
     if (!hideLeader) {
       const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
       const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });

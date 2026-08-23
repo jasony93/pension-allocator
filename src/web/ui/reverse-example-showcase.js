@@ -262,8 +262,15 @@ export async function mountReverseExampleShowcase(hostEl, { engineClient }) {
   try {
     const [response] = await Promise.all([computeReverseExampleScenario(engineClient), stylesReady]);
     shadowRoot.appendChild(reverseExampleShowcaseSection(response));
-    applyDonutSliceInlineLabels(shadowRoot);
-    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot));
+    // [2026-08-23, D83 판정 1] `forceOutside: true` — 상설 규칙("라벨은 어떤
+    // 화면에서도 차트와 겹치지 않는다")이 이 화면을 명시로 짚었다(소유자
+    // 지시 "역산기 예시"). 조각 안에 들어가면 안에 그리던 예전 동작(옵션
+    // 없이 호출)은 큰 조각(예: "연금저축82%")에서 라벨이 고리 안쪽에
+    // 놓여 규칙과 충돌한다 — 첫 탭 예시(`example-showcase.js`, D79 판정 4)가
+    // 이미 같은 이유로 이 옵션을 쓴다. 두 "예시" 화면을 같은 규칙으로
+    // 맞춘다.
+    applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true });
+    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true }));
   } catch (err) {
     console.error('[reverse-example-showcase] 예시를 계산하지 못했습니다', err);
   }

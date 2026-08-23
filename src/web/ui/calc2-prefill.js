@@ -4,9 +4,19 @@
  * 총급여 4,000만원·월 150만원)를 그대로 재사용한다 — 새 상수를 따로
  * 만들면 두 화면의 "김철수씨"가 서로 다른 나이·소득을 말할 수 있게 된다.
  *
- * **수익률은 프리필하지 않는다**(D77 판정 1 유지, D79 판정 2가 재확인).
- * `isaReturnEnabled` 등은 여기서 아예 건드리지 않는다 — `initialForm()`의
- * 기본값(꺼짐)이 그대로 남는다.
+ * **수익률은 [2026-08-23, D83 판정 2]부터 프리필한다 — D77 판정 1·D79
+ * 판정 2의 명시 번복, 계산기2 한정.** 종전에는 여기서 `isaReturnEnabled`
+ * 등을 아예 건드리지 않아 `initialForm()`의 기본값(꺼짐·빈 값)이 그대로
+ * 남았다. 지금은 토글을 켜고 연 5%를 채운다 — 「서비스가 제시하는
+ * 수익률」이 아니라 「예시 인물(김철수씨)이 정한 값, 편집 가능」이라는
+ * 성격을 유지하기 위해 이 프리필 틀 안에 넣는다(D79 판정 2의 프리필 틀
+ * 그대로, 값만 새로 추가). 소득 성격(`isaIncomeCharacter`)은 화면에서
+ * 토글을 직접 켤 때와 같은 값 `'mixed_or_unknown'`을 채운다
+ * (`ui/calc2-input-panel.js`의 `returnToggle.onChange`가 쓰는 값과 같다
+ * — 계약 3.6절의 "모른다" 값, 화면이 새로 지어낸 답이 아니다). 이 값은
+ * 계산기2 입력 화면에서 그대로 고쳐 쓸 수 있다 — 프리필은 시작값일 뿐
+ * 잠그지 않는다. 첫 탭·역산기는 이 프리필을 쓰지 않으므로 무기본값이
+ * 그대로 산다.
  *
  * **연금 수령 여부(`annuityStarted`)도 여기서 채우지 않는다** — 김철수씨는
  * 만 30세라 조문상 미개시가 확실하지만, 그 판단은 하드코딩이 아니라
@@ -21,6 +31,9 @@
 import { EXAMPLE_AGE_YEARS, EXAMPLE_SALARY_MANWON, EXAMPLE_MONTHLY_CAPACITY_MANWON, exampleBirthDate } from './example-showcase.js';
 import { TAX_YEAR } from '../state/store.js';
 
+/** [2026-08-23, D83 소유자 지시 9번] 프리필되는 연 수익률(%) — 편집 가능한 시작값. */
+export const CALC2_PREFILL_ISA_RETURN_RATE_PERCENT = '5';
+
 export function buildCalc2PrefillForm() {
   return {
     birthDate: exampleBirthDate(TAX_YEAR),
@@ -28,6 +41,9 @@ export function buildCalc2PrefillForm() {
     hasNonWageIncome: false,
     monthlyCapacity: String(EXAMPLE_MONTHLY_CAPACITY_MANWON),
     fundUseHorizon: 'unknown',
+    isaReturnEnabled: true,
+    isaReturnRatePercent: CALC2_PREFILL_ISA_RETURN_RATE_PERCENT,
+    isaIncomeCharacter: 'mixed_or_unknown',
   };
 }
 

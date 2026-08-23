@@ -71,15 +71,14 @@ import {
   FINANCIAL_INCOME_LABEL,
   FINANCIAL_INCOME_EFFECT_CAPTION,
   isaAccountTypeLabel,
-  ISA_RETURN_SECTION_TITLE,
   ISA_RETURN_TOGGLE_LABEL,
-  ISA_RETURN_SECTION_HELP,
   ISA_RETURN_RATE_LABEL,
 } from '../copy.js';
 import {
   CALC2_MORE_INFO_TRIGGER,
   CALC2_ESSENTIAL_GROUP_TITLE,
   CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL,
+  CALC2_ISA_RETURN_SECTION_TITLE,
 } from '../calc2-copy.js';
 import { ISA_INCOME_CHARACTERS } from '../state/validation.js';
 import { deriveAnnuityStartedFromBoundaries } from '../state/annuity-start-derivation.js';
@@ -314,7 +313,11 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
         store.setField('isaIncomeCharacter', 'mixed_or_unknown', { immediate: true });
       }
     },
-    help: ISA_RETURN_SECTION_HELP,
+    // [2026-08-23, D83 소유자 지시 8번 / 판정 2] 방어 문구(제시·전망이
+    // 아니라는 안내)를 계산기2에서는 달지 않는다 — 소유자 명시 번복,
+    // `calc2-copy.js`의 `CALC2_ISA_RETURN_SECTION_TITLE` 주석에 위험·근거를
+    // 적었다. 첫 탭(`ui/input-panel.js`)은 `ISA_RETURN_SECTION_HELP`를
+    // 그대로 단다 — 이 줄만 계산기2 한정으로 뗀다.
   });
   const rateField = percentField({
     id: 'calc2IsaReturnRatePercent',
@@ -327,7 +330,7 @@ export function renderCalc2InputPanel({ state, store, renderGuard }) {
   });
   const returnInner = conditionalGroup(form.isaReturnEnabled, [rateField], 'calc2IsaReturnGroup');
   const returnGroup = el('section', { class: 'input-group', 'data-key': 'calc2ReturnGroup' }, [
-    groupTitleNode(iconTrend, ISA_RETURN_SECTION_TITLE),
+    groupTitleNode(iconTrend, CALC2_ISA_RETURN_SECTION_TITLE),
     returnToggle,
     returnInner,
   ]);

@@ -59,11 +59,19 @@ after(async () => {
   if (app) await app.close();
 });
 
+// [2026-08-23, D83 소유자 지시 9번] 계산기2 프리필이 이제 ISA 예상 수익률을
+// 켜고 5%를 채운다(`ui/calc2-prefill.js`) — 계산기2 결과도 그 값으로 항상
+// 구간 변형(구성 두 줄 포함) 헤드라인을 낼 수 있게 됐다. 첫 탭·계산기2 두
+// 결과 패널이 늘 동시에 DOM에 있으므로(2.1.2절 (3)), 스코프 없는
+// `document.querySelector`는 이제 이 시험이 실제로 보려는 **첫 탭**이 아니라
+// 계산기2 쪽 요소를 집을 수 있다 — `.result-slot`으로 좁혀 이 시험이 여는
+// 탭(`before()`의 `tab-calculator`)과 일치시킨다.
 const READ_HEADLINE = `(() => {
+  const scope = document.querySelector('.result-slot');
   return {
-    label: document.querySelector('.amount-card-label')?.textContent ?? null,
-    value: document.querySelector('.amount-card-value')?.textContent ?? null,
-    hasComposition: !!document.querySelector('.amount-card-composition'),
+    label: scope?.querySelector('.amount-card-label')?.textContent ?? null,
+    value: scope?.querySelector('.amount-card-value')?.textContent ?? null,
+    hasComposition: !!scope?.querySelector('.amount-card-composition'),
   };
 })()`;
 
@@ -81,19 +89,22 @@ test('기본안이 그려질 때 헤드라인은 합계(세액공제액/절세�
   }
 });
 
+// [2026-08-23, D83 소유자 지시 9번] 계산기2도 이제(프리필로) 구성 두 줄·
+// 다른 배분 비교 스택바 행을 낼 수 있다 — `.result-slot`으로 좁혀 이 파일이
+// 실제로 여는 첫 탭만 겨눈다(위 `READ_HEADLINE` 주석과 같은 이유).
 test('대안 행을 누르면 헤드라인이 「기본안 대비 세액공제액 차이」로 바뀌고, 그 값은 스택바 행의 값과 글자 그대로 같다 — 새로 계산하지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const altRowAmount = await page.evaluate(`(() => {
-    const row = Array.from(document.querySelectorAll('.stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'));
+    const row = Array.from(document.querySelectorAll('.result-slot .stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'));
     return row ? row.querySelector('.stackbar-row-amount').textContent.trim() : null;
   })()`);
   assert.ok(altRowAmount, '대안 행을 찾지 못했다 — 픽스처가 최소 2개의 배분안을 내야 한다');
   assert.notEqual(altRowAmount, '기본', '대안 행이 "기본"이면 클릭 대상 선택이 잘못됐다');
 
   await page.clickElement(
-    `Array.from(document.querySelectorAll('.stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
+    `Array.from(document.querySelectorAll('.result-slot .stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
   );
-  await page.waitFor(`document.querySelector('.amount-card-label')?.textContent === ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
+  await page.waitFor(`document.querySelector('.result-slot .amount-card-label')?.textContent === ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
 
   const h = await page.evaluate(READ_HEADLINE);
   assert.equal(h.label, AMOUNT_CARD_LABEL_DELTA);
@@ -104,9 +115,9 @@ test('대안 행을 누르면 헤드라인이 「기본안 대비 세액공제�
 test('다시 기본안 행을 누르면 원래 헤드라인이 복원된다 — 대안 상태가 남지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.clickElement(
-    `Array.from(document.querySelectorAll('.stackbar-row')).find((r) => r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
+    `Array.from(document.querySelectorAll('.result-slot .stackbar-row')).find((r) => r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
   );
-  await page.waitFor(`document.querySelector('.amount-card-label')?.textContent !== ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
+  await page.waitFor(`document.querySelector('.result-slot .amount-card-label')?.textContent !== ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
   const h = await page.evaluate(READ_HEADLINE);
   assert.notEqual(h.label, AMOUNT_CARD_LABEL_DELTA);
   assert.ok(

@@ -62,3 +62,32 @@ export const CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL = '10년 안에 쓸 계
  * 라벨만 바꿔 쓴다(`ui/calc2-example-modal.js`).
  */
 export const CALC2_EXAMPLE_CAPACITY_LABEL = '납입금';
+
+/**
+ * [2026-08-23, D83 소유자 지시 4번 / 판정 3] 결과의 도넛+배분표 머리말 —
+ * 「최적 월 배분표」→「최적 월 배분」, 계산기2 한정. 같은 자리가 이제
+ * 시나리오 탭보다 위로 옮겨졌으므로(`ui/result-panel.js`의
+ * `resultPanelForScenario`가 반환하는 `extractedChartArea`) 표라기보다
+ * 첫 결과 문장에 가깝다는 것이 소유자의 이유였다 — "표"를 떼어 더 짧게.
+ * 첫 탭은 `copy.js`의 `DONUT_OPTIMAL_KICKER_LABEL`(「최적 월 배분표」)을
+ * 그대로 쓴다.
+ */
+export const CALC2_DONUT_OPTIMAL_KICKER_LABEL = '최적 월 배분';
+
+/**
+ * [2026-08-23, D83 소유자 지시 8번 / 판정 2] ISA 예상 수익률 절의 제목 —
+ * 「④ ISA 예상 수익률 (선택)」에서 "(선택)"을 뗀다, 계산기2 한정. 방어
+ * 문구(`copy.js`의 `ISA_RETURN_SECTION_HELP` — "직접 예상한 수익률을
+ * 넣어야 합니다(제시·전망하지 않습니다).")도 계산기2에서는 붙이지 않는다
+ * (`ui/calc2-input-panel.js`가 `help`를 아예 넘기지 않는다 — 대체 문구가
+ * 없다, 문장 자체를 없앤다).
+ *
+ * **번복 이유와 위험.** 이 절 전체(선택 표기·방어 문구)는 스타일이 아니라
+ * 자본시장법 인접 노출(서비스가 수익률을 제시·전망하는 것으로 읽힐 위험,
+ * 30절) 때문에 세워졌다 — D77 판정 1, D79 판정 2. 소유자가 명시로
+ * 뒤집었고(D83 판정 2), 대신 김철수씨 프리필의 기본값 5%로 "서비스가
+ * 아니라 예시 인물이 정한 값"이라는 성격을 유지한다(`ui/calc2-prefill.js`).
+ * 위험은 소유자에게 보고됐다 — 법적 우려가 실제 문제로 커지면 이 항목이
+ * 첫 복원 대상이다. 첫 탭·역산기는 원래 문구·무기본값 그대로.
+ */
+export const CALC2_ISA_RETURN_SECTION_TITLE = '④ ISA 예상 수익률';

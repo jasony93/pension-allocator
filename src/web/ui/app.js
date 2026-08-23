@@ -479,7 +479,12 @@ export function mountApp(root, { engineClient, analytics }) {
     // **실제로 화면에 붙은 뒤**의 노드를 잰다(`patch`가 노드를 재사용하므로
     // `render` 시점에 재면 버려질 사본을 잰다) — 데스크톱(labelled) 도넛에는
     // `data-label-mode="legend"`가 없어 이 함수가 조용히 아무것도 하지 않는다.
-    applyDonutSliceInlineLabels(resultSlot);
+    // [2026-08-23, D83 판정 1] `forceOutside: true` — 조각 안에 들어가면 안에
+    // 그리던 예전 동작은 큰 조각(예: 계좌 하나뿐이라 100%인 도넛)에서 라벨이
+    // 고리 안쪽에 놓여 상설 규칙("라벨은 어떤 화면에서도 차트와 겹치지
+    // 않는다")과 충돌한다 — 실측으로 잡았다(모바일 100% ISA 라벨). 첫 탭
+    // 예시·역산기 예시와 같은 이유로 같은 옵션을 쓴다.
+    applyDonutSliceInlineLabels(resultSlot, { forceOutside: true });
     // [2026-08-20, D79] 계산기2 결과 슬롯에도 같은 후처리 — 같은 컴포넌트를
     // 재사용하므로 도넛 진입 애니메이션·조각 라벨 후처리도 그대로 건다.
     runDonutEntrance(calc2ResultSlot);
@@ -489,9 +494,10 @@ export function mountApp(root, { engineClient, analytics }) {
     // 모드에서만 이 옵션이 뜻이 있다).
     applyDonutSliceInlineLabels(calc2ResultSlot, { forceOutside: true, hideLeader: true });
     // [2026-08-19, D78 ③] 역산기 결과에도 `AccountDonut`이 생겼다 — 같은
-    // 이유로 같은 후처리를 그 슬롯에도 건다.
+    // 이유로 같은 후처리를 그 슬롯에도 건다. [2026-08-23, D83 판정 1] 위
+    // `resultSlot`과 같은 이유로 `forceOutside: true`.
     runDonutEntrance(reverseResultSlot);
-    applyDonutSliceInlineLabels(reverseResultSlot);
+    applyDonutSliceInlineLabels(reverseResultSlot, { forceOutside: true });
   };
 
   setRerenderHook(scheduleRender);
@@ -502,13 +508,14 @@ export function mountApp(root, { engineClient, analytics }) {
   // 전환은 `renderNow`를 다시 부르지 않는다 — 그래서 이 감시를 한 번, 여기서
   // 따로 건다(예시 쪽과 같은 두 경로를 듣는 `watchDonutThemeChange`, `charts.js`).
   watchDonutThemeChange(() => {
-    applyDonutSliceInlineLabels(resultSlot);
+    // [2026-08-23, D83 판정 1] 위 `scheduleRender`와 같은 이유로 `forceOutside: true`.
+    applyDonutSliceInlineLabels(resultSlot, { forceOutside: true });
     // [2026-08-23, D82 소유자 지시 5번] 계산기2 결과 도넛만 지시선 없이,
     // 조각에 더 가까운 라벨로 그린다(`ui/result-panel.js`의 `chartArea`가
     // 계산기2 한정으로 `labelMode: 'legend'`를 강제하는 것과 짝이다 — 그
     // 모드에서만 이 옵션이 뜻이 있다).
     applyDonutSliceInlineLabels(calc2ResultSlot, { forceOutside: true, hideLeader: true });
-    applyDonutSliceInlineLabels(reverseResultSlot);
+    applyDonutSliceInlineLabels(reverseResultSlot, { forceOutside: true });
   });
 
   // 도넛은 라벨을 옆에 붙이는지 아래 리스트로 내리는지에 따라 **상자 크기 자체가
