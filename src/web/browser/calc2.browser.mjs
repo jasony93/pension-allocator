@@ -750,7 +750,11 @@ test('D82 소유자 지시 1번 — 예시 카드 내용이 원래 크기의 95%
     };
   })()`);
   const near = (actual, expected, label) => assert.ok(Math.abs(actual - expected) <= 0.5, `${label}(${actual})이 기대값(${expected})과 다르다`);
-  near(m.donutWidth, 150.48, '도넛 렌더 폭');
+  // [2026-08-23, 소유자 지시 1번(신규 회차)으로 뒤집힘] 도넛 렌더 폭을
+  // 150.48×1.1=165.528로 다시 키운다 — 조각 라벨 가독성 신고("연금저축이
+  // 안 보인다") 대응, `styles.css`의 `.calc2-example-card .example-persona-donut-col
+  // .chart-donut` 참고.
+  near(m.donutWidth, 165.528, '도넛 렌더 폭');
   // [2026-08-23, D83 소유자 지시 1번으로 뒤집힘] 아이콘·기본 정보(이름표·
   // 정보 줄)만 추가 −10%(도넛·절세액은 그대로) — D82의 ×0.95에 이어
   // ×0.9, 누적 ×0.855. 13.851×0.9=12.4659, 9.61875×0.9=8.656875
@@ -1061,19 +1065,19 @@ test('D82 소유자 지시 5번 — 계산기2 결과 도넛에는 지시선이 
 });
 
 /**
- * [D82 소유자 지시 6번, D83 소유자 지시 6번으로 크기 수정] 결과 도넛 —
- * 계산기2는 legend 모드로 고정되고(판단 근거는 5번 항목과 같다,
- * `ui/result-panel.js` 주석), 그 자연폭(200px)의 95%(190px)로 렌더된다 —
- * D82의 −10%(180px)를 D83이 절반만 줄이는 값으로 되돌렸다.
+ * [D82 소유자 지시 6번, D83 소유자 지시 6번, 소유자 지시 2번(신규 회차)로
+ * 다시 크기 수정] 결과 도넛 — 계산기2는 legend 모드로 고정되고(판단
+ * 근거는 5번 항목과 같다, `ui/result-panel.js` 주석), 190×1.1=209px로
+ * 렌더된다 — 조각 라벨("연금저축") 가독성 신고 대응.
  */
-test('D83 소유자 지시 6번 — 계산기2 결과 도넛이 190px(legend 자연폭의 95%)로 그려진다', { skip: skipWithoutChrome }, async () => {
+test('소유자 지시 2번(신규 회차) — 계산기2 결과 도넛이 209px(190px×1.1)로 그려진다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await dismissCalc2ExampleModalIfOpen(page);
   await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
   await sleep(300);
   const width = await page.evaluate(`document.querySelector('.calc2-result-slot .chart-donut').getBoundingClientRect().width`);
-  assert.ok(Math.abs(width - 190) <= 1, `계산기2 결과 도넛 렌더 폭(${width}px)이 190px가 아니다`);
+  assert.ok(Math.abs(width - 209) <= 1, `계산기2 결과 도넛 렌더 폭(${width}px)이 209px가 아니다`);
 });
 
 /**
@@ -1245,12 +1249,20 @@ test('D83 소유자 지시 5번 — 계산기2 결과 헤드라인이 왼쪽 정
 });
 
 /**
- * [2026-08-23, D83 소유자 지시 7번, 관리자 지시(신규 회차) 7번으로 위치·
- * 간격 재조정] 이미지·공유 버튼이 **도넛 차트가 있는 영역**의 우측
- * 하단에 한 행으로, 테두리 없이, +5% 크기, 두 아이콘 간격 −20%로 —
+ * [2026-08-23, D83 소유자 지시 7번, 관리자 지시(신규 회차) 7번, 소유자
+ * 지시 3번(그다음 회차)으로 위치 재정정] 이미지·공유 버튼이 **도넛 차트가
+ * 차지하는 영역의 우측 하단**, 「계좌별 세제혜택」(`AccountBenefitStrip`)
+ * **보다 위**에 한 행으로, 테두리 없이, +5% 크기, 두 아이콘 간격 −20%로 —
  * 첫 탭은 두 줄(이미지+PDF, 공유) 그대로다.
+ *
+ * **y좌표 검사가 핵심이다.** 이전 회차는 버튼이 "도넛 영역 우측 하단"
+ * 이라는 자리 이름은 맞았지만, 실제로는 `.donut-with-strip`(도넛+범례+
+ * 세제혜택을 다 담은 통) **전체**의 형제로 붙어 세제혜택 블록 **아래**에
+ * 렌더됐다 — 실측 스크린샷으로 소유자가 잡았다. 그래서 이 시험은 "행
+ * 안에 있다"가 아니라 **버튼의 아래쪽 끝이 세제혜택의 위쪽 끝보다 위에
+ * 있는지**를 직접 잰다.
  */
-test('관리자 지시(신규 회차) 7번 — 계산기2 이미지·공유 버튼이 도넛 영역 우측 하단 한 행에, 테두리 없이, +5% 크기·−20% 간격이다', { skip: skipWithoutChrome }, async () => {
+test('소유자 지시 3번(신규 회차) — 계산기2 이미지·공유 버튼이 계좌별 세제혜택보다 위, 도넛 영역 우측 하단 한 행에, 테두리 없이, +5% 크기·−20% 간격이다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   await dismissCalc2ExampleModalIfOpen(page);
@@ -1258,27 +1270,35 @@ test('관리자 지시(신규 회차) 7번 — 계산기2 이미지·공유 버�
   await sleep(300);
   const m = await page.evaluate(`(() => {
     const scope = document.querySelector('.calc2-result-slot');
-    const donutSection = scope.querySelector('.calc2-donut-section');
     const donutWithStrip = scope.querySelector('.chart-area .donut-with-strip');
+    const strip = scope.querySelector('.account-benefit-strip');
+    const donutWrap = scope.querySelector('.chart-area .donut-wrap');
     const buttons = [...scope.querySelectorAll('.save-share-icon-btn')];
     const rows = new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
     const borders = buttons.map((b) => getComputedStyle(b).borderStyle);
     const icons = buttons.map((b) => { const r = b.querySelector('.save-share-icon').getBoundingClientRect(); return { w: r.width, h: r.height }; });
     const rects = buttons.map((b) => b.getBoundingClientRect());
-    const insideDonutSection = !!donutSection && buttons.every((b) => donutSection.contains(b));
-    const belowDonut = !!donutWithStrip && rects.every((r) => r.top >= donutWithStrip.getBoundingClientRect().top);
-    const sectionRect = donutSection ? donutSection.getBoundingClientRect() : null;
-    // 행 전체의 오른쪽 끝(마지막 버튼의 오른쪽 끝)이 도넛 영역의 오른쪽
-    // 끝과 맞아야 한다 — 버튼 하나하나가 아니라 행이 우측에 붙는다.
+    const insideDonutWithStrip = !!donutWithStrip && buttons.every((b) => donutWithStrip.contains(b));
+    const belowDonutWrap = !!donutWrap && rects.every((r) => r.top >= donutWrap.getBoundingClientRect().bottom - 1);
+    // 핵심 검사 — 버튼 아래쪽 끝 < 세제혜택 위쪽 끝(소유자 지시 3번 원문).
+    const stripTop = strip ? strip.getBoundingClientRect().top : null;
+    const buttonsBottom = rects.length ? Math.max(...rects.map((r) => r.bottom)) : null;
+    const aboveStrip = stripTop != null && buttonsBottom != null && buttonsBottom <= stripTop + 1;
+    const containerRect = donutWithStrip ? donutWithStrip.getBoundingClientRect() : null;
     const rowRight = rects.length ? Math.max(...rects.map((r) => r.right)) : null;
-    const rightAligned = sectionRect && rowRight != null && Math.abs(rowRight - sectionRect.right) <= 2;
+    const rightAligned = containerRect && rowRight != null && Math.abs(rowRight - containerRect.right) <= 2;
     const gap = rects.length === 2 ? Math.abs(rects[1].left - rects[0].right) : null;
-    return { count: buttons.length, rowCount: rows.size, borders, icons, insideDonutSection, belowDonut, rightAligned, gap };
+    return { count: buttons.length, rowCount: rows.size, borders, icons, insideDonutWithStrip, belowDonutWrap, aboveStrip, stripTop, buttonsBottom, rightAligned, gap };
   })()`);
   assert.equal(m.count, 2, `계산기2 저장·공유 버튼이 2개가 아니다: ${m.count}`);
   assert.equal(m.rowCount, 1, `이미지·공유 버튼이 한 행에 있지 않다(서로 다른 top ${m.rowCount}개)`);
-  assert.equal(m.insideDonutSection, true, '이미지·공유 버튼이 도넛 영역(.calc2-donut-section) 안에 있지 않다');
-  assert.equal(m.belowDonut, true, '이미지·공유 버튼이 도넛보다 아래(하단)에 있지 않다');
+  assert.equal(m.insideDonutWithStrip, true, '이미지·공유 버튼이 도넛 영역(.donut-with-strip) 안에 있지 않다');
+  assert.equal(m.belowDonutWrap, true, '이미지·공유 버튼이 도넛 그림보다 아래(하단)에 있지 않다');
+  assert.equal(
+    m.aboveStrip,
+    true,
+    `이미지·공유 버튼(아래쪽 끝 ${m.buttonsBottom})이 계좌별 세제혜택(위쪽 끝 ${m.stripTop})보다 아래에 있다 — 위치가 잘못됐다`,
+  );
   assert.equal(m.rightAligned, true, '이미지·공유 버튼이 도넛 영역의 우측에 붙어 있지 않다');
   for (const [i, border] of m.borders.entries()) {
     assert.equal(border, 'none', `버튼 ${i}에 테두리가 남아 있다: ${border}`);

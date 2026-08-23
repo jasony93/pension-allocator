@@ -44,7 +44,11 @@ const overlapCheck = (rootExpr) => `(() => {
       const b = el.getBoundingClientRect();
       const overlaps = b.left < ring.right && b.right > ring.left && b.top < ring.bottom && b.bottom > ring.top;
       const clipped = b.left < svgBox.left || b.right > svgBox.right || b.top < svgBox.top || b.bottom > svgBox.bottom;
-      return { text: el.textContent, overlaps, clipped, box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, ring, svgBox: { left: svgBox.left, right: svgBox.right, top: svgBox.top, bottom: svgBox.bottom } };
+      // [2026-08-23, 소유자 지시 1·2번(신규 회차)] 이름 줄 글자 크기 —
+      // "라벨 폰트 하한을 같이 점검하라"는 지시대로 뒤에서 최저치를 잰다.
+      const nameEl = el.querySelector('.donut-slice-label-name');
+      const nameFontPx = nameEl ? parseFloat(getComputedStyle(nameEl).fontSize) : null;
+      return { text: el.textContent, overlaps, clipped, nameFontPx, box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, ring, svgBox: { left: svgBox.left, right: svgBox.right, top: svgBox.top, bottom: svgBox.bottom } };
     });
     const leaderCount = svg.querySelectorAll('.donut-slice-label-leader, .donut-leader').length;
     return { hasRing: true, labelCount: labels.length, labels, leaderCount };
@@ -60,6 +64,25 @@ function assertNoOverlap(result, where) {
       assert.equal(label.overlaps, false, `${where} — 라벨 "${label.text}"이 도넛 고리와 겹친다: ${JSON.stringify(label)}`);
       // [2026-08-23, 소유자 지시 1번] 라벨이 카드 밖으로 잘리지 않는다.
       assert.equal(label.clipped, false, `${where} — 라벨 "${label.text}"이 카드 밖으로 잘린다: ${JSON.stringify(label)}`);
+    }
+  }
+}
+
+/**
+ * [2026-08-23, 소유자 지시 1·2번(신규 회차)] "폴백으로 다시 줄이는 방향
+ * 금지" — 이름 줄 글자 크기가 바닥값(`SLICE_LABEL_MIN_FONT_PX`=9.9px)
+ * 근처까지 떨어지면 안 된다. 기본값(16.5px)의 90% 이상이면 사실상 축소
+ * 폴백을 타지 않은 것으로 본다 — 아주 드문 극단(가장 넓은 라벨 + 가장
+ * 작은 카드)까지 완전히 막지는 못해도, "대부분 기본 크기로 보인다"는
+ * 소유자 지시의 핵심을 기계로 확인한다.
+ */
+function assertFontFloor(result, where, minPx = 14.85 /* 16.5 × 0.9 */) {
+  for (const donut of result.donuts) {
+    for (const label of donut.labels) {
+      assert.ok(
+        label.nameFontPx == null || label.nameFontPx >= minPx,
+        `${where} — 라벨 "${label.text}" 이름 글자(${label.nameFontPx}px)가 바닥값(${minPx}px) 밑으로 줄었다`,
+      );
     }
   }
 }
@@ -82,6 +105,7 @@ test('D83 판정 1, 소유자 지시 1번 — 계산기2 예시 팝업 도넛 �
   await sleep(200);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-example-modal-host')?.shadowRoot`));
   assertNoOverlap(result, '계산기2 예시 팝업');
+  assertFontFloor(result, '계산기2 예시 팝업');
   // [2026-08-23, 소유자 지시 1번] 지시선(리더선) 제거.
   for (const donut of result.donuts) {
     assert.equal(donut.leaderCount, 0, `팝업 도넛에 지시선이 남아 있다: ${donut.leaderCount}개`);
@@ -108,13 +132,14 @@ test('D83 판정 1 — 역산기 예시 도넛 라벨이 고리와 겹치지 않
   assertNoOverlap(result, '역산기 예시');
 });
 
-test('D83 판정 1 — 계산기2 결과 도넛 라벨이 고리와 겹치지 않는다(레전드 모드, 190px)', { skip: skipWithoutChrome }, async () => {
+test('D83 판정 1 — 계산기2 결과 도넛 라벨이 고리와 겹치지 않는다(레전드 모드, 209px)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut path[role="img"]')`, { timeoutMs: 8000 });
   await sleep(300);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-result-slot')`));
   assertNoOverlap(result, '계산기2 결과');
+  assertFontFloor(result, '계산기2 결과');
 });
 
 test('D83 판정 1 — 첫 탭 결과 도넛(모바일 375px, 레전드 모드) 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {

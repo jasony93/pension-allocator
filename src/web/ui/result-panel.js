@@ -873,32 +873,29 @@ function chartArea(
     el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
   ]);
 
-  // [2026-08-23, 관리자 지시(신규 회차) 7번] 이미지·공유 아이콘 — 계산기2
-  // 한정으로 도넛이 있는 영역의 우측 하단에 둔다(`saveShareEl`, 호출부
-  // `resultPanelForScenario`가 만들어 넘긴다). `.donut-with-strip`은
-  // 이미 가로 배치(도넛+범례+계좌별 세제혜택)라 그 형제로 세로로 쌓고
-  // (`flex-direction: column`), `saveShareEl` 자신은 오른쪽으로
-  // 붙인다(`align-self: flex-end`, `styles.css`) — 절대 위치를 쓰지
-  // 않아 아래 계좌별 세제혜택 내용과 겹칠 일이 없다.
-  const donutSectionBody = saveShareEl
-    ? el('div', { class: 'calc2-donut-section' }, [
-        el('div', { class: 'donut-with-strip' }, [
-          el('div', { class: 'donut-wrap' }, [donut]),
-          donutLegend(donutArgs),
-          accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
-        ]),
-        saveShareEl,
-      ])
-    : el('div', { class: 'donut-with-strip' }, [
-        el('div', { class: 'donut-wrap' }, [donut]),
-        // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
-        // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
-        donutLegend(donutArgs),
-        // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
-        // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
-        // 정렬, 절반 크기.
-        accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
-      ]);
+  // [2026-08-23, 관리자 지시(신규 회차) 7번, 위치 정정] 이미지·공유
+  // 아이콘 — 계산기2 한정으로 **도넛 차트가 차지하는 영역의 우측 하단**,
+  // 「계좌별 세제혜택」(`accountBenefitStrip`) **보다 위**에 둔다.
+  // 지난 회차는 `saveShareEl`을 `.donut-with-strip`(도넛+범례+세제혜택을
+  // 다 담은 통) 전체의 형제로 붙였는데, 그러면 세제혜택 블록까지 지난
+  // 뒤(그 아래)에 렌더된다 — 소유자가 실측으로 잡은 그 결함이다. 이제는
+  // **`.donut-with-strip`(여전히 `flex-direction: column`) 안에서 도넛+
+  // 범례 바로 다음, 세제혜택 바로 앞** 자리에 넣는다 — "도넛이 차지하는
+  // 영역의 하단"과 "세제혜택보다 위"를 같은 자리 하나로 만족한다.
+  // `saveShareEl` 자신은 오른쪽으로 붙는다(`align-self: flex-end`,
+  // `styles.css`) — 절대 위치를 쓰지 않아 위아래 어느 내용과도 겹칠 일이
+  // 없다(자연스러운 흐름 배치).
+  const donutSectionBody = el('div', { class: 'donut-with-strip' }, [
+    el('div', { class: 'donut-wrap' }, [donut]),
+    // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
+    // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
+    donutLegend(donutArgs),
+    saveShareEl,
+    // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
+    // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
+    // 정렬, 절반 크기.
+    accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
+  ]);
 
   return el('div', { class: 'chart-area' }, [
     hideConditionalCopy ? null : defaultDonutHeader,
