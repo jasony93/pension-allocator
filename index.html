@@ -225,6 +225,15 @@
      알파값을 새 색(`--accent-warm`)에 입힌다. 장식(밑줄)이라 텍스트 대비
      규칙이 적용되지 않는다. */
   --accent-warm-underline: rgba(230, 115, 0, 0.45);
+  /* [2026-08-23, D82 소유자 지시 1번] 계산기2 팝업의 예시 카드 바탕 —
+     `--accent-warm` 테두리와 짝을 이루는 **더 연한** 주황 바탕(흰색에
+     `--accent-warm`을 12% 섞은 값). 글자(`--text-primary`)와의 대비는
+     15.67:1(라이트)·12.75:1(다크)로 4.5:1을 넉넉히 넘는다(그 위에 얹는
+     텍스트는 카드 배경 대비가 아니라 이 값 대비 재야 한다 — 테두리 자체의
+     WCAG 1.4.11 대상은 카드 안쪽이 아니라 카드가 놓인 바깥 표면이고, 그
+     실측은 이미 있다: `.example-showcase-scroll-arrow` 옆 주석, 라이트
+     3.08:1·다크 5.20:1). */
+  --accent-warm-subtle: #fceee0;
 }
 
 /* 2) 운영체제가 다크이고 사용자가 라이트를 명시하지 않았을 때. */
@@ -262,6 +271,10 @@
     --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.14);
     /* 위 :root 주석 참고 — 검정 윤곽선용 옅은 원형 판. */
     --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
+    /* 위 :root 주석 참고 — 다크에서는 흰색 대신 어두운 표면(#14171a 계열)에
+       `--accent-warm`을 18% 섞는다(그대로 옅게 두면 밝아서 다크 카드 위에서
+       튀어 보인다, 실측). */
+    --accent-warm-subtle: #3a2815;
   }
 }
 
@@ -291,6 +304,7 @@
   --shadow-warm-1: 0 1px 2px rgba(230, 115, 0, 0.08), 0 4px 14px rgba(230, 115, 0, 0.12);
   --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.14);
   --example-icon-plate-bg: rgba(255, 255, 255, 0.92);
+  --accent-warm-subtle: #3a2815;
 }
 
 /* 4) 인쇄는 **항상 라이트**다(design-system 8.5절). 대부분의 프린터 설정에서
@@ -324,6 +338,7 @@
        (`styles-tokens.test.mjs` 8.5절 규칙). */
     --accent-warm: rgb(230, 115, 0);
     --accent-warm-underline: rgba(230, 115, 0, 0.45);
+    --accent-warm-subtle: #fceee0;
     --shadow-warm-1: 0 1px 2px rgba(230, 115, 0, 0.12), 0 4px 14px rgba(230, 115, 0, 0.18);
     --shadow-warm-2: 0 6px 18px rgba(230, 115, 0, 0.22);
   }
@@ -1797,6 +1812,28 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
 .calc2-result-slot .account-table th:nth-child(2),
 .calc2-result-slot .account-table th:nth-child(3) { text-align: right; }
 
+/* [2026-08-23, D82 소유자 지시 6번, D83 소유자 지시 6번, 소유자 지시
+   2번(신규 회차)로 다시 확대] 결과 도넛 — 계산기2 결과 도넛은 항상
+   legend 모드로 고정된다(`ui/result-panel.js`의 `chartArea`, D82 소유자
+   지시 5번과 같은 판단 근거). 190×1.1=209px — 조각 라벨(특히 "연금저축")
+   가독성 신고로 다시 키운다. 라벨-링 비겹침(D83 판정 1)·카드 밖 비잘림
+   (신규 회차 지시 1번)은 크기와 무관하게 `charts.js`의 반복 재측정
+   알고리즘이 보장한다 — CSS 전용 관행(`width`만 주고 `height`는 SVG
+   자체 비율을 따르게 둔다, `.example-persona-donut-col .chart-donut`
+   참고)은 그대로. */
+.calc2-result-slot .chart-donut { width: 209px; max-width: 100%; overflow: visible; }
+
+/* [2026-08-23, D82 소유자 지시 7번] 결과란 세로 간격을 일관된 배수(×0.75,
+   "과감하지 않게")로 줄인다 — 이미 계산기2 전용으로 조정된 자리
+   (`.allocation-bars` 등, 위)는 손대지 않고, 아직 첫 탭과 같은 기본
+   눈금을 쓰던 두 상위 컨테이너(결과 블록 사이 `.result-body`, 도넛 카드
+   안 `.chart-area`)만 줄인다 — 화면 전체에서 가장 큰 세로 여백 둘이라
+   줄임의 체감이 여기서 난다. 정확한 목표값은 실측 스크린샷 근거(소유자
+   제공)인데 이 회차에는 그 스크린샷이 첨부되지 않았다 — ×0.75라는 배수
+   자체를 판단으로 골랐다는 점을 최종 보고에 남긴다. */
+.calc2-result-slot .result-body { gap: 18px; } /* --space-5(24px) × 0.75 */
+.calc2-result-slot .chart-area { gap: 12px; } /* --space-4(16px) × 0.75 */
+
 .segment-group { display: flex; gap: var(--space-2); align-items: stretch; }
 /* `min-height`(고정 `height`가 아니다) — 터치 타깃 44px는 지키되, 이번 회차
    (D28 수익 성격 3택)처럼 라벨이 한 줄을 넘으면 버튼이 늘어나 아래 요소와
@@ -1960,6 +1997,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    베이스 클래스를 쓴다)에 똑같이 적용된다 — 두 상태가 서로 다른 폭으로
    보이면 카드가 "숨쉬는" 것처럼 보이는 결함이 된다. */
 .result-body .amount-card { width: 70%; margin-left: auto; margin-right: auto; }
+/* [2026-08-23, D83 소유자 지시 5번] 계산기2 결과 헤드라인만 왼쪽 정렬 —
+   가운데 정렬(위 규칙)을 계산기2 스코프에서 되돌린다. 카드 폭(70%)은
+   그대로 두고 좌측 여백만 없앤다(첫 탭·개정안 미리보기는 이 규칙 밖 —
+   `.calc2-result-slot` 스코프가 없다). */
+.calc2-result-slot .result-body .amount-card { margin-left: 0; }
 /* D45 3번(관리자) — 대안 미리보기의 헤드라인 자리(`기본안 대비 세액공제액
    차이`). `.amount-card`의 레이아웃을 그대로 물려받는다 — 별도 배치가
    필요하지 않다. 클래스 자체는 이 규칙 존재 검사(`css-class-consistency.
@@ -2000,6 +2042,11 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    5.6절 "슬롯4와 이 변형이 겹치는 경우") — 위 border-top과 겹치지 않게
    자체 여백만 남긴다. */
 .amount-card-composition .amount-card-direction { margin-top: 0; padding-top: 0; border-top: none; }
+/* [2026-08-23, 관리자 지시(신규 회차) 6번] 계산기2 한정 — 구성 두 줄을
+   한 행으로 합친다(`ui/result-panel.js`의 `singleLineComposition`). 두
+   줄을 하나로 잇는 만큼 폰트를 −20%(18×0.8=14.4px)로 줄여 한 줄에서도
+   전체 폭을 덜 밀어낸다. */
+.amount-card-composition-single .amount-card-composition-line { font-size: 14.4px; }
 
 .warning-note { display: flex; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-m); margin-top: var(--space-2); font-size: 14px; }
 .warning-note-warning { background: var(--state-warning-subtle); border-left: 3px solid var(--state-warning); }
@@ -2027,10 +2074,44 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    다시 줄 필요가 없다 — `gap`만으로 아이콘·글자 사이 간격을 만든다. */
 .donut-section-header-title-row { display: flex; align-items: center; gap: var(--space-2); }
 .donut-plan-name { color: var(--text-secondary); }
+/* [2026-08-23, D82 소유자 지시 3·4번] 계산기2 한정 — 「월 납입 여력…」
+   제목·배분안 이름 캡션을 뺀 뒤 「최적 월 배분표」(kicker)만 남아 결과
+   영역 최상단이 된다. 「기본 정보」(입력 섹션 제목, `.calc2-input-panel
+   .input-group-title`)와 같은 크기·굵기로 키우고, 옆 아이콘을 주황으로
+   칠한다(소유자 지시 원문 그대로 — 색은 아이콘에만, 글자색은 손대지
+   않는다는 지시가 없어 일반 제목 색(text-primary)으로 맞췄다). */
+.donut-section-header-calc2 .donut-optimal-kicker {
+  font-size: 23.4px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.donut-section-header-calc2 .donut-section-header-title-row .section-icon { color: var(--accent-warm); }
+/* [2026-08-23, 관리자 지시(신규 회차) 3번] 테두리-내용 마진 확보 —
+   `.donut-section-header-calc2`는 이제 `resultPanelForScenario`가 시나리오
+   탭보다 앞, `.result-panel-inner`(카드, 주황 테두리) 바로 안쪽에 직접
+   꽂는다(`extractedTitle`) — `.result-body`(패딩 `--space-5`)의 패딩을
+   물려받지 못해 제목·아이콘이 테두리에 닿았다(실측). `.scenario-tabs`가
+   이미 같은 좌우 패딩을 쓰므로(위 `.scenario-tabs`) 그 값을 그대로
+   맞춘다 — 아래쪽은 `.scenario-tabs`의 `margin-top`이 간격을 이미
+   주므로 0으로 둔다. */
+.donut-section-header-calc2 { padding: var(--space-5) var(--space-5) 0; }
 /* 도넛 + `[4-C']` 위젯을 한 컬럼으로 묶는다 — 위젯이 도넛 카드의 자식이지
    넷째 층이 아니라는 것을 구조로도 지킨다(screens.md 5.14절). */
 .donut-with-strip { display: flex; flex-direction: column; }
 .donut-wrap { display: flex; justify-content: center; }
+/* [2026-08-23, 관리자 지시(신규 회차) 7번, 위치 정정] 계산기2 한정 —
+   이미지·공유 아이콘을 **도넛이 차지하는 영역의 우측 하단, 「계좌별
+   세제혜택」보다 위**에 둔다. `saveShareEl`은 이제 `.donut-with-strip`
+   (도넛+범례+세제혜택을 다 담은 세로 통, `ui/result-panel.js`) **안에서
+   세제혜택 바로 앞** 자리에 들어간다 — 지난 회차는 `.donut-with-strip`
+   전체의 형제였어서 세제혜택 아래로 렌더됐다(실측으로 잡힌 결함). 이
+   셀렉터를 `.donut-with-strip`으로 다시 겨눈다. `.save-share-calc2` 자신은
+   오른쪽 끝에 붙인다(`align-self: flex-end`) — 절대 위치를 쓰지 않아
+   위아래 어느 내용과도 겹칠 일이 없다(자연스러운 흐름 배치). */
+.donut-with-strip .save-share-calc2 { align-self: flex-end; margin-top: var(--space-2); margin-bottom: var(--space-2); }
+/* [2026-08-23, 관리자 지시(신규 회차) 7번] 두 아이콘 간격 −20% —
+   8×0.8=6.4px(`--space-2`의 옛 값에서 계산기2 한 행만 다시 좁힌다). */
+.donut-with-strip .save-share-actions-calc2-row { gap: 6.4px; }
 
 /* `AccountBenefitStrip`(design-system 5.31.3절, D36 재개정) — 도넛 카드
    **내용 폭 그대로(100%), 모든 뷰포트.**
@@ -2429,6 +2510,38 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .save-share-actions-secondary { margin-top: var(--space-1); }
 .share-link-note { margin: 0; text-align: right; min-height: 1.2em; word-break: break-all; }
 
+/* [2026-08-23, D82 판정 4] 저장·공유 버튼 아이콘화 — 계산기2 한정
+   (`.save-share-calc2`, `ui/result-panel.js`의 `saveShareBlock`). 버튼
+   자체(`.btn.btn-secondary`)는 그대로 둬 터치 타깃 44×44·초점 링·hover를
+   그대로 물려받고, 안의 글자를 아이콘 하나로 바꾼다. 아이콘은 `mask-image`
+   (래스터 재채색이 아니라 알파 채널만 원본 PNG에서 가져오고 색은
+   `background-color`가 낸다 — 테마가 `--accent-warm`을 바꾸면 아이콘도
+   따라간다)로 칠한다. */
+.save-share-icon-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
+/* [2026-08-23, D83 소유자 지시 7번] 계산기2 이미지·공유 버튼 — 테두리를
+   없앤다(`.btn-secondary`의 `border: 1px solid var(--border-strong)` 되돌림).
+   아이콘 자체가 이미 뜻을 나르므로(9절 — `aria-label`이 접근 가능한
+   이름을 진다) 상자 테두리 없이도 눌림 대상임은 hover·focus-visible의
+   기존 스타일(`.btn` 공통 규칙)이 계속 알린다. */
+.save-share-icon-btn { border: none; }
+/* 이미지·공유 버튼을 결과란 우측 하단 한 행에 함께 둔다 — 첫 탭의 두 줄
+   배치(이미지+PDF 행, 공유 행)와 달리 계산기2는 이 한 행뿐이다.
+   `.save-share-actions`가 이미 `justify-content:flex-end`라 우측 정렬은
+   그대로 상속한다 — 이 클래스는 `css-class-consistency.test.mjs`가 요구하는
+   등록용이자, 계산기2 한정 훅으로 남겨 다음 회차가 이 행만 따로 겨눌 수
+   있게 한다. */
+.save-share-actions-calc2-row { /* .save-share-actions 상속 외 추가 규칙 없음 */ }
+.save-share-icon {
+  display: inline-block;
+  background-color: var(--accent-warm);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
 .type-display-sub { font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.015em; }
 
 .modal-scrim {
@@ -2456,7 +2569,9 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    아래 제자리를 지킨다 — `.modal`이 이미 `display: flex; flex-direction:
    column`이므로(기본 규칙) 이 변형은 자식들의 flex 크기만 다시 준다. */
 .modal:has(.calc2-example-modal-host) {
-  max-width: min(900px, 95vw);
+  /* [2026-08-23, D83 소유자 지시 2번] 900×1.05=945 — 도넛 라벨이 링과 겹치지
+     않으려면(판정 1) 더 바깥으로 밀려날 수 있는데, 그 여유 공간을 준다. */
+  max-width: min(945px, 95vw);
   max-height: min(700px, 90vh);
   overflow: hidden;
 }
@@ -2464,18 +2579,95 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
 .modal:has(.calc2-example-modal-host) .modal-actions { flex: 0 0 auto; }
-/* [번들 실측 마감 회차] 히어로 카피(위) → 김철수씨 한 행(아래), 세로로
-   쌓는다. 원본 첫 탭 배치(카피가 옆)와 다른 자리라 클래스 자체를
-   새로 쓴다(`ui/calc2-example-modal.js` 머리말). */
-.calc2-example-modal-body { display: flex; flex-direction: column; gap: var(--space-5); align-items: stretch; }
-/* [2026-08-21, D81] **정렬 마감** — `.example-hero-copy`의 `margin-left: 64px`
-   (관리자 지시(3차) 1번, styles.css 위쪽)은 원본 페이지에서 카피가 예시
-   행 **옆**(가로)에 설 때 오른쪽으로 밀던 값이다. 이 모달은 카피를 행
-   **위**(세로)에 쌓으므로 그 여백이 그대로 남으면 카피만 오른쪽으로
-   밀려 김철수씨 행의 왼쪽 시작선과 어긋난다(실측 — 행 266px, 카피
-   330px, 64px 어긋남 = 정확히 그 margin-left 값). 이 스코프에서만 0으로
-   되돌려 두 왼쪽 시작선을 맞춘다. */
-.calc2-example-modal-body .example-hero-copy { margin-left: 0; }
+/* [2026-08-23, D82 소유자 지시 1번 — 다시 가로 배치로] "오른쪽이 비어
+   보인다"는 지적으로 세로 쌓기(번들 실측 마감 회차)를 접고 카피(왼쪽) |
+   예시 카드(오른쪽)로 되돌아간다. "카피가 먼저" 원칙(5항목 회차)은 왼쪽이
+   읽기 순서로 먼저이므로 여전히 지킨다.
+   **카드는 줄지 않는다(`flex: 0 0 auto`)** — 실측으로 잡은 결함: 카드에
+   `flex-shrink`를 허용하면(카피와 나란히 공간을 다투며) 도넛 열(`1fr`)이
+   찌그러져 150.48px를 기대한 도넛이 82px로 눌렸다. 카드는 항상 제 내용
+   폭(도넛+정보+여백) 그대로 서고, **카피가 남는 공간만 쓴다**
+   (`.example-hero-copy`의 기존 `min-width: 320px`도 함께 지운다 — 그
+   하한이 카드를 밀어내는 쪽으로 작용했었다). */
+.calc2-example-modal-body { display: flex; flex-direction: row; gap: var(--space-5); align-items: flex-start; }
+/* [2026-08-21, D81, 2026-08-23 D82로 근거 갱신] `.example-hero-copy`의
+   `margin-left: 64px`(관리자 지시(3차) 1번)는 원본 첫 탭 페이지의 가로
+   배치 간격 값이고, 이 모달은 `gap`(위)으로 카피-카드 간격을 별도로
+   통제한다 — 그 64px가 그대로 남으면 간격이 이중으로 겹친다. 이
+   스코프에서만 0으로 되돌린다. */
+.calc2-example-modal-body .example-hero-copy { margin-left: 0; flex: 1 1 auto; min-width: 0; }
+.calc2-example-modal-body .calc2-example-card { flex: 0 0 auto; }
+/* [2026-08-23, D82 소유자 지시 1번] 예시 카드 — 정보 좌상단·도넛 우상단·
+   절세액 하단(전체 폭). 주황 테두리 + 더 연한 주황 바탕(새 토큰
+   `--accent-warm-subtle`, styles.css 위쪽 3단 구조)으로 "한 장의 카드"
+   처럼 보이게 한다. */
+.calc2-example-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "info donut" "amount amount";
+  align-items: start;
+  row-gap: var(--space-3);
+  /* [2026-08-23, D83 소유자 지시 2번, 소유자 지시 1번(신규 회차)로 재확대]
+     정보 열과 도넛 열 사이 가로 간격 — 12px→24px(D83)→32px(신규 회차).
+     라벨 글자가 커지고(+10%) 도넛 렌더 폭도 커지면서 라벨이 고정 상자
+     가장자리(정보 열 쪽)에 더 가깝게 붙는다 — 폴백으로 라벨을 다시
+     줄이지 않고("금지" 지시) 이 간격을 늘려 여유를 준다. */
+  column-gap: var(--space-6);
+  border: 2px solid var(--accent-warm);
+  background: var(--accent-warm-subtle);
+  border-radius: var(--radius-l);
+  padding: var(--space-4);
+}
+.calc2-example-card .example-persona-info {
+  grid-area: info;
+  /* [2026-08-23, D83 소유자 지시 1번] "지금보다 한 행쯤 아래로" — 정보
+     열의 첫 줄(직업)이 도넛보다 한 행(줄 높이) 아래에서 시작한다. 아래
+     −10% 적용 뒤 실제 한 줄 높이(12.4659px × line-height 1.35)로 잰
+     값이다. */
+  margin-top: 16.83px;
+}
+.calc2-example-card .example-persona-donut-col { grid-area: donut; justify-self: end; }
+/* [2026-08-23, D83 소유자 지시 3번] 세액공제액 영역 — 전폭(그리드 두 열
+   합산) 대신 글자에 맞는 크기로. `justify-self: start`만으로는 부모
+   `.example-persona-amount`의 옛 `width: 100%`(styles.css 위쪽, 첫 탭과
+   공유하는 기본값)를 이기지 못해 `width: auto`로 그 값을 이 스코프에서
+   되돌린다. `.amount-card` 자신도 일반 블록이라 기본이 "남는 폭을
+   채운다"이므로 `width: fit-content`로 내용 폭만 쓰게 한다. */
+/* [2026-08-23, 소유자 지시 2번으로 정렬 변경] 「이 배분으로 계산된
+   세액공제액」 카드를 예시 영역 하단 가운데로 — `justify-self: start`
+   (D83 소유자 지시 3번, 크기만의 문제였다)를 `center`로 바꾼다. 그리드
+   행 자체("amount amount", 전체 폭을 쓰는 자리)는 그대로 두고 그 안의
+   정렬만 바꾼다. */
+.calc2-example-card .example-persona-amount { grid-area: amount; width: auto; justify-self: center; }
+.calc2-example-card .example-persona-amount .amount-card { width: fit-content; }
+/* [2026-08-23, D82 소유자 지시 1번] **내용 전체 −5%.** 도넛은 `width`
+   전용 스케일(예시 2케이스 축소, D79 판정 4가 세운 같은 관행) —
+   158.4×0.95=150.48px. SVG는 `viewBox` 좌표계라 이 하나로 도넛 중앙
+   라벨·값과 조각 위 이름+비율 라벨(JS가 그리는 인라인 `font-size`
+   포함)까지 전부 비례로 함께 줄어든다(이 파일 위 `.example-persona-donut-col`
+   주석 — "CSS 렌더 폭만 키워도 안의 조각·라벨 글자가 함께 비례로
+   커진다"의 역방향). 도넛 밖(HTML 텍스트) 나머지 셋은 SVG가 아니라서
+   비례 스케일이 안 통한다 — 각 요소의 확정 절댓값에 같은 배수(×0.95)를
+   직접 적용한다. */
+/* [2026-08-23, 소유자 지시 1번(신규 회차)] 150.48×1.1=165.528 — 라벨 글자
+   자체를 키운(`charts.js`의 `SLICE_LABEL_NAME_FONT_PX`) 만큼 렌더 폭도
+   같이 키운다. SVG는 viewBox 좌표계라 폭만 키우면 링·여백·라벨이 전부
+   비례로 함께 커진다(줄이는 폴백에 기대지 않고 "공간을 늘려 해결"). */
+.calc2-example-card .example-persona-donut-col .chart-donut { width: 165.528px; max-width: 100%; overflow: visible; }
+/* [2026-08-23, D83 소유자 지시 1번] 아이콘·기본 정보(이름표·정보 줄)만
+   추가 −10%(도넛·절세액은 그대로) — D82의 ×0.95에 이어 ×0.9, 누적
+   ×0.855. 13.851×0.9=12.4659, 9.61875×0.9=8.656875. */
+.calc2-example-card .example-persona-line { font-size: 12.4659px; }
+.calc2-example-card .example-persona-name { font-size: 8.656875px; }
+.calc2-example-card .example-persona-amount .amount-card-label { font-size: 10.0035px; } /* 10.53 × 0.95 (D82) — 이 회차는 손대지 않는다 */
+.calc2-example-card .example-persona-amount .amount-card-value { font-size: 20.007px; } /* 21.06 × 0.95 (D82) — 이 회차는 손대지 않는다 */
+/* 아이콘 높이는 위 두 글자 크기(정보 줄·이름표)에서 유도되는 계산식이다
+   (`.example-persona-icon` 주석 참고) — 같은 식에 이번 회차 값(추가
+   −10%)을 그대로 넣는다(상자를 별도 배수로 다시 줄이지 않는다, 그
+   계산식이 이미 "글자"이기 때문이라는 원래 판단 그대로). */
+.calc2-example-card .example-persona-icon {
+  height: calc(12.4659px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 8.656875px * 1.4);
+}
 /* 오른쪽 하단 — 「오늘 하루 보지 않음」을 주황 계열로 눈에 띄게(소유자 지시),
    일반 닫기(X)는 옆의 수수한 아이콘 버튼. */
 .calc2-example-modal-close {
@@ -6522,13 +6714,44 @@ function anyPlanCapApplied(scenario) {
  * `ui/result-panel.js`의 공유 버튼 핸들러), (2) 프래그먼트 한정 — 이 파일이
  * 그것을 구조로 보장한다(아래 `buildShareUrl`).
  *
- * **버전 필드(`v`)를 넣는다.** 폼 스키마가 나중에 바뀌면(필드 추가·삭제)
- * 옛 링크를 조용히 잘못 해석하는 대신 "이 링크는 읽을 수 없다"고 말할 수
- * 있어야 한다 — `decodeShareFragment`가 버전이 다르면 `version_mismatch`로
- * 명시로 실패한다.
+ * **[2026-08-23, D82 판정 3] v2 — 위치 기반 압축 인코딩.** v1(JSON을 그대로
+ * base64url로 싼 것)은 키 이름을 매번 다시 실어 길다. v2는 키 이름을 버리고
+ * `SHARE_LINK_FIELDS`의 **고정 순서**만으로 값을 위치로 식별한다 — 필드
+ * 앞에 "몇 번째 값인가"라는 정보를 실을 필요가 없다. 원칙은 그대로다(프래그먼트
+ * 전용, 서버 전송 없음, 공유 시점 고지 문구 유지, D74) — **바뀌는 것은 인코딩
+ * 밀도뿐이다.**
+ *
+ * - **접두 `v2.`** — 리터럴 문자열이다(v1의 base64url 알파벳은 `.`을 낼 수
+ *   없으므로 이 접두만으로 v1/v2를 명확히 가른다, `decodeShareFragment` 참고).
+ * - **구분자 `.`** — `SHARE_LINK_FIELDS` 순서 그대로, 값 27개를 `.`으로 잇는다.
+ * - **불리언은 1글자** — 참 `1`, 거짓 `0`, 모름(`null`)은 빈 슬롯.
+ * - **금액은 이미 만원 단위 정수 문자열이다**(화면 입력 자체가 그렇다, `store.js`
+ *   머리말) — 그대로 싣는다. 그 밖의 문자열(날짜·열거값)도 그대로 싣는다.
+ * - **빈 값은 빈 슬롯** — 아무 값도 넣지 않는다(`''`).
+ * - **값 안의 `.`은 이스케이프한다.** 유일하게 소수점을 가질 수 있는
+ *   `isaReturnRatePercent`(예: `3.5`)가 구분자와 부딪히지 않도록, 인코딩
+ *   시 `%`→`%25`, `.`→`%2E` 순서로 바꾼다(표준 퍼센트 인코딩의 부분집합 —
+ *   이 두 글자만 다룬다). 나머지 필드는 이 두 글자를 쓰지 않으므로 사실상
+ *   손대지 않는 값 그대로 나간다.
+ * - **`null`(모름)과 `''`(빈 문자열)을 구분해 복원한다.** 세 열거값 필드
+ *   (`fundUseHorizon`·`isaFinancialIncomeTaxpayer`·`isaIncomeCharacter`)는
+ *   기본값이 `null`(아직 고르지 않음)이라 빈 슬롯을 `null`로 되돌리고,
+ *   나머지(금액·날짜 등, 기본값이 `''`)는 빈 슬롯을 `''`로 되돌린다
+ *   (`SHARE_LINK_NULLABLE_STRING_FIELDS`) — `state/store.js`의
+ *   `initialForm()` 기본값과 어긋나면 안 되는 자리다.
+ *
+ * **v1 링크는 계속 열린다** — `decodeShareFragment`가 접두로 두 판을 가른
+ * 뒤 각자의 디코더로 넘긴다. 이미 공유된 옛 링크를 죽이지 않는다(D82 판정 3
+ * 원문).
+ *
+ * **버전 필드를 넣는 이유는 v1과 같다.** 폼 스키마가 나중에 바뀌면(필드
+ * 추가·삭제) 옛 링크를 조용히 잘못 해석하는 대신 "이 링크는 읽을 수 없다"고
+ * 말할 수 있어야 한다 — v1은 페이로드 안의 `v` 필드가, v2는 접두와 세그먼트
+ * 개수가 그 방패다(개수가 다르면 스키마가 바뀐 것이므로 `version_mismatch`).
  */
 
 const SHARE_LINK_VERSION = 1;
+const SHARE_LINK_V2_PREFIX = 'v2.';
 
 /**
  * 프래그먼트에 실을 필드만 **명시로 고른다.** `state/store.js`의
@@ -6569,6 +6792,95 @@ const SHARE_LINK_FIELDS = [
 ];
 
 /**
+ * [2026-08-23, D82 판정 3] v2 인코딩이 각 필드를 어떻게 다루는지 — `state/store.js`의
+ * `initialForm()`을 근거로 정했다(코드로 값을 보고 정하지 않았다 — 셋 다
+ * "지금은 우연히 비슷해 보이는" 값이 아니라 그 필드의 실제 의미다).
+ *
+ * - `true`(`SHARE_LINK_BOOLEAN_FIELDS`) — `initialForm()` 기본값이 `false`
+ *   또는 `null`인 토글/3택 물음. 1글자(`1`/`0`), 빈 슬롯은 `null`.
+ * - `false`이지만 `SHARE_LINK_NULLABLE_STRING_FIELDS`에 있다 — `initialForm()`
+ *   기본값이 `null`인 열거값 물음(아직 고르지 않음이 "빈 문자열"이 아니라
+ *   "값 자체가 없음"이다). 빈 슬롯은 `null`.
+ * - 그 밖(`false`, 목록에도 없음) — `initialForm()` 기본값이 `''`인 금액·
+ *   날짜·열거값. 빈 슬롯은 `''`.
+ */
+const SHARE_LINK_BOOLEAN_FIELDS = new Set([
+  'hasNonWageIncome',
+  'priorSalaryEnabled',
+  'annuityStarted',
+  'declaredYouth',
+  'isaExists',
+  'isaTransferEnabled',
+  'isaReturnEnabled',
+]);
+const SHARE_LINK_NULLABLE_STRING_FIELDS = new Set(['fundUseHorizon', 'isaFinancialIncomeTaxpayer', 'isaIncomeCharacter']);
+
+/** 3택 불리언 → 1글자. `null`/`undefined`는 빈 슬롯(모름)이다. */
+function encodeBoolSegment(value) {
+  if (value === true) return '1';
+  if (value === false) return '0';
+  return '';
+}
+function decodeBoolSegment(segment) {
+  if (segment === '1') return true;
+  if (segment === '0') return false;
+  return null;
+}
+
+/**
+ * 값 안의 `.`이 v2의 구분자와 부딪히지 않도록 최소한으로 이스케이프한다 —
+ * 표준 퍼센트 인코딩과 같은 관행이지만 이 두 글자만 다룬다(`%`을 먼저 바꿔야
+ * 그 다음에 만드는 `%2E`의 `%`까지 다시 바뀌는 것을 막는다 — 순서가 중요하다).
+ */
+function escapeSegmentValue(value) {
+  return String(value).replace(/%/g, '%25').replace(/\./g, '%2E');
+}
+function unescapeSegmentValue(segment) {
+  return segment.replace(/%2E/g, '.').replace(/%25/g, '%');
+}
+
+function encodeStringSegment(value) {
+  if (value === null || value === undefined || value === '') return '';
+  return escapeSegmentValue(value);
+}
+function decodeStringSegment(segment, key) {
+  if (segment === '') return SHARE_LINK_NULLABLE_STRING_FIELDS.has(key) ? null : '';
+  return unescapeSegmentValue(segment);
+}
+
+/**
+ * `form` → v2 프래그먼트(선행 `#`도 `v2.` 접두도 이미 포함된 문자열은 아니다
+ * — `v2.` 접두 뒤 `SHARE_LINK_FIELDS` 순서대로 값 27개를 `.`으로 잇는다).
+ */
+function encodeShareFragmentV2(form) {
+  const segments = SHARE_LINK_FIELDS.map((key) => {
+    const value = form?.[key] ?? null;
+    return SHARE_LINK_BOOLEAN_FIELDS.has(key) ? encodeBoolSegment(value) : encodeStringSegment(value);
+  });
+  return `${SHARE_LINK_V2_PREFIX}${segments.join('.')}`;
+}
+
+/**
+ * v2 프래그먼트(선행 `#` 없이, `v2.` 접두 포함) → `{ ok, form }`/`{ ok, reason }`.
+ * **세그먼트 개수가 `SHARE_LINK_FIELDS`와 다르면 `version_mismatch`다** —
+ * v1의 `payload.v !== SHARE_LINK_VERSION`과 같은 방패: 필드가 늘거나 줄면
+ * 옛 v2 링크를 잘못된 자리에 값을 꽂아 읽는 대신 명시로 거절한다.
+ */
+function decodeShareFragmentV2(fragment) {
+  const rest = fragment.slice(SHARE_LINK_V2_PREFIX.length);
+  // 값 자체는 이스케이프됐으므로(`.`→`%2E`) 이 시점의 `.` 분할은 항상 진짜
+  // 구분자만 가른다 — 갈라진 조각 안에 남는 `.`이 없다. 필드가 27개면 빈
+  // 값이어도 구분자 26개가 남으므로 `rest`가 완전히 빈 문자열일 일은 없다.
+  const segments = rest.split('.');
+  if (segments.length !== SHARE_LINK_FIELDS.length) return { ok: false, reason: 'version_mismatch' };
+  const form = {};
+  SHARE_LINK_FIELDS.forEach((key, i) => {
+    form[key] = SHARE_LINK_BOOLEAN_FIELDS.has(key) ? decodeBoolSegment(segments[i]) : decodeStringSegment(segments[i], key);
+  });
+  return { ok: true, form };
+}
+
+/**
  * UTF-8 문자열 → base64url. 표준 `btoa`는 Latin1 바이트 문자열만 받으므로
  * 한글이 섞인 JSON을 바로 넣으면 예외가 난다 — `TextEncoder`로 UTF-8
  * 바이트를 먼저 만든다. `+`/`/`·패딩(`=`)을 URL 프래그먼트에 안전한
@@ -6589,22 +6901,20 @@ function base64UrlDecode(text) {
   return new TextDecoder().decode(bytes);
 }
 
-/** `form` → 프래그먼트 문자열(선행 `#` 없이). 버전 필드를 함께 담는다. */
-function encodeShareFragment(form) {
+/**
+ * [2026-08-23, D82 판정 3] v1 — JSON을 그대로 base64url로 싼 옛 인코딩.
+ * **더는 `buildShareUrl`이 만들지 않는다**(그 자리는 v2가 가져갔다) — 이미
+ * 공유된 옛 링크를 여전히 읽으려고(`decodeShareFragmentV1`) 이름만 바꿔
+ * 남긴다. `export`로 여는 이유는 옛 링크 하위 호환을 실측하는 시험
+ * (`share-link.test.mjs`)이 v1 픽스처를 직접 만들어야 하기 때문이다.
+ */
+function encodeShareFragmentV1(form) {
   const payload = { v: SHARE_LINK_VERSION };
   for (const key of SHARE_LINK_FIELDS) payload[key] = form?.[key] ?? null;
   return base64UrlEncode(JSON.stringify(payload));
 }
 
-/**
- * 프래그먼트 문자열(선행 `#` 없이) → `{ ok: true, form }` 또는
- * `{ ok: false, reason }`. **조용히 무시하지 않는다** — 실패 이유를 셋으로
- * 가른다(`decode_failed`: base64url 자체가 깨짐, `parse_failed`: JSON이
- * 아니거나 객체가 아님, `version_mismatch`: 버전이 다름). 호출부가 이
- * `reason`으로 짧은 안내를 낼 수 있다(`copy.js`의 `SHARE_LINK_INVALID_NOTE`).
- */
-function decodeShareFragment(fragment) {
-  if (!fragment) return { ok: false, reason: 'empty' };
+function decodeShareFragmentV1(fragment) {
   let json;
   try {
     json = base64UrlDecode(fragment);
@@ -6622,6 +6932,32 @@ function decodeShareFragment(fragment) {
   const form = {};
   for (const key of SHARE_LINK_FIELDS) if (key in payload) form[key] = payload[key];
   return { ok: true, form };
+}
+
+/**
+ * `form` → 프래그먼트 문자열(선행 `#` 없이). **[2026-08-23, D82 판정 3]
+ * v2를 낸다** — 같은 값을 실어도 v1보다 짧다(길이 비교는 최종 보고 참고).
+ */
+function encodeShareFragment(form) {
+  return encodeShareFragmentV2(form);
+}
+
+/**
+ * 프래그먼트 문자열(선행 `#` 없이) → `{ ok: true, form }` 또는
+ * `{ ok: false, reason }`. **조용히 무시하지 않는다** — 실패 이유를 셋으로
+ * 가른다(`decode_failed`: base64url 자체가 깨짐, `parse_failed`: JSON이
+ * 아니거나 객체가 아님, `version_mismatch`: 버전/필드 수가 다름). 호출부가 이
+ * `reason`으로 짧은 안내를 낼 수 있다(`copy.js`의 `SHARE_LINK_INVALID_NOTE`).
+ *
+ * **[2026-08-23, D82 판정 3] 접두로 v1/v2를 가른다.** `v2.`로 시작하면
+ * v2(리터럴 접두 — base64url 알파벳은 `.`을 내지 않으므로 v1과 절대
+ * 겹치지 않는다), 아니면 옛 v1 경로(base64url+JSON) 그대로 시도한다 — 이미
+ * 공유된 v1 링크가 이 함수 하나로 계속 열린다.
+ */
+function decodeShareFragment(fragment) {
+  if (!fragment) return { ok: false, reason: 'empty' };
+  if (fragment.startsWith(SHARE_LINK_V2_PREFIX)) return decodeShareFragmentV2(fragment);
+  return decodeShareFragmentV1(fragment);
 }
 
 /**
@@ -6644,6 +6980,145 @@ function readShareFragmentFromLocation(locationLike = typeof window !== 'undefin
   if (!hash || hash === '#') return null;
   return decodeShareFragment(hash.slice(1));
 }
+
+// ───────── src/web/calc2-copy.js ─────────
+/**
+ * 「절세계좌 계산기2」(D79) 탭 전용 문구 사전. `reverse-copy.js`가 역산기
+ * 탭을 첫 탭 사전(`copy.js`)에서 분리한 것과 같은 이유(engine-interface.md
+ * 8.11절 — "다른 탭의 코드를 그 목록에 섞으면 첫 탭의 사전이 두 번째 탭의
+ * 문장을 지게 된다")로, 이 탭이 새로 여는 문구만 따로 둔다.
+ *
+ * **오류·안내·가정 코드(`ERROR_MESSAGE`·`NOTICE_MESSAGE`·`ASSUMPTION_MESSAGE`)는
+ * 나누지 않는다** — 이 탭은 첫 탭과 **같은 엔진, 같은 요청 스키마**를 쓰므로
+ * (D79 머리말 "엔진·계산·결과는 첫 탭과 같고, 입력 화면만 다르다") 같은 코드가
+ * 같은 뜻이다. `copy.js`의 기존 사전을 그대로 재사용한다
+ * (`ui/calc2-input-panel.js`가 `copy.js`에서 직접 가져다 쓴다).
+ *
+ * 헌장의 문구 규약(세무 상담·자문 어휘 금지, 지시형·단정형 금지, 세법 수치
+ * 하드코딩 금지)을 그대로 지킨다.
+ */
+
+
+
+/** 탭 라벨 — 소유자 지시 원문 "절세계좌 계산기2". `SERVICE_NAME`을 재사용해
+ * 첫 탭 이름이 바뀌면 이 라벨도 같이 따라간다. */
+const CALC2_TAB_LABEL = `${SERVICE_NAME}2`;
+
+// **`CALC2_PREFILL_NOTE`가 여기 있었다**(D79 판정 2로 도입, D80 판정 2로
+// 폐기). 소유자가 프리필 안내줄을 조건절·근거 문구 넷 중 하나로 명시 지목해
+// 지웠다(D59~D61 계보와 같은 성질) — 부르는 곳이 더는 없다.
+
+/** [D79 판정 1·3] 필수 최소 입력 뒤, 조건부·선택 입력을 접어 두는 자리의 트리거. */
+const CALC2_MORE_INFO_TRIGGER = '▸ 추가 정보 (선택)';
+
+/** 필수 최소 입력 그룹 제목. */
+const CALC2_ESSENTIAL_GROUP_TITLE = '기본 정보';
+
+/**
+ * [신규 회차 — 소유자 지시 3번] 「이 돈을 언제 쓸 계획인가요?」 답변 2번
+ * (`fund_use_horizon: 'before_pension_age'`)의 계산기2 전용 문구 — 첫 탭은
+ * `copy.js`의 `fundUseHorizonLabel(value, boundariesInfo)`가 계산한 문구
+ * (경계값을 알면 "N년 후 ~ M년 이내 쓸 계획이다", 모르면 "중간에 쓸
+ * 계획이다")를 그대로 쓰지만, 계산기2는 경계값 유무와 무관하게 **항상**
+ * 이 고정 문장 하나로 바꾼다(`ui/calc2-input-panel.js`의
+ * `fundUseHorizonGroup({ labelOverrides })` 호출).
+ *
+ * **엔진 매핑은 그대로다.** 이 답을 고르면 여전히 같은 `fund_use_horizon:
+ * 'before_pension_age'`가 요청에 실리고, 엔진은 여전히 같은 로직대로
+ * IRP 배분을 피한다 — 소유자가 로직 유지까지 명시했다. 이 문구-값
+ * 매핑(「10년 안에 쓸 계획이다」 = `before_pension_age`)은 **계산기2
+ * 사전에만 있다** — 첫 탭·역산기는 옛 문구를 그대로 쓴다.
+ *
+ * **주의(관리자 판정).** 이 답은 원래 "연금 개시 전"이라는 뜻이라 실제
+ * 연금 개시까지 10년이 채 안 남은 고령 사용자에게는 "10년 안에"라는
+ * 새 문구가 그 사람의 실제 시점과 어긋날 수 있다 — 그래도 소유자가
+ * 문구만 바꾸고 로직은 유지하라고 명시했으므로 그대로 시행한다. 계산기2가
+ * "간결한 판"이라는 실험 축(D80 판정 2 계보)이라는 것이 그 판단의 근거다.
+ */
+const CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL = '10년 안에 쓸 계획이다';
+
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 계산기2 일일 팝업 예시의 입력 네 줄 중
+ * 마지막 줄 라벨 — 「월 납입금」→「납입금」. 값(콜론 뒤 "월 150만원")은
+ * 그대로다, 라벨 한 낱말만 짧아진다. `ui/example-showcase.js`의
+ * `exampleCapacityLineText()`(첫 탭 예시·팝업이 원래 공유하던 그 문구)는
+ * 손대지 않는다 — 이 상수는 계산기2 팝업 한 자리에서만, 그 문구를 받아
+ * 라벨만 바꿔 쓴다(`ui/calc2-example-modal.js`).
+ */
+const CALC2_EXAMPLE_CAPACITY_LABEL = '납입금';
+
+/**
+ * [2026-08-23, D83 소유자 지시 4번 / 판정 3] 결과의 도넛+배분표 머리말 —
+ * 「최적 월 배분표」→「최적 월 배분」, 계산기2 한정. 같은 자리가 이제
+ * 시나리오 탭보다 위로 옮겨졌으므로(`ui/result-panel.js`의
+ * `resultPanelForScenario`가 반환하는 `extractedChartArea`) 표라기보다
+ * 첫 결과 문장에 가깝다는 것이 소유자의 이유였다 — "표"를 떼어 더 짧게.
+ * 첫 탭은 `copy.js`의 `DONUT_OPTIMAL_KICKER_LABEL`(「최적 월 배분표」)을
+ * 그대로 쓴다.
+ */
+const CALC2_DONUT_OPTIMAL_KICKER_LABEL = '최적 월 배분';
+
+/**
+ * [2026-08-23, D83 소유자 지시 8번 / 판정 2] ISA 예상 수익률 절의 제목 —
+ * 「④ ISA 예상 수익률 (선택)」에서 "(선택)"을 뗀다, 계산기2 한정. 방어
+ * 문구(`copy.js`의 `ISA_RETURN_SECTION_HELP` — "직접 예상한 수익률을
+ * 넣어야 합니다(제시·전망하지 않습니다).")도 계산기2에서는 붙이지 않는다
+ * (`ui/calc2-input-panel.js`가 `help`를 아예 넘기지 않는다 — 대체 문구가
+ * 없다, 문장 자체를 없앤다).
+ *
+ * **번복 이유와 위험.** 이 절 전체(선택 표기·방어 문구)는 스타일이 아니라
+ * 자본시장법 인접 노출(서비스가 수익률을 제시·전망하는 것으로 읽힐 위험,
+ * 30절) 때문에 세워졌다 — D77 판정 1, D79 판정 2. 소유자가 명시로
+ * 뒤집었고(D83 판정 2), 대신 김철수씨 프리필의 기본값 5%로 "서비스가
+ * 아니라 예시 인물이 정한 값"이라는 성격을 유지한다(`ui/calc2-prefill.js`).
+ * 위험은 소유자에게 보고됐다 — 법적 우려가 실제 문제로 커지면 이 항목이
+ * 첫 복원 대상이다. 첫 탭·역산기는 원래 문구·무기본값 그대로.
+ */
+const CALC2_ISA_RETURN_SECTION_TITLE = '④ ISA 예상 수익률';
+
+// ───────── src/web/assets/save-share-image-icon.js ─────────
+/**
+ * "이미지로 저장" 버튼 아이콘 — D82 판정 4(소유자 지시 10항목).
+ *
+ * **원본** — `src/design/image.png`(512x512, 소유자가 직접 제공한 단색 PNG).
+ * **이 파일은 `scripts/gen-logo-asset.mjs`로 재생성하지 않는다** — 그
+ * 스크립트는 로고 전용이고 이 회차의 작업 범위 밖이다(관리자 지시). 아래
+ * 데이터 URI는 원본 PNG를 Node의 Buffer base64 인코딩으로 **수동으로**
+ * 만들어 붙여 넣은 값이다 — 원본이 바뀌면 같은 방식으로 다시 인코딩해 이
+ * 문자열을 통째로 교체해야 한다(자동 재생성 경로가 없다).
+ *
+ * **단색 마스크로 색을 입힌다.** 이 PNG 자체는 원본 색(검정/투명)을 그대로
+ * 담고 있고, 화면에서는 background-color + mask-image(래스터 재채색이
+ * 아니라 CSS mask, D82 판정 4)로 --accent-warm을 입힌다(styles.css의
+ * .save-share-icon-image 참고) — 이 데이터 URI는 마스크의 알파 채널
+ * 원본으로만 쓰인다.
+ */
+const SAVE_SHARE_IMAGE_ICON_DATA_URI = 'data:image/png;base64,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';
+
+/** 원본 자산의 실제 픽셀 치수(정사각형). */
+const SAVE_SHARE_IMAGE_ICON_INTRINSIC_WIDTH = 512;
+const SAVE_SHARE_IMAGE_ICON_INTRINSIC_HEIGHT = 512;
+
+// ───────── src/web/assets/save-share-share-icon.js ─────────
+/**
+ * "내 결과 공유하기" 버튼 아이콘 — D82 판정 4(소유자 지시 10항목).
+ *
+ * **원본** — `src/design/share.png`(512x512, 소유자가 직접 제공한 단색 PNG).
+ * **이 파일은 `scripts/gen-logo-asset.mjs`로 재생성하지 않는다** — 그
+ * 스크립트는 로고 전용이고 이 회차의 작업 범위 밖이다(관리자 지시). 아래
+ * 데이터 URI는 원본 PNG를 Node의 Buffer base64 인코딩으로 **수동으로**
+ * 만들어 붙여 넣은 값이다 — 원본이 바뀌면 같은 방식으로 다시 인코딩해 이
+ * 문자열을 통째로 교체해야 한다(자동 재생성 경로가 없다).
+ *
+ * **단색 마스크로 색을 입힌다** — image-icon과 같은 이유(그 파일 머리말
+ * 참고). background-color + mask-image로 --accent-warm을 입힌다
+ * (styles.css의 .save-share-icon-share 참고).
+ */
+const SAVE_SHARE_SHARE_ICON_DATA_URI = 'data:image/png;base64,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';
+
+/** 원본 자산의 실제 픽셀 치수(정사각형). */
+const SAVE_SHARE_SHARE_ICON_INTRINSIC_WIDTH = 512;
+const SAVE_SHARE_SHARE_ICON_INTRINSIC_HEIGHT = 512;
 
 // ───────── src/web/ui/charts.js ─────────
 /**
@@ -6858,16 +7333,34 @@ const LABEL_GUTTER = 176;
 const LABEL_TEXT_BUDGET = 132;
 const LABEL_VPAD = 26;
 /**
- * 라벨을 그리지 않는 모드에서 도넛 둘레에 남기는 여백(압출 그림자·안티에일리어싱
- * · 조각 번호).
+ * `legend` 모드(모바일 결과·계산기2 결과·팝업·예시) 도넛 둘레에 남기는 여백.
  *
- * **결함 ②의 수정으로 8→10이 됐다**(design-system 3.5.5절 규약 6). 조각 순번은
- * 이제 계좌 색 위가 아니라 고리 **바깥**에 그린다 — 계좌 색은 정의상 표면 대비
- * 3:1 대역에서 뽑히므로 4.5:1이 필요한 작은 글자를 그 위에 얹을 수 없다. 번호가
- * 상자 밖으로 잘리지 않으려면 여백이 조금 더 필요하고, `wasted <= 20`(테스트)
- * 안에서 최대로 늘린 값이 10이다.
+ * **원래 이유(8→10, 조각 번호)는 D72로 없어졌다** — 조각 순번 배지
+ * (`sliceNumbers`)를 지우고 계좌 이름을 조각 위에 직접 쓰는 방식으로
+ * 바뀌면서, "번호가 상자 밖으로 잘리지 않게"라는 옛 근거 자체가 사라졌다.
+ *
+ * **[2026-08-23, 소유자 지시 1번(신규 회차)] 지금의 진짜 이유 — 고리 밖으로
+ * 밀려난 조각 라벨(`applyDonutSliceInlineLabels`의 폴백 경로)이 이 여백
+ * 밖으로 잘려 나갔다(실측 — 팝업의 "연금저축"이 잘렸다).** 그 폴백은
+ * 라벨을 `rOuter + gap`(최소 `SLICE_LABEL_OUTSIDE_GAP_CLOSE`=5, 최대
+ * `SLICE_LABEL_OUTSIDE_GAP`=16에서 시작해 겹침을 피해 더 밀려날 수 있다)
+ * 반지름에 **글자 상자 중심**을 찍는다(`dominant-baseline: central`) —
+ * 상자 절반이 그 반지름보다 더 바깥으로 나간다.
+ *
+ * **[2026-08-23, 소유자 지시 1·2번(신규 회차)] 40→65로 다시 올렸다.**
+ * 지난 회차(40)는 라벨 글자 크기(`SLICE_LABEL_NAME_FONT_PX`)가 15px일 때도
+ * "연금저축" 같은 넓은 라벨(4음절+두 자리 %)에서는 여전히 폴백이 글자를
+ * 줄여야 했다 — 소유자가 "글자가 안 보인다"고 두 회차 연속 신고했고, 이번
+ * 회차 지시는 "폴백으로 다시 줄이는 방향 금지, 공간을 늘려 해결"이었다.
+ * 그런데 이번 회차는 그 글자 크기 자체도 15→16.5px로 키웠고, 고리를
+ * 벗어나는 데 필요한 간격도 폭이 넓어진 라벨일수록 함께 늘어난다(고리
+ * 겹침 회피와 여백 확보가 서로 되먹임한다) — 50으로도 "연금저축"이
+ * 11.5px까지 줄었다(실측). 65에서는 가장 넓은 그 라벨도 15.5px(기본값의
+ * 94%)까지만, 나머지는 16.5px 그대로 고리를 벗어나며 카드 안에 든다(실측
+ * 확인, `donut-label-overlap.browser.mjs`의 `assertFontFloor`). 아래
+ * `charts.test.mjs`의 `wasted` 상한도 함께 올렸다.
  */
-const LEGEND_PAD = 10;
+const LEGEND_PAD = 65;
 const LABEL_LINE_GAP = 56; // 세 줄짜리 라벨 블록의 최소 세로 간격
 /**
  * 라벨의 y는 **첫 줄의 기준선**이고 아래로 두 줄이 더 붙는다. 이 값을 계산에
@@ -7428,10 +7921,34 @@ function bestTextColorOn(cssBackgroundColor) {
   return whiteContrast >= blackContrast ? 'white' : 'black';
 }
 
-const SLICE_LABEL_NAME_FONT_PX = 15; // `.donut-legend-item`(15px)와 나란한 자리
-const SLICE_LABEL_MIN_FONT_PX = 9; // 더 못 줄이는 바닥값 — 이 아래는 글자가 아니라 얼룩이다
+// [2026-08-23, 소유자 지시 1·2번] +10% — 소유자가 두 회차 연속 "라벨이(특히
+// 「연금저축」) 안 보인다"고 신고했다. 지난 회차는 카드 밖 잘림을 막으려고
+// 조각 밖 라벨을 축소 폴백(`SLICE_LABEL_MIN_FONT_PX`까지)으로 우겨넣었는데,
+// 그 자체가 가독성을 해쳤다 — **줄이는 방향으로 다시 풀지 않는다.** 대신
+// 기본 크기를 키우고(15×1.1=16.5), 공간이 모자란 자리(팝업 예시 영역·결과
+// 도넛)는 이 회차에서 폭을 늘려 맞춘다(아래 `styles.css`) — 글자를 줄이는
+// 폴백은 여전히 있지만(정말 안 맞는 극단 대비), 첫 시도가 이 크기에서
+// 끝나도록 공간을 먼저 늘리는 것이 이번 지시의 핵심이다.
+const SLICE_LABEL_NAME_FONT_PX = 16.5;
+// 바닥값도 함께 올린다(9×1.1=9.9) — "폴백의 하한을 올리거나"(소유자 지시
+// 1번 원문)의 그 하한. 그래도 여전히 바닥이지 목표가 아니다 — 정상 경로는
+// 위 기본 크기(16.5px)에서 끝나야 한다.
+const SLICE_LABEL_MIN_FONT_PX = 9.9;
 const SLICE_LABEL_FIT_MARGIN = 0.92; // 조각 안 여유 8% — 테두리에 글자가 닿지 않게
 const SLICE_LABEL_OUTSIDE_GAP = 16; // 리더선 폴백 — 고리(rOuter) 밖으로 이만큼(뷰박스 단위) 뺀다
+// [2026-08-23, D82 소유자 지시 5번 — 계산기2 결과 도넛 한정] 지시선을 없애고
+// 라벨을 조각에 더 가깝게 붙인다 — 위 간격(16)의 약 3분의 1. 0에 가깝게
+// 붙이면(리더선이 없으므로) 라벨이 조각 테두리에 닿아 보여 "안에 쓴 것"처럼
+// 오독될 수 있다 — 지시선이 있을 때보다 더 좁지만 여전히 눈에 띄는 간격을
+// 남긴다(`hideLeader` 옵션, `applyDonutSliceInlineLabelsToSvg` 참고).
+const SLICE_LABEL_OUTSIDE_GAP_CLOSE = 5;
+// [2026-08-23, D83 판정 1] 라벨-링 비겹침 재시도 — 겹치면 이 만큼(뷰박스
+// 단위)씩 더 밀어내며 다시 잰다. 큰 라벨(긴 계좌 이름 등)도 몇 번 안에
+// 안전히 벗어나도록 8을 썼다(`SLICE_LABEL_OUTSIDE_GAP`의 절반) — 너무
+// 작으면 겹치는 조각마다 반복 횟수가 늘어 계산이 느려지고, 너무 크면
+// 필요 이상으로 멀리 밀려나 도넛과의 시각적 연결이 옅어진다.
+const SLICE_LABEL_OVERLAP_STEP = 8;
+const SLICE_LABEL_OVERLAP_MAX_ATTEMPTS = 12;
 const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(em, 이름 글자 크기 기준)
 
 /**
@@ -7478,14 +7995,62 @@ const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(
  * (`example-showcase.js`)만 켠다 — 결과 패널·역산기 탭은 인자 없이 부르므로
  * (`forceOutside: false` 기본) 조각 안에 들어가면 안에 그리는 기존 동작이
  * 그대로다.
+ *
+ * `hideLeader`(D82 소유자 지시 5번, 계산기2 결과 도넛 한정) — `forceOutside`와
+ * 항상 함께 켠다(고리 밖 폴백 경로에서만 뜻이 있다). 지시선(polyline)을
+ * 아예 만들지 않고, 라벨을 고리에 더 가깝게(`SLICE_LABEL_OUTSIDE_GAP_CLOSE`)
+ * 붙인다 — "조각 위(안)에는 쓰지 않는다"는 조건은 여전히 지킨다(고리 밖에
+ * 그린다는 사실 자체는 바뀌지 않았다, 간격만 좁혔다).
  */
-function applyDonutSliceInlineLabels(root, { forceOutside = false } = {}) {
+function applyDonutSliceInlineLabels(root, { forceOutside = false, hideLeader = false } = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
   const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"]')];
-  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside);
+  for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside, hideLeader);
+  // [2026-08-23, D83 판정 1] **숨은 도넛 보정 — 진짜 원인을 실측으로 찾았다.**
+  // `getBBox()`는 SVG 명세상 그 원소(또는 조상)가 `display:none`이면 폭·높이
+  // 0을 낸다. 첫 탭 예시·역산기 예시는 **기본 랜딩 탭이 계산기2로 바뀐
+  // 뒤(D81)로 앱이 뜨자마자 숨은 탭 패널(`tab-panel-hidden`) 안에서
+  // 그려진다** — 이 함수가 그 순간 라벨을 배치하면 `getBBox()`가 늘 0×0을
+  // 내므로 `overlapsRing({width:0,height:0})`이 항상 거짓이 되어(0×0 상자는
+  // 사실상 무엇과도 안 겹친다) **첫 시도(가장 좁은 간격)에서 곧장 "안 겹친다"고
+  // 잘못 확정한다.** 나중에 사용자가 그 탭을 눌러 실제로 보이면, 라벨은 이미
+  // 정해진(너무 좁은) 자리에 실제 크기로 그려져 고리와 겹친다 — 실측으로 잡은
+  // 정확한 재현 경로다(`requestAnimationFrame`을 겹쳐 불러도 탭이 계속 숨어
+  // 있으면 재보정 자체가 또 0×0을 재므로 소용없었다 — 값의 문제가 아니라
+  // "숨어 있다"는 조건 자체를 잡아야 했다).
+  //
+  // **`ResizeObserver`로 "실제로 보이는 순간"을 기다려 다시 그린다 — 매번,
+  // 조건 없이 붙인다.** 미리 `getBoundingClientRect()`로 "지금 숨었는지"를
+  // 스냅샷으로 재고 그 결과로 붙일지 말지 가르면, 그 스냅샷을 재는 순간과
+  // 실제 숨김·보임이 갈리는 자리 사이에 경합이 생길 수 있다(예: 역산기
+  // 예시에서 실측으로 이 경합을 직접 봤다 — 스냅샷은 "이미 보인다"로 읽혔지만
+  // 그 안쪽 텍스트 배치 자체는 여전히 숨은 상태를 쟀다). `ResizeObserver`는
+  // `observe()`를 부르는 즉시 **현재 크기로 최소 한 번은 반드시 콜백을
+  // 낸다**(명세) — 조건문으로 미리 걸러내지 않고 **항상** 붙이면, 이미
+  // 보이는 상태였어도 그 첫 콜백에서 한 번 더 정확히 다시 그려 자가
+  // 확인하고, 숨은 상태였다면 나중에 실제로 커지는 그 순간의 콜백에서
+  // 다시 그린다 — 두 경우 모두 스냅샷 타이밍에 기대지 않는다. 크기가
+  // 있는 값으로 한 번 다시 그리면 스스로 끊는다(자원이 새지 않는다). 이
+  // 함수는 멱등이다(매번 `.donut-slice-label-group`을 지우고 새로 그린다)
+  // — 다시 불러도 중복이 생기지 않는다.
+  if (typeof ResizeObserver === 'function') {
+    for (const svg of svgs) {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const box = entry.contentRect;
+          if (box.width > 0 && box.height > 0) {
+            applyDonutSliceInlineLabelsToSvg(svg, forceOutside, hideLeader);
+            observer.disconnect();
+            return;
+          }
+        }
+      });
+      observer.observe(svg);
+    }
+  }
 }
 
-function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
+function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader = false) {
   if (!svg || typeof svg.querySelectorAll !== 'function') return;
   const cx = Number(svg.dataset.cx);
   const rOuter = Number(svg.dataset.rOuter);
@@ -7553,6 +8118,13 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
 
     const fitsInsideSlice = () => {
       const box = text.getBBox();
+      // [2026-08-23, D83 판정 1] svg(또는 조상)가 `display:none`이면
+      // `getBBox()`는 명세상 0×0을 낸다 — 0×0은 어떤 상한 검사도 항상
+      // 통과하므로("들어간다"고 잘못 확정), 숨은 순간엔 실측 없이 무조건
+      // "안에 들어간다"고 속아 폴백(고리 밖) 경로 자체를 건너뛴다. 숨은
+      // 동안은 반대로 판정한다(안 들어간다) — 위 `applyDonutSliceInlineLabels`의
+      // `ResizeObserver`가 실제로 보이는 순간 이 함수를 포함해 전부 다시 그린다.
+      if (box.width === 0 && box.height === 0) return false;
       return box.width <= chordAtMid * SLICE_LABEL_FIT_MARGIN && box.height <= bandThickness * SLICE_LABEL_FIT_MARGIN;
     };
     // [D79 판정 4] `forceOutside`면 안(조각)에 들어가는지 실측조차 하지 않고
@@ -7569,27 +8141,81 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false) {
       if (fitsInsideSlice()) continue;
     }
 
-    // 폴백(또는 `forceOutside`) — 고리 밖, 지시선과 함께. 배경이 카드
-    // 표면이 되므로 대비를 다시 잴 필요 없이 검증된 토큰(text-primary)을 쓴다.
-    const outerRadius = rOuter + SLICE_LABEL_OUTSIDE_GAP;
-    const [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
-    const fallback = svgEl(
-      'text',
-      { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
-      [
-        svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${SLICE_LABEL_NAME_FONT_PX}px` }, [name]),
-        svgEl(
-          'tspan',
-          { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${SLICE_LABEL_NAME_FONT_PX - 2}px` },
-          [pctText],
-        ),
-      ],
-    );
-    group.replaceChild(fallback, text);
+    // 폴백(또는 `forceOutside`) — 고리 밖, 지시선과 함께(`hideLeader`가
+    // 아니면). 배경이 카드 표면이 되므로 대비를 다시 잴 필요 없이 검증된
+    // 토큰(text-primary)을 쓴다.
+    // [D82 소유자 지시 5번] `hideLeader`면 간격을 좁힌다 — 지시선이 없으므로
+    // 라벨과 조각의 관계를 거리로 대신 보여야 한다.
+    // [2026-08-23, D83 판정 1 — 상설 규칙] "도넛 계좌별 라벨은 어떤 화면
+    // 에서도 차트와 겹치지 않는다." 처음 간격(위)만으로는 라벨 텍스트
+    // 사각형이 여전히 고리 사각형에 닿을 수 있다(실측 — 팝업의 연금저축
+    // 33%·ISA 50%가 닿았다) — 중심점 하나만 밀어내는 방식은 텍스트
+    // 자신의 폭·높이를 고려하지 않기 때문이다. **실제로 겹치지 않을
+    // 때까지 간격을 늘려가며 다시 잰다**(최대
+    // `SLICE_LABEL_OVERLAP_MAX_ATTEMPTS`회) — 이 회차부터 이 함수를 쓰는
+    // 모든 도넛(예시·팝업·결과·역산기)이 이 보장을 공짜로 받는다.
+    const ringLeft = cx - rOuter;
+    const ringRight = cx + rOuter;
+    const ringTop = cy - rOuter * ry;
+    const ringBottom = cy + rOuter * ry;
+    const overlapsRing = (box) => box.x < ringRight && box.x + box.width > ringLeft && box.y < ringBottom && box.y + box.height > ringTop;
+
+    // [2026-08-23, 소유자 지시 1번(팝업) — D83 상설 규칙 확장] 고리를
+    // 피해 밀려난 라벨이 카드(svg viewBox) 밖으로 나가면 잘려 보인다
+    // (실측 — 팝업의 "연금저축"이 잘렸다). viewBox 경계 안에 온전히
+    // 들어가는지도 함께 잰다.
+    const vb = svg.viewBox.baseVal;
+    const boxLeft = vb.x;
+    const boxRight = vb.x + vb.width;
+    const boxTop = vb.y;
+    const boxBottom = vb.y + vb.height;
+    const fitsInViewBox = (box) => box.x >= boxLeft && box.x + box.width <= boxRight && box.y >= boxTop && box.y + box.height <= boxBottom;
+
+    let ox;
+    let oy;
+    let fallback = text;
+    // [2026-08-23, 소유자 지시 1번] **간격만으로는 두 조건(고리 비겹침 +
+    // 카드 안)을 동시에 만족 못할 때가 있다** — 라벨이 그 방향의 남은
+    // 폭보다 넓으면, 고리를 벗어나는 순간 이미 카드 밖이다(간격을 더
+    // 늘려도 더 나갈 뿐 나아지지 않는다). 그때는 조각 안 라벨(위
+    // `fitsInsideSlice`)과 같은 방식으로 글자 크기를 줄여 다시 시도한다.
+    // 바닥 크기에서도 못 맞추면 마지막으로 찾은 자리를 그대로 쓴다(예전
+    // 동작 — 안 보이는 것보다 낫다).
+    fontShrink: for (let outFontPx = SLICE_LABEL_NAME_FONT_PX; outFontPx >= SLICE_LABEL_MIN_FONT_PX; outFontPx -= 1) {
+      let gap = hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP;
+      for (let attempt = 0; attempt < SLICE_LABEL_OVERLAP_MAX_ATTEMPTS; attempt++) {
+        const outerRadius = rOuter + gap;
+        [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
+        const next = svgEl(
+          'text',
+          { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
+          [
+            svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${outFontPx}px` }, [name]),
+            svgEl(
+              'tspan',
+              { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(SLICE_LABEL_MIN_FONT_PX, outFontPx - 2)}px` },
+              [pctText],
+            ),
+          ],
+        );
+        group.replaceChild(next, fallback);
+        fallback = next;
+        const box = fallback.getBBox();
+        if (!overlapsRing(box)) {
+          if (fitsInViewBox(box)) break fontShrink; // 둘 다 만족 — 끝
+          // 고리는 벗어났지만 카드 밖이다 — 이 글자 크기로는 간격을 더
+          // 늘려도 카드 밖으로 더 나갈 뿐이다. 더 작은 글자로 넘어간다.
+          break;
+        }
+        gap += SLICE_LABEL_OVERLAP_STEP;
+      }
+    }
     text = fallback;
-    const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
-    const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
-    group.insertBefore(leader, text);
+    if (!hideLeader) {
+      const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
+      const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
+      group.insertBefore(leader, text);
+    }
   }
 }
 
@@ -9073,6 +9699,9 @@ function downloadDataUrl(dataUrl, filename) {
 
 
 
+
+
+
 // 필수 항목의 라벨·초점 대상·충족 판정은 `validation.js`의 `CORE_REQUIREMENTS`
 // 한 곳에만 있다. 여기에 다시 적으면 항목이 늘 때 한쪽만 고쳐진다.
 
@@ -9407,7 +10036,7 @@ function amountCard(
   plan,
   scenario,
   annualReturnRate = null,
-  { compactCaption = false, showCaption = true, showComposition = true } = {},
+  { compactCaption = false, showCaption = true, showComposition = true, singleLineComposition = false } = {},
 ) {
   const baseCaption = amountCardBaseCaption(scenario, { compactCaption });
 
@@ -9437,13 +10066,25 @@ function amountCard(
   // 적으려면 슬롯5가 반드시 같은 화면에 있어야 한다(design-system 5.6절). 줄①은
   // `bound_code`와 무관하게 언제나 슬롯2'의 {최소}(또는 point) 안에 든 확정
   // 성분과 같은 수다(항등식).
+  // [2026-08-23, 관리자 지시(신규 회차) 6번] `singleLineComposition` —
+  // 계산기2 한정으로 구성 두 줄을 **한 행**으로 합친다(폰트 −20%,
+  // `styles.css`). 줄② 문구가 이미 "+ "로 시작하므로(위
+  // `headlineComponentAssumptionLine`) 공백 하나로 이으면 소유자가 든
+  // 예("올해 세액공제 …원 + 앞으로 …년 동안 ISA 최대 …원 (연 …% 가정)")와
+  // 글자 그대로 같아진다 — 화면이 새 접속사를 짓지 않는다.
   const compositionBlock = includesAssumption && showComposition
-    ? el('div', { class: 'amount-card-composition' }, [
-        el('p', { class: 'amount-card-composition-line type-num' }, [headlineComponentDeterminedLine(headline)]),
-        el('p', { class: 'amount-card-composition-line type-num' }, [
-          headlineComponentAssumptionLine(headline, annualReturnRate),
-        ]),
-      ])
+    ? singleLineComposition
+      ? el('div', { class: 'amount-card-composition amount-card-composition-single' }, [
+          el('p', { class: 'amount-card-composition-line type-num' }, [
+            `${headlineComponentDeterminedLine(headline)} ${headlineComponentAssumptionLine(headline, annualReturnRate)}`,
+          ]),
+        ])
+      : el('div', { class: 'amount-card-composition' }, [
+          el('p', { class: 'amount-card-composition-line type-num' }, [headlineComponentDeterminedLine(headline)]),
+          el('p', { class: 'amount-card-composition-line type-num' }, [
+            headlineComponentAssumptionLine(headline, annualReturnRate),
+          ]),
+        ])
     : null;
 
   if (isReduced) {
@@ -9593,16 +10234,45 @@ function fillOrderNote(plan, scenario) {
  * **이 한 자리에만 쓴다.** 다른 화면 요소·서비스 이름에 이 상수를 재사용하지
  * 않는다 — 조건은 자리마다 다시 판정되어야 한다.
  */
-function donutOptimalKicker(planNameCaptionText) {
+// [2026-08-23, D83 소유자 지시 4번] `labelText` 매개변수 — 계산기2 한정으로
+// 「최적 월 배분표」를 「최적 월 배분」으로 바꿔 부른다(`CALC2_DONUT_OPTIMAL_KICKER_LABEL`).
+// 가드(캡션 없이 못 쓴다)는 문구와 무관하게 그대로 지킨다 — D45 5번 조건은
+// 어느 라벨을 쓰든 "무엇에 대해 최적인지" 캡션이 같은 화면에 있어야 한다는
+// 뜻이라 라벨 문구 자체와는 별개다. 기본값은 첫 탭이 쓰는 원래 상수라
+// 이 매개변수를 넘기지 않는 모든 호출(첫 탭)은 전과 동일하다.
+function donutOptimalKicker(planNameCaptionText, labelText = DONUT_OPTIMAL_KICKER_LABEL) {
   if (!planNameCaptionText) {
     throw new Error(
       'donutOptimalKicker: 배분안 이름 캡션(donutPlanNameCaption) 없이 "최적"을 표시할 수 없습니다 — D45 5번 조건 위반',
     );
   }
-  return el('p', { class: 'donut-optimal-kicker type-caption' }, [DONUT_OPTIMAL_KICKER_LABEL]);
+  return el('p', { class: 'donut-optimal-kicker type-caption' }, [labelText]);
 }
 
-function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssumption = null, hideConditionalCopy = false } = {}) {
+/**
+ * [2026-08-23, 관리자 지시(신규 회차) 3·4번] 계산기2 결과 위계 최상단 —
+ * 「최적 월 배분」제목 한 줄(아이콘+kicker)만. 예전에는 `chartArea` 안에서
+ * 도넛과 한 덩어리(`calc2DonutHeader`)로 그렸으나, 이번 지시로 위계가
+ * 「제목 → 시나리오 탭 → 헤드라인 → 구성 → 도넛」으로 다시 갈리면서 제목이
+ * 도넛보다 훨씬 앞(시나리오 탭보다도 위)에 홀로 서게 됐다 — 그래서 `chartArea`
+ * 밖으로 완전히 뺐다. `donutOptimalKicker`의 가드(캡션 없이 못 쓴다)는
+ * 그대로 지킨다.
+ */
+function calc2DonutTitleOnly(planNameCaptionText) {
+  return el('div', { class: 'donut-section-header donut-section-header-calc2' }, [
+    el('div', { class: 'donut-section-header-title-row' }, [
+      iconChart(),
+      donutOptimalKicker(planNameCaptionText, CALC2_DONUT_OPTIMAL_KICKER_LABEL),
+    ]),
+  ]);
+}
+
+function chartArea(
+  plan,
+  scenario,
+  months,
+  { seatDraw = 'donut', isaReturnAssumption = null, hideConditionalCopy = false, saveShareEl = null } = {},
+) {
   const unallocated = plan.unallocated_annual_krw;
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
@@ -9631,6 +10301,17 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
           totalAllocatedMonthlyKrw: plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw,
           isProposed: !scenario.is_enacted,
           animateFromZero: seatDraw === 'donut-entering',
+          // [2026-08-23, D82 소유자 지시 5번 — 계산기2 결과 도넛 한정, 판단
+          // 근거] "지시선 제거 + 조각에 더 가까이"는 `labelled`/`labelledWide`
+          // 모드(라벨을 좌우 세로 열에 쌓고 지시선으로 잇는 설계, `charts.js`
+          // `donutLabelLayout`)의 구조 자체와 상충한다 — 그 모드는 라벨이
+          // 조각 옆이 아니라 열 안 빈자리에 앉는 것이 설계의 핵심이라, 지시선을
+          // 없애면 "이 라벨이 어느 조각 것인지" 자체가 모호해진다. `legend`
+          // 모드는 애초에 조각마다 **자기 위치**(중심각)에 라벨을 두므로
+          // "조각에 더 가깝다"는 요구와 구조가 이미 맞는다 — 계산기2는 뷰포트
+          // 폭과 무관하게 이 모드로 고정한다(아래 `applyDonutSliceInlineLabels`
+          // 호출의 `hideLeader`가 이 모드에서만 뜻이 있다, `ui/app.js`).
+          labelMode: hideConditionalCopy ? 'legend' : undefined,
         });
 
   // D16 — 공통 배율. 납입 잔여 한도가 가장 큰 계좌의 트랙이 폭을 채우고 나머지는
@@ -9674,12 +10355,19 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
       const remaining = view.remainingLimitKrw;
       const percentOfLimit = remaining > 0 ? alloc.annual_krw / remaining : alloc.annual_krw > 0 ? 1 : 0;
       const trackScalePercent = computeTrackScalePercent(remaining, maxRemaining);
-      const warning = plan.warnings.find((w) => w.account === account);
+      const warning0 = plan.warnings.find((w) => w.account === account);
       // **소유자가 지목해 지운 경고**(`early_withdrawal_penalty_pension`,
       // 2026-08-13)는 `warningMessage()`가 `null`을 돌려준다 — 여기서 그
       // `null`을 문구 없는 빈 상자로 그리지 않고, 경고 자체가 없었던 것처럼
       // 아예 만들지 않는다. `warning.code`가 그대로 화면에 새는 것도 같은
       // 이유로 막는다(`copy.js`의 `warningMessage` 주석 참고).
+      // [2026-08-23, D82 판정 1] `hideConditionalCopy`(계산기2 전용) — 자금
+      // 사용 시점 미판정 정직성 문구("자금 사용 시점을 밝히지 않아 판정하지
+      // 않았습니다 — …")는 D42 계열 장치로 첫 탭에는 그대로 남는다. 계산기2
+      // 한정으로 이 트리거(`horizon_unknown`)일 때만 경고 자체를 만들지
+      // 않는다 — 같은 계좌의 다른 트리거(`declared_horizon`) 경고는 건드리지
+      // 않는다(그 경고는 "밝혔다"는 사실 위에 서 있어 이 지시와 무관하다).
+      const warning = hideConditionalCopy && warning0?.trigger === 'horizon_unknown' ? null : warning0;
       const warningText = warning ? warningMessage(warning, scenario.fund_use_horizon_boundaries) : null;
       return el('div', { class: 'allocation-bar-row' }, [
         el('div', { class: 'allocation-bar-labels' }, [
@@ -9719,33 +10407,66 @@ function chartArea(plan, scenario, months, { seatDraw = 'donut', isaReturnAssump
   // 같은 값을 준다. 여기서 비면 둘 다 그 사실을 반영한다.
   const planNameCaptionText = donutPlanNameCaption(plan.plan_id, plan.is_baseline);
 
+  // [2026-08-23, D82 판정(불요, 소유자 지시 3·4번) — 계산기2 한정, 관리자
+  // 지시(신규 회차) 3·4번으로 자리를 다시 옮김] 「월 납입 여력…나눕니다」
+  // 제목과 「…기본」 배분안 이름 캡션을 뺀다. 「최적 월 배분」(kicker)은
+  // **이제 이 함수 밖에서** 그린다(`calc2DonutTitleOnly`, `resultPanelForScenario`가
+  // 결과 위계 최상단에 별도로 꽂는다) — 그래서 이 함수 자신은 계산기2일 때
+  // 제목 행을 아예 만들지 않는다(`null`).
+  //
+  // **flag — D45 5번(헌장) 긴장.** `donutOptimalKicker`의 가드는 "「최적」은
+  // 무엇에 대해 최적인지 말하는 캡션이 **같은 화면에 실제로 보일 때만**
+  // 쓴다"는 조건을 지킨다(그 문서 머리말). 이 계산기2 분기는 가드 함수
+  // 자체(`planNameCaptionText`가 비어 있으면 여전히 던진다)는 그대로 지키지만,
+  // **그 캡션 문단 자체를 화면에서 지운다** — 소유자 지시 3번을 그대로
+  // 따른 결과다. tax-domain이 이 항목을 판정 대상으로 올리지 않았으므로
+  // (D82 게이트 기록 — 판정 1~4에 이 자리는 없다) 문면 그대로 구현했지만,
+  // "무엇에 대해 최적인지"가 계산기2 화면 어디에도 문장으로 남지 않는다는
+  // 점은 최종 보고에 열린 물음으로 올린다.
+  const defaultDonutHeader = el('div', { class: 'donut-section-header' }, [
+    // D45 5번 — 「최적」은 이 한 자리에만 쓴다. 조건(무엇에 대해 최적인지)은
+    // 바로 아래 배분안 이름 캡션이 진다 — `donutOptimalKicker`가 그 캡션
+    // 없이는 이 요소를 만들지 않는다(가드가 실제로 문다는 것은
+    // `ui/donut-optimal-kicker.test.mjs`가 확인한다).
+    donutOptimalKicker(planNameCaptionText),
+    // [2026-08-17, 관리자 지시(2차) 9번] 「결과」 섹션 아이콘(도넛/파이 모양,
+    // `icons.js`의 `iconChart`) — 제목 줄 앞에 붙인다. 도넛 중앙과 같은
+    // 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
+    // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
+    el('div', { class: 'donut-section-header-title-row' }, [
+      iconChart(),
+      el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
+    ]),
+    el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
+  ]);
+
+  // [2026-08-23, 관리자 지시(신규 회차) 7번, 위치 정정] 이미지·공유
+  // 아이콘 — 계산기2 한정으로 **도넛 차트가 차지하는 영역의 우측 하단**,
+  // 「계좌별 세제혜택」(`accountBenefitStrip`) **보다 위**에 둔다.
+  // 지난 회차는 `saveShareEl`을 `.donut-with-strip`(도넛+범례+세제혜택을
+  // 다 담은 통) 전체의 형제로 붙였는데, 그러면 세제혜택 블록까지 지난
+  // 뒤(그 아래)에 렌더된다 — 소유자가 실측으로 잡은 그 결함이다. 이제는
+  // **`.donut-with-strip`(여전히 `flex-direction: column`) 안에서 도넛+
+  // 범례 바로 다음, 세제혜택 바로 앞** 자리에 넣는다 — "도넛이 차지하는
+  // 영역의 하단"과 "세제혜택보다 위"를 같은 자리 하나로 만족한다.
+  // `saveShareEl` 자신은 오른쪽으로 붙는다(`align-self: flex-end`,
+  // `styles.css`) — 절대 위치를 쓰지 않아 위아래 어느 내용과도 겹칠 일이
+  // 없다(자연스러운 흐름 배치).
+  const donutSectionBody = el('div', { class: 'donut-with-strip' }, [
+    el('div', { class: 'donut-wrap' }, [donut]),
+    // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
+    // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
+    donutLegend(donutArgs),
+    saveShareEl,
+    // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
+    // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
+    // 정렬, 절반 크기.
+    accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
+  ]);
+
   return el('div', { class: 'chart-area' }, [
-    el('div', { class: 'donut-section-header' }, [
-      // D45 5번 — 「최적」은 이 한 자리에만 쓴다. 조건(무엇에 대해 최적인지)은
-      // 바로 아래 배분안 이름 캡션이 진다 — `donutOptimalKicker`가 그 캡션
-      // 없이는 이 요소를 만들지 않는다(가드가 실제로 문다는 것은
-      // `ui/donut-optimal-kicker.test.mjs`가 확인한다).
-      donutOptimalKicker(planNameCaptionText),
-      // [2026-08-17, 관리자 지시(2차) 9번] 「결과」 섹션 아이콘(도넛/파이 모양,
-      // `icons.js`의 `iconChart`) — 제목 줄 앞에 붙인다. 도넛 중앙과 같은
-      // 산식(`total_allocated_monthly_krw + unallocated_monthly_krw`
-      // = `echo.monthly_capacity_krw`) — 네 조각의 합과 같은 값을 되비춘다.
-      el('div', { class: 'donut-section-header-title-row' }, [
-        iconChart(),
-        el('p', { class: 'type-title-m' }, [donutSectionTitle(plan.total_allocated_monthly_krw + plan.unallocated_monthly_krw)]),
-      ]),
-      el('p', { class: 'type-body-s donut-plan-name' }, [planNameCaptionText]),
-    ]),
-    el('div', { class: 'donut-with-strip' }, [
-      el('div', { class: 'donut-wrap' }, [donut]),
-      // 모바일 전용 — 라벨이 겹치는 폭에서 SVG 라벨 대신 이 리스트가 값을 낸다.
-      // CSS 미디어쿼리가 둘 중 하나만 보이게 한다(둘 다 그려 두고 폭으로 고른다).
-      donutLegend(donutArgs),
-      // `[4-C']` — 도넛 카드의 자식이지 넷째 층이 아니다(screens.md 5.14절:
-      // "C-1→C-2→C-3 사이에 넷째 층을 꽂지 않는다"). 도넛 바로 아래, 우측
-      // 정렬, 절반 크기.
-      accountBenefitStrip(scenario, plan, isaReturnAssumption, hideConditionalCopy),
-    ]),
+    hideConditionalCopy ? null : defaultDonutHeader,
+    donutSectionBody,
     singleSlice ? el('p', { class: 'field-help chart-note' }, [donutSingleSliceCaption(singleSlice)]) : null,
     // 12.2(c) — 같은 사실을 더 짧게.
     el('p', { class: 'field-help chart-note' }, ['납입 잔여 한도 대비']),
@@ -10543,48 +11264,92 @@ function summarySheet(plan, scenario, annualReturnRate, form) {
  * 재사용)와 공유 링크의 확인 안내(`.share-link-note`, 별도 노드 — PDF/이미지
  * 캡션을 지우지 않고 나란히 둔다)도 같은 이유로 클릭 시점에 다시 찾는다.
  */
-function saveShareBlock(store, plan, scenario, annualReturnRate) {
-  const imageButton = el(
+/**
+ * [2026-08-23, D82 판정 4] 저장·공유 버튼의 아이콘화 — 계산기2 한정
+ * (`saveShareBlock`의 `hideConditionalCopy` 분기). 소유자 제공
+ * `src/design/image.png`·`share.png`를 단색 마스크(CSS `mask-image`)로
+ * `--accent-warm`을 입힌다 — 래스터 자체를 다시 칠하지 않는다(원본은
+ * 그대로, 화면에 실제로 칠해지는 색은 토큰 하나가 진다. 테마가 바뀌어도
+ * `--accent-warm`이 갱신되면 아이콘 색도 따라간다). **버튼의 접근 가능한
+ * 이름은 `aria-label`이 진다** — 아이콘만 남아도 뜻은 텍스트가 나른다는
+ * 9절 규약 그대로다.
+ */
+function saveShareIconButton({ extraClass, dataUri, iconWidth, iconHeight, ariaLabel, onclick }) {
+  return el(
     'button',
     {
       type: 'button',
-      class: 'btn btn-secondary',
-      onclick: async () => {
-        try {
-          // [2026-08-18, 관리자 지시(6차) 2번, D75] `store.getState().form`을
-          // 클릭 시점에 다시 읽는다 — `shareButton`(아래)이 이미 같은 이유로
-          // 그렇게 한다: 클로저가 마운트 시점 값을 붙잡으면 그 뒤 입력이
-          // 바뀌어도 예전 값이 이미지에 실린다.
-          const data = buildSummaryData(plan, scenario, annualReturnRate, store.getState().form);
-          const dataUrl = await exportSummaryPng(data);
-          downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
-          store.reportSaveShare('image');
-        } catch {
-          const note = document.querySelector('.save-share-note');
-          if (note) note.textContent = IMAGE_EXPORT_BLOCKED_NOTE;
-        }
-      },
+      class: `btn btn-secondary save-share-icon-btn ${extraClass}`,
+      'aria-label': ariaLabel,
+      onclick,
     },
-    [IMAGE_EXPORT_LABEL],
+    [
+      el('span', {
+        class: 'save-share-icon',
+        'aria-hidden': 'true',
+        style: `mask-image:url(${dataUri});-webkit-mask-image:url(${dataUri});width:${iconWidth}px;height:${iconHeight}px;`,
+      }),
+    ],
   );
-  const pdfButton = el(
-    'button',
-    {
-      type: 'button',
-      class: 'btn btn-secondary',
-      onclick: () => {
-        const attempted = exportToPdf({
-          onBlocked: () => {
-            const note = document.querySelector('.save-share-note');
-            if (note) note.textContent = PDF_EXPORT_BLOCKED_NOTE;
+}
+
+function saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy = false) {
+  const imageOnClick = async () => {
+    try {
+      // [2026-08-18, 관리자 지시(6차) 2번, D75] `store.getState().form`을
+      // 클릭 시점에 다시 읽는다 — `shareButton`(아래)이 이미 같은 이유로
+      // 그렇게 한다: 클로저가 마운트 시점 값을 붙잡으면 그 뒤 입력이
+      // 바뀌어도 예전 값이 이미지에 실린다.
+      const data = buildSummaryData(plan, scenario, annualReturnRate, store.getState().form);
+      const dataUrl = await exportSummaryPng(data);
+      downloadDataUrl(dataUrl, `배분-요약-${scenario?.ruleset?.tax_year ?? ''}.png`);
+      store.reportSaveShare('image');
+    } catch {
+      const note = document.querySelector('.save-share-note');
+      if (note) note.textContent = IMAGE_EXPORT_BLOCKED_NOTE;
+    }
+  };
+  const imageButton = hideConditionalCopy
+    ? saveShareIconButton({
+        extraClass: 'save-share-icon-btn-image',
+        dataUri: SAVE_SHARE_IMAGE_ICON_DATA_URI,
+        // [2026-08-23, D83 소유자 지시 7번] 22 × 1.05 = 23.1
+        iconWidth: 23.1,
+        iconHeight: 23.1,
+        ariaLabel: IMAGE_EXPORT_LABEL,
+        onclick: imageOnClick,
+      })
+    : el('button', { type: 'button', class: 'btn btn-secondary', onclick: imageOnClick }, [IMAGE_EXPORT_LABEL]);
+  // [2026-08-23, D82 판정 2] PDF 저장 버튼 — 계산기2 한정으로 화면에서만
+  // 뺀다. **조립기(`exportToPdf`, `ui/print.js`)와 인쇄 CSS는 그대로
+  // 둔다** — 브라우저 인쇄(Ctrl/Cmd+P)로는 여전히 동작하고, 버튼을
+  // 되살리려면 이 삼항 하나만 되돌리면 된다(D82 게이트 기록 원문).
+  const pdfButton = hideConditionalCopy
+    ? null
+    : el(
+        'button',
+        {
+          type: 'button',
+          class: 'btn btn-secondary',
+          onclick: () => {
+            const attempted = exportToPdf({
+              onBlocked: () => {
+                const note = document.querySelector('.save-share-note');
+                if (note) note.textContent = PDF_EXPORT_BLOCKED_NOTE;
+              },
+            });
+            if (attempted) store.reportSaveShare('pdf');
           },
-        });
-        if (attempted) store.reportSaveShare('pdf');
-      },
-    },
-    [PDF_EXPORT_LABEL],
-  );
-  const note = el('p', { class: 'type-caption save-share-note' }, [SUMMARY_EXPORT_NOTE]);
+        },
+        [PDF_EXPORT_LABEL],
+      );
+  // [2026-08-23, D82 판정(불요) — 소유자 지시 8번] 캡션 문장(SUMMARY_EXPORT_NOTE)
+  // 자체는 계산기2에서 뺀다 — 그러나 **이 문단 요소는 그대로 둔다**(빈
+  // 문자열로 시작). `.save-share-note`는 내보내기가 막혔을 때 이미지
+  // 버튼 핸들러(`imageOnClick`)가 `document.querySelector`로 다시 찾아
+  // 오류 안내를 적는 유일한 자리다 — 요소째 지우면 그 안내가 갈 곳이
+  // 없어진다(소유자 지시는 "캡션 제거"이지 "오류 안내 경로 제거"가 아니다).
+  const note = el('p', { class: 'type-caption save-share-note' }, [hideConditionalCopy ? '' : SUMMARY_EXPORT_NOTE]);
 
   /**
    * [관리자 지시(4차) 7번, D74] 공유 링크 — URL **프래그먼트**에 현재 입력을
@@ -10595,33 +11360,48 @@ function saveShareBlock(store, plan, scenario, annualReturnRate) {
    * 링크를 이어 붙인다) — "복사됐다"는 사실만 알리고 "값이 들어 있다"를
    * 빠뜨리면 D74의 판정이 무너진다.
    */
-  const shareButton = el(
-    'button',
-    {
-      type: 'button',
-      class: 'btn btn-secondary',
-      onclick: async () => {
-        const url = buildShareUrl(store.getState().form);
-        const noteEl = document.querySelector('.share-link-note');
-        try {
-          if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
-          await navigator.clipboard.writeText(url);
-          if (noteEl) noteEl.textContent = SHARE_LINK_COPIED_NOTE;
-        } catch {
-          if (noteEl) noteEl.textContent = `${SHARE_LINK_COPY_BLOCKED_NOTE} ${url}`;
-        }
-        store.reportSaveShare('link_copy');
-      },
-    },
-    [SHARE_LINK_LABEL],
-  );
+  const shareOnClick = async () => {
+    const url = buildShareUrl(store.getState().form);
+    const noteEl = document.querySelector('.share-link-note');
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
+      await navigator.clipboard.writeText(url);
+      if (noteEl) noteEl.textContent = SHARE_LINK_COPIED_NOTE;
+    } catch {
+      if (noteEl) noteEl.textContent = `${SHARE_LINK_COPY_BLOCKED_NOTE} ${url}`;
+    }
+    store.reportSaveShare('link_copy');
+  };
+  const shareButton = hideConditionalCopy
+    ? saveShareIconButton({
+        extraClass: 'save-share-icon-btn-share',
+        dataUri: SAVE_SHARE_SHARE_ICON_DATA_URI,
+        // [2026-08-23, D83 소유자 지시 7번] 22 × 1.05 = 23.1
+        iconWidth: 23.1,
+        iconHeight: 23.1,
+        ariaLabel: SHARE_LINK_LABEL,
+        onclick: shareOnClick,
+      })
+    : el('button', { type: 'button', class: 'btn btn-secondary', onclick: shareOnClick }, [SHARE_LINK_LABEL]);
   const shareNote = el('p', { class: 'type-caption share-link-note' }, ['']);
 
-  return el('div', { class: 'save-share' }, [
-    el('p', { class: 'save-share-heading type-body-strong' }, [SAVE_SHARE_HEADING]),
-    el('div', { class: 'save-share-actions' }, [imageButton, pdfButton]),
+  // [2026-08-23, D82 소유자 지시 8번] 「요약 저장」 소제목 — 계산기2에서는
+  // 뺀다(캡션과 같은 지시). 버튼 묶음(`save-share-actions`)에서 PDF 버튼이
+  // 빠지면(판정 2) 이미지 버튼 하나만 남는다 — `pdfButton`이 `null`이면
+  // `el()`이 그 자식을 조용히 건너뛴다(`dom.js` — 이 파일 다른 자리에서도
+  // 쓰는 관행, 새로 만들지 않는다).
+  //
+  // [2026-08-23, D83 소유자 지시 7번] 계산기2는 이미지·공유 버튼을 같은 한
+  // 행에 우측 정렬로 묶는다(`save-share-actions-calc2-row`, CSS
+  // `justify-content:flex-end`) — 첫 탭은 이미지(+PDF) 행과 공유 행이
+  // 여전히 따로다(`save-share-actions-secondary`). 테두리 제거·+5% 크기는
+  // CSS(`.save-share-icon-btn`)와 위 `iconWidth/iconHeight`가 진다.
+  const calc2ActionsRow = el('div', { class: 'save-share-actions save-share-actions-calc2-row' }, [imageButton, shareButton]);
+  return el('div', { class: `save-share${hideConditionalCopy ? ' save-share-calc2' : ''}` }, [
+    hideConditionalCopy ? null : el('p', { class: 'save-share-heading type-body-strong' }, [SAVE_SHARE_HEADING]),
+    hideConditionalCopy ? calc2ActionsRow : el('div', { class: 'save-share-actions' }, [imageButton, pdfButton]),
     note,
-    el('div', { class: 'save-share-actions save-share-actions-secondary' }, [shareButton]),
+    hideConditionalCopy ? null : el('div', { class: 'save-share-actions save-share-actions-secondary' }, [shareButton]),
     shareNote,
   ]);
 }
@@ -10702,6 +11482,19 @@ function proposedSameAsCurrentBody(scenario) {
   ]);
 }
 
+/**
+ * [2026-08-23, D83 판정 3 — 계산기2 한정, 관리자 지시(신규 회차) 3~7번으로
+ * 다시 갈림] 결과 위계 — 「제목(최적 월 배분) → 시나리오 탭 → 헤드라인 →
+ * 구성 한 줄 → 도넛(+이미지·공유 아이콘) → 나머지」. `renderResultPanel`이
+ * 시나리오 탭을 이 함수보다 **먼저** 그리므로(고정 순서), **제목만** 이
+ * 함수 밖으로 빼서(`extractedTitle`) `renderResultPanel`이 시나리오 탭
+ * **앞**에 꽂는다 — 도넛(`chartAreaEl`)은 이제 시나리오 탭 뒤, 헤드라인
+ * (`amountCard`) 바로 다음 자리에 이 함수 **안에서** 그린다(D83은 도넛
+ * 전체를 시나리오 탭 앞으로 뺐었는데, 이번 지시로 도넛은 헤드라인 뒤로
+ * 다시 내려간다 — 제목만 계속 맨 위에 남는다). 첫 탭(`hideConditionalCopy
+ * === false`)은 제목이 도넛과 한 덩어리인 원래 자리 그대로 남는다 —
+ * 위계가 안 바뀐다.
+ */
 function resultPanelForScenario(
   response,
   scenario,
@@ -10711,7 +11504,7 @@ function resultPanelForScenario(
   { conditionalPending = false, form = {}, seatDraw = 'donut', hideConditionalCopy = false } = {},
 ) {
   if (proposedScenarioMatchesCurrent(response, scenario)) {
-    return proposedSameAsCurrentBody(scenario);
+    return { body: proposedSameAsCurrentBody(scenario), extractedTitle: null };
   }
 
   const plan = scenario.plans.find((p) => p.plan_id === activePlanId) ?? scenario.plans[0];
@@ -10719,7 +11512,30 @@ function resultPanelForScenario(
   const reorderNote = scenario.comparison_note_codes.includes('baseline_reordered_by_fund_use_horizon');
   const annualReturnRate = response.echo.isa_return_assumption?.annual_return_rate ?? null;
 
-  return el('div', { class: 'result-body' }, [
+  // [2026-08-23, 관리자 지시(신규 회차) 7번] 이미지·공유 — 계산기2 한정으로
+  // 도넛이 있는 영역의 우측 하단에 둔다. `chartArea`가 이 엘리먼트를
+  // 그 안에(`.donut-with-strip` 형제로) 심는다 — `saveShareBlock` 자신은
+  // 그대로다(계산기2 분기는 이미 아이콘만 남기고 캡션·PDF 버튼을 뺐다,
+  // D82). 첫 탭은 이 함수 안 옛 자리(맨 끝)에 그대로 남는다.
+  const calc2SaveShareEl = hideConditionalCopy ? saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy) : null;
+
+  const chartAreaEl = chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
+    seatDraw,
+    hideConditionalCopy,
+    // 5.1.0(D28) — "무엇을 주었는가"(echo)와 "무엇을 썼는가"(estimate)를 한
+    // 칸에 뭉치지 않는다. 정산 기간은 estimate에서, 수익률·소득 성격은
+    // echo에서 읽어 같은 캡션에 함께 적는다(계약 4.2절).
+    isaReturnAssumption: response.echo.isa_return_assumption,
+    saveShareEl: calc2SaveShareEl,
+  });
+
+  // [2026-08-23, 관리자 지시(신규 회차) 3·4번] 제목(「최적 월 배분」)만
+  // 따로 뺀다 — `chartArea`는 계산기2일 때 이 제목 행을 만들지 않는다
+  // (`calc2DonutTitleOnly` 주석). 도넛 이름 캡션과 같은 값을 쓴다(D45
+  // 5번의 가드 조건, 위 `donutOptimalKicker` 머리말).
+  const calc2TitleEl = hideConditionalCopy ? calc2DonutTitleOnly(donutPlanNameCaption(plan.plan_id, plan.is_baseline)) : null;
+
+  const body = el('div', { class: 'result-body' }, [
     // 5.1.0(D28) — "무엇을 주었는가"(echo)를 헤드라인 구성 줄②의 조건절에도
     // 그대로 쓴다. 화면이 수익률을 제안하거나 미리 채우지 않는다(0.10절) —
     // 여기서도 사용자가 준 값을 되비출 뿐 새 값을 만들지 않는다.
@@ -10727,7 +11543,13 @@ function resultPanelForScenario(
     // `showCaption: false`로 헤드라인 밑 조건절만 뺀다. "잘림" 사실 문단
     // (`amount-card-direction`)은 `showCaption`과 무관하게 그대로 남는다
     // (`amountCard` 머리말) — D80이 지운 것은 조건절뿐이다.
-    amountCard(plan, scenario, annualReturnRate, { showCaption: !hideConditionalCopy }),
+    // [2026-08-23, 관리자 지시(신규 회차) 6번] `singleLineComposition` —
+    // 계산기2 한정으로 구성 두 줄을 한 행으로 합친다(`amountCard` 머리말).
+    amountCard(plan, scenario, annualReturnRate, { showCaption: !hideConditionalCopy, singleLineComposition: hideConditionalCopy }),
+    // [2026-08-23, 관리자 지시(신규 회차) 3~7번] 계산기2는 도넛(+아이콘)이
+    // 헤드라인 바로 다음이다 — 시나리오 탭 앞이 아니라 여기(제목만 앞으로
+    // 뺐다, 위 `calc2TitleEl`). 첫 탭은 옛 자리(맨 아래쪽) 그대로.
+    hideConditionalCopy ? chartAreaEl : null,
     // 표시된 숫자 바로 옆에서 말한다 — 배너만으로는 금액을 보는 사용자의 눈에
     // 안 들어온다(3.5절 "아래 결과에는 아직 반영되지 않았다는 표시를 함께 둔다").
     conditionalPending ? el('p', { class: 'stale-caption' }, [CONDITIONAL_PENDING_STALE_CAPTION]) : null,
@@ -10736,14 +11558,8 @@ function resultPanelForScenario(
     proposedScenarioCaption(scenario),
     // [2026-08-21, D80 판정 2] 이월 개정안 경고 — 계산기2에서는 뺀다.
     hideConditionalCopy ? null : isaCarryoverRepealDivergenceNote(response, scenario),
-    chartArea(plan, scenario, response.echo.months_remaining_in_tax_year, {
-      seatDraw,
-      hideConditionalCopy,
-      // 5.1.0(D28) — "무엇을 주었는가"(echo)와 "무엇을 썼는가"(estimate)를 한
-      // 칸에 뭉치지 않는다. 정산 기간은 estimate에서, 수익률·소득 성격은
-      // echo에서 읽어 같은 캡션에 함께 적는다(계약 4.2절).
-      isaReturnAssumption: response.echo.isa_return_assumption,
-    }),
+    // 첫 탭은 여기가 원래 자리 그대로다 — 계산기2는 위(헤드라인 바로 다음)에 이미 그렸다.
+    hideConditionalCopy ? null : chartAreaEl,
     // [2026-08-21, D80 판정 2] 「두 연금계좌 중 왜 이 순서인가」 블록 —
     // 계산기2에서는 뺀다.
     hideConditionalCopy ? null : fillOrderNote(plan, scenario),
@@ -10756,8 +11572,12 @@ function resultPanelForScenario(
     // 않는다(어차피 숨어 있다) — 저장·공유 버튼 바로 앞에 두어 "이 결과를
     // 어떻게 들고 나갈까"라는 흐름과 코드 순서가 같게 맞춘다.
     summarySheet(plan, scenario, annualReturnRate, form),
-    saveShareBlock(store, plan, scenario, annualReturnRate),
+    // [2026-08-23, 관리자 지시(신규 회차) 7번] 계산기2는 이미 도넛 영역
+    // 안에 심었다(`calc2SaveShareEl` → `chartArea`의 `saveShareEl`) — 여기서
+    // 또 그리면 버튼이 두 번(중복) 생긴다. 첫 탭은 옛 자리 그대로.
+    hideConditionalCopy ? null : saveShareBlock(store, plan, scenario, annualReturnRate, hideConditionalCopy),
   ]);
+  return { body, extractedTitle: calc2TitleEl };
 }
 
 function scenarioTabs(response, activeScenarioId, onSelect) {
@@ -10893,7 +11713,7 @@ function renderResultPanel({ state, store, resultKey = 'default' }) {
   // 영향받지 않는다. 프리필 안내줄(넷째)은 `ui/calc2-input-panel.js`가
   // 이미 그리지 않는다(이 파일과 무관).
   const hideConditionalCopy = resultKey === 'calc2';
-  const body = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
+  const { body, extractedTitle } = resultPanelForScenario(result, scenario, planId, store, onSelectPlan, {
     conditionalPending,
     form: state.form,
     seatDraw,
@@ -10906,6 +11726,12 @@ function renderResultPanel({ state, store, resultKey = 'default' }) {
   return el('div', { class: wrapperClass }, [
     status === 'field_error' ? fieldErrorBanner(store) : null,
     conditionalPending ? conditionalPendingAlert() : null,
+    // [2026-08-23, 관리자 지시(신규 회차) 3·4번 — 계산기2 한정] 「최적 월
+    // 배분」 제목이 결과 위계 최상단, 시나리오 탭보다도 위다.
+    // `extractedTitle`은 `hideConditionalCopy`일 때만 값이 있다
+    // (`resultPanelForScenario`). 첫 탭은 `null`이라 이 줄이 아무것도 안
+    // 그리고, 제목은 도넛과 한 덩어리로 `body` 안 원래 자리에 그대로 남는다.
+    extractedTitle,
     scenarioTabs(result, scenarioId, onSelectScenario),
     body,
   ]);
@@ -10922,62 +11748,6 @@ let rerenderHook = () => {};
 function setRerenderHook(fn) {
   rerenderHook = fn;
 }
-
-// ───────── src/web/calc2-copy.js ─────────
-/**
- * 「절세계좌 계산기2」(D79) 탭 전용 문구 사전. `reverse-copy.js`가 역산기
- * 탭을 첫 탭 사전(`copy.js`)에서 분리한 것과 같은 이유(engine-interface.md
- * 8.11절 — "다른 탭의 코드를 그 목록에 섞으면 첫 탭의 사전이 두 번째 탭의
- * 문장을 지게 된다")로, 이 탭이 새로 여는 문구만 따로 둔다.
- *
- * **오류·안내·가정 코드(`ERROR_MESSAGE`·`NOTICE_MESSAGE`·`ASSUMPTION_MESSAGE`)는
- * 나누지 않는다** — 이 탭은 첫 탭과 **같은 엔진, 같은 요청 스키마**를 쓰므로
- * (D79 머리말 "엔진·계산·결과는 첫 탭과 같고, 입력 화면만 다르다") 같은 코드가
- * 같은 뜻이다. `copy.js`의 기존 사전을 그대로 재사용한다
- * (`ui/calc2-input-panel.js`가 `copy.js`에서 직접 가져다 쓴다).
- *
- * 헌장의 문구 규약(세무 상담·자문 어휘 금지, 지시형·단정형 금지, 세법 수치
- * 하드코딩 금지)을 그대로 지킨다.
- */
-
-
-
-/** 탭 라벨 — 소유자 지시 원문 "절세계좌 계산기2". `SERVICE_NAME`을 재사용해
- * 첫 탭 이름이 바뀌면 이 라벨도 같이 따라간다. */
-const CALC2_TAB_LABEL = `${SERVICE_NAME}2`;
-
-// **`CALC2_PREFILL_NOTE`가 여기 있었다**(D79 판정 2로 도입, D80 판정 2로
-// 폐기). 소유자가 프리필 안내줄을 조건절·근거 문구 넷 중 하나로 명시 지목해
-// 지웠다(D59~D61 계보와 같은 성질) — 부르는 곳이 더는 없다.
-
-/** [D79 판정 1·3] 필수 최소 입력 뒤, 조건부·선택 입력을 접어 두는 자리의 트리거. */
-const CALC2_MORE_INFO_TRIGGER = '▸ 추가 정보 (선택)';
-
-/** 필수 최소 입력 그룹 제목. */
-const CALC2_ESSENTIAL_GROUP_TITLE = '기본 정보';
-
-/**
- * [신규 회차 — 소유자 지시 3번] 「이 돈을 언제 쓸 계획인가요?」 답변 2번
- * (`fund_use_horizon: 'before_pension_age'`)의 계산기2 전용 문구 — 첫 탭은
- * `copy.js`의 `fundUseHorizonLabel(value, boundariesInfo)`가 계산한 문구
- * (경계값을 알면 "N년 후 ~ M년 이내 쓸 계획이다", 모르면 "중간에 쓸
- * 계획이다")를 그대로 쓰지만, 계산기2는 경계값 유무와 무관하게 **항상**
- * 이 고정 문장 하나로 바꾼다(`ui/calc2-input-panel.js`의
- * `fundUseHorizonGroup({ labelOverrides })` 호출).
- *
- * **엔진 매핑은 그대로다.** 이 답을 고르면 여전히 같은 `fund_use_horizon:
- * 'before_pension_age'`가 요청에 실리고, 엔진은 여전히 같은 로직대로
- * IRP 배분을 피한다 — 소유자가 로직 유지까지 명시했다. 이 문구-값
- * 매핑(「10년 안에 쓸 계획이다」 = `before_pension_age`)은 **계산기2
- * 사전에만 있다** — 첫 탭·역산기는 옛 문구를 그대로 쓴다.
- *
- * **주의(관리자 판정).** 이 답은 원래 "연금 개시 전"이라는 뜻이라 실제
- * 연금 개시까지 10년이 채 안 남은 고령 사용자에게는 "10년 안에"라는
- * 새 문구가 그 사람의 실제 시점과 어긋날 수 있다 — 그래도 소유자가
- * 문구만 바꾸고 로직은 유지하라고 명시했으므로 그대로 시행한다. 계산기2가
- * "간결한 판"이라는 실험 축(D80 판정 2 계보)이라는 것이 그 판단의 근거다.
- */
-const CALC2_FUND_USE_HORIZON_BEFORE_PENSION_LABEL = '10년 안에 쓸 계획이다';
 
 // ───────── src/web/state/annuity-start-derivation.js ─────────
 /**
@@ -11298,7 +12068,11 @@ function renderCalc2InputPanel({ state, store, renderGuard }) {
         store.setField('isaIncomeCharacter', 'mixed_or_unknown', { immediate: true });
       }
     },
-    help: ISA_RETURN_SECTION_HELP,
+    // [2026-08-23, D83 소유자 지시 8번 / 판정 2] 방어 문구(제시·전망이
+    // 아니라는 안내)를 계산기2에서는 달지 않는다 — 소유자 명시 번복,
+    // `calc2-copy.js`의 `CALC2_ISA_RETURN_SECTION_TITLE` 주석에 위험·근거를
+    // 적었다. 첫 탭(`ui/input-panel.js`)은 `ISA_RETURN_SECTION_HELP`를
+    // 그대로 단다 — 이 줄만 계산기2 한정으로 뗀다.
   });
   const rateField = percentField({
     id: 'calc2IsaReturnRatePercent',
@@ -11311,7 +12085,7 @@ function renderCalc2InputPanel({ state, store, renderGuard }) {
   });
   const returnInner = conditionalGroup(form.isaReturnEnabled, [rateField], 'calc2IsaReturnGroup');
   const returnGroup = el('section', { class: 'input-group', 'data-key': 'calc2ReturnGroup' }, [
-    groupTitleNode(iconTrend, ISA_RETURN_SECTION_TITLE),
+    groupTitleNode(iconTrend, CALC2_ISA_RETURN_SECTION_TITLE),
     returnToggle,
     returnInner,
   ]);
@@ -21563,10 +22337,15 @@ function exampleShowcaseScrollArrow() {
  * 머리말 최신 항목 참고). SVG는 `viewBox` 좌표계라 CSS 렌더 폭만 바꿔도
  * 안의 조각·글자가 함께 비례로 바뀐다.
  */
-/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업(`ui/calc2-example-modal.js`)이
- * 첫 탭과 완전히 같은 행 컴포넌트를 그대로 재사용한다(소유자 지시: "첫 탭
- * 예시영역 내용(두 페르소나 + 히어로 카피)을 팝업으로"). */
-function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 정보·도넛·절세액 세 칸을 낱개로 낸다 —
+ * `examplePersonaRow`(아래, 가로 한 줄 배치)와 계산기2 팝업의 새 카드 배치
+ * (`ui/calc2-example-modal.js`, 정보 좌상단·도넛 우상단·절세액 하단)가 같은
+ * 계산·같은 셀을 서로 다른 그리드로 배열할 수 있게 낱개로 뗐다 — 계산은
+ * 한 곳(`donutChart`·`amountCard` 호출)에만 있고, 두 배치는 그 결과를
+ * 감싸는 그리드 규칙만 다르다.
+ */
+function examplePersonaCells({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
   const excluded = excludedAccounts(scenario);
   const donutArgs = {
     allocations: plan.allocations,
@@ -21620,6 +22399,22 @@ function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, sc
   const amountCol = el('div', { class: 'example-persona-amount' }, [
     amountCard(plan, scenario, null, { compactCaption: true, showCaption: false, showComposition: false }),
   ]);
+
+  return { infoCol, donutCol, amountCol };
+}
+
+/** [신규 회차] `export`로 연다 — 계산기2 예시 팝업(`ui/calc2-example-modal.js`)이
+ * 첫 탭과 완전히 같은 행 컴포넌트를 그대로 재사용한다(소유자 지시: "첫 탭
+ * 예시영역 내용(두 페르소나 + 히어로 카피)을 팝업으로").
+ *
+ * **[2026-08-23, D82] 계산기2 팝업은 더는 이 함수를 부르지 않는다** — 그
+ * 팝업은 이제 `examplePersonaCells`의 세 칸을 자기만의 카드 그리드(정보
+ * 좌상단·도넛 우상단·절세액 하단, `ui/calc2-example-modal.js`)로 배열한다
+ * (소유자 지시 1번). 이 함수(첫 탭의 가로 한 줄 배치)는 그대로 첫 탭
+ * 전용으로 남는다 — 이름·동작 전부 이전과 같다(첫 탭 회귀 없음).
+ */
+function examplePersonaRow({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan }) {
+  const { infoCol, donutCol, amountCol } = examplePersonaCells({ name, iconDataUri, iconWidth, iconHeight, lines, scenario, plan });
 
   // [2026-08-20, 관리자 지시 2번] **고정 그리드 열**(`example-persona-row`,
   // styles.css) — 세 칸(정보/도넛/절세액)의 폭이 두 행에서 정확히 같은
@@ -21934,9 +22729,19 @@ async function mountExampleShowcase(hostEl, { engineClient }) {
  * 총급여 4,000만원·월 150만원)를 그대로 재사용한다 — 새 상수를 따로
  * 만들면 두 화면의 "김철수씨"가 서로 다른 나이·소득을 말할 수 있게 된다.
  *
- * **수익률은 프리필하지 않는다**(D77 판정 1 유지, D79 판정 2가 재확인).
- * `isaReturnEnabled` 등은 여기서 아예 건드리지 않는다 — `initialForm()`의
- * 기본값(꺼짐)이 그대로 남는다.
+ * **수익률은 [2026-08-23, D83 판정 2]부터 프리필한다 — D77 판정 1·D79
+ * 판정 2의 명시 번복, 계산기2 한정.** 종전에는 여기서 `isaReturnEnabled`
+ * 등을 아예 건드리지 않아 `initialForm()`의 기본값(꺼짐·빈 값)이 그대로
+ * 남았다. 지금은 토글을 켜고 연 5%를 채운다 — 「서비스가 제시하는
+ * 수익률」이 아니라 「예시 인물(김철수씨)이 정한 값, 편집 가능」이라는
+ * 성격을 유지하기 위해 이 프리필 틀 안에 넣는다(D79 판정 2의 프리필 틀
+ * 그대로, 값만 새로 추가). 소득 성격(`isaIncomeCharacter`)은 화면에서
+ * 토글을 직접 켤 때와 같은 값 `'mixed_or_unknown'`을 채운다
+ * (`ui/calc2-input-panel.js`의 `returnToggle.onChange`가 쓰는 값과 같다
+ * — 계약 3.6절의 "모른다" 값, 화면이 새로 지어낸 답이 아니다). 이 값은
+ * 계산기2 입력 화면에서 그대로 고쳐 쓸 수 있다 — 프리필은 시작값일 뿐
+ * 잠그지 않는다. 첫 탭·역산기는 이 프리필을 쓰지 않으므로 무기본값이
+ * 그대로 산다.
  *
  * **연금 수령 여부(`annuityStarted`)도 여기서 채우지 않는다** — 김철수씨는
  * 만 30세라 조문상 미개시가 확실하지만, 그 판단은 하드코딩이 아니라
@@ -21951,6 +22756,9 @@ async function mountExampleShowcase(hostEl, { engineClient }) {
 
 
 
+/** [2026-08-23, D83 소유자 지시 9번] 프리필되는 연 수익률(%) — 편집 가능한 시작값. */
+const CALC2_PREFILL_ISA_RETURN_RATE_PERCENT = '5';
+
 function buildCalc2PrefillForm() {
   return {
     birthDate: exampleBirthDate(TAX_YEAR),
@@ -21958,6 +22766,9 @@ function buildCalc2PrefillForm() {
     hasNonWageIncome: false,
     monthlyCapacity: String(EXAMPLE_MONTHLY_CAPACITY_MANWON),
     fundUseHorizon: 'unknown',
+    isaReturnEnabled: true,
+    isaReturnRatePercent: CALC2_PREFILL_ISA_RETURN_RATE_PERCENT,
+    isaIncomeCharacter: 'mixed_or_unknown',
   };
 }
 
@@ -21995,6 +22806,7 @@ function buildCalc2PrefillForm() {
  * 입력이 아니라 "오늘 이 팝업을 봤다"는 UI 상태 하나뿐이라 계측·전송 금지
  * 규약과 무관하다(사용자 입력값이 아니다).
  */
+
 
 
 
@@ -22044,22 +22856,52 @@ function safeLocalStorage() {
 }
 
 /**
- * 히어로 카피(위) + 김철수씨 한 행(아래) — [번들 실측 마감 회차] 순서를
- * 뒤집고 이승은씨 행을 뺐다. 첫 탭의 `rowsAndCopy`(카피가 옆)와는 다른
- * 배치라 클래스를 새로 준다(`calc2-example-modal-body`) — 첫 탭 레이아웃
- * 규칙(가로 배치)이 이 모달에 새지 않는다.
+ * [2026-08-23, D82 소유자 지시 1번] 「월 납입금」→「납입금」 — 입력 네 줄 중
+ * 마지막 한 줄의 라벨만 짧아진다(값은 그대로). `exampleInputLineTexts()`가
+ * 낸 문자열을 여기서 다시 짓지 않고 접두만 바꿔 친다 — 값(만원 숫자)이나
+ * 줄 순서는 `example-showcase.js`가 계속 진다.
  */
-function exampleCopyAndRow({ persona1 }) {
-  const row1 = examplePersonaRow({
+function calc2ExampleInputLineTexts() {
+  return exampleInputLineTexts().map((line) => (line.startsWith('월 납입금') ? line.replace('월 납입금', CALC2_EXAMPLE_CAPACITY_LABEL) : line));
+}
+
+/**
+ * [2026-08-23, D82 소유자 지시 1번] 예시 카드 — 오른쪽 공간이 비어 보인다는
+ * 지적에 따라, 정보(기본 정보 네 줄)를 카드 좌상단, 도넛을 우상단, 절세액
+ * 카드를 카드 하단(전체 폭)에 앉힌다. **계산은 새로 하지 않는다** —
+ * `examplePersonaCells`가 첫 탭과 똑같은 계산(`donutChart`·`amountCard`
+ * 호출)으로 낸 세 칸을 이 카드만의 그리드(`calc2-example-card`,
+ * styles.css)로 다시 배열할 뿐이다.
+ *
+ * **카드처럼 보이게 — 주황 테두리 + 더 연한 주황 바탕**(`--accent-warm`·
+ * `--accent-warm-subtle`, 새 토큰 — 3단 구조로 다크 값도 함께 선언했다,
+ * `styles.css` 머리말 쪽). 내용 전체(정보·도넛·절세액) −5%는 `styles.css`의
+ * `.calc2-example-card` 스코프가 진다.
+ */
+function calc2ExampleCard({ persona1 }) {
+  const { infoCol, donutCol, amountCol } = examplePersonaCells({
     name: EXAMPLE_PERSONA_NAME,
     iconDataUri: MAN_ICON_DATA_URI,
     iconWidth: MAN_ICON_INTRINSIC_WIDTH,
     iconHeight: MAN_ICON_INTRINSIC_HEIGHT,
-    lines: exampleInputLineTexts(),
+    lines: calc2ExampleInputLineTexts(),
     scenario: persona1.scenario,
     plan: persona1.plan,
   });
-  return el('div', { class: 'calc2-example-modal-body' }, [exampleHeroCopy(), row1]);
+  return el('div', { class: 'calc2-example-card' }, [infoCol, donutCol, amountCol]);
+}
+
+/**
+ * 히어로 카피(왼쪽) + 예시 카드(오른쪽, 김철수씨) — [D82 소유자 지시 1번]
+ * 오른쪽이 비어 보인다는 지적으로 가로 배치(카피 | 카드)로 되돌아간다.
+ * **"카피가 먼저" 원칙(5항목 회차 판단)은 여전히 지킨다** — 그때는
+ * 위/아래로 순서를 나타냈지만 이제는 왼쪽/오른쪽(읽기 순서)으로 나타낸다,
+ * 뜻은 같다. 클래스는 그대로 `calc2-example-modal-body`(첫 탭의
+ * `rowsAndCopy`와는 다른 그리드 규칙을 쓴다 — 두 파일이 서로의 레이아웃을
+ * 밟지 않는다는 원래 원칙 그대로).
+ */
+function exampleCopyAndRow({ persona1 }) {
+  return el('div', { class: 'calc2-example-modal-body' }, [exampleHeroCopy(), calc2ExampleCard({ persona1 })]);
 }
 
 /**
@@ -22134,8 +22976,11 @@ async function maybeShowCalc2ExampleModal({ engineClient, now = new Date(), stor
   loadingNode.remove();
   shadowRoot.appendChild(exampleCopyAndRow({ persona1 }));
   fitAmountValueToCard(shadowRoot);
-  applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true });
-  stopWatchingTheme = watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true }));
+  // [2026-08-23, 소유자 지시 1번] `hideLeader: true` — 도넛-라벨 지시선을
+  // 없앤다. 계산기2 결과 도넛(D82 소유자 지시 5번)과 같은 이유·같은 옵션
+  // 조합이다 — 카드가 좁아 지시선까지 있으면 더 붐빈다.
+  applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true, hideLeader: true });
+  stopWatchingTheme = watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true, hideLeader: true }));
 }
 
 // ───────── src/web/reverse-copy.js ─────────
@@ -24184,8 +25029,15 @@ async function mountReverseExampleShowcase(hostEl, { engineClient }) {
   try {
     const [response] = await Promise.all([computeReverseExampleScenario(engineClient), stylesReady]);
     shadowRoot.appendChild(reverseExampleShowcaseSection(response));
-    applyDonutSliceInlineLabels(shadowRoot);
-    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot));
+    // [2026-08-23, D83 판정 1] `forceOutside: true` — 상설 규칙("라벨은 어떤
+    // 화면에서도 차트와 겹치지 않는다")이 이 화면을 명시로 짚었다(소유자
+    // 지시 "역산기 예시"). 조각 안에 들어가면 안에 그리던 예전 동작(옵션
+    // 없이 호출)은 큰 조각(예: "연금저축82%")에서 라벨이 고리 안쪽에
+    // 놓여 규칙과 충돌한다 — 첫 탭 예시(`example-showcase.js`, D79 판정 4)가
+    // 이미 같은 이유로 이 옵션을 쓴다. 두 "예시" 화면을 같은 규칙으로
+    // 맞춘다.
+    applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true });
+    watchDonutThemeChange(() => applyDonutSliceInlineLabels(shadowRoot, { forceOutside: true }));
   } catch (err) {
     console.error('[reverse-example-showcase] 예시를 계산하지 못했습니다', err);
   }
@@ -24956,15 +25808,25 @@ function mountApp(root, { engineClient, analytics }) {
     // **실제로 화면에 붙은 뒤**의 노드를 잰다(`patch`가 노드를 재사용하므로
     // `render` 시점에 재면 버려질 사본을 잰다) — 데스크톱(labelled) 도넛에는
     // `data-label-mode="legend"`가 없어 이 함수가 조용히 아무것도 하지 않는다.
-    applyDonutSliceInlineLabels(resultSlot);
+    // [2026-08-23, D83 판정 1] `forceOutside: true` — 조각 안에 들어가면 안에
+    // 그리던 예전 동작은 큰 조각(예: 계좌 하나뿐이라 100%인 도넛)에서 라벨이
+    // 고리 안쪽에 놓여 상설 규칙("라벨은 어떤 화면에서도 차트와 겹치지
+    // 않는다")과 충돌한다 — 실측으로 잡았다(모바일 100% ISA 라벨). 첫 탭
+    // 예시·역산기 예시와 같은 이유로 같은 옵션을 쓴다.
+    applyDonutSliceInlineLabels(resultSlot, { forceOutside: true });
     // [2026-08-20, D79] 계산기2 결과 슬롯에도 같은 후처리 — 같은 컴포넌트를
     // 재사용하므로 도넛 진입 애니메이션·조각 라벨 후처리도 그대로 건다.
     runDonutEntrance(calc2ResultSlot);
-    applyDonutSliceInlineLabels(calc2ResultSlot);
+    // [2026-08-23, D82 소유자 지시 5번] 계산기2 결과 도넛만 지시선 없이,
+    // 조각에 더 가까운 라벨로 그린다(`ui/result-panel.js`의 `chartArea`가
+    // 계산기2 한정으로 `labelMode: 'legend'`를 강제하는 것과 짝이다 — 그
+    // 모드에서만 이 옵션이 뜻이 있다).
+    applyDonutSliceInlineLabels(calc2ResultSlot, { forceOutside: true, hideLeader: true });
     // [2026-08-19, D78 ③] 역산기 결과에도 `AccountDonut`이 생겼다 — 같은
-    // 이유로 같은 후처리를 그 슬롯에도 건다.
+    // 이유로 같은 후처리를 그 슬롯에도 건다. [2026-08-23, D83 판정 1] 위
+    // `resultSlot`과 같은 이유로 `forceOutside: true`.
     runDonutEntrance(reverseResultSlot);
-    applyDonutSliceInlineLabels(reverseResultSlot);
+    applyDonutSliceInlineLabels(reverseResultSlot, { forceOutside: true });
   };
 
   setRerenderHook(scheduleRender);
@@ -24975,9 +25837,14 @@ function mountApp(root, { engineClient, analytics }) {
   // 전환은 `renderNow`를 다시 부르지 않는다 — 그래서 이 감시를 한 번, 여기서
   // 따로 건다(예시 쪽과 같은 두 경로를 듣는 `watchDonutThemeChange`, `charts.js`).
   watchDonutThemeChange(() => {
-    applyDonutSliceInlineLabels(resultSlot);
-    applyDonutSliceInlineLabels(calc2ResultSlot);
-    applyDonutSliceInlineLabels(reverseResultSlot);
+    // [2026-08-23, D83 판정 1] 위 `scheduleRender`와 같은 이유로 `forceOutside: true`.
+    applyDonutSliceInlineLabels(resultSlot, { forceOutside: true });
+    // [2026-08-23, D82 소유자 지시 5번] 계산기2 결과 도넛만 지시선 없이,
+    // 조각에 더 가까운 라벨로 그린다(`ui/result-panel.js`의 `chartArea`가
+    // 계산기2 한정으로 `labelMode: 'legend'`를 강제하는 것과 짝이다 — 그
+    // 모드에서만 이 옵션이 뜻이 있다).
+    applyDonutSliceInlineLabels(calc2ResultSlot, { forceOutside: true, hideLeader: true });
+    applyDonutSliceInlineLabels(reverseResultSlot, { forceOutside: true });
   });
 
   // 도넛은 라벨을 옆에 붙이는지 아래 리스트로 내리는지에 따라 **상자 크기 자체가
