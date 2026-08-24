@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen, FILL_REQUIRED_FIELDS } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * [2026-08-23, D83 판정 1 — 상설 규칙] 「도넛 차트의 계좌별 라벨은 어떤
@@ -112,29 +112,17 @@ test('D83 판정 1, 소유자 지시 1번 — 계산기2 예시 팝업 도넛 �
   }
 });
 
-test('D83 판정 1 — 첫 탭 예시 두 인물 도넛 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
-  const { page } = app;
-  await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.waitFor(`!!document.querySelector('.example-showcase-slot')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
-  await sleep(200);
-  const result = await page.evaluate(overlapCheck(`document.querySelector('.example-showcase-slot')?.shadowRoot`));
-  assertNoOverlap(result, '첫 탭 예시');
-  assert.ok(result.donuts.length >= 2, `첫 탭 예시 도넛이 두 인물분(2개) 이상이어야 한다: ${result.donuts.length}`);
-});
-
-test('D83 판정 1 — 역산기 예시 도넛 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
-  const { page } = app;
-  await page.clickElement(`document.getElementById('tab-pension-reverse')`);
-  await page.waitFor(`!!document.querySelector('.reverse-example-showcase-slot')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
-  await sleep(200);
-  const result = await page.evaluate(overlapCheck(`document.querySelector('.reverse-example-showcase-slot')?.shadowRoot`));
-  assertNoOverlap(result, '역산기 예시');
-});
-
+// [2026-08-24, D84 정리] 원래 여기 있던 두 검사("첫 탭 예시 두 인물 도넛"·
+// "역산기 예시 도넛")를 지운다 — 「절세계좌 계산기2(근거판)」와 「연금
+// 역산기」 탭이 지워지며 `.example-showcase-slot`·`.reverse-example-
+// showcase-slot` 둘 다 앱 어디에도 마운트되지 않는다. 이 파일이 재던
+// "다섯 화면" 상설 규칙은 이제 셋(계산기2 예시 팝업·계산기2 결과 데스크톱·
+// 계산기2 결과 모바일)이다 — 모바일 자리는 첫 탭의 것을 계산기2로 옮겨
+// 아래에 다시 세운다(계산기2 도넛도 뷰포트별 실측 가치가 있다,
+// `donut-geometry.browser.mjs`가 이미 같은 판단을 내렸다).
 test('D83 판정 1 — 계산기2 결과 도넛 라벨이 고리와 겹치지 않는다(레전드 모드, 209px)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await dismissCalc2ExampleModalIfOpen(page);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut path[role="img"]')`, { timeoutMs: 8000 });
   await sleep(300);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-result-slot')`));
@@ -142,15 +130,14 @@ test('D83 판정 1 — 계산기2 결과 도넛 라벨이 고리와 겹치지 �
   assertFontFloor(result, '계산기2 결과');
 });
 
-test('D83 판정 1 — 첫 탭 결과 도넛(모바일 375px, 레전드 모드) 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
-  const { page } = app;
-  await page.clickElement(`document.getElementById('tab-calculator')`);
+test('D83 판정 1 — 계산기2 결과 도넛(모바일 375px)도 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 900, deviceScaleFactor: 1, mobile: true });
-  await sleep(150);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut path[role="img"]')`, { timeoutMs: 8000 });
   await sleep(400);
-  const result = await page.evaluate(overlapCheck(`document.querySelector('.result-slot .chart-area')`));
-  assertNoOverlap(result, '첫 탭 결과(모바일)');
+  const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-result-slot .chart-area')`));
+  assertNoOverlap(result, '계산기2 결과(모바일)');
   await page.send('Emulation.clearDeviceMetricsOverride');
 });

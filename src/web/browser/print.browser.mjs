@@ -1,6 +1,18 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, attachSandboxedFrame, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { EXAMPLE_SALARY_MANWON } from '../ui/example-showcase.js';
+import { TAX_YEAR } from '../state/store.js';
+import { EXAMPLE_AGE_YEARS } from '../ui/example-showcase.js';
+
+// [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 이 파일이
+// 재는 대상도 calc2 하나다. 옛 `FILL_REQUIRED_FIELDS` 픽스처(생년월일
+// 1980-01-01·총급여 6,000만원)는 그 탭 전용이었다 — 이제는 calc2가 로드와
+// 동시에 채우는 김철수씨 프리필 값(`ui/calc2-prefill.js`)을 그대로 쓴다.
+// 생년월일은 과세연도에 따라 달라지는 계산값이라(`exampleBirthDate`) 여기서
+// 새로 하드코딩하지 않고 같은 계산식으로 다시 낸다.
+const CALC2_PREFILL_BIRTH_DATE = `${TAX_YEAR - EXAMPLE_AGE_YEARS}-01-01`;
+const CALC2_PREFILL_SALARY_DISPLAY = `${EXAMPLE_SALARY_MANWON.toLocaleString('ko-KR')}만원`;
 
 /**
  * PDF 내보내기(`ui/print.js` + `styles.css`의 `@media print`) — 2026-08-10,
@@ -61,14 +73,11 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일이 재는 것은
-  // 첫 탭(calculator)의 인쇄 레이아웃이다. 그 탭이 숨어 있으면 좌표 클릭이
-  // 빗나가고, `.save-share button`을 문서 전체로 찾을 때도 계산기2 쪽이
-  // 먼저 걸릴 수 있다. 먼저 켠다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
+  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
+  // 선다(D79 판정 2).
   await dismissCalc2ExampleModalIfOpen(app.page);
-  await app.page.clickElement(`document.getElementById('tab-calculator')`);
-  await app.page.evaluate(FILL_REQUIRED_FIELDS);
-  await app.page.waitFor(`!!document.querySelector('.save-share button')`);
+  await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(400);
 }, { skip: skipWithoutChrome });
 
@@ -76,32 +85,27 @@ after(async () => {
   if (app) await app.close();
 });
 
-test('[뒤집힘, D74] 「요약 저장」 버튼 둘(이미지·PDF) + 「내 결과 공유하기」가 있다 — 옛 단언은 PDF 하나뿐이었다', { skip: skipWithoutChrome }, async () => {
-  // 옛 검사(2026-08-10)는 [PDF로 저장] 하나만 요구했다 — 그때는 "공유용
-  // 이미지 만들기"를 걷어낸 직후였다. D74로 이미지가 요약 전용으로
-  // 되돌아왔고, 공유 링크(관리자 지시 7번)도 이 블록에 함께 붙는다.
-  const { page } = app;
-  // [2026-08-21, D81] 계산기2도 같은 `.save-share` 블록을 공유해 기본
-  // 탭으로 이미 떠 있다 — 문서 전체 질의는 두 탭 몫이 겹쳐 6개가 나온다.
-  // 첫 탭(`calculator`)으로 좁힌다.
-  const labels = await page.evaluate(`[...document.getElementById('tabpanel-calculator').querySelectorAll('.save-share button')].map((b) => b.textContent.trim())`);
-  assert.deepEqual(labels, ['이미지로 저장', 'PDF로 저장', '내 결과 공유하기']);
-});
+// [2026-08-24, D84 정리] 원래 여기 있던 "「요약 저장」 버튼 둘(이미지·PDF)
+// + 「내 결과 공유하기」가 있다" 검사를 지운다 — D82 판정 2가 PDF 버튼을
+// calc2에서 화면 분기로 뺐고(조립기 자체는 남는다), D82 판정 4가 남은
+// 두 버튼(이미지·공유)의 글자를 아이콘+aria-label로 바꿨다 — 둘 다
+// `calc2.browser.mjs`의 "D82 판정 2"·"D82 판정 4" 검사가 이미 고정한다.
+// 이 파일에서 같은 것을 다시 재는 것은 중복이다.
 
-test('[뒤집힘, D75] 인쇄 미디어에서 입력 패널(`.input-slot`) 자체는 여전히 사라지지만, 요약 시트에는 이제 생년월일·총급여액이 보인다', { skip: skipWithoutChrome }, async () => {
+test('[뒤집힘, D75] 인쇄 미디어에서 입력 패널(`.calc2-input-slot`) 자체는 여전히 사라지지만, 요약 시트에는 이제 생년월일·총급여액이 보인다', { skip: skipWithoutChrome }, async () => {
   // 옛(D74) 검사 이름은 "입력 패널이 통째로 사라진다 — 입력값이 인쇄물에
   // 실릴 방법이 없다"였다. **D75가 그 마지막 절반을 명시로 뒤집었다** —
   // 소유자가 도넛 오른쪽에 입력값을 적으라고 지시했고(관리자 지시(6차)
   // 2번), 받아들이는 근거는 "요약은 사용자가 자기 기기에 저장하는 자기
-  // 파일"이라는 것이다(D75). **`.input-slot`(원본 `<input>`이 실제로
+  // 파일"이라는 것이다(D75). **`.calc2-input-slot`(원본 `<input>`이 실제로
   // 담긴 자리) 자체가 사라진다는 것은 여전히 참이다** — D75가 뒤집은 것은
   // "값이 어디에도 없다"이지 "입력 패널이 안 보인다"가 아니다.
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
     const layout = await page.evaluate(`(() => {
-      const inputSlot = document.querySelector('.input-slot');
-      const resultSlot = document.querySelector('.result-slot');
+      const inputSlot = document.querySelector('.calc2-input-slot');
+      const resultSlot = document.querySelector('.calc2-result-slot');
       return {
         inputSlotDisplay: getComputedStyle(inputSlot).display,
         resultSlotPosition: getComputedStyle(resultSlot).position,
@@ -112,21 +116,21 @@ test('[뒤집힘, D75] 인쇄 미디어에서 입력 패널(`.input-slot`) 자�
     assert.equal(layout.inputSlotDisplay, 'none', '입력 패널이 인쇄에서 숨어야 한다');
     assert.equal(layout.resultSlotPosition, 'static', 'sticky가 풀리지 않으면 스크롤 밖 내용이 잘린다');
     assert.equal(layout.resultSlotOverflow, 'visible', 'overflow가 풀리지 않으면 뷰포트 높이로 잘린다');
-    assert.equal(layout.saveShareDisplay, 'none', '인쇄된 종이 위의 "PDF로 저장" 버튼은 뜻이 없다');
+    assert.equal(layout.saveShareDisplay, 'none', '인쇄된 종이 위의 저장·공유 버튼은 뜻이 없다');
 
-    // [뒤집힘, D75] `.result-slot`의 나머지(요약 시트 밖)는 여전히 안
-    // 보이므로, `.result-slot`에 실제로 렌더된 텍스트는 곧 요약 시트의
-    // 텍스트다. 생년월일(FILL_REQUIRED_FIELDS의 `1980-01-01`, 마스킹
-    // 형식)과 총급여액(같은 픽스처의 `6000`만원 → `6,000만원`으로 표시,
-    // `ui/summary-data.js`의 `manwonDisplayText`)이 **이제는 있어야 한다.**
-    const resultText = await page.evaluate(`document.querySelector('.result-slot').innerText`);
-    assert.ok(resultText.includes('1980-01-01'), `요약 시트에 생년월일이 보이지 않습니다: ${JSON.stringify(resultText)}`);
-    assert.ok(resultText.includes('6,000만원'), `요약 시트에 총급여액이 보이지 않습니다: ${JSON.stringify(resultText)}`);
-    // **원 단위로 환산한 총급여(60,000,000원)는 여전히 어디에도 없다** —
-    // D75가 되비추는 것은 사용자가 화면에서 본 것과 같은 단위(만원)이지,
-    // 계산에 쓰인 원 단위 값이 아니다(`ui/summary-data.js`의
-    // `manwonDisplayText` 머리말).
-    assert.ok(!resultText.includes('60,000,000'), `요약 시트에 원 단위로 환산한 총급여가 보입니다: ${JSON.stringify(resultText)}`);
+    // [뒤집힘, D75] `.calc2-result-slot`의 나머지(요약 시트 밖)는 여전히 안
+    // 보이므로, `.calc2-result-slot`에 실제로 렌더된 텍스트는 곧 요약
+    // 시트의 텍스트다. 생년월일(calc2 프리필의 계산값)과 총급여액(같은
+    // 프리필의 `EXAMPLE_SALARY_MANWON`만원 → `ui/summary-data.js`의
+    // `manwonDisplayText`로 표시)이 **이제는 있어야 한다.**
+    const resultText = await page.evaluate(`document.querySelector('.calc2-result-slot').innerText`);
+    assert.ok(resultText.includes(CALC2_PREFILL_BIRTH_DATE), `요약 시트에 생년월일이 보이지 않습니다: ${JSON.stringify(resultText)}`);
+    assert.ok(resultText.includes(CALC2_PREFILL_SALARY_DISPLAY), `요약 시트에 총급여액이 보이지 않습니다: ${JSON.stringify(resultText)}`);
+    // **원 단위로 환산한 총급여(40,000,000원, calc2 프리필 4,000만원의
+    // 원화 환산)는 여전히 어디에도 없다** — D75가 되비추는 것은 사용자가
+    // 화면에서 본 것과 같은 단위(만원)이지, 계산에 쓰인 원 단위 값이
+    // 아니다(`ui/summary-data.js`의 `manwonDisplayText` 머리말).
+    assert.ok(!resultText.includes('40,000,000'), `요약 시트에 원 단위로 환산한 총급여가 보입니다: ${JSON.stringify(resultText)}`);
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }
@@ -135,7 +139,7 @@ test('[뒤집힘, D75] 인쇄 미디어에서 입력 패널(`.input-slot`) 자�
 test('인쇄 미디어에서도 도넛(SVG)이 실제 크기를 유지한다', { skip: skipWithoutChrome }, async () => {
   // [2026-08-18, D74] 이 SVG는 이제 화면용 `chartArea`의 도넛이 아니라
   // `.summary-sheet`(요약 시트) 안의 도넛이다 — 나머지는 전부 숨었으므로
-  // `.result-slot svg`가 가리키는 대상 자체가 바뀌었다(단언 자체는 그대로
+  // `.calc2-result-slot svg`가 가리키는 대상 자체가 바뀌었다(단언 자체는 그대로
   // 유효하다: "도넛이 인쇄에서 0×0이 아니다"). 선택자를 `.summary-sheet`로
   // 명시해 그 사실을 코드로도 남긴다.
   const { page } = app;
@@ -180,11 +184,15 @@ test('[신설, D75] 인쇄 미디어에서 도넛 조각 라벨(이름+비율)�
       return {
         allText: texts.map((t) => t.text),
         // 조각 라벨은 이름+비율 두 tspan을 한 text 노드에 담으므로 textContent가
-        // "ISA100%"처럼 붙어 나온다(summary-image.js의 sliceInlineLabelsMarkup)
-        // — 전체 일치가 아니라 부분 일치로 찾는다.
-        pctLabelRects: texts.filter((t) => /\\d+%/.test(t.text)).map((t) => t.rect),
+        // "ISA100%"처럼 붙어 나온다(summary-image.js의 sliceInlineLabelsMarkup,
+        // 이름과 숫자 사이에 공백이 없다). [2026-08-24, D84] calc2 프리필이
+        // ISA 예상 수익률을 기본으로 켜(D83 소유자 지시 9번) 입력값 블록에도
+        // "연 5%"(이름과 숫자 사이에 공백이 있다) 줄이 생겼다 — 느슨한 부분
+        // 일치(\\d+%)로는 이 줄까지 조각 라벨로 잘못 집는다. 공백이 전혀
+        // 없는 문자열 전체가 %로 끝나는 것만 조각 라벨로 좁힌다.
+        pctLabelRects: texts.filter((t) => /^\\S+%$/.test(t.text)).map((t) => t.rect),
         inputsHeadingRect: texts.find((t) => t.text === '입력값')?.rect ?? null,
-        birthDateRect: texts.find((t) => t.text === '1980-01-01')?.rect ?? null,
+        birthDateRect: texts.find((t) => t.text === ${JSON.stringify(CALC2_PREFILL_BIRTH_DATE)})?.rect ?? null,
       };
     })()`);
     assert.ok(m, '요약 시트 SVG를 찾지 못했습니다');
@@ -194,7 +202,7 @@ test('[신설, D75] 인쇄 미디어에서 도넛 조각 라벨(이름+비율)�
     }
     assert.ok(m.inputsHeadingRect, '입력값 블록 제목("입력값")이 SVG 안에 없습니다');
     assert.ok(m.inputsHeadingRect.width > 0 && m.inputsHeadingRect.height > 0, `입력값 블록 제목이 0크기로 렌더됐습니다: ${JSON.stringify(m.inputsHeadingRect)}`);
-    assert.ok(m.birthDateRect, '생년월일 값("1980-01-01")이 SVG 안에 없습니다');
+    assert.ok(m.birthDateRect, `생년월일 값("${CALC2_PREFILL_BIRTH_DATE}")이 SVG 안에 없습니다`);
     // 입력값 블록이 도넛 **오른쪽**에 있다 — 도넛 라벨(조각 안/밖)보다
     // 항상 더 오른쪽 x좌표에서 시작해야 한다(관리자 지시 원문 "도넛
     // 오른쪽에 사용자가 입력한 값을 적어라").
@@ -366,7 +374,7 @@ test('D60 — 인쇄 레이아웃에도 `.disclosure-banner`도 그 두 문장�
   try {
     const state = await page.evaluate(`(() => ({
       bannerExists: !!document.querySelector('.disclosure-banner'),
-      resultText: document.querySelector('.result-slot').innerText,
+      resultText: document.querySelector('.calc2-result-slot').innerText,
     }))()`);
     assert.equal(state.bannerExists, false, '.disclosure-banner가 인쇄 레이아웃에 남아 있습니다');
     assert.ok(!state.resultText.includes('신고 대리가 아닙니다'), '성격 문장이 인쇄 레이아웃에 있습니다');
@@ -386,7 +394,7 @@ test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 인�
       limitNoteExists: !!document.querySelector('.limit-note'),
       factTagExists: !!document.querySelector('.note-tag-fact'),
       productTagExists: !!document.querySelector('.note-tag-product'),
-      resultText: document.querySelector('.result-slot').innerText,
+      resultText: document.querySelector('.calc2-result-slot').innerText,
     }))()`);
     assert.equal(state.limitNoteExists, false, '.limit-note가 인쇄 레이아웃에 남아 있습니다');
     assert.equal(state.factTagExists, false, '.note-tag-fact가 인쇄 레이아웃에 남아 있습니다');
@@ -592,29 +600,44 @@ test('[뒤집힘, D75] 요약 시트 자신에 이제 입력값이 있다 — �
   // 옛 이름은 "[신설, D74] 요약 시트 자신에도 원시 입력(생년월일·총급여)이
   // 없다"였다. 소유자가 D75로 그 유보를 명시로 덮었다 — 이 검사는 그
   // 뒤집힘을 확인한다: (1) 입력값 블록 제목("입력값")과 생년월일·총급여액이
-  // 요약 시트에 실제로 있고, (2) `form`을 켜지 않은 값(ISA 예상 수익률 — D42
-  // 픽스처는 이 값을 켜지 않는다)은 여전히 줄 자체가 없다(D75 선 ①).
+  // 요약 시트에 실제로 있고, (2) `form`에 켜지 않은 값(정산 기간 — calc2
+  // 프리필은 이 값을 채우지 않는다, D80 판정 1로 그 칸 자체가 calc2에
+  // 없다)은 여전히 줄 자체가 없다(D75 선 ①).
+  //
+  // [2026-08-24, D84] 옛(D42) 픽스처(FILL_REQUIRED_FIELDS)는 ISA 예상
+  // 수익률을 켜지 않았지만, calc2 프리필(`ui/calc2-prefill.js`, D83
+  // 소유자 지시 9번)은 **켠 채로** 시작한다(연 5%, 소득 성격
+  // `mixed_or_unknown`) — 그래서 "수익 성격"·"예상 수익률" 두 줄은 이제
+  // **있어야** 정상이고, "정산 기간"만 여전히 없어야 정상이다(D75 선 ①이
+  // 항목별로 개별 판정하는 것을 그대로 보여준다).
   const { page } = app;
   await page.send('Emulation.setEmulatedMedia', { media: 'print' });
   try {
     const summaryText = await page.evaluate(`document.querySelector('.summary-sheet').innerText`);
     assert.ok(summaryText.length > 0, '요약 시트가 비어 있습니다 — 검사 전제가 깨졌습니다');
     assert.ok(summaryText.includes('입력값'), '요약 시트에 입력값 블록 제목이 없습니다');
-    assert.ok(summaryText.includes('1980-01-01'), '요약 시트에 생년월일이 없습니다');
-    assert.ok(summaryText.includes('6,000만원'), '요약 시트에 총급여액이 없습니다');
-    // 이 픽스처(FILL_REQUIRED_FIELDS)는 ISA 예상 수익률을 켜지 않는다 —
-    // D75 선 ①(입력하지 않은 값은 줄 자체가 없다)이 지켜졌는지 여기서 잰다.
-    assert.ok(!summaryText.includes('수익 성격'), 'ISA 수익률을 안 켰는데 수익 성격 줄이 있습니다');
-    assert.ok(!summaryText.includes('정산 기간'), 'ISA 수익률을 안 켰는데 정산 기간 줄이 있습니다');
+    assert.ok(summaryText.includes(CALC2_PREFILL_BIRTH_DATE), '요약 시트에 생년월일이 없습니다');
+    assert.ok(summaryText.includes(CALC2_PREFILL_SALARY_DISPLAY), '요약 시트에 총급여액이 없습니다');
+    assert.ok(summaryText.includes('수익 성격'), 'calc2 프리필이 ISA 수익률을 켠 채로 시작하는데 수익 성격 줄이 없습니다');
+    assert.ok(summaryText.includes('연 수익률'), 'calc2 프리필이 ISA 수익률을 켠 채로 시작하는데 연 수익률 줄이 없습니다');
+    assert.ok(!summaryText.includes('정산 기간'), 'calc2에는 정산 기간 입력 칸 자체가 없는데(D80 판정 1) 그 줄이 있습니다');
     // 원 단위 환산값은 여전히 없다 — D75가 되비추는 것은 화면에서 입력한
     // 단위(만원)이지 계산에 쓰인 원 단위가 아니다.
-    assert.ok(!summaryText.includes('60,000,000'), '요약 시트에 원 단위로 환산한 총급여가 보입니다');
+    assert.ok(!summaryText.includes('40,000,000'), '요약 시트에 원 단위로 환산한 총급여가 보입니다');
   } finally {
     await page.send('Emulation.setEmulatedMedia', { media: '' });
   }
 });
 
-test('버튼을 누르면 save_share_action(method: pdf)이 나간다', { skip: skipWithoutChrome }, async () => {
+// [2026-08-24, D84] 「PDF로 저장」 버튼 자체가 calc2 DOM에서 완전히
+// 빠졌다(D82 판정 2 — `ui/result-panel.js`의 `saveShareBlock`,
+// `hideConditionalCopy`가 참이면 `pdfButton`을 배열에 아예 넣지 않는다.
+// 화면에서 숨긴 것이 아니라 그릴 대상 자체가 없다) — 이제 클릭할 PDF
+// 버튼이 없다. `reportSaveShare(method)`가 `method`만 다르고 나머지
+// 배선(`store.reportSaveShare` → `analytics.track('save_share_action', …)`)
+// 은 이미지 버튼과 같은 함수이므로, 남아 있는 「이미지로 저장」 버튼으로
+// 같은 배선(계측이 실제로 `track()`까지 도달하는가)을 겨눈다.
+test('버튼을 누르면 save_share_action(method: image)이 나간다', { skip: skipWithoutChrome }, async () => {
   // 개발·검사 환경은 `analytics-config.js`의 수집기 주소가 비어 있어 실제
   // 전송(fetch)까지는 가지 않는다 — 그 상태에서 `analytics.js`는
   // `console.warn(문구, eventName)`으로 대신 알린다(코드 경로가 여전히
@@ -625,7 +648,7 @@ test('버튼을 누르면 save_share_action(method: pdf)이 나간다', { skip: 
     const orig = console.warn.bind(console);
     console.warn = (...args) => { window.__warnCalls.push(args.map(String)); orig(...args); };
   })()`);
-  await page.clickElement(`[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === 'PDF로 저장')`);
+  await page.clickElement(`[...document.querySelectorAll('.calc2-result-slot .save-share button')].find((b) => b.getAttribute('aria-label') === '이미지로 저장')`);
   await sleep(200);
   const calls = await page.evaluate(`window.__warnCalls`);
   assert.ok(
@@ -634,24 +657,15 @@ test('버튼을 누르면 save_share_action(method: pdf)이 나간다', { skip: 
   );
 });
 
-test('아티팩트 샌드박스(sandbox="allow-scripts")에서는 window.print()가 조용히 막히고, 화면이 그 사실을 알린다', { skip: skipWithoutChrome }, async () => {
-  const frame = await attachSandboxedFrame(app.page);
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 탭(calculator)의
-  // 저장 버튼을 누르려면 먼저 그 탭을 켜야 한다(숨은 채면 좌표 클릭이
-  // 빗나간다). 이 iframe은 `allow-same-origin`이 없어 localStorage가
-  // 막히므로(위 sandboxed-frame.browser.mjs와 같은 이유) 예시 팝업 자체가
-  // 애초에 뜨지 않는다 — 탭 전환만 하면 된다.
-  await frame.click(`document.getElementById('tab-calculator')`);
-  await frame.evaluate(FILL_REQUIRED_FIELDS);
-  await app.page.waitFor(`!!document.querySelector('.save-share button')`, { sessionId: frame.sessionId });
-  await sleep(400);
-
-  const before = await frame.evaluate(`document.querySelector('.save-share-note').textContent`);
-  await frame.click(`[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === 'PDF로 저장')`);
-  // `exportToPdf`의 감지 창(500ms)보다 넉넉히 기다린다.
-  await sleep(800);
-  const after = await frame.evaluate(`document.querySelector('.save-share-note').textContent`);
-
-  assert.notEqual(after, before, '차단을 감지했으면 안내 문구가 바뀌어야 한다');
-  assert.ok(after.includes('열리지 않았'), `대체 안내가 나오지 않았습니다: ${after}`);
-});
+// [2026-08-24, D84 정리, 알려진 빈 자리] 원래 여기 있던 "아티팩트
+// 샌드박스에서는 window.print()가 조용히 막히고, 화면이 그 사실을 알린다"
+// 검사를 지운다 — D82 판정 2로 「PDF로 저장」 버튼이 calc2 DOM에서
+// 완전히 빠져(위 주석 참고) 이 검사가 누르던 클릭 대상이 없다.
+// `exportToPdf`(`ui/print.js`)는 여전히 있지만 어떤 버튼에도 물려 있지
+// 않아 이 파일 안에서 프로그램적으로 부를 창구도 없다(모듈 스코프 함수라
+// `window`에 노출되지 않는다). **이 검사가 지키던 실제 동작(샌드박스에서
+// `window.print()`가 막히면 화면이 대체 안내로 알린다)은 여전히
+// `ui/print.js`의 코드 경로로 남아 있으나, 지금 이 저장소 어떤 화면에도
+// 그 경로로 가는 버튼이 없어 브라우저 검사로 회귀를 잠글 방법이 없다** —
+// PDF 버튼이 되살아나거나(D82 게이트 기록의 삼항 되돌리기) 다른 트리거가
+// 생기면 이 검사를 다시 세워야 한다(관리자 보고에 후속 과제로 남긴다).

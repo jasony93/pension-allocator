@@ -14,9 +14,6 @@ import { openApp, attachSandboxedFrame, skipWithoutChrome, sleep } from './harne
  *    뜨지 않았다.
  */
 
-const RESET_TRIGGER = `[...document.querySelectorAll('.input-panel-header button')].find((b) => b.textContent.trim() === '초기화')`;
-const modalButton = (label) => `[...document.querySelectorAll('.modal-actions button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
-
 let app;
 let frame;
 
@@ -24,9 +21,8 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   frame = await attachSandboxedFrame(app.page);
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일이 재는 초기화
-  // 버튼은 첫 탭(calculator) 것이다. 그 탭이 숨어 있으면 좌표 클릭이
-  // 빗나간다. 먼저 켠다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
+  // 탭 전환이 더는 필요 없다.
   // **예시 팝업은 여기서 따로 치울 필요가 없다** — 이 iframe은
   // `allow-same-origin`이 없는 불투명 출처라 `localStorage` 접근 자체가
   // SecurityError를 던진다(위 첫 시험이 그 사실 자체를 못박는다). 모달을
@@ -34,7 +30,6 @@ before(async () => {
   // 돌려주므로, 이 환경에서는 애초에 모달이 뜨지 않는다 —
   // `dismissCalc2ExampleModalIfOpen`을 불렀다가는 그 함수 자신의
   // `localStorage.setItem` 호출이 여기서 대신 던져 이 훅을 깬다.
-  await frame.click(`document.getElementById('tab-calculator')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -46,90 +41,18 @@ test('이 환경에서 window.confirm()은 조용히 false를 돌려준다 — �
 });
 
 test('그런 환경에서도 앱이 뜬다 — 계측의 storage 접근이 화면을 죽이지 않는다', { skip: skipWithoutChrome }, async () => {
-  assert.equal(await frame.evaluate(`!!document.getElementById('birthDate')`), true, '#app이 비어 있으면 계측이 계산을 막은 것이다');
+  assert.equal(await frame.evaluate(`!!document.getElementById('calc2BirthDate')`), true, '#app이 비어 있으면 계측이 계산을 막은 것이다');
   assert.equal(await frame.evaluate(`!!document.querySelector('.input-panel')`), true);
 });
 
-test('초기화가 화면 안 확인을 거쳐 실제로 값을 지운다', { skip: skipWithoutChrome }, async () => {
-  await frame.evaluate(`(() => {
-    const set = (id, v) => { const el = document.getElementById(id); el.focus(); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
-    set('birthDate', '19800101');
-    set('currentSalary', '60000000');
-  })()`);
-  await sleep(200);
-
-  await frame.click(RESET_TRIGGER);
-  await sleep(250);
-
-  assert.equal(await frame.evaluate(`!!document.querySelector('.modal-scrim [role="dialog"]')`), true, '화면 안 확인이 떠야 한다');
-  assert.equal(await frame.evaluate(`document.activeElement.textContent.trim()`), '취소', '기본 포커스는 취소에 둔다');
-
-  await frame.click(modalButton('모두 지우기'));
-  await sleep(400);
-
-  const after = await frame.evaluate(`(() => ({
-    birth: document.getElementById('birthDate').value,
-    salary: document.getElementById('currentSalary').value,
-    dialogOpen: !!document.querySelector('.modal-scrim'),
-    bodyOverflow: document.body.style.overflow,
-  }))()`);
-  assert.equal(after.birth, '', '초기화가 값을 지워야 한다');
-  assert.equal(after.salary, '');
-  assert.equal(after.dialogOpen, false, '확인 뒤 대화상자가 닫혀야 한다');
-  assert.equal(after.bodyOverflow, '', '배경 스크롤 잠금이 풀려야 한다');
-});
-
-test('취소하면 값이 남는다 — 확인이 형식이 아니다', { skip: skipWithoutChrome }, async () => {
-  await frame.evaluate(`(() => {
-    const el = document.getElementById('birthDate');
-    el.focus(); el.value = '19800101'; el.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await sleep(200);
-  await frame.click(RESET_TRIGGER);
-  await sleep(250);
-  await frame.click(modalButton('취소'));
-  await sleep(300);
-
-  const after = await frame.evaluate(`(() => ({
-    birth: document.getElementById('birthDate').value,
-    dialogOpen: !!document.querySelector('.modal-scrim'),
-    focus: document.activeElement ? document.activeElement.textContent.trim() : null,
-  }))()`);
-  assert.equal(after.birth, '1980-01-01', '취소했는데 값이 지워지면 안 된다');
-  assert.equal(after.dialogOpen, false);
-  assert.equal(after.focus, '초기화', 'design-system 5.18절 — 닫히면 트리거로 포커스 복귀');
-});
-
-test('Esc로도 닫히고 값이 남는다', { skip: skipWithoutChrome }, async () => {
-  await frame.click(RESET_TRIGGER);
-  await sleep(250);
-  assert.equal(await frame.evaluate(`!!document.querySelector('.modal-scrim')`), true);
-  await app.page.pressKey('Escape', 'Escape', 27);
-  await sleep(300);
-
-  const after = await frame.evaluate(`(() => ({
-    birth: document.getElementById('birthDate').value,
-    dialogOpen: !!document.querySelector('.modal-scrim'),
-    bodyOverflow: document.body.style.overflow,
-  }))()`);
-  assert.equal(after.birth, '1980-01-01');
-  assert.equal(after.dialogOpen, false);
-  assert.equal(after.bodyOverflow, '');
-});
-
-test('확인 중에는 탭이 대화상자 밖으로 새지 않는다 (design-system 5.18절 포커스 트랩)', { skip: skipWithoutChrome }, async () => {
-  await frame.click(RESET_TRIGGER);
-  await sleep(250);
-  const seen = [];
-  for (let i = 0; i < 5; i++) {
-    await app.page.pressKey('Tab', 'Tab', 9);
-    await sleep(60);
-    seen.push(await frame.evaluate(`document.activeElement ? document.activeElement.textContent.trim() : null`));
-  }
-  assert.ok(
-    seen.every((label) => label === '취소' || label === '모두 지우기'),
-    `대화상자 밖으로 초점이 새었습니다: ${JSON.stringify(seen)}`,
-  );
-  await app.page.pressKey('Escape', 'Escape', 27);
-  await sleep(200);
-});
+// [2026-08-24, D84 정리, 알려진 빈 자리] 원래 여기 있던 네 검사(초기화 →
+// 화면 안 확인 → 실제로 값을 지운다 / 취소하면 남는다 / Esc로 닫힌다 /
+// 포커스 트랩)를 지운다 — 그 넷이 겨누던 「초기화」 버튼(`.input-panel-
+// header button`, `ui/print.js`가 아니라 첫 탭 전용 UI)이 calc2에는
+// 아예 없다(calc2-input-panel.js에 그 버튼·확인 대화상자 배선이 없다).
+// `ui/modal.js`의 확인 대화상자(포커스 트랩·Esc·취소/확인) 컴포넌트
+// 자체는 여전히 있지만, calc2 화면 안에서 그것을 여는 다른 트리거가
+// 없다(calc2의 유일한 모달은 예시 팝업 — 확인/취소 쌍이 아니라 단순
+// 닫기 팝업이라 같은 성격이 아니다). **이 저장소 어딘가에 초기화(또는
+// 다른 확인 필요 동작)가 calc2에도 생기면 이 네 검사를 다시 세워야
+// 한다** — 관리자 보고에 후속 과제로 남긴다.

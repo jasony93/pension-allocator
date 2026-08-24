@@ -2946,3 +2946,87 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    규칙은 `.example-showcase-amount`가 이미 진다). */
 .reverse-example-showcase-condition { text-align: center; }
 .reverse-example-showcase-condition p { margin: 0; }
+
+/* ===========================================================================
+   「연금고갈 시뮬레이션」 탭 (D84 판정 2·3) — 공적 기금 시나리오 도구.
+   소유자 초안(`src/design/연금고갈_시뮬레이션.html`)의 외부 토큰
+   (`--surface-1`·`--font-voice`·`--bg-accent`·`--text-accent` 등)을 전부
+   이 저장소의 토큰으로 치환했다. 구조(카드 3장·핵심 가정 슬라이더·고급
+   설정 접힘·2030 검증 줄)는 초안 그대로다.
+   =========================================================================== */
+.depletion-slot { /* 스타일 없음 — 훅 클래스, `ui/app.js` */ }
+.depletion-panel { padding: var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-2); }
+
+.depletion-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3); margin-bottom: var(--space-2);
+}
+.depletion-card {
+  background: var(--surface-raised); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-m); padding: var(--space-4);
+}
+.depletion-card-label { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-1); }
+.depletion-card-value { font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.depletion-validation {
+  font-size: 12px; color: var(--text-secondary); background: var(--accent-subtle);
+  border-radius: var(--radius-m); padding: 10px var(--space-3); margin-bottom: var(--space-2);
+  line-height: 1.6;
+}
+.depletion-validation-heading { color: var(--accent); font-weight: 500; }
+.depletion-validation-official { color: var(--text-muted); }
+.depletion-validation-source { margin-top: 4px; color: var(--text-muted); }
+
+.depletion-validation-slot { /* 스타일 없음 — 훅 클래스, `.depletion-validation`이 안에서 스타일을 낸다 */ }
+
+/* [2026-08-24, tax-rules-report.md 33절] 출처·한계 상시 고지 두 줄
+   (실제 적립금 실적, 수급자 곡선 2031년 이후 한계). */
+.depletion-static-notes { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-2); }
+.depletion-static-note { margin: 0; color: var(--text-muted); }
+
+/* 슬라이더가 법정 상한을 넘겨 "가정" 구간에 들어갔을 때만 뜨는 경고 줄. */
+.depletion-assumption-notes-slot { /* 스타일 없음 — 훅 클래스, `.depletion-assumption-notes`가 안에서 스타일을 낸다 */ }
+.depletion-assumption-notes { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-2); }
+.depletion-assumption-notes[hidden] { display: none; }
+.depletion-assumption-note {
+  margin: 0; color: var(--state-warning); background: var(--state-warning-subtle);
+  border-left: 3px solid var(--state-warning); border-radius: var(--radius-s); padding: 6px var(--space-2);
+}
+.depletion-chart-wrap { width: 100%; margin-bottom: var(--space-4); }
+.depletion-chart { display: block; width: 100%; height: auto; }
+.depletion-chart-grid { stroke: var(--border-subtle); stroke-width: 1; }
+.depletion-chart-axis-label { fill: var(--text-muted); font-size: 11px; }
+.depletion-chart-area { fill: var(--accent); opacity: 0.12; }
+.depletion-chart-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.depletion-chart-point { fill: transparent; stroke: none; cursor: default; }
+.depletion-chart-point:hover, .depletion-chart-point:focus-visible { fill: var(--accent); opacity: 0.3; }
+.depletion-chart-marker line { stroke-width: 1.5; stroke-dasharray: 4 3; }
+.depletion-chart-marker text { font-size: 11px; font-weight: 600; }
+.depletion-chart-marker-depletion line { stroke: var(--state-error); }
+.depletion-chart-marker-depletion text { fill: var(--state-error); }
+.depletion-chart-marker-deficit line { stroke: var(--state-warning); }
+
+.depletion-sliders-heading { margin: var(--space-2) 0 var(--space-1); }
+.depletion-sliders { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-2); }
+.depletion-sliders-core { /* 스타일 없음 — 훅 클래스, `.depletion-sliders`가 이미 배치를 낸다 */ }
+.depletion-sliders-advanced[hidden] { display: none; }
+.depletion-slider-row { display: flex; align-items: center; gap: var(--space-3); }
+.depletion-slider-label { font-size: 14px; color: var(--text-secondary); flex: 0 0 195px; }
+.depletion-slider-input { flex: 1; accent-color: var(--accent); }
+.depletion-slider-value {
+  font-size: 14px; font-weight: 500; min-width: 64px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.depletion-advanced-toggle { width: 100%; margin: var(--space-2) 0; }
+
+.depletion-bridge {
+  margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
+}
+.depletion-bridge-note { color: var(--text-secondary); margin: 0; }
+.depletion-bridge-link { /* 스타일 없음 — 훅 클래스, `.btn.btn-secondary` 공용 규칙이 실제 모양을 낸다 */ }
+
+@media (max-width: 767px) {
+  .depletion-slider-row { flex-wrap: wrap; }
+  .depletion-slider-label { flex-basis: 100%; }
+}

@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 다크 모드의 **실측** — design-system 8절.
@@ -113,9 +113,15 @@ const MEASURE_LIVE_ELEMENTS = `(() => {
   // D60 검사가 직접 확인한다.
   // D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — 같은 이유로
   // LimitNote(.limit-note p)도 뺐다. 부재는 아래 D61 검사가 직접 확인한다.
+  // [2026-08-24, D84] AmountCard 조건 캡션(.amount-card-caption)도 이
+  // 고정 목록에서 뺐다 — D80 판정 2로 calc2는 showCaption:false로
+  // 항상 꺼진다(ui/result-panel.js의 amountCard 호출부, hideConditionalCopy
+  // 가 참이면 그렇다)라 이 요소 자체가 렌더되지 않는다. 남은 유일한
+  // 계산 탭(calc2)에 없는 요소를 목록에 두면 언제나 missing: true인
+  // 죽은 검사가 된다 — 토큰 자체의 대비는 여전히 DISCLOSURE_ROWS(위,
+  // 토큰만 재는 목록)의 "AmountCard 조건 캡션 (P1)" 행이 잠근다.
   const rows = [
     ['AssumptionBlock 항목', '.assumption-block li'],
-    ['AmountCard 조건 캡션', '.amount-card-caption'],
   ];
   return rows.map(([label, sel]) => {
     const el = document.querySelector(sel);
@@ -138,14 +144,12 @@ const measurements = { combos: [], disclosure: {}, live: {}, donut: {} };
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 파일 대부분의 시험이
-  // 첫 탭(`calculator`)의 `.result-slot`/`.assumption-block`을 좌표 클릭·
-  // 레이아웃 실측(offsetHeight 등)으로 잰다. 그 탭이 숨어 있으면 다 0이거나
-  // 클릭이 빗나간다. 먼저 켠다 — 아래에서 `page.goto()`로 새로 여는 시험
-  // (브랜드 색 두 건)은 의도로 `getComputedStyle`의 레이아웃-무관 속성만
-  // 재도록 이미 설계돼 있어 이 전환과 무관하다(그 시험들의 자체 주석 참고).
+  // [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 calc2가
+  // 유일한 계산 탭이자 기본 활성 탭이다 — `.calc2-result-slot`/
+  // `.assumption-block`이 로드와 동시에(프리필로) 보이므로 명시 탭 전환이
+  // 더는 필요 없다.
   await dismissCalc2ExampleModalIfOpen(app.page);
-  await app.page.clickElement(`document.getElementById('tab-calculator')`);
+  await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .result-panel-inner')`, { timeoutMs: 8000 });
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -223,8 +227,11 @@ test('결과 화면의 고지 요소가 두 테마 모두에서 4.5:1을 넘고 
   // 토큰이 맞아도 그 토큰이 그 요소에 안 걸려 있으면 고지는 여전히 안 읽힌다.
   // P4의 "작게, 회색으로" 방어도 함께 본다 — 캡션 최소 크기는 12.5px 고정이다.
   const { page } = app;
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.amount-card-caption')`, { timeoutMs: 6000 });
+  // [2026-08-24, D84] calc2는 로드와 동시에 예시 값으로 프리필돼 결과가
+  // 바로 서므로(D79 판정 2) 필드를 채울 필요가 없다. `.amount-card-caption`
+  // 은 D80 판정 2로 calc2에는 없다(MEASURE_LIVE_ELEMENTS 주석 참고) — 그
+  // 대신 항상 있는 `.assumption-block`으로 준비 상태를 기다린다.
+  await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
   await sleep(400);
 
   for (const theme of ['light', 'dark']) {
@@ -282,29 +289,15 @@ test('D60(관리자 판정, 소유자 지시) — 성격·자격 배너가 두 �
     qualificationSentence: document.body.innerText.includes('세무사법 제6조'),
   }))()`;
 
-  // 입력 부족 상태 — 첫 진입, 아무것도 채우지 않는다.
+  // [2026-08-24, D84] 원래 여기서 "입력 부족 상태"(첫 진입, 아무것도
+  // 채우지 않은 상태)를 먼저 쟀다 — 그 상태 자체가 첫 탭(calculator,
+  // 지워진 근거판) 고유였다. calc2는 로드와 동시에 예시 값으로
+  // 프리필돼(D79 판정 2) 결과가 바로 서므로 "입력 부족" 상태 자체가 이
+  // 탭에는 없다 — 그 절반은 뺀다. 결과 상태만 잰다.
   await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] "입력 부족 상태"는 첫 탭(calculator) 고유의 상태다
-  // (계산기2는 프리필이라 이 상태 자체가 없다) — 새로고침이 기본으로
-  // 내려앉는 calc2가 아니라 명시로 이 탭을 켠다. localStorage를 방금
-  // 지워 예시 팝업이 뜰 수 있으니 먼저 치운다(이 시험은 localStorage
-  // 내용 자체를 재지 않으므로 안전하다).
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.waitFor(`!!document.getElementById('tabpanel-calculator').querySelector('.result-panel-inner')`);
-  for (const theme of ['light', 'dark']) {
-    await emulate(page, { scheme: theme });
-    await page.evaluate(`document.documentElement.setAttribute('data-theme','${theme}')`);
-    const state = await page.evaluate(read);
-    assert.equal(state.bannerExists, false, `[입력 부족/${theme}] .disclosure-banner가 있습니다`);
-    assert.equal(state.natureSentence, false, `[입력 부족/${theme}] 성격 문장이 화면에 있습니다`);
-    assert.equal(state.qualificationSentence, false, `[입력 부족/${theme}] 자격 문장이 화면에 있습니다`);
-  }
-
-  // 결과 상태 — 필수 항목을 채운다.
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.amount-card')`, { timeoutMs: 6000 });
+  await page.waitFor(`!!document.querySelector('.amount-card')`, { timeoutMs: 8000 });
   await sleep(300);
   for (const theme of ['light', 'dark']) {
     await emulate(page, { scheme: theme });
@@ -331,7 +324,6 @@ test('D46 2·3번 → D59 → D61(관리자 판정) — 「법령 조항」 나�
   // 자리"가 아니라 다른 자리와 똑같이 **회귀 대상**이다. 남는 자리는
   // 배제 사유(`.eligibility-note`·`.table-row-excluded`) 하나뿐이다.
   const { page } = app;
-  await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
   await sleep(300);
 
@@ -342,7 +334,7 @@ test('D46 2·3번 → D59 → D61(관리자 판정) — 「법령 조항」 나�
       basisBlock: !!document.querySelector('.basis-block'),
       lawLink: !!document.querySelector('.law-link'),
       strayLawChipCount: stray.length,
-      resultSlotText: document.querySelector('.result-slot').innerText,
+      resultSlotText: document.querySelector('.calc2-result-slot').innerText,
     };
   })()`);
   assert.equal(found.basisBlock, false, '.basis-block이 남아 있습니다 — 법령 조항 disclosure가 다시 렌더됩니다');
@@ -362,7 +354,6 @@ test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — Limi
   // 문구 자체가 되살아나는 회귀를 이 검사가 잡는다(실제로 문자열을 되돌려
   // 붉어지는지 확인했다 — 수동 변이, `src/`에는 반영하지 않음).
   const { page } = app;
-  await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
   await sleep(300);
 
@@ -370,7 +361,7 @@ test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — Limi
     limitNoteExists: !!document.querySelector('.limit-note'),
     factTagExists: !!document.querySelector('.note-tag-fact'),
     productTagExists: !!document.querySelector('.note-tag-product'),
-    resultSlotText: document.querySelector('.result-slot').innerText,
+    resultSlotText: document.querySelector('.calc2-result-slot').innerText,
   }))()`);
   assert.equal(state.limitNoteExists, false, '.limit-note가 있습니다');
   assert.equal(state.factTagExists, false, '.note-tag-fact가 있습니다');
@@ -384,7 +375,6 @@ test('D61(관리자 판정, 소유자 지시, 세 번째 같은 방향) — Limi
 
 test('D25 — 접힌 가정 블록도 제목과 건수가 읽히고, 펼치면 나머지 전부에 닿는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  await page.evaluate(FILL_REQUIRED_FIELDS);
   await page.waitFor(`!!document.querySelector('.assumption-block')`, { timeoutMs: 6000 });
   await sleep(300);
 
@@ -435,7 +425,7 @@ test('도넛 조각의 실제 계산 색이 두 테마에서 설계가 확정한
   // 조각에 걸린 `fill`은 `var(--data-…)`이고, 브라우저가 그것을 풀어 실제로
   // 칠하는 값이 여기 나온다. **화면에 두 세대의 색이 섞이면 여기서 드러난다.**
   const readFills = `(() => {
-    const svg = document.querySelector('.result-slot .chart-donut');
+    const svg = document.querySelector('.calc2-result-slot .chart-donut');
     const paths = [...svg.querySelectorAll('path')].map((p) => getComputedStyle(p).fill);
     const cs = getComputedStyle(document.documentElement);
     return {
@@ -620,16 +610,15 @@ test('테마를 바꿔도 도넛이 다시 그려지지 않는다 — 값이 바
   // 도 예시 팝업을 다시 열 수 있다(스크림이 아래 `.theme-control-trigger`
   // 클릭을 가릴 수 있다). 먼저 치운다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut path')`, { timeoutMs: 6000 });
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 6000 });
   // 입력 칸에서 초점을 빼고 화면이 완전히 멎기를 기다린다 — 남은 재계산이 있으면
   // 그것이 그린 변화를 테마 탓으로 읽게 된다.
   await page.evaluate(`document.activeElement && document.activeElement.blur()`);
   await sleep(1200);
-  await page.evaluate(`window.__firstPath = document.querySelector('.result-slot .chart-donut path'); window.__firstD = window.__firstPath.getAttribute('d');`);
+  await page.evaluate(`window.__firstPath = document.querySelector('.calc2-result-slot .chart-donut path'); window.__firstD = window.__firstPath.getAttribute('d');`);
   await sleep(400);
   assert.equal(
-    await page.evaluate(`window.__firstD === document.querySelector('.result-slot .chart-donut path').getAttribute('d')`),
+    await page.evaluate(`window.__firstD === document.querySelector('.calc2-result-slot .chart-donut path').getAttribute('d')`),
     true,
     '기준선을 잡기 전에 화면이 아직 움직이고 있습니다',
   );
@@ -640,9 +629,9 @@ test('테마를 바꿔도 도넛이 다시 그려지지 않는다 — 값이 바
   await sleep(250);
 
   const same = await page.evaluate(`(() => ({
-    sameNode: window.__firstPath === document.querySelector('.result-slot .chart-donut path'),
-    sameD: window.__firstD === document.querySelector('.result-slot .chart-donut path').getAttribute('d'),
-    fill: getComputedStyle(document.querySelector('.result-slot .chart-donut path')).fill,
+    sameNode: window.__firstPath === document.querySelector('.calc2-result-slot .chart-donut path'),
+    sameD: window.__firstD === document.querySelector('.calc2-result-slot .chart-donut path').getAttribute('d'),
+    fill: getComputedStyle(document.querySelector('.calc2-result-slot .chart-donut path')).fill,
   }))()`);
   assert.equal(same.sameNode, true, '테마 변경이 도넛 노드를 갈아치웠습니다 — 각도 애니메이션이 다시 돕니다');
   assert.equal(same.sameD, true, '조각 각도가 다시 계산됐습니다');
@@ -795,52 +784,48 @@ test('관리자 지시(5차) 3번 — 탭 글자 크기가 옛값(15px)의 1.2�
 // 대표 색이 자동으로 퍼진다(관리자 지시 원문 "대표 색은 서비스 전체다").
 // ---------------------------------------------------------------------------
 
+// [2026-08-24, D84] 원래 이 상수는 첫 탭 예시(`.example-showcase-slot`)
+// 와 역산기 탭 예시(`.reverse-example-showcase-slot`)를 함께 쟀다 — 둘 다
+// 그 탭들과 함께 지워졌다. 남은 유일한 예시는 calc2의 예시 모달
+// (`.calc2-example-modal-host` shadow root 안의 `.calc2-example-card`,
+// `ui/calc2-example-modal.js`) — 그 카드로 "예시 카드 테두리/그림자가
+// 대표 색이다"라는 같은 요구를 잇는다. 입력·결과 패널도 이제 calc2
+// 하나뿐이라 개수 기대값을 3(세 탭)에서 1로 내린다.
 const READ_BRAND_COLOR = `(() => {
-  const rectOf = (el) => { const r = el.getBoundingClientRect(); return { w: r.width, h: r.height }; };
-  // 세 카드 — 탭마다 하나씩(첫 탭 예시·입력·결과 + 역산기 탭 예시·입력·결과).
-  // 역산기 탭 패널은 비활성(display:none)이어도 getComputedStyle은 여전히
-  // 값을 낸다(레이아웃 파생값만 0이 된다) — 탭을 굳이 전환하지 않아도 잰다.
-  const exampleHost = document.querySelector('.example-showcase-slot');
-  const reverseExampleHost = document.querySelector('.reverse-example-showcase-slot');
-  const exampleSection = exampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
-  const reverseExampleSection = reverseExampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
+  const exampleHost = document.querySelector('.calc2-example-modal-host');
+  const exampleCard = exampleHost?.shadowRoot?.querySelector('.calc2-example-card') ?? null;
   const inputPanels = [...document.querySelectorAll('.input-panel')];
   const resultPanels = [...document.querySelectorAll('.result-panel-inner')];
   const groupIcons = [...document.querySelectorAll('.input-group-title .section-icon')];
-  const panelTitleIcon = document.querySelector('.panel-title .section-icon');
   return {
-    exampleBorder: exampleSection ? getComputedStyle(exampleSection).borderTopColor : null,
-    reverseExampleBorder: reverseExampleSection ? getComputedStyle(reverseExampleSection).borderTopColor : null,
+    exampleBorder: exampleCard ? getComputedStyle(exampleCard).borderTopColor : null,
     inputPanelBorders: inputPanels.map((el) => getComputedStyle(el).borderTopColor),
     inputPanelCount: inputPanels.length,
     resultPanelBorders: resultPanels.map((el) => getComputedStyle(el).borderTopColor),
     resultPanelCount: resultPanels.length,
     groupIconColors: groupIcons.map((el) => getComputedStyle(el).color),
     groupIconCount: groupIcons.length,
-    panelTitleIconColor: panelTitleIcon ? getComputedStyle(panelTitleIcon).color : null,
   };
 })()`;
 
 const ACCENT_WARM_RGB = 'rgb(230, 115, 0)';
 
-test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두리가 대표 색이다 — 라이트·다크, 세 탭 모두(D79로 셋)', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(3차) 2번 — 카드(예시·입력·결과) 테두리가 대표 색이다 — 라이트·다크', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
+  // 예시 모달을 강제로 다시 연다 — 「오늘 하루 보지 않음」 저장을 지운다.
+  await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
-  await page.waitFor(`!!document.querySelector('.example-showcase-slot')?.shadowRoot?.querySelector('.example-showcase')`, { timeoutMs: 8000 });
+  await page.waitFor(`!!document.querySelector('.calc2-example-modal-host')?.shadowRoot?.querySelector('.calc2-example-card')`, { timeoutMs: 8000 });
   await sleep(150);
 
   const light = await page.evaluate(READ_BRAND_COLOR);
-  assert.equal(light.exampleBorder, ACCENT_WARM_RGB, `라이트 — 첫 탭 예시 카드 테두리가 대표 색이 아니다: ${light.exampleBorder}`);
-  assert.equal(light.reverseExampleBorder, ACCENT_WARM_RGB, `라이트 — 역산기 탭 예시 카드 테두리가 대표 색이 아니다: ${light.reverseExampleBorder}`);
-  // [2026-08-20, D79] 탭이 셋으로 늘었다 — 계산기2도 같은 `.input-panel`/
-  // `.result-panel-inner` 클래스를 쓰므로(첫 탭 컴포넌트를 그대로 재사용,
-  // D79 머리말) 3개가 정상이다.
-  assert.equal(light.inputPanelCount, 3, `입력 패널이 3개(세 탭)가 아니다: ${light.inputPanelCount}`);
+  assert.equal(light.exampleBorder, ACCENT_WARM_RGB, `라이트 — 예시 카드 테두리가 대표 색이 아니다: ${light.exampleBorder}`);
+  assert.equal(light.inputPanelCount, 1, `입력 패널이 1개(calc2 하나)가 아니다: ${light.inputPanelCount}`);
   for (const [i, c] of light.inputPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
   }
-  assert.equal(light.resultPanelCount, 3, `결과 카드가 3개(세 탭)가 아니다: ${light.resultPanelCount}`);
+  assert.equal(light.resultPanelCount, 1, `결과 카드가 1개(calc2 하나)가 아니다: ${light.resultPanelCount}`);
   for (const [i, c] of light.resultPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 결과 카드 테두리가 대표 색이 아니다: ${c}`);
   }
@@ -848,8 +833,7 @@ test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두�
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
   await sleep(150);
   const dark = await page.evaluate(READ_BRAND_COLOR);
-  assert.equal(dark.exampleBorder, ACCENT_WARM_RGB, `다크 — 첫 탭 예시 카드 테두리가 대표 색이 아니다: ${dark.exampleBorder}`);
-  assert.equal(dark.reverseExampleBorder, ACCENT_WARM_RGB, `다크 — 역산기 탭 예시 카드 테두리가 대표 색이 아니다: ${dark.reverseExampleBorder}`);
+  assert.equal(dark.exampleBorder, ACCENT_WARM_RGB, `다크 — 예시 카드 테두리가 대표 색이 아니다: ${dark.exampleBorder}`);
   for (const [i, c] of dark.inputPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `다크 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
   }
@@ -867,23 +851,26 @@ test('관리자 지시(3차) 2번 — 세 카드(예시·입력·결과) 테두�
  * (색만 바꾸고 흐림·번짐 값은 그대로 두는 지시였으므로 문자열 포함 여부로
  * 충분하다). 역산기 탭 카드도 같은 클래스를 공유하므로 함께 확인한다.
  */
-test('관리자 지시(4차) 3번 — 세 카드 그림자가 주황 계열이다 — 라이트·다크, 두 탭 모두', { skip: skipWithoutChrome }, async () => {
+// [2026-08-24, D84] 첫 탭 예시·역산기 탭 예시가 지워져 카드 그림자 절반은
+// calc2 예시 모달(`.calc2-example-modal-host`) 카드로 옮기려 했으나,
+// 실측해 보니 `.calc2-example-card`(`styles.css`, D82 소유자 지시 1번
+// 이후 신설)는 애초에 `box-shadow`를 진 적이 없다 — 주황 테두리
+// (`border: 2px solid var(--accent-warm)`)와 연한 주황 바탕만으로 "대표
+// 색" 요구를 채우는 다른 설계다(이 카드는 관리자 지시(4차) 3번 이후에
+// 생겨 그 지시의 적용 대상이었던 적이 없다). 그래서 예시 카드 그림자
+// 검사는 빼고, 입력·결과 패널(계속 존재, 그림자 규칙도 그대로)만 잰다.
+test('관리자 지시(4차) 3번 — 입력·결과 패널 그림자가 주황 계열이다 — 라이트·다크', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
+  await dismissCalc2ExampleModalIfOpen(page);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
-  await page.waitFor(`!!document.querySelector('.example-showcase-slot')?.shadowRoot?.querySelector('.example-showcase')`, { timeoutMs: 8000 });
+  await page.waitFor(`!!document.querySelector('.result-panel-inner')`, { timeoutMs: 8000 });
   await sleep(150);
 
   const READ_SHADOWS = `(() => {
-    const exampleHost = document.querySelector('.example-showcase-slot');
-    const reverseExampleHost = document.querySelector('.reverse-example-showcase-slot');
-    const exampleSection = exampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
-    const reverseExampleSection = reverseExampleHost?.shadowRoot?.querySelector('.example-showcase') ?? null;
     const inputPanels = [...document.querySelectorAll('.input-panel')];
     const resultPanels = [...document.querySelectorAll('.result-panel-inner')];
     return {
-      exampleShadow: exampleSection ? getComputedStyle(exampleSection).boxShadow : null,
-      reverseExampleShadow: reverseExampleSection ? getComputedStyle(reverseExampleSection).boxShadow : null,
       inputPanelShadows: inputPanels.map((el) => getComputedStyle(el).boxShadow),
       resultPanelShadows: resultPanels.map((el) => getComputedStyle(el).boxShadow),
     };
@@ -894,8 +881,6 @@ test('관리자 지시(4차) 3번 — 세 카드 그림자가 주황 계열이�
   // 아니다) — 그래서 RGB 세 값(230, 115, 0)만 부분 일치로 잰다.
   const WARM_RGB_TUPLE = '230, 115, 0';
   const check = (data, themeLabel) => {
-    assert.ok(data.exampleShadow?.includes(WARM_RGB_TUPLE), `${themeLabel} — 첫 탭 예시 카드 그림자가 주황이 아니다: ${data.exampleShadow}`);
-    assert.ok(data.reverseExampleShadow?.includes(WARM_RGB_TUPLE), `${themeLabel} — 역산기 탭 예시 카드 그림자가 주황이 아니다: ${data.reverseExampleShadow}`);
     for (const [i, s] of data.inputPanelShadows.entries()) {
       assert.ok(s.includes(WARM_RGB_TUPLE), `${themeLabel} — ${i}번 입력 패널 그림자가 주황이 아니다: ${s}`);
     }
@@ -941,23 +926,24 @@ test('관리자 지시(3차) 2번 — 다크 모드 카드 테두리 대비가 W
   assert.ok(ratio >= 3, `다크 카드 테두리(--accent-warm) 대비비(${ratio.toFixed(2)}:1)가 WCAG 3:1 미만이다`);
 });
 
-test('관리자 지시(3차) 3번 — 입력 패널의 섹션 그룹 아이콘(기본정보·계좌 등)이 대표 색이다(두 탭 모두), 패널 제목 아이콘은 그대로다', { skip: skipWithoutChrome }, async () => {
+// [2026-08-24, D84] 「두 탭 모두」 기대값(6개 이상, 탭마다 3그룹 이상)은
+// 첫 탭이 지워지며 성립하지 않는다 — calc2 하나의 그룹 수(프리필 기본
+// 상태에서 최소 1개, ISA 예상 수익률 섹션이 켜져 있으므로 실제로는 더
+// 많다)로 "그룹 아이콘이 있고, 전부 대표 색이다"라는 본 요지만 잠근다.
+// [2026-08-24, D84 정리] 원래 이 검사는 뒷부분에서 "패널 제목("입력")
+// 아이콘은 지시 범위 밖이라 색이 바뀌지 않는다"도 함께 쟀다 —
+// `.panel-title`(첫 탭 `renderInputPanel`의 「입력」 제목, `ui/input-
+// panel.js` 955행)은 그 함수가 이제 죽은 코드라 어디에도 마운트되지
+// 않는다(calc2는 `renderCalc2InputPanel`을 쓴다 — 이 함수엔 그 제목·
+// 아이콘 구조 자체가 없다). "색이 바뀌지 않아야 할 대상"이 사라졌으니
+// 그 절반은 뺀다 — 그룹 아이콘이 대표 색이라는 본 요지만 남긴다.
+test('관리자 지시(3차) 3번 — 입력 패널의 섹션 그룹 아이콘(기본정보·계좌 등)이 대표 색이다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const data = await page.evaluate(READ_BRAND_COLOR);
-  assert.ok(data.groupIconCount >= 6, `그룹 아이콘이 6개 미만이다(두 탭 × 3그룹 이상 기대): ${data.groupIconCount}`);
+  assert.ok(data.groupIconCount >= 1, `그룹 아이콘을 찾지 못했다: ${data.groupIconCount}`);
   for (const [i, c] of data.groupIconColors.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `${i}번 그룹 아이콘이 대표 색이 아니다: ${c}`);
   }
-  // 패널 제목("입력") 아이콘은 지시 범위 밖이다 — 색이 바뀌지 않아야 한다.
-  const textSecondary = await page.evaluate(`(() => {
-    const probe = document.createElement('div');
-    probe.style.color = 'var(--text-secondary)';
-    document.body.appendChild(probe);
-    const c = getComputedStyle(probe).color;
-    probe.remove();
-    return c;
-  })()`);
-  assert.equal(data.panelTitleIconColor, textSecondary, `패널 제목 아이콘 색이 바뀌었다(지시 범위 밖이어야 한다): ${data.panelTitleIconColor}`);
 });
 
 /**
@@ -965,61 +951,11 @@ test('관리자 지시(3차) 3번 — 입력 패널의 섹션 그룹 아이콘(�
  * 문구와, 채워진 진행 동그라미(●)가 대표 색이다 — 빈 동그라미(○)는
  * 그대로(대표 색이 아니다)여야 한다.
  */
-test('관리자 지시(3차) 4번 — 체크리스트 문구와 채워진 동그라미가 대표 색이다, 빈 동그라미는 그대로다', { skip: skipWithoutChrome }, async () => {
-  const { page, origin } = app;
-  await page.goto(`${origin}/src/web/index.html`);
-  await page.waitFor(`!!document.querySelector('.requirement-checklist')`, { timeoutMs: 8000 });
-  // [2026-08-23, D82] **방어적 초기화.** 이 파일의 앞선 시험(D25 등)이 첫
-  // 탭에 `FILL_REQUIRED_FIELDS`로 값을 채운다 — 이론상 이 `page.goto()`가
-  // 완전한 새 로드라 그 값은 초기화돼야 하지만, 실측에서 간헐적으로 동그라미
-  // 하나가 이미 채워진 채로 나타났다(브라우저의 폼 값 복원 또는 뒤로가기
-  // 캐시가 원인으로 보인다 — 자바스크립트 힙까지 그대로 복원되면 `goto()`
-  // 만으로는 store의 in-memory 상태가 진짜로 비워진다는 보장이 없다). 이
-  // 검사의 전제("아무것도 입력하지 않았다")를 코드로 직접 보장한다 —
-  // 초기화 버튼 + 확인 모달을 실제로 눌러 store를 `initialForm()`으로
-  // 되돌린다(`result-placeholder.browser.mjs`가 이미 쓰는 같은 흐름).
-  // [2026-08-21, D81] 기본 탭이 이제 calc2다 — 초기화 버튼은 첫 탭
-  // (calculator) 전용이라 그 탭이 숨어 있으면 좌표 클릭이 빗나간다. 예시
-  // 팝업(스크림)도 먼저 치우고 명시로 그 탭을 켠다.
-  await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await sleep(100);
-  await page.clickElement(`[...document.querySelectorAll('.input-panel-header button')].find((b) => b.textContent.includes('초기화'))`);
-  await page.waitFor(`!!document.querySelector('.modal-scrim [role="dialog"]')`, { timeoutMs: 4000 });
-  await page.clickElement(`[...document.querySelectorAll('.modal-actions button')].find((b) => b.textContent.includes('모두 지우기'))`);
-  await sleep(200);
-
-  const before = await page.evaluate(`(() => {
-    const heading = document.querySelector('.req-progress-row .type-title-m');
-    const dots = [...document.querySelectorAll('.req-dot')];
-    return {
-      headingColor: heading ? getComputedStyle(heading).color : null,
-      dotCount: dots.length,
-      anyFilled: dots.some((d) => d.textContent === '●'),
-      unfilledColors: dots.filter((d) => d.textContent === '○').map((d) => getComputedStyle(d).color),
-    };
-  })()`);
-  assert.equal(before.headingColor, ACCENT_WARM_RGB, `체크리스트 문구 색이 대표 색이 아니다: ${before.headingColor}`);
-  assert.ok(before.dotCount > 0, '진행 동그라미를 찾지 못했다');
-  assert.equal(before.anyFilled, false, '아무것도 입력하지 않았는데 채워진 동그라미가 있다 — 이 검사가 전제를 잃었다');
-  for (const c of before.unfilledColors) {
-    assert.notEqual(c, ACCENT_WARM_RGB, `빈 동그라미가 이미 대표 색이다(채워지기 전엔 그대로여야 한다): ${c}`);
-  }
-
-  // 한 필드를 채워 동그라미 하나를 채운다.
-  await page.evaluate(`(() => {
-    const el = document.getElementById('currentSalary');
-    el.focus();
-    el.value = '6000';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
-  await sleep(200);
-  const after = await page.evaluate(`(() => {
-    const filledDots = [...document.querySelectorAll('.req-item-filled .req-dot')];
-    return { filledColors: filledDots.map((d) => getComputedStyle(d).color), filledCount: filledDots.length };
-  })()`);
-  assert.ok(after.filledCount > 0, '필드를 채웠는데 채워진 동그라미가 없다');
-  for (const c of after.filledColors) {
-    assert.equal(c, ACCENT_WARM_RGB, `채워진 동그라미가 대표 색이 아니다: ${c}`);
-  }
-});
+// [2026-08-24, D84 정리, 알려진 빈 자리] 원래 여기 있던 "체크리스트
+// 문구와 채워진 동그라미가 대표 색이다" 검사를 지운다 — `.requirement-
+// checklist`/`.req-dot`(계산에 필요한 값이 아직 남았다는 진행 표시)는
+// "입력 부족" 상태에서만 뜨는 첫 탭(calculator, 지워진 근거판) 전용
+// 컴포넌트였다. calc2는 로드와 동시에 프리필로 결과가 서므로(D79 판정 2)
+// 이 상태 자체가 없고, `ui/calc2-input-panel.js` 어디에도 이 컴포넌트가
+// 없다 — 재현할 화면이 없다. calc2에 언젠가 비슷한 진행 표시가 생기면
+// 이 검사를 다시 세워야 한다(관리자 보고에 후속 과제로 남긴다).

@@ -429,19 +429,30 @@ export async function dismissCalc2ExampleModalIfOpen(page) {
 
 /**
  * 필수 항목을 채워 결과가 나오는 상태로 만든다(값 대입 — 여기서는 커서가 관심사가
- * 아니다). 금액 입력란은 **만원 단위**다(소유자 지시, 6절) — `currentSalary`
- * `6000`은 60,000,000원, `monthlyCapacity` `50`은 500,000원과 같다. 이 값을
+ * 아니다). 금액 입력란은 **만원 단위**다(소유자 지시, 6절) — `calc2CurrentSalary`
+ * `6000`은 60,000,000원, `calc2MonthlyCapacity` `50`은 500,000원과 같다. 이 값을
  * 바꾸면 실제 원 단위 금액도 함께 바뀌므로, 다른 실측이 기대하는 결과(도넛
  * 크기·경계값 등)가 흔들리지 않게 **단위 전환 전과 같은 원 금액**을 유지했다.
+ *
+ * [2026-08-24, D84 정리] **필드 id를 `calc2` 접두어로 정정한다.** 이 상수가
+ * 가리키던 `birthDate`·`currentSalary`·`monthlyCapacity`·`hasNonWageIncome-false`
+ * ·`annuityStarted-false`·`fundUseHorizon-before_pension_age`는 D84로 삭제된
+ * 「절세계좌 계산기2(근거판)」 탭의 id였다 — 그 탭이 지워지며 이 상수가
+ * 가리키는 요소가 전부 사라져, 이 상수를 쓰는 모든 시험이 조용히
+ * `getElementById(...) === null`에서 죽고 있었다. 지금 유일한 계산 탭인
+ * calc2의 id(`calc2BirthDate` 등, `ui/calc2-input-panel.js`)로 옮긴다.
  */
 export const FILL_REQUIRED_FIELDS = `(() => {
   const set = (id, v) => { const el = document.getElementById(id); el.focus(); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
-  set('birthDate', '19800101');
-  set('currentSalary', '6000');
+  set('calc2BirthDate', '19800101');
+  set('calc2CurrentSalary', '6000');
   // 계약 5.0.0(D27) — 공제율 판정 축의 첫 물음. 대다수 사용자가 여기(아니오)다.
-  document.getElementById('hasNonWageIncome-false').click();
-  set('monthlyCapacity', '50');
+  document.getElementById('calc2HasNonWageIncome-false').click();
+  set('calc2MonthlyCapacity', '50');
   // 9.0.0(D39) — 「직전 과세연도 결정세액」 입력이 사라졌다. 클릭할 대상이 없다.
-  document.getElementById('annuityStarted-false').click();
-  document.getElementById('fundUseHorizon-before_pension_age').click();
+  // [D79 판정 3] 생년월일이 만 55세 미만(이 상수의 '19800101'은 만 55세
+  // 미만)이면 도출값이 확실한 미개시라 이 물음 자체를 그리지 않는다 —
+  // 존재할 때만 누른다.
+  document.getElementById('calc2AnnuityStarted-false')?.click();
+  document.getElementById('calc2fundUseHorizon-before_pension_age').click();
 })()`;

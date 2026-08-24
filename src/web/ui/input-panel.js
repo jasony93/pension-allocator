@@ -1,4 +1,17 @@
 /**
+ * [2026-08-23, D84 판정 1] **첫 탭(내부 id `calculator`, 「절세계좌
+ * 계산기2」 옛 근거판) 자체는 지워졌다** — `ui/app.js`가 더는
+ * `renderInputPanel`(이 파일 아래)을 부르지 않는다. 그런데 이 파일의
+ * 필드 헬퍼(`numberField`·`percentField`·`segmentToggle`·
+ * `conditionalGroup`·`groupTitleNode`·`fieldError`·`birthDateField`·
+ * `fundUseHorizonGroup`)는 계산기2(`ui/calc2-input-panel.js`)가 그대로
+ * 가져다 쓴다("첫 탭과 같은 헬퍼로 지은, 필드 배치·조건부만 다른 화면"
+ * 이라는 그 파일 머리말) — 그래서 파일을 통째로 지우지 않는다. **아래
+ * `renderInputPanel`은 더는 어디서도 불리지 않는 죽은 내보내기다** —
+ * 그 함수 하나만 도려내려면 이 파일 전체(입력 그룹 조립 순서·조건부
+ * 배선)를 다시 읽어야 하는데, 이번 회차의 범위(탭 삭제·신설)를 넘는
+ * 위험한 리팩터라 남겨 둔다.
+ *
  * 입력 패널 — `screens.md` 3절. 좌측(데스크톱) / 상단(모바일) 영역.
  * 조건부 그룹은 다른 필드 값에서 추론하지 않고 사용자의 명시적 진술을 조건으로
  * 쓴다(게이트 2 D14) — 예: ISA 관련 항목은 `ISA 계좌가 있나요 = 예`가 조건이지

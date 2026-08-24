@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 배분안이 넷일 때의 비교 UI·표를 좁은 화면에서 실측한다 (계약 5.0.0 · D26,
@@ -20,38 +20,28 @@ import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2Ex
 
 let app;
 
+// [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 청년 우대
+// 블록 자체가 앱에서 사라졌다(D80 판정 — "계산기2에는 청년 블록이 없다").
+// 원래 이 파일은 청년 우대를 켜 계좌마다 공제율이 갈리게 만들어 네 배분안이
+// 전부 다르게(동점 없이) 나오는 조건을 만들었다 — 그 손잡이가 이제 UI
+// 어디에도 없어 그 정확한 조건은 재현할 수 없다. calc2의 기본 프리필
+// 상태에서 자연히 서는 배분안 수(현재 3개 — 청년 우대 없이는 한 쌍이
+// 동점이라 화면이 합친다, 계약 0.4절)로 같은 구조 시험(좁은 화면 넘침·
+// 금액 잘림·표 가로 스크롤)을 잇는다.
+const CALC_SCOPE = `document.getElementById('tabpanel-calc2')`;
+
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 탭이 숨어 있으면
-  // 아래 좌표 기반 클릭들이 빗나간다. 먼저 켠다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  // [2026-08-21, D81] 아래 모든 질의를 `#tabpanel-calculator`로 좁힌다 —
-  // 계산기2가 기본 탭이 되며 그 프리필 결과가 같은 클래스(`.stackbar`·
-  // `.scenario-tab`·`.stackbar-row` 등, 공유 컴포넌트)로 이미 렌더돼 있다.
-  // 문서 전체 질의로 재면 두 탭의 값이 섞인다(실측 — `.stackbar-row`가
-  // 4가 아니라 7로 나왔다, calc2의 3줄 + 첫 탭의 4줄).
-  const CALC_TAB = `document.getElementById('tabpanel-calculator')`;
-  await page.waitFor(`!!${CALC_TAB}.querySelector('.stackbar')`);
+  await page.waitFor(`!!${CALC_SCOPE}.querySelector('.stackbar')`, { timeoutMs: 8000 });
+  await sleep(300);
   await page.evaluate(`(() => {
     const set = (id, v) => { const el = document.getElementById(id); el.focus(); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
-    set('birthDate', '20000101');
-    set('monthlyCapacity', '150');
+    set('calc2MonthlyCapacity', '150');
   })()`);
-  await sleep(300);
-  // 9.0.0(D39 §2) — 청년 우대 블록이 기본 접힘이다(screens.md 3.9.3.1절).
-  // 안의 체크박스를 누르려면 먼저 트리거를 열어야 한다 — 닫힌 `<details>`
-  // 안의 자식은 `display: none`이라 좌표를 얻을 수 없다.
-  await page.clickElement(`${CALC_TAB}.querySelector('.provisional-note-trigger')`);
-  await sleep(200);
-  await page.clickElement(`${CALC_TAB}.querySelector('#declaredYouth')`);
-  await sleep(200);
-  await page.clickElement(`${CALC_TAB}.querySelector('.scenario-tab:not(.scenario-tab-selected)')`);
-  await page.waitFor(`${CALC_TAB}.querySelectorAll('.stackbar-row').length === 4`);
   await sleep(300);
 }, { skip: skipWithoutChrome });
 
@@ -59,12 +49,17 @@ after(async () => {
   if (app) await app.close();
 });
 
-test('네 배분안이 전부 다른 배분으로 나온다 — 넷째 안이 조용히 다른 안에 합쳐지지 않는다', { skip: skipWithoutChrome }, async () => {
+test('배분안 라벨이 서로 겹치지 않는다 — 넷째 안이 조용히 다른 안에 합쳐지지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const labels = await page.evaluate(
-    `Array.from(document.getElementById('tabpanel-calculator').querySelectorAll('.stackbar-row-label')).map((e) => e.textContent.trim())`,
+    `Array.from(document.getElementById('tabpanel-calc2').querySelectorAll('.stackbar-row-label')).map((e) => e.textContent.trim())`,
   );
-  assert.equal(labels.length, 4);
+  // [2026-08-24, D84] 청년 우대 손잡이가 없어 네 안을 전부 갈라놓을 수
+  // 없다 — 지금 계약 0.4절의 동점 규칙대로 자연히 3개로 합쳐진다. "넷"을
+  // 강제하는 대신 라벨에 중복이 없는지(조용히 합쳐지는 결함이면 라벨
+  // 개수보다 실제 고유 라벨 수가 적게 나온다)를 잠근다.
+  assert.ok(labels.length >= 3, `배분안이 3개 미만이다: ${JSON.stringify(labels)}`);
+  assert.equal(new Set(labels).size, labels.length, `배분안 라벨에 중복이 있다: ${JSON.stringify(labels)}`);
   assert.ok(labels.some((l) => l.includes('ISA보다 먼저')), '넷째 안(D32에서 개명)이 비교 목록에 있다');
   // 넷째 안은 언제나 `is_baseline: false`다 — "(기본)" 표시가 붙지 않는다.
   const beforeIsaLabel = labels.find((l) => l.includes('ISA보다 먼저'));
@@ -74,7 +69,7 @@ test('네 배분안이 전부 다른 배분으로 나온다 — 넷째 안이 �
 test('375px 너비에서도 스택바 행이 뷰포트를 벗어나지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const overflow = await page.evaluate(`(() => {
-    const rows = Array.from(document.getElementById('tabpanel-calculator').querySelectorAll('.stackbar-row'));
+    const rows = Array.from(document.getElementById('tabpanel-calc2').querySelectorAll('.stackbar-row'));
     return rows.map((r) => r.getBoundingClientRect().right - window.innerWidth);
   })()`);
   for (const over of overflow) {
@@ -85,7 +80,7 @@ test('375px 너비에서도 스택바 행이 뷰포트를 벗어나지 않는다
 test('금액이 라벨·막대에 가려지지 않고 화면 안에서 읽힌다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const amounts = await page.evaluate(`(() => {
-    const els = Array.from(document.getElementById('tabpanel-calculator').querySelectorAll('.stackbar-row-amount'));
+    const els = Array.from(document.getElementById('tabpanel-calc2').querySelectorAll('.stackbar-row-amount'));
     return els.map((e) => ({ text: e.textContent.trim(), right: e.getBoundingClientRect().right, width: window.innerWidth }));
   })()`);
   assert.ok(amounts.length >= 3);
@@ -98,7 +93,7 @@ test('금액이 라벨·막대에 가려지지 않고 화면 안에서 읽힌다
 test('계좌별 표는 좁은 화면에서 잘리지 않고 가로 스크롤로 근거 조항까지 닿는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const info = await page.evaluate(`(() => {
-    const scope = document.getElementById('tabpanel-calculator');
+    const scope = document.getElementById('tabpanel-calc2');
     const wrap = scope.querySelector('.account-table-scroll');
     const table = scope.querySelector('.account-table');
     if (!wrap || !table) return null;

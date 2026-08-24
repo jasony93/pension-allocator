@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 패널의 실측 — 클릭이 삼켜지던 자리와, 노드를 고쳐 쓰는 렌더가 내용을
@@ -21,22 +21,22 @@ import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2Ex
  * `browser/sandboxed-frame.browser.mjs`가 계속 본다.
  */
 
-const PDF_TRIGGER = `[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === 'PDF로 저장')`;
+// [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워지며 「PDF로
+// 저장」 버튼 자체가 calc2 DOM에서 완전히 빠졌다(D82 판정 2, `print.
+// browser.mjs`와 같은 근거) — 남은 「이미지로 저장」 버튼(아이콘+
+// aria-label, D82 판정 4)으로 같은 클릭-삼킴 결함 재현 표면을 겨눈다.
+const IMAGE_SAVE_TRIGGER = `[...document.querySelectorAll('.calc2-result-slot .save-share button')].find((b) => b.getAttribute('aria-label') === '이미지로 저장')`;
 
 let app;
 
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 탭(`calculator`)이
-  // 숨어 있으면 (1) 이 탭 필드에 좌표 클릭이 안 먹고, (2) `.save-share
-  // button`을 문서 전체로 찾을 때 계산기2 쪽(프리필로 이미 결과가 서
-  // 있다)이 먼저 걸릴 수 있다. 먼저 명시로 켠다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
+  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
+  // 선다(D79 판정 2).
   await dismissCalc2ExampleModalIfOpen(app.page);
-  await app.page.clickElement(`document.getElementById('tab-calculator')`);
-  await app.page.evaluate(FILL_REQUIRED_FIELDS);
-  // 디바운스(400ms) + 계산 + 경계값 조회가 끝나 결과 패널이 안정될 때까지 기다린다.
-  await app.page.waitFor(`!!document.querySelector('.save-share button')`);
+  await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(600);
 }, { skip: skipWithoutChrome });
 
@@ -46,25 +46,31 @@ after(async () => {
 
 test('값을 친 직후 눌러도 결과 패널의 첫 클릭이 삼켜지지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  // 입력 칸에 초점이 남아 있는 상태 — 클릭이 blur → 재계산 → 재렌더를 부른다.
+  // 입력 칸에 초점을 남긴다 — 클릭이 blur → 재계산 → 재렌더를 부른다.
   // 예전에는 이 상황에서 버튼 노드가 press와 release 사이에 바뀌어 click이 사라졌다.
+  await page.evaluate(`(() => { document.getElementById('calc2CurrentSalary').focus(); })()`);
   assert.equal(
-    await page.evaluate(`document.activeElement.tagName`),
-    'INPUT',
+    await page.evaluate(`document.activeElement.id`),
+    'calc2CurrentSalary',
     '이 검사는 입력 칸에 초점이 남아 있어야 뜻이 있다',
   );
-  // 클릭이 실제로 버튼에 도달했는지는 `window.print()`가 불렸는지로 잰다 —
-  // 헤드리스·비샌드박스 최상위 프레임에서는 `window.print()`가 `beforeprint`를
-  // 동기로 낸다(`ui/print.js` 머리말이 실측해 둔 그대로).
-  await page.evaluate(`(() => { window.__printed = false; window.addEventListener('beforeprint', () => { window.__printed = true; }, { once: true }); })()`);
-  await page.clickElement(PDF_TRIGGER);
-  await page.waitFor(`window.__printed === true`, { timeoutMs: 2000 });
+  // [2026-08-24, D84] 클릭이 실제로 버튼에 도달했는지는 이제
+  // `save_share_action` 계측이 `track()`까지 도달했는지로 잰다(PDF 버튼이
+  // 없어 `window.print()`/`beforeprint` 신호를 더는 쓸 수 없다,
+  // `print.browser.mjs`와 같은 근거).
+  await page.evaluate(`(() => {
+    window.__warnCalls = [];
+    const orig = console.warn.bind(console);
+    console.warn = (...args) => { window.__warnCalls.push(args.map(String)); orig(...args); };
+  })()`);
+  await page.clickElement(IMAGE_SAVE_TRIGGER);
+  await page.waitFor(`window.__warnCalls.some((args) => args.some((a) => a.includes('save_share_action')))`, { timeoutMs: 2000 });
 });
 
 test('결과 패널의 도넛이 실제 크기를 갖고 그려진다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const donut = await page.evaluate(`(() => {
-    const svg = document.querySelector('.result-slot svg');
+    const svg = document.querySelector('.calc2-result-slot svg');
     if (!svg) return null;
     const r = svg.getBoundingClientRect();
     const paths = [...svg.querySelectorAll('path')].map((p) => (p.getAttribute('d') || '').length);
@@ -77,23 +83,23 @@ test('결과 패널의 도넛이 실제 크기를 갖고 그려진다', { skip: 
 
 test('입력을 바꾸면 결과 숫자가 실제로 갱신된다 — 노드를 고쳐 써도 내용이 남지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  const readAmount = `document.querySelector('.result-slot').textContent`;
+  const readAmount = `document.querySelector('.calc2-result-slot').textContent`;
   const before = await page.evaluate(readAmount);
   await page.evaluate(`(() => {
-    const el = document.getElementById('monthlyCapacity');
-    // 만원 단위다(6절) — '120'은 1,200,000원. FILL_REQUIRED_FIELDS의 기본값
-    // 500,000원과 다른 값이면 충분하다.
+    const el = document.getElementById('calc2MonthlyCapacity');
+    // 만원 단위다(6절) — '120'은 1,200,000원. calc2 프리필의 기본값
+    // 150만원과 다른 값이면 충분하다.
     el.focus(); el.value = '120'; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur();
   })()`);
   await page.waitFor(`${readAmount} !== ${JSON.stringify(before)}`, { timeoutMs: 4000 });
   const after = await page.evaluate(readAmount);
   assert.notEqual(after, before);
   // 도넛도 함께 갱신됐는지 — SVG는 네임스페이스가 달라 고쳐 쓰기가 가장 위험한 자리다.
-  assert.equal(await page.evaluate(`!!document.querySelector('.result-slot svg path')`), true);
+  assert.equal(await page.evaluate(`!!document.querySelector('.calc2-result-slot svg path')`), true);
 });
 
-test('결과가 나와야 PDF로 저장 버튼이 있다', { skip: skipWithoutChrome }, async () => {
+test('결과가 나와야 저장·공유 버튼이 있다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  assert.equal(await page.evaluate(`!!document.querySelector('.save-share')`), true);
-  assert.equal(await page.evaluate(`!!(${PDF_TRIGGER})`), true);
+  assert.equal(await page.evaluate(`!!document.querySelector('.calc2-result-slot .save-share')`), true);
+  assert.equal(await page.evaluate(`!!(${IMAGE_SAVE_TRIGGER})`), true);
 });

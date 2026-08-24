@@ -1,0 +1,143 @@
+<h2 class="sr-only">국민연금 기금 소진 시뮬레이터 수정판. 단위 오류를 고치고 제도 성숙 효과를 반영했으며, 2030년 값을 공식 전망과 대조하는 검증 표시가 있습니다.</h2>
+
+<div style="padding: 0.5rem 0 1rem;">
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.25rem;">
+  <div style="background: var(--surface-1); border-radius: var(--radius); padding: 1rem;">
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">기금 소진</div>
+    <div id="out-dep" style="font-size: 24px; font-weight: 500; font-family: var(--font-voice);">—</div>
+  </div>
+  <div style="background: var(--surface-1); border-radius: var(--radius); padding: 1rem;">
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">수지 적자 전환</div>
+    <div id="out-def" style="font-size: 24px; font-weight: 500; font-family: var(--font-voice);">—</div>
+  </div>
+  <div style="background: var(--surface-1); border-radius: var(--radius); padding: 1rem;">
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">최대 적립금</div>
+    <div id="out-max" style="font-size: 24px; font-weight: 500; font-family: var(--font-voice);">—</div>
+  </div>
+</div>
+
+<div id="valid" style="font-size: 12px; color: var(--text-secondary); background: var(--bg-accent); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 1.25rem; line-height: 1.6;"></div>
+
+<div style="position: relative; width: 100%; height: 250px; margin-bottom: 1.5rem;">
+  <canvas id="fundChart2" role="img" aria-label="연도별 국민연금 적립금 궤적 선그래프">적립금이 증가하다 정점 이후 감소해 소진되는 궤적.</canvas>
+</div>
+
+<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">핵심 가정</div>
+<div id="core2"></div>
+
+<button id="toggle2" style="margin: 1rem 0 0; width: 100%;">고급 설정 펼치기</button>
+<div id="adv2" style="margin-top: 1rem;"></div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const P2 = [
+  {id:'ror', g:'c', label:'기금운용수익률', min:2, max:9, step:0.1, val:4.6, unit:'%', d:1},
+  {id:'rate', g:'c', label:'보험료율 (최종)', min:9, max:22, step:0.5, val:13, unit:'%', d:1},
+  {id:'sub', g:'c', label:'가입자 연평균 증감률', min:-3, max:0.5, step:0.1, val:-1.0, unit:'%', d:1},
+  {id:'wage', g:'a', label:'임금상승률', min:1, max:6, step:0.1, val:3.8, unit:'%', d:1},
+  {id:'cpi', g:'a', label:'물가상승률', min:0.5, max:4, step:0.1, val:2.0, unit:'%', d:1},
+  {id:'life', g:'a', label:'기대수명 증가 (2070년까지)', min:0, max:8, step:0.5, val:3, unit:'년', d:1},
+  {id:'age', g:'a', label:'수급개시연령', min:65, max:70, step:1, val:65, unit:'세', d:0},
+  {id:'ben', g:'a', label:'수급자수 보정', min:-20, max:20, step:1, val:0, unit:'%', d:0}
+];
+const V2 = {}; P2.forEach(p => V2[p.id] = p.val);
+
+function row2(p) {
+  return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+    '<label for="s-'+p.id+'" style="font-size:14px;color:var(--text-secondary);flex:0 0 195px;">'+p.label+'</label>' +
+    '<input type="range" id="s-'+p.id+'" min="'+p.min+'" max="'+p.max+'" step="'+p.step+'" value="'+p.val+'" style="flex:1;" />' +
+    '<span id="v-'+p.id+'" style="font-size:14px;font-weight:500;min-width:56px;text-align:right;font-variant-numeric:tabular-nums;">'+p.val.toFixed(p.d)+p.unit+'</span></div>';
+}
+document.getElementById('core2').innerHTML = P2.filter(p=>p.g==='c').map(row2).join('');
+document.getElementById('adv2').innerHTML = P2.filter(p=>p.g==='a').map(row2).join('');
+document.getElementById('adv2').style.display = 'none';
+document.getElementById('toggle2').onclick = function() {
+  const a = document.getElementById('adv2'), open = a.style.display === 'none';
+  a.style.display = open ? 'block' : 'none';
+  this.textContent = open ? '고급 설정 접기' : '고급 설정 펼치기';
+};
+
+const BP2 = [[2026,828],[2030,1006],[2035,1230],[2040,1450],[2045,1620],[2050,1750],[2055,1810],[2060,1790],[2065,1720],[2070,1630],[2080,1420],[2090,1220],[2100,1050]];
+function baseRecip2(y) {
+  if (y <= 2026) return 828;
+  if (y >= 2100) return 1050;
+  for (let i=0;i<BP2.length-1;i++) {
+    if (y >= BP2[i][0] && y <= BP2[i+1][0]) {
+      const f = (y-BP2[i][0])/(BP2[i+1][0]-BP2[i][0]);
+      return BP2[i][1] + f*(BP2[i+1][1]-BP2[i][1]);
+    }
+  }
+  return 1050;
+}
+function shock2(y) { return y<2035 ? 1.0 : (y<2050 ? 1.8 : (y<2070 ? 1.5 : 1.0)); }
+function ph2(y,s,e) { return y<=s ? 0 : (y>=e ? 1 : (y-s)/(e-s)); }
+function matur(y) { return y<=2055 ? 0.013 : (y>=2068 ? 0 : 0.013*(2068-y)/13); }
+
+function run2() {
+  const r = V2.ror/100, wg = V2.wage/100, cp = V2.cpi/100;
+  const dA = V2.age - 65, dL = V2.life;
+  let fund = 1458, subs = 2140, wB = 2.812, pB = 0.5636;
+  const yrs = [], fds = [];
+  let depY = null, defY = null, maxF = fund, chk = null;
+
+  for (let y = 2026; y <= 2115; y++) {
+    const pr = Math.min(9 + 0.5*(y-2025), V2.rate)/100;
+    const aP = ph2(y,2030,2042), lP = ph2(y,2026,2070);
+    const recip = baseRecip2(y) * (1 - 0.05*dA*aP) * (1 + 0.05*dL*lP) * (1 + V2.ben/100);
+    const income = subs * (1 + 0.012*dA*aP) * wB * 12 * pr * 0.01;
+    const outgo = recip * pB * (1 + 0.05*dA*aP) * 12 * 0.01;
+
+    yrs.push(y); fds.push(Math.max(fund, 0));
+    if (fund > maxF) maxF = fund;
+    if (defY === null && outgo > income + fund*r) defY = y;
+    if (y === 2030) chk = {i: income, o: outgo, f: fund};
+
+    fund = fund*(1+r) + income - outgo;
+    if (fund < 0 && depY === null) depY = y + 1;
+    if (depY !== null && y >= depY + 2) break;
+
+    subs *= (1 + (V2.sub/100)*shock2(y));
+    wB *= (1 + wg);
+    pB *= (1 + cp + 0.45*(wg-cp) + matur(y));
+  }
+
+  document.getElementById('out-dep').textContent = depY ? depY + '년' : '소진 없음';
+  document.getElementById('out-def').textContent = defY ? defY + '년' : '없음';
+  document.getElementById('out-max').textContent = Math.round(maxF).toLocaleString() + '조';
+  document.getElementById('valid').innerHTML =
+    '<span style="color:var(--text-accent);font-weight:500;">2030년 검증</span> · 보험료수입 ' +
+    chk.i.toFixed(1) + '조 <span style="color:var(--text-muted);">(공식 91.6조)</span> · 급여지출 ' +
+    chk.o.toFixed(1) + '조 <span style="color:var(--text-muted);">(공식 81.7조)</span> · 적립금 ' +
+    Math.round(chk.f).toLocaleString() + '조 <span style="color:var(--text-muted);">(공식 1,898조)</span>';
+  return {yrs, fds};
+}
+
+const ink2 = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#898781';
+const dk2 = (document.documentElement.dataset.mode || '') === 'dark' || (!document.documentElement.dataset.mode && matchMedia('(prefers-color-scheme: dark)').matches);
+const ln2 = dk2 ? '#3987e5' : '#2a78d6';
+const D2 = run2();
+const ch2 = new Chart(document.getElementById('fundChart2'), {
+  type: 'line',
+  data: { labels: D2.yrs, datasets: [{ data: D2.fds, borderColor: ln2, backgroundColor: ln2+'1a', borderWidth: 2, fill: true, pointRadius: 0, tension: 0.25 }] },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: {display:false}, tooltip: { callbacks: { label: c => Math.round(c.parsed.y).toLocaleString()+'조원' } } },
+    scales: {
+      x: { ticks: {color: ink2, maxTicksLimit: 8, font:{size:11}}, grid: {display:false} },
+      y: { ticks: {color: ink2, font:{size:11}, callback: v => Math.round(v/1000*10)/10+'천조'}, grid: {color: dk2?'#2c2c2a':'#e1e0d9'}, border: {display:false} }
+    },
+    interaction: { mode:'index', intersect:false }
+  }
+});
+P2.forEach(p => {
+  document.getElementById('s-'+p.id).addEventListener('input', function(e) {
+    V2[p.id] = parseFloat(e.target.value);
+    document.getElementById('v-'+p.id).textContent = V2[p.id].toFixed(p.d)+p.unit;
+    const d = run2();
+    ch2.data.labels = d.yrs; ch2.data.datasets[0].data = d.fds; ch2.update('none');
+  });
+});
+</script>

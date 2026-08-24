@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 import { encodeShareFragment, encodeShareFragmentV1 } from '../state/share-link.js';
 import { initialForm } from '../state/store.js';
 
@@ -26,22 +26,17 @@ after(async () => {
 test('D74 — 「내 결과 공유하기」를 누르면 「이 링크에는 입력하신 값이 들어 있습니다」가 반드시 함께 보인다', { skip: skipWithoutChrome }, async () => {
   const app = await openTracked();
   const { page } = app;
-  // [2026-08-21, D81] 기본 탭이 이제 calc2다 — `FILL_REQUIRED_FIELDS`는
-  // 첫 탭(`calculator`) 필드를 채우지만, 그 탭 패널이 숨어 있으면(D81 전
-  // 에는 기본이라 숨을 일이 없었다) `.save-share button`을 문서 전체
-  // 질의로 찾을 때 계산기2 쪽(이미 프리필로 결과가 서 있다)이 먼저 걸리거나,
-  // 첫 탭 버튼이 숨은 채(0×0) 좌표 클릭을 놓친다. 첫 로드부터 뜰 수 있는
-  // 예시 팝업(스크림)도 먼저 치운 뒤, 명시로 이 탭을 켠다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
+  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
+  // 선다(D79 판정 2).
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.save-share button')`);
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(400);
 
   const before = await page.evaluate(`document.querySelector('.share-link-note').textContent`);
   assert.equal(before, '', '클릭 전에는 공유 안내가 비어 있어야 한다');
 
-  await page.clickElement(`[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === '내 결과 공유하기')`);
+  await page.clickElement(`[...document.querySelectorAll('.calc2-result-slot .save-share button')].find((b) => b.getAttribute('aria-label') === '내 결과 공유하기')`);
   await page.waitFor(`document.querySelector('.share-link-note').textContent !== ''`, { timeoutMs: 3000 });
   const after = await page.evaluate(`document.querySelector('.share-link-note').textContent`);
   // D74의 조건 자체 — 성공(복사됨)이든 실패(자동 복사 실패)든 이 문구가
@@ -56,13 +51,10 @@ test('D74 — 「내 결과 공유하기」를 누르면 「이 링크에는 입
 test('D74 — 공유 URL은 프래그먼트(#)에 실린다. 네트워크 쿼리로 나갈 방법이 없다(location.search가 비어 있다)', { skip: skipWithoutChrome }, async () => {
   const app = await openTracked();
   const { page } = app;
-  // [2026-08-21, D81] 위 시험과 같은 이유로 먼저 팝업을 치우고 첫 탭을 켠다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.save-share button')`);
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(400);
-  await page.clickElement(`[...document.querySelectorAll('.save-share button')].find((b) => b.textContent.trim() === '내 결과 공유하기')`);
+  await page.clickElement(`[...document.querySelectorAll('.calc2-result-slot .save-share button')].find((b) => b.getAttribute('aria-label') === '내 결과 공유하기')`);
   await page.waitFor(`document.querySelector('.share-link-note').textContent !== ''`, { timeoutMs: 3000 });
 
   const location = await page.evaluate(`({ search: location.search, hash: location.hash })`);
@@ -87,30 +79,39 @@ test('D74 — 공유 링크로 열면 입력이 채워지고 계산까지 실행
   const app = await openTracked({ url: `/src/web/index.html#${fragment}` });
   const { page } = app;
 
-  // 입력을 전혀 치지 않았는데 결과가 떠야 한다 — 프래그먼트가 폼을 채우고
-  // 즉시 계산(immediate: true)까지 실행했다는 뜻이다.
-  await page.waitFor(`!!document.querySelector('.save-share button')`, { timeoutMs: 5000 });
-  const birthDateValue = await page.evaluate(`document.getElementById('birthDate').value`);
+  // [2026-08-24, D84 판정 1] `encodeShareFragment`(v2/현행)도 v1과 같은
+  // 탭 없는 데이터 블롭이라 `ui/app.js`가 같은 경로로 calc2에 싣는다 —
+  // calc2 필드 id로 확인한다.
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 5000 });
+  const birthDateValue = await page.evaluate(`document.getElementById('calc2BirthDate').value`);
   assert.ok(birthDateValue.includes('1993'), `birthDate 입력이 채워지지 않았습니다: "${birthDateValue}"`);
 
   // **만 나이를 되비추는 새 표시가 생기지 않았다** — 기존 규칙("만 나이를
   // 필드 옆에 되비추지 않는다")이 공유 링크 경로에서도 그대로 유지되는지
   // 확인한다. 도움말 문구("만 나이 계산에만 씁니다")는 숫자가 없으므로
   // 통과하고, "만 33세"처럼 숫자+세가 붙은 새 문구가 생기면 잡는다.
-  const inputSlotText = await page.evaluate(`document.querySelector('.input-slot').innerText`);
+  const inputSlotText = await page.evaluate(`document.querySelector('.calc2-input-slot').innerText`);
   assert.doesNotMatch(inputSlotText, /만\s*\d+\s*세/, '입력 패널에 만 나이를 되비추는 문구가 생겼습니다 — 기존 규칙 위반');
 });
 
 /**
- * [2026-08-23, D82 판정 3] **v1 링크는 계속 열린다** — 이미 공유된 옛
- * 링크(위치 기반 v2 이전, JSON+base64url)를 실제 브라우저로 열어
- * 실측한다(`state/share-link.test.mjs`는 디코더 함수만 단위로 잰다 — 이
- * 파일은 "URL을 실제로 열면 앱이 그 값으로 뜨는가"까지 확인한다).
- * **`encodeShareFragmentV1`을 직접 써서 v2 인코더를 거치지 않는다** —
- * 지금(v2를 내는) `buildShareUrl`을 쓰면 이 시험이 실은 v2를 열어 보는
- * 시험이 돼 버린다.
+ * [2026-08-23, D82 판정 3, 2026-08-24 D84 판정 1로 라우팅 정정] **v1
+ * 링크는 계속 열린다** — 이미 공유된 옛 링크(위치 기반 v2 이전,
+ * JSON+base64url)를 실제 브라우저로 열어 실측한다(`state/share-
+ * link.test.mjs`는 디코더 함수만 단위로 잰다 — 이 파일은 "URL을 실제로
+ * 열면 앱이 그 값으로 뜨는가"까지 확인한다). **`encodeShareFragmentV1`을
+ * 직접 써서 v2 인코더를 거치지 않는다** — 지금(v2를 내는) `buildShareUrl`
+ * 을 쓰면 이 시험이 실은 v2를 열어 보는 시험이 돼 버린다.
+ *
+ * **[2026-08-24, D84 판정 1] 라우팅 목적지가 바뀌었다.** v1 링크가
+ * 가리키던 「절세계좌 계산기2(근거판)」 탭(`calculator`)이 지워졌다 —
+ * `ui/app.js`가 이제 그 값을 **간결판(calc2)에 싣는다**(링크가 죽는
+ * 것보다 낫다는 판단, `CALC2_UNSUPPORTED_SHARE_FIELDS` 주석 참고). 이
+ * 픽스처의 필드(생년월일·총급여·월 납입액 등)는 전부 calc2가 그리는
+ * 값이라 못 실은 값 안내(`.shared-fragment-notice`)는 뜨지 않아야
+ * 정상이다 — 그 배너는 별도 시험이 진다(아래).
  */
-test('D82 판정 3 — v1(옛 JSON+base64url) 공유 링크를 실제로 열면 입력이 채워지고 계산까지 실행된다', { skip: skipWithoutChrome }, async () => {
+test('D82 판정 3, D84 판정 1 — v1(옛 JSON+base64url) 공유 링크를 실제로 열면 calc2에 값이 채워지고 계산까지 실행된다', { skip: skipWithoutChrome }, async () => {
   const form = {
     ...initialForm(),
     birthDate: '1993-04-17',
@@ -125,17 +126,49 @@ test('D82 판정 3 — v1(옛 JSON+base64url) 공유 링크를 실제로 열면 
   const app = await openTracked({ url: `/src/web/index.html#${v1Fragment}` });
   const { page } = app;
 
-  // [2026-08-21, D81] 기본 탭이 이제 calc2다 — 옛(탭 id가 없는) 공유
-  // 링크가 성공으로 디코드되면 `ui/app.js`가 활성 탭을 명시로
-  // `calculator`로 돌린다(공유받은 결과가 실제로 보이도록) — 그래서 여기
-  // 명시 탭 클릭 없이도 결과가 이 탭에서 바로 떠야 한다.
-  await page.waitFor(`!!document.querySelector('.save-share button')`, { timeoutMs: 5000 });
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 5000 });
   const state = await page.evaluate(`(() => ({
-    birthDate: document.getElementById('birthDate').value,
-    calculatorHidden: document.getElementById('tabpanel-calculator').classList.contains('tab-panel-hidden'),
+    birthDate: document.getElementById('calc2BirthDate').value,
+    calc2Hidden: document.getElementById('tabpanel-calc2').classList.contains('tab-panel-hidden'),
+    hasPartialNotice: !!document.querySelector('.shared-fragment-notice'),
   }))()`);
-  assert.ok(state.birthDate.includes('1993'), `v1 링크로 열었는데 birthDate가 채워지지 않았다: "${state.birthDate}"`);
-  assert.equal(state.calculatorHidden, false, 'v1 링크로 열었는데 그 결과가 있는 탭이 숨어 있다');
+  assert.ok(state.birthDate.includes('1993'), `v1 링크로 열었는데 calc2의 birthDate가 채워지지 않았다: "${state.birthDate}"`);
+  assert.equal(state.calc2Hidden, false, 'v1 링크로 열었는데 calc2 탭이 숨어 있다');
+  assert.equal(state.hasPartialNotice, false, '이 픽스처는 calc2가 못 싣는 값이 없는데 부분 안내 배너가 떴다');
+});
+
+/**
+ * [2026-08-24, D84 판정 1] **못 싣는 값이 있으면 조용히 버리지 않고
+ * 안내한다.** v1 링크가 calc2가 화면에 묻지 않는 값(청년 자기신고)을
+ * 실었을 때, 그 값 자체는 (표시할 곳이 없으니) 반영되지 않지만 배너
+ * (`.shared-fragment-notice`)가 그 사실을 알려야 한다 — `ui/app.js`의
+ * `CALC2_UNSUPPORTED_SHARE_FIELDS`·`sharedFormHasCalc2UnsupportedValues`
+ * 가 실제로 이 판정까지 이어지는지 실측한다(단위 시험은 이 판정 함수만
+ * 순수 호출로 잰다 — 여기서는 실제 URL을 열어 배너가 화면에 뜨는지까지
+ * 본다).
+ */
+test('D84 판정 1 — v1 링크가 calc2에 없는 값(청년 자기신고)을 실었으면 부분 안내가 뜬다', { skip: skipWithoutChrome }, async () => {
+  const form = {
+    ...initialForm(),
+    birthDate: '1993-04-17',
+    currentSalary: '4000',
+    hasNonWageIncome: false,
+    monthlyCapacity: '50',
+    annuityStarted: false,
+    fundUseHorizon: 'before_pension_age',
+    declaredYouth: true,
+  };
+  const v1Fragment = encodeShareFragmentV1(form);
+  const app = await openTracked({ url: `/src/web/index.html#${v1Fragment}` });
+  const { page } = app;
+
+  await page.waitFor(`!!document.querySelector('.shared-fragment-notice')`, { timeoutMs: 5000 });
+  const state = await page.evaluate(`(() => ({
+    birthDate: document.getElementById('calc2BirthDate').value,
+    noticeText: document.querySelector('.shared-fragment-notice').textContent,
+  }))()`);
+  assert.ok(state.birthDate.includes('1993'), `실을 수 있는 값(생년월일)까지 함께 빠졌다: "${state.birthDate}"`);
+  assert.ok(state.noticeText.length > 0, '부분 안내 배너에 문구가 없다');
 });
 
 test('D74 — 깨진·이전 버전 공유 링크는 조용히 무시되지 않고 짧게 알려준다', { skip: skipWithoutChrome }, async () => {

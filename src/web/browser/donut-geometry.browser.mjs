@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 도넛의 **실제 기하** 실측 — 회귀 재발 방지.
@@ -21,7 +21,7 @@ import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2Ex
 
 /** `.chart-donut` 안의 조각(top면)의 실제 bbox와 각도 데이터를 잰다. */
 const MEASURE_SLICES = `(() => {
-  const svg = document.querySelector('.result-slot .chart-donut');
+  const svg = document.querySelector('.calc2-result-slot .chart-donut');
   if (!svg) return null;
   // top면만 — role="img"가 top에만 붙는다(옆면은 장식이라 없다).
   const tops = [...svg.querySelectorAll('path[role="img"]')];
@@ -46,7 +46,7 @@ const MEASURE_SLICES = `(() => {
  * 대신 코드로 "화면에 실제로 그 픽셀이 칠해져 있는가"를 재는 방법이다.
  */
 const HIT_TEST_MIDPOINTS = `(() => {
-  const svg = document.querySelector('.result-slot .chart-donut');
+  const svg = document.querySelector('.calc2-result-slot .chart-donut');
   // 뷰포트 안으로 스크롤한 뒤 좌표를 잰다 — \`elementFromPoint\`는 뷰포트 밖
   // 좌표에서 항상 null을 낸다(관리자 지시 2026-08-14 4번으로 헤더 위에 예시
   // 구역이 생기면서 페이지가 길어졌고, 기본 스크롤 위치에서는 도넛이 뷰포트
@@ -83,11 +83,11 @@ const measurements = {};
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 첫 로드부터 예시 팝업이
-  // 뜰 수 있어 먼저 치운다. 그 다음 `.result-slot`(첫 탭 전용)이 숨어
-  // 있으면 SVG `getBBox()`가 0을 내므로 명시로 켠다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
+  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
+  // 선다(D79 판정 2).
   await dismissCalc2ExampleModalIfOpen(app.page);
-  await app.page.clickElement(`document.getElementById('tab-calculator')`);
+  await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
 }, { skip: skipWithoutChrome });
 
 after(async () => {
@@ -95,10 +95,8 @@ after(async () => {
   if (!skipWithoutChrome) console.log('\n[도넛 기하 실측]', JSON.stringify(measurements, null, 1));
 });
 
-test('필수 입력을 채우고 2.5초 뒤 — 조각마다 bbox가 0이 아니다 (회귀 재현 조건 그대로)', { skip: skipWithoutChrome }, async () => {
+test('결과가 선 뒤 2.5초 — 조각마다 bbox가 0이 아니다 (회귀 재현 조건 그대로)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(2500);
   const m = await page.evaluate(MEASURE_SLICES);
   measurements.afterFill = m;
@@ -129,14 +127,17 @@ test('조각 중간 각도의 실제 화면 픽셀에 그 조각이 그려져 �
 
 test('`requestAnimationFrame`이 없어도 도넛은 즉시 최종 모양이다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
+  // [2026-08-24, D84] calc2는 필드를 채워야 렌더되던 첫 탭과 달리 로드와
+  // 동시에(모듈 스크립트 평가 중) 프리필로 렌더된다(D79 판정 2) — 그래서
+  // `goto()` 뒤에 `requestAnimationFrame`을 지우면 이미 늦을 수 있다(그
+  // 시점엔 이미 첫 렌더가 끝나 있을 수 있다). 문서가 파싱되기 **전**에
+  // 미리 지워 두는 CDP 훅(`Page.addScriptToEvaluateOnNewDocument`,
+  // `theme.browser.mjs`의 "저장된 테마" 검사와 같은 기법)으로 바꾼다.
+  await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `window.requestAnimationFrame = undefined;`,
+  });
   await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
-  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
-  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(`window.requestAnimationFrame = undefined;`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
   // [2026-08-18, D74] **단순 존재 확인에서 실제 bbox 확인으로 좁혔다.** 옛
   // 검사는 `.chart-donut`이 DOM에 존재하는 순간 곧바로(추가 대기 없이)
   // 재는 것으로 "장식(rAF) 없이도 내용은 그 자리에 있다"를 확인했다 —
@@ -153,7 +154,7 @@ test('`requestAnimationFrame`이 없어도 도넛은 즉시 최종 모양이다'
   // 회귀 탐지력은 그대로다.
   await page.waitFor(
     `(() => {
-      const svg = document.querySelector('.result-slot .chart-donut');
+      const svg = document.querySelector('.calc2-result-slot .chart-donut');
       const p = svg && svg.querySelector('path[role="img"]');
       return !!p && p.getBBox().width > 1;
     })()`,
@@ -169,15 +170,12 @@ test('prefers-reduced-motion이면 진입 표시 없이 바로 최종 모양이�
   const { page, origin } = app;
   await page.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
-  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
-  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  // [2026-08-24, D84] calc2가 로드와 동시에 프리필로 결과를 낸다(D79
+  // 판정 2) — 명시 탭 전환·필드 채움이 더는 필요 없다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
   const m = await page.evaluate(`(() => {
-    const svg = document.querySelector('.result-slot .chart-donut');
+    const svg = document.querySelector('.calc2-result-slot .chart-donut');
     return { entering: svg.classList.contains('chart-donut-entering'), boxes: [...svg.querySelectorAll('path[role="img"]')].map((p) => p.getBBox().width) };
   })()`);
   measurements.reducedMotion = m;
@@ -189,17 +187,14 @@ test('prefers-reduced-motion이면 진입 표시 없이 바로 최종 모양이�
 test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도넛이 비지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
-  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
-  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
+  // [2026-08-24, D84] calc2가 로드와 동시에 프리필로 결과를 낸다(D79
+  // 판정 2) — 명시 탭 전환·필드 채움이 더는 필요 없다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
   // 진입(240ms) 도중에 값을 한 번 더 바꿔 디바운스 재계산을 건다 — 재렌더가
   // rAF 체인을 끊는 경로를 실측으로 때린다.
   // 만원 단위다(6절) — '60'은 600,000원.
-  await page.evaluate(`(() => { const el = document.getElementById('monthlyCapacity'); el.focus(); el.value = '60'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await page.evaluate(`(() => { const el = document.getElementById('calc2MonthlyCapacity'); el.focus(); el.value = '60'; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
   await sleep(1200); // 디바운스(400ms) + 재계산 + 진입까지 넉넉히
   const m = await page.evaluate(MEASURE_SLICES);
   measurements.interruptedEntrance = m;
@@ -226,75 +221,61 @@ test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도
  * 라벨, `charts.js`의 `applyDonutSliceInlineLabels`가 실제 결과 패널
  * (모바일)에도 적용한다)로 대신한다.
  */
-test('실제 결과 도넛 — 데스크톱에서는 도넛 옆 직접 라벨이 실제로 보인다(범례가 아니라)', { skip: skipWithoutChrome }, async () => {
-  const { page, origin } = app;
-  await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
-  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
-  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
-  await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
-  await sleep(400);
-  // [2026-08-18, D74] **`.chart-area`로 범위를 좁혔다** — 옛 검사는
-  // `.result-slot` 전체를 뒤졌다. D74로 `.result-slot` 안에 인쇄 전용 요약
-  // 시트(`.summary-sheet`, 화면에서는 `display: none`)가 하나 더 생겼고,
-  // 그 시트도 항상 legend 모드 도넛+범례를 담는다(도넛/범례 자체를 그대로
-  // 재사용한다, `ui/result-panel.js`의 `summarySheet`) — `.result-slot`
-  // 전체를 뒤지면 화면에 보이지 않는 그 사본까지 함께 잡혀 "중복이다"로
-  // 오판하거나(존재 여부만 보는 질의) "0크기다"로 오판한다(크기를 보는
-  // 질의 — 숨은 사본은 실제로 0×0이 맞다). **화면에 실제로 보이는 도넛은
-  // 언제나 `.chart-area` 안에 있다** — 요약 시트는 그 밖에 있으므로,
-  // `.chart-area`로 좁히면 이 충돌이 구조적으로 사라진다.
-  const m = await page.evaluate(`(() => {
-    const scope = document.querySelector('.result-slot .chart-area');
-    const rect = (sel) => { const el = scope.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; };
-    const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
-    return { labels: rect('.donut-labels'), sliceLabelGroup: !!scope.querySelector('.donut-slice-label-group'), legendItems };
-  })()`);
-  measurements.desktopLabelVisibility = m;
-  assert.ok(m.labels, '데스크톱에서 .donut-labels 노드 자체가 없다');
-  assert.ok(m.labels.width > 1 && m.labels.height > 1, `데스크톱 직접 라벨이 0크기다(안 보인다): ${JSON.stringify(m.labels)}`);
-  // 데스크톱(labelled 모드)의 도넛 svg는 `data-label-mode="legend"`가 아니므로
-  // `applyDonutSliceInlineLabels`가 조용히 아무것도 하지 않는다 — 조각 안
-  // 이름+비율 라벨 그룹 자체가 생기지 않아야 한다(직접 라벨과 중복되면 안 된다).
-  assert.equal(m.sliceLabelGroup, false, '데스크톱에서도 조각 안 이름+비율 라벨 그룹이 생겼다 — 직접 라벨과 중복이다');
-  // 범례는 이 폭에서 DOM에 있어도 됨(범례는 `chartArea`가 언제나 만든다) —
-  // 하지만 **보이면 안 된다**(라벨과 범례가 동시에 보이면 중복이다).
-  for (const item of m.legendItems) {
-    assert.ok(item.width === 0 || item.height === 0, `데스크톱에서 범례 항목이 보인다(라벨과 중복): ${JSON.stringify(item)}`);
-  }
-});
-
-test('실제 결과 도넛 — 모바일(375px)에서는 범례·조각 안 이름+비율 라벨이 실제로 보인다(0크기가 아니다)', { skip: skipWithoutChrome }, async () => {
-  const { page, origin } = app;
-  await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] 새로고침은 기본 탭(calc2)으로 되돌아간다 — 첫 탭
-  // (calculator)의 `.result-slot`을 재려면 먼저 그 탭을 켜야 한다. 켜기
-  // 전에, 이 로드가 곧장 열 수 있는 예시 팝업(스크림)부터 치운다.
-  await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 900, deviceScaleFactor: 1, mobile: true });
-  await sleep(150);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
-  await sleep(400);
-  // [2026-08-18, D74] 위 데스크톱 검사와 같은 이유로 `.chart-area`로 좁힌다.
-  const m = await page.evaluate(`(() => {
-    const scope = document.querySelector('.result-slot .chart-area');
-    const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
-    const sliceLabels = [...scope.querySelectorAll('.donut-slice-label')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
-    return { legendItems, sliceLabels };
-  })()`);
-  measurements.mobileLegendVisibility = m;
-  assert.ok(m.legendItems.length > 0, '모바일에서 범례 항목이 하나도 없다');
-  for (const item of m.legendItems) {
-    assert.ok(item.width > 1 && item.height > 1, `모바일 범례 항목이 0크기다(관리자가 예시에서 잡은 것과 같은 결함): ${JSON.stringify(item)}`);
-  }
-  assert.ok(m.sliceLabels.length > 0, '모바일에서 조각 안 이름+비율 라벨이 하나도 없다');
-  for (const b of m.sliceLabels) {
-    assert.ok(b.width > 1 && b.height > 1, `모바일 조각 안 이름+비율 라벨이 0크기다: ${JSON.stringify(b)}`);
-  }
-  await page.send('Emulation.clearDeviceMetricsOverride');
-});
+/**
+ * [2026-08-24, D84 정리] 원래 이 자리는 뷰포트로 갈리는 두 검사였다 —
+ * 데스크톱(labelled 모드, 도넛 옆 직접 라벨·범례 없음)과 모바일(legend
+ * 모드, 범례+조각 안 라벨 둘 다). **SVG의 내부 label-mode 자체는 더는
+ * 뷰포트로 갈리지 않는다** — calc2는 `preferredDonutSizeMode()`의 반응형
+ * 계산을 타지 않고 D79/D83 판정으로 **뷰포트와 무관하게 언제나 legend
+ * 모드**로 고정된 209px 도넛을 그린다(실측 확인 — 1440px에서도
+ * `data-label-mode`가 "legend", `.donut-labels`도 없다). 조각 안 라벨은
+ * 그래서 두 뷰포트 모두 항상 보인다. **다만 `.donut-legend` 목록 자체의
+ * CSS 표시 규칙(`styles.css`의 767px 미디어쿼리)은 그대로 남아 있다** —
+ * 실측해 보니 375px에서는 범례 목록도 함께 보이고(옛 모바일 검사와
+ * 같은 사실), 1440px에서는 범례가 여전히 감춰진다(옛 데스크톱 검사의
+ * "직접 라벨" 절반만 이제 성립하지 않는다). 그 실측값 그대로 기대값을
+ * 적는다 — 두 검사를 완전히 합치지 않고, 너비별 기대값을 명시한다.
+ */
+for (const [label, width, expectLegendVisible] of [
+  ['데스크톱(1440px)', 1440, false],
+  ['모바일(375px)', 375, true],
+]) {
+  test(`실제 결과 도넛 — ${label}에서 조각 안 이름+비율 라벨이 실제로 보이고, 범례는 767px 규칙대로 갈린다`, { skip: skipWithoutChrome }, async () => {
+    const { page, origin } = app;
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 768 });
+    await page.goto(`${origin}/src/web/index.html`);
+    await dismissCalc2ExampleModalIfOpen(page);
+    await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
+    await sleep(400);
+    // [2026-08-18, D74] `.chart-area`로 범위를 좁힌다 — `.calc2-result-slot`
+    // 안에는 인쇄 전용 요약 시트(`.summary-sheet`, 화면에서는 display:none)
+    // 가 도넛·범례 사본을 하나 더 담고 있다(`ui/result-panel.js`의
+    // `summarySheet`) — 전체를 뒤지면 그 숨은 사본이 섞여 개수·크기 판정을
+    // 오염시킨다. 화면에 실제로 보이는 도넛은 언제나 `.chart-area` 안에 있다.
+    const m = await page.evaluate(`(() => {
+      const scope = document.querySelector('.calc2-result-slot .chart-area');
+      const svg = scope.querySelector('.chart-donut');
+      const legendItems = [...scope.querySelectorAll('.donut-legend-item')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+      const sliceLabels = [...scope.querySelectorAll('.donut-slice-label')].map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; });
+      const directLabels = scope.querySelector('.donut-labels');
+      return { labelMode: svg?.dataset.labelMode, hasDirectLabels: !!directLabels, legendItems, sliceLabels };
+    })()`);
+    measurements[`labelVisibility_${width}`] = m;
+    assert.equal(m.labelMode, 'legend', `${label} — 도넛 label-mode가 legend가 아니다: ${m.labelMode}`);
+    assert.equal(m.hasDirectLabels, false, `${label} — 직접 라벨(.donut-labels) 노드가 생겼다 — calc2는 언제나 legend 모드다`);
+    assert.ok(m.sliceLabels.length > 0, `${label} — 조각 안 이름+비율 라벨이 하나도 없다`);
+    for (const b of m.sliceLabels) {
+      assert.ok(b.width > 1 && b.height > 1, `${label} — 조각 안 이름+비율 라벨이 0크기다: ${JSON.stringify(b)}`);
+    }
+    assert.ok(m.legendItems.length > 0, `${label} — 범례 항목 자체가 DOM에 없다`);
+    for (const item of m.legendItems) {
+      const visible = item.width > 1 && item.height > 1;
+      assert.equal(
+        visible,
+        expectLegendVisible,
+        `${label} — 범례 항목 표시 상태가 767px 규칙과 어긋난다(기대: ${expectLegendVisible ? '보임' : '숨음'}): ${JSON.stringify(item)}`,
+      );
+    }
+    await page.send('Emulation.clearDeviceMetricsOverride');
+  });
+}

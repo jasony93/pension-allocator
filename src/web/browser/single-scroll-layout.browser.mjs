@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 
 /**
  * 단일 페이지 스크롤 · 컨테이너 확대 (2026-08-12, D48) — 실제 렌더 실측.
@@ -21,13 +21,11 @@ before(async () => {
   app = await openApp();
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — `.result-slot`(첫 탭
-  // 전용)이 숨어 있으면 이 파일의 위치 실측(getBoundingClientRect)이
-  // 전부 0이 된다. 먼저 켠다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
+  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
+  // 선다(D79 판정 2).
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await page.waitFor(`!!document.querySelector('.result-slot .chart-donut')`, { timeoutMs: 8000 });
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(300);
 }, { skip: skipWithoutChrome });
 
@@ -40,20 +38,20 @@ async function setViewport(width, height = 1000) {
   await sleep(150);
 }
 
-test('데스크톱 — `.result-slot`이 자체 스크롤 상자가 아니다(스크롤 막대가 하나다)', { skip: skipWithoutChrome }, async () => {
+test('데스크톱 — `.calc2-result-slot`이 자체 스크롤 상자가 아니다(스크롤 막대가 하나다)', { skip: skipWithoutChrome }, async () => {
   await setViewport(1440);
   const cs = await app.page.evaluate(`(() => {
-    const el = document.querySelector('.result-slot');
+    const el = document.querySelector('.calc2-result-slot');
     const s = getComputedStyle(el);
     return { position: s.position, overflowY: s.overflowY, maxHeight: s.maxHeight };
   })()`);
-  assert.notEqual(cs.position, 'sticky', '.result-slot이 여전히 sticky면 자체 스크롤 상자로 남아 있을 수 있다');
-  assert.notEqual(cs.overflowY, 'auto', '.result-slot이 overflow-y:auto면 스크롤 막대가 둘이다');
+  assert.notEqual(cs.position, 'sticky', '.calc2-result-slot이 여전히 sticky면 자체 스크롤 상자로 남아 있을 수 있다');
+  assert.notEqual(cs.overflowY, 'auto', '.calc2-result-slot이 overflow-y:auto면 스크롤 막대가 둘이다');
   // max-height가 뷰포트에 묶여 있으면(예: calc(100vh - 96px)) 내용이 넘칠 때
   // 결국 내부 스크롤이 생긴다. 'none'이거나 뷰포트보다 훨씬 큰 값이어야 한다.
   assert.ok(
     cs.maxHeight === 'none' || Number.parseFloat(cs.maxHeight) > 100000,
-    `.result-slot의 max-height(${cs.maxHeight})가 뷰포트에 묶여 있다`,
+    `.calc2-result-slot의 max-height(${cs.maxHeight})가 뷰포트에 묶여 있다`,
   );
 });
 
@@ -181,11 +179,11 @@ test('1280px는 이번 개정의 영향을 받지 않는다(옛 상한에도 안
   assert.ok(ratio > 0.95, `1280px 비율이 ${(ratio * 100).toFixed(1)}%다 — 설계 실측(98.8%)과 크게 다르다`);
 });
 
-test('.input-slot 실측 폭이 1024~1439px 사이에서 440~640px 범위 안에 있다', { skip: skipWithoutChrome }, async () => {
+test('.calc2-input-slot 실측 폭이 1024~1439px 사이에서 440~640px 범위 안에 있다', { skip: skipWithoutChrome }, async () => {
   for (const width of [1024, 1200, 1439]) {
     await setViewport(width, 900);
-    const w = await app.page.evaluate(`document.querySelector('.input-slot').getBoundingClientRect().width`);
-    assert.ok(w >= 440 - 1 && w <= 640 + 1, `뷰포트 ${width}px에서 .input-slot 폭이 ${w}px — 440~640 범위 밖이다`);
+    const w = await app.page.evaluate(`document.querySelector('.calc2-input-slot').getBoundingClientRect().width`);
+    assert.ok(w >= 440 - 1 && w <= 640 + 1, `뷰포트 ${width}px에서 .calc2-input-slot 폭이 ${w}px — 440~640 범위 밖이다`);
   }
 });
 
@@ -212,26 +210,27 @@ test('산문 텍스트 블록이 --prose-max-width(640px)를 넘지 않는다 �
   }
 });
 
-test('도넛도 넓은 데스크톱에서 함께 커지되, 옆의 AccountBenefitStrip(전체 폭)보다는 여전히 좁다 — 위계가 유지된다', { skip: skipWithoutChrome }, async () => {
-  await setViewport(1024, 900);
-  const narrowWidth = await app.page.evaluate(`Number(document.querySelector('.result-slot .chart-donut').getAttribute('width'))`);
-
+/**
+ * [2026-08-24, D84] 원래 이 검사는 첫 탭(계산기2 근거판)의 반응형 도넛
+ * (좁은 데스크톱에서 labelled 모드 지름 260 → 넓은 데스크톱에서
+ * labelledWide 모드 지름 320으로 뷰포트에 맞춰 커지는 로직)을 겨눴다 —
+ * 그 로직 자체가 첫 탭 전용이었다(D79 판정 2 — 계산기2 도넛은 뷰포트와
+ * 무관하게 209px 고정, `styles.css`의 `.calc2-result-slot .chart-donut`).
+ * "넓어지면 커진다"는 더는 calc2에 해당하지 않으므로 그 절반은 뺀다 —
+ * "도넛이 AccountBenefitStrip(전체 폭)보다 좁다"는 위계만, 도넛이 고정
+ * 크기인 지금도 여전히 지켜야 할 사실이라 남긴다.
+ */
+test('도넛이 넓은 데스크톱에서도 옆의 AccountBenefitStrip(전체 폭)보다 좁다 — 위계가 유지된다', { skip: skipWithoutChrome }, async () => {
   await setViewport(1920, 1080);
   await sleep(200);
   const wide = await app.page.evaluate(`(() => {
-    const donut = document.querySelector('.result-slot .chart-donut');
+    const donut = document.querySelector('.calc2-result-slot .chart-donut');
     const strip = document.querySelector('.account-benefit-strip');
     return {
-      donutIntrinsicWidth: Number(donut.getAttribute('width')),
       donutRenderedWidth: donut.getBoundingClientRect().width,
       stripWidth: strip ? strip.getBoundingClientRect().width : null,
     };
   })()`);
-
-  assert.ok(wide.donutIntrinsicWidth > narrowWidth, `넓은 데스크톱(${wide.donutIntrinsicWidth})이 좁은 데스크톱(${narrowWidth})보다 커야 한다`);
-  // 320px 상한에서 유도된 값(260 → 320, gutter 176 → 182)과 대략 일치하는지도 본다.
-  assert.equal(narrowWidth, 612, '1024px에서는 labelled 모드(지름 260, gutter 176)여야 한다');
-  assert.equal(wide.donutIntrinsicWidth, 684, '1920px에서는 labelledWide 모드(지름 320, gutter 182)여야 한다');
 
   assert.ok(wide.stripWidth != null, '.account-benefit-strip을 찾지 못했다');
   assert.ok(

@@ -1,4 +1,18 @@
 /**
+ * [2026-08-23, D84 판정 1] **첫 탭 예시 블록(헤더 아래 김철수씨·이승은씨
+ * 두 행) 자체는 지워졌다** — `ui/app.js`가 더는 `mountExampleShowcase`
+ * (이 파일 아래)를 부르지 않는다. 그런데 이 파일의 예시 조립 헬퍼
+ * (`examplePersonaCells`·`exampleHeroCopy`·`attachHostStyles`·
+ * `fitAmountValueToCard`·`computeExampleScenario`·`EXAMPLE_PERSONA_NAME`·
+ * `exampleInputLineTexts`·`EXAMPLE_AGE_YEARS`·`EXAMPLE_SALARY_MANWON`·
+ * `EXAMPLE_MONTHLY_CAPACITY_MANWON`·`exampleBirthDate`)는 계산기2의 일일
+ * 예시 팝업(`ui/calc2-example-modal.js`)과 프리필(`ui/calc2-prefill.js`)이
+ * 그대로 가져다 쓴다 — 그래서 파일을 통째로 지우지 않는다. **아래
+ * `mountExampleShowcase`는 더는 어디서도 불리지 않는 죽은 내보내기다** —
+ * 그 함수 하나만 도려내려면 이 파일 전체(두 인물 조립·화살표·Shadow DOM
+ * 마운트 순서)를 다시 읽어야 하는데, 이번 회차의 범위(탭 삭제·신설)를
+ * 넘는 위험한 리팩터라 남겨 둔다.
+ *
  * ExampleShowcase — 관리자 지시(2026-08-14) 3·4·5·6번, D70(2026-08-16)으로
  * 배치 재작업. 헤더와 입력/결과 사이, "이 계산기로 무엇을 볼 수 있는지"를
  * 보여주는 간략한 예시(도넛 + 절세액 둘뿐 — 계좌별 세제혜택 막대·법령·가정

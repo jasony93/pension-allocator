@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, FILL_REQUIRED_FIELDS, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
 import { AMOUNT_CARD_LABEL_CREDIT_ONLY, AMOUNT_CARD_LABEL_COMPOSITE, AMOUNT_CARD_LABEL_DELTA } from '../copy.js';
 
 /**
@@ -18,40 +18,22 @@ import { AMOUNT_CARD_LABEL_CREDIT_ONLY, AMOUNT_CARD_LABEL_COMPOSITE, AMOUNT_CARD
  * 을 여기서만 잡을 수 있다.
  */
 
-const SET = (id, v) => `(() => { const el = document.getElementById(${JSON.stringify(id)}); el.focus(); el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`;
-const CLICK = (id) => `document.getElementById(${JSON.stringify(id)}).click()`;
-
 let app;
 
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   const { page } = app;
-  // [2026-08-21, D81] 기본 탭이 calc2로 바뀌었다 — 이 시험은 첫 탭 안에서
-  // 좌표 기반 클릭을 쓰는데(대안 미리보기 스택바 행), 그 탭이 숨어 있으면
-  // 클릭이 빗나간다. 먼저 켠다.
   await dismissCalc2ExampleModalIfOpen(page);
-  await page.clickElement(`document.getElementById('tab-calculator')`);
-  // 구성 두 줄(슬롯5)까지 함께 검사하려면 헤드라인이 구간 변형(가정 성분 포함)
-  // 이어야 한다 — ISA 계좌를 켜서 그 상태를 만든다(account-benefit-strip.browser.mjs
-  // 와 같은 픽스처).
-  await page.evaluate(FILL_REQUIRED_FIELDS);
-  await sleep(150);
-  await page.evaluate(CLICK('isaExists-true'));
-  await page.waitFor(`!!document.getElementById('isaCumulative')`);
-  await page.evaluate(CLICK('isaAccountType-general'));
-  await sleep(150);
-  await page.evaluate(SET('isaCumulative', '0'));
-  await sleep(150);
-  await page.evaluate(CLICK('isaReturnEnabled-true'));
-  await page.waitFor(`!!document.getElementById('isaReturnRatePercent')`);
-  await page.evaluate(SET('isaReturnRatePercent', '7'));
-  await sleep(150);
-  await page.evaluate(CLICK('isaIncomeCharacter-interest_dividend'));
-  await sleep(150);
-  await page.evaluate(SET('isaSettlementYears', '5'));
-  await sleep(150);
-  await page.waitFor(`document.querySelectorAll('.stackbar-row').length >= 2`);
+  // [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 이제
+  // calc2가 유일한 계산 탭이자 기본 활성 탭이다 — 탭 전환도, ISA 상세
+  // 입력(계좌 존재·누적액·정산기간·소득 성격)도 더는 필요 없다. calc2
+  // 프리필(`ui/calc2-prefill.js`, D83 소유자 지시 9번)이 이미
+  // `isaReturnEnabled: true, isaReturnRatePercent: '5'`를 채우고,
+  // `buildIsaReturnAssumption`은 `isaExists`와 무관하게 유효하다
+  // (`state/store.js` 141행) — 로드와 동시에 가정 성분(구성 두 줄) 포함
+  // 구간 변형 헤드라인이 선다.
+  await page.waitFor(`document.querySelectorAll('.calc2-result-slot .stackbar-row').length >= 2`, { timeoutMs: 8000 });
   await sleep(500);
 }, { skip: skipWithoutChrome });
 
@@ -59,15 +41,12 @@ after(async () => {
   if (app) await app.close();
 });
 
-// [2026-08-23, D83 소유자 지시 9번] 계산기2 프리필이 이제 ISA 예상 수익률을
-// 켜고 5%를 채운다(`ui/calc2-prefill.js`) — 계산기2 결과도 그 값으로 항상
-// 구간 변형(구성 두 줄 포함) 헤드라인을 낼 수 있게 됐다. 첫 탭·계산기2 두
-// 결과 패널이 늘 동시에 DOM에 있으므로(2.1.2절 (3)), 스코프 없는
-// `document.querySelector`는 이제 이 시험이 실제로 보려는 **첫 탭**이 아니라
-// 계산기2 쪽 요소를 집을 수 있다 — `.result-slot`으로 좁혀 이 시험이 여는
-// 탭(`before()`의 `tab-calculator`)과 일치시킨다.
+// [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 스코프
+// 없는 `document.querySelector`도 이제 계산기2 요소만 집는다 — 그래도
+// `.calc2-result-slot`으로 명시해 앞으로 다른 탭이 늘어도 흔들리지 않게
+// 한다.
 const READ_HEADLINE = `(() => {
-  const scope = document.querySelector('.result-slot');
+  const scope = document.querySelector('.calc2-result-slot');
   return {
     label: scope?.querySelector('.amount-card-label')?.textContent ?? null,
     value: scope?.querySelector('.amount-card-value')?.textContent ?? null,
@@ -90,21 +69,20 @@ test('기본안이 그려질 때 헤드라인은 합계(세액공제액/절세�
 });
 
 // [2026-08-23, D83 소유자 지시 9번] 계산기2도 이제(프리필로) 구성 두 줄·
-// 다른 배분 비교 스택바 행을 낼 수 있다 — `.result-slot`으로 좁혀 이 파일이
-// 실제로 여는 첫 탭만 겨눈다(위 `READ_HEADLINE` 주석과 같은 이유).
+// 다른 배분 비교 스택바 행을 낸다.
 test('대안 행을 누르면 헤드라인이 「기본안 대비 세액공제액 차이」로 바뀌고, 그 값은 스택바 행의 값과 글자 그대로 같다 — 새로 계산하지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const altRowAmount = await page.evaluate(`(() => {
-    const row = Array.from(document.querySelectorAll('.result-slot .stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'));
+    const row = Array.from(document.querySelectorAll('.calc2-result-slot .stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'));
     return row ? row.querySelector('.stackbar-row-amount').textContent.trim() : null;
   })()`);
   assert.ok(altRowAmount, '대안 행을 찾지 못했다 — 픽스처가 최소 2개의 배분안을 내야 한다');
   assert.notEqual(altRowAmount, '기본', '대안 행이 "기본"이면 클릭 대상 선택이 잘못됐다');
 
   await page.clickElement(
-    `Array.from(document.querySelectorAll('.result-slot .stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
+    `Array.from(document.querySelectorAll('.calc2-result-slot .stackbar-row')).find((r) => !r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
   );
-  await page.waitFor(`document.querySelector('.result-slot .amount-card-label')?.textContent === ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
+  await page.waitFor(`document.querySelector('.calc2-result-slot .amount-card-label')?.textContent === ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
 
   const h = await page.evaluate(READ_HEADLINE);
   assert.equal(h.label, AMOUNT_CARD_LABEL_DELTA);
@@ -115,9 +93,9 @@ test('대안 행을 누르면 헤드라인이 「기본안 대비 세액공제�
 test('다시 기본안 행을 누르면 원래 헤드라인이 복원된다 — 대안 상태가 남지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   await page.clickElement(
-    `Array.from(document.querySelectorAll('.result-slot .stackbar-row')).find((r) => r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
+    `Array.from(document.querySelectorAll('.calc2-result-slot .stackbar-row')).find((r) => r.querySelector('.stackbar-row-label').textContent.includes('기본'))`,
   );
-  await page.waitFor(`document.querySelector('.result-slot .amount-card-label')?.textContent !== ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
+  await page.waitFor(`document.querySelector('.calc2-result-slot .amount-card-label')?.textContent !== ${JSON.stringify(AMOUNT_CARD_LABEL_DELTA)}`, { timeoutMs: 3000 });
   const h = await page.evaluate(READ_HEADLINE);
   assert.notEqual(h.label, AMOUNT_CARD_LABEL_DELTA);
   assert.ok(

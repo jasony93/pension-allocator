@@ -10,24 +10,24 @@
 
 import { el } from './dom.js';
 import { SERVICE_NAME } from '../copy.js';
-import { CALC2_TAB_LABEL } from '../calc2-copy.js';
-import { REVERSE_TAB_LABEL } from '../reverse-copy.js';
+import { DEPLETION_TAB_LABEL } from '../depletion-copy.js';
 
-// 라벨은 각 탭의 문구 사전에서 가져온다 — 세 탭이 문구 사전을 나누는
-// 이유(계약 8.11절)와 같은 이유로, 탭 이름을 이 파일에 다시 박지 않는다.
+// 라벨은 각 탭의 문구 사전에서 가져온다 — 탭마다 문구 사전을 나누는 이유
+// (계약 8.11절)와 같은 이유로, 탭 이름을 이 파일에 다시 박지 않는다.
 // [2026-08-20, D79] 순서는 「절세계좌 계산기 | 절세계좌 계산기2 | 연금
 // 역산기」 — 소유자 지시 원문 순서 그대로.
-// [2026-08-21, D81] **소유자가 표시 순서·라벨을 맞바꿨다** — 계산기2(간결판)
-// 가 첫 자리·이름 「절세계좌 계산기」를, 옛 첫 탭이 둘째 자리·이름
-// 「절세계좌 계산기2」를 가져간다("실험이 판가름 났다 — 간결판이 기본,
-// 근거 있는 판이 보조가 된다"). **내부 `id`(`calculator`/`calc2`)는 그대로다**
-// — `state/tab-fragment.js`가 그 문자열로 옛 공유 링크를 계속 연다. 바뀌는
-// 것은 이 배열의 `label` 값과 순서(자바스크립트 배열 순서가 그대로 표시
-// 순서다)뿐이다.
+// [2026-08-21, D81] 소유자가 표시 순서·라벨을 맞바꿨다 — 계산기2(간결판)
+// 가 첫 자리·이름 「절세계좌 계산기」를 가져간다.
+// [2026-08-23, D84 판정 1·2] **탭 둘을 지운다.** 「절세계좌 계산기2」
+// (내부 id `calculator`, 옛 근거판)와 「연금 역산기」(`pension-reverse`)
+// 화면 배선을 지운다 — 엔진(`src/engine/reverse-*`)과 그 시험은 손대지
+// 않는다(보관 자산). 남는 계산 탭의 내부 `id`는 그대로 `calc2`다(옛
+// `#calc2` 공유 링크가 계속 같은 패널을 연다). 새로 「연금고갈 시뮬레이션」
+// 탭(내부 id `pension-depletion`)을 둘째 자리에 연다 — 공적 기금 시나리오
+// 교육 도구이지 개인 세액 계산이 아니다(D84 판정 2).
 export const TABS = [
   { id: 'calc2', label: SERVICE_NAME },
-  { id: 'calculator', label: CALC2_TAB_LABEL },
-  { id: 'pension-reverse', label: REVERSE_TAB_LABEL },
+  { id: 'pension-depletion', label: DEPLETION_TAB_LABEL },
 ];
 
 /**
