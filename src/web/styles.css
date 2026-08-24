@@ -2954,19 +2954,37 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    이 저장소의 토큰으로 치환했다. 구조(카드 3장·핵심 가정 슬라이더·고급
    설정 접힘·2030 검증 줄)는 초안 그대로다.
    =========================================================================== */
-.depletion-slot { /* 스타일 없음 — 훅 클래스, `ui/app.js` */ }
-.depletion-panel { padding: var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-2); }
+/* [2026-08-24, 소유자 지시 1번] **중앙 정렬 + 차트 확장.** 옛 구조는
+   `.depletion-slot`이 계산기2와 같은 `.app-main`(데스크톱에서
+   `flex-direction: row`, 위 미디어쿼리)의 한 자식이었다 — 계산기2는 그
+   행에 입력·결과 두 칸을 나눠 쓰지만, 이 탭은 자식이 하나뿐이라 그 한
+   칸이 내용 폭만큼만 좁게 차지하고 오른쪽이 통째로 비었다(실측 회귀).
+   `#tabpanel-pension-depletion.app-main`을 아래 미디어쿼리에서 다시
+   `column`으로 돌리고, `.depletion-slot`이 그 폭 전체를 쓰게 한 뒤
+   `.depletion-panel` 자신을 가운데 정렬된 넓은 단일 열로 만든다 — 카드·
+   차트가 그 넓어진 폭을 그대로 쓴다(차트는 `width:100%`라 컨테이너가
+   넓어지면 자동으로 넓어진다, 아래 `.depletion-chart`). */
+.depletion-slot { width: 100%; }
+.depletion-panel {
+  padding: var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-2);
+  width: 100%; max-width: 980px; margin: 0 auto;
+}
 
 .depletion-cards {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--space-3); margin-bottom: var(--space-2);
 }
+/* [2026-08-24, 소유자 지시 3번] 「주황 확산」 — 카드 테두리를 첫 탭
+   (`.input-panel`·`.result-panel-inner`)과 같은 `--accent-warm`으로.
+   다크 대비는 그 두 규칙과 같은 토큰이라 이미 실측된 값을 그대로 쓴다. */
 .depletion-card {
-  background: var(--surface-raised); border: 1px solid var(--border-subtle);
+  background: var(--surface-raised); border: 1px solid var(--accent-warm);
   border-radius: var(--radius-m); padding: var(--space-4);
 }
 .depletion-card-label { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-1); }
 .depletion-card-value { font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
+/* [2026-08-24, 소유자 지시 4번] 「현재 기금」 카드의 작은 출처 캡션. */
+.depletion-card-source { margin-top: 2px; font-size: 11.5px; color: var(--text-muted); }
 
 .depletion-validation {
   font-size: 12px; color: var(--text-secondary); background: var(--accent-subtle);
@@ -2979,8 +2997,10 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 
 .depletion-validation-slot { /* 스타일 없음 — 훅 클래스, `.depletion-validation`이 안에서 스타일을 낸다 */ }
 
-/* [2026-08-24, tax-rules-report.md 33절] 출처·한계 상시 고지 두 줄
-   (실제 적립금 실적, 수급자 곡선 2031년 이후 한계). */
+/* [2026-08-24, tax-rules-report.md 33절 → 소유자 지시 4번으로 한 줄만
+   남았다] 출처·한계 상시 고지 — 실제 적립금 실적 줄은 「현재 기금」
+   카드(출처 캡션 포함)로 옮겨 여기서는 뺐다(중복 정리, 소유자 지시
+   원문). 수급자 곡선 2031년 이후 한계 고지만 남는다. */
 .depletion-static-notes { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-2); }
 .depletion-static-note { margin: 0; color: var(--text-muted); }
 
@@ -2992,19 +3012,37 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   margin: 0; color: var(--state-warning); background: var(--state-warning-subtle);
   border-left: 3px solid var(--state-warning); border-radius: var(--radius-s); padding: 6px var(--space-2);
 }
-.depletion-chart-wrap { width: 100%; margin-bottom: var(--space-4); }
+.depletion-chart-wrap { width: 100%; margin-bottom: var(--space-2); position: relative; }
 .depletion-chart { display: block; width: 100%; height: auto; }
 .depletion-chart-grid { stroke: var(--border-subtle); stroke-width: 1; }
 .depletion-chart-axis-label { fill: var(--text-muted); font-size: 11px; }
-.depletion-chart-area { fill: var(--accent); opacity: 0.12; }
-.depletion-chart-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+/* [2026-08-24, 소유자 지시 3번] 「주황 확산」 — 선·아래 영역 채움을
+   `--accent`(청록)에서 `--accent-warm`(주황)으로. 다크에서도 같은 고정
+   rgb(230,115,0)이라(위 `.depletion-card` 주석과 같은 토큰) 별도 다크
+   대비 재실측이 필요 없다 — 두 테마가 같은 값을 쓴다. */
+.depletion-chart-area { fill: var(--accent-warm); opacity: 0.12; }
+.depletion-chart-line { stroke: var(--accent-warm); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .depletion-chart-point { fill: transparent; stroke: none; cursor: default; }
-.depletion-chart-point:hover, .depletion-chart-point:focus-visible { fill: var(--accent); opacity: 0.3; }
+.depletion-chart-point:hover, .depletion-chart-point:focus-visible { fill: var(--accent-warm); opacity: 0.3; }
 .depletion-chart-marker line { stroke-width: 1.5; stroke-dasharray: 4 3; }
 .depletion-chart-marker text { font-size: 11px; font-weight: 600; }
 .depletion-chart-marker-depletion line { stroke: var(--state-error); }
 .depletion-chart-marker-depletion text { fill: var(--state-error); }
 .depletion-chart-marker-deficit line { stroke: var(--state-warning); }
+/* [2026-08-24, 소유자 지시 2번] 궤적 시작점(2026) 라벨 — 전망 재현
+   출발값(1,458조원). 카드·범례와 같은 대표 색 계열로 눈에 띄게 한다. */
+.depletion-chart-start { /* 스타일 없음 — 훅 클래스, 안의 점·라벨이 각자 스타일을 낸다 */ }
+.depletion-chart-start-point { fill: var(--accent-warm); }
+.depletion-chart-start-label { fill: var(--text-primary); font-size: 11.5px; font-weight: 700; }
+
+/* [2026-08-24, 소유자 지시 5번] 이미지 저장·공유 — 그래프 우측 하단 한
+   행. `.save-share-icon-btn`·`.save-share-icon`은 계산기2가 이미 쓰는
+   범용 클래스(`styles.css` 위쪽, 특정 탭에 매인 이름이 아니다)를 그대로
+   재사용한다. */
+.depletion-chart-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-bottom: var(--space-1); }
+.depletion-image-btn { /* 스타일 없음 — 훅 클래스, `.save-share-icon-btn` 공용 규칙이 실제 모양을 낸다 */ }
+.depletion-share-btn { /* 스타일 없음 — 훅 클래스, `.save-share-icon-btn` 공용 규칙이 실제 모양을 낸다 */ }
+.depletion-share-note { margin: 0 0 var(--space-2); text-align: right; min-height: 1.2em; word-break: break-all; font-size: 12.5px; color: var(--text-secondary); }
 
 .depletion-sliders-heading { margin: var(--space-2) 0 var(--space-1); }
 .depletion-sliders { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-2); }
@@ -3012,12 +3050,25 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .depletion-sliders-advanced[hidden] { display: none; }
 .depletion-slider-row { display: flex; align-items: center; gap: var(--space-3); }
 .depletion-slider-label { font-size: 14px; color: var(--text-secondary); flex: 0 0 195px; }
-.depletion-slider-input { flex: 1; accent-color: var(--accent); }
+/* [2026-08-24, 소유자 지시 3번] 「주황 확산」 — 슬라이더 트랙 채움·썸을
+   `--accent-warm`으로. 네이티브 `accent-color`가 지원 브라우저(Chromium
+   계열, 이 저장소의 실측 대상)에서 썸과 채움 트랙 둘 다를 이 값으로
+   칠한다. */
+.depletion-slider-input { flex: 1; accent-color: var(--accent-warm); }
 .depletion-slider-value {
   font-size: 14px; font-weight: 500; min-width: 64px; text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.depletion-advanced-toggle { width: 100%; margin: var(--space-2) 0; }
+/* [2026-08-24, 소유자 지시 3번] 「추가 정보 기입」 — 주황 바탕, 가로 폭은
+   글자만 감싼다(옛 `width: 100%`를 뗀다 — `<button>`은 기본이 내용
+   크기다, `.btn`도 폭을 강제하지 않는다). 배경+흰 글자는 이미
+   `.calc2-example-modal-dismiss`(styles.css 2650행 부근)가 쓰는 같은
+   조합 — 새 대비 등급이 아니다. */
+.depletion-advanced-toggle {
+  align-self: flex-start; margin: var(--space-2) 0;
+  background: var(--accent-warm); border: none; color: #fff; font-weight: 700;
+}
+.depletion-advanced-toggle:hover { filter: brightness(0.92); }
 
 .depletion-bridge {
   margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle);
@@ -3029,4 +3080,10 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 @media (max-width: 767px) {
   .depletion-slider-row { flex-wrap: wrap; }
   .depletion-slider-label { flex-basis: 100%; }
+}
+
+/* [2026-08-24, 소유자 지시 1번] 데스크톱에서 계산기2와 같은 `.app-main`
+   행 배치를 이 탭만 되돌린다 — 위 `.depletion-panel` 주석 참고. */
+@media (min-width: 1024px) {
+  #tabpanel-pension-depletion.app-main { flex-direction: column; }
 }

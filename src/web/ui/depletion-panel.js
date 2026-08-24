@@ -22,23 +22,36 @@ import {
   DEPLETION_SLIDER_PARAMS,
   OFFICIAL_2030_CHECK,
   ACTUAL_FUND_BALANCE,
+  INITIAL_FUND_TRILLION_KRW,
   STATUTORY_RATE_CEILING_PERCENT,
   STATUTORY_AGE_CEILING_YEARS,
 } from '../depletion/constants.js';
+import { exportDepletionSummaryPng, downloadDataUrl } from '../depletion/summary-image.js';
+import { buildDepletionShareUrl } from '../depletion/share-link.js';
 import {
   DEPLETION_BRIDGE_NOTE,
   DEPLETION_BRIDGE_LINK_LABEL,
   DEPLETION_ADVANCED_TOGGLE_OPEN_LABEL,
   DEPLETION_ADVANCED_TOGGLE_CLOSE_LABEL,
   DEPLETION_CARD_DEPLETION_LABEL,
-  DEPLETION_CARD_DEFICIT_LABEL,
+  DEPLETION_CARD_CURRENT_FUND_LABEL,
   DEPLETION_CARD_MAX_FUND_LABEL,
   DEPLETION_CORE_ASSUMPTIONS_HEADING,
-  DEPLETION_ACTUAL_FUND_NOTE_PREFIX,
   DEPLETION_RECIPIENTS_CURVE_NOTE,
   DEPLETION_RATE_ASSUMPTION_NOTE,
   DEPLETION_AGE_ASSUMPTION_NOTE,
+  DEPLETION_CHART_START_LABEL_PREFIX,
+  DEPLETION_CHART_START_LABEL_SUFFIX,
 } from '../depletion-copy.js';
+import {
+  IMAGE_EXPORT_LABEL,
+  SHARE_LINK_LABEL,
+  SHARE_LINK_COPIED_NOTE,
+  SHARE_LINK_COPY_BLOCKED_NOTE,
+  IMAGE_EXPORT_BLOCKED_NOTE,
+} from '../copy.js';
+import { SAVE_SHARE_IMAGE_ICON_DATA_URI } from '../assets/save-share-image-icon.js';
+import { SAVE_SHARE_SHARE_ICON_DATA_URI } from '../assets/save-share-share-icon.js';
 
 const CORE_PARAMS = DEPLETION_SLIDER_PARAMS.filter((p) => p.group === 'core');
 const ADVANCED_PARAMS = DEPLETION_SLIDER_PARAMS.filter((p) => p.group === 'advanced');
@@ -84,10 +97,11 @@ function sliderRow(param, value, onInput) {
   ]);
 }
 
-function outcomeCard(label, valueText) {
+function outcomeCard(label, valueText, sourceText) {
   return el('div', { class: 'depletion-card' }, [
     el('div', { class: 'depletion-card-label' }, [label]),
     el('div', { class: 'depletion-card-value' }, [valueText]),
+    sourceText ? el('div', { class: 'depletion-card-source type-caption' }, [sourceText]) : null,
   ]);
 }
 
@@ -122,14 +136,17 @@ function validationLine(checkpoint2030) {
 }
 
 /**
- * 출발값·수급자 곡선의 한계를 밝히는 상시 고지 두 줄(33.7, 33.8 #21) —
- * 슬라이더와 무관하게 항상 보인다.
+ * 수급자 곡선의 출처 한계를 밝히는 상시 고지(33.8 #21) — 슬라이더와
+ * 무관하게 항상 보인다.
+ *
+ * [2026-08-24, 소유자 지시 4번] **실제 적립금 실적 고지 줄은 여기서
+ * 뺐다** — 「현재 기금」 카드(출처 캡션 포함, 아래 `rerenderComputed`)가
+ * 이제 같은 사실(실적값·출처)을 카드 자리에서 밝히므로, 같은 사실을 두
+ * 자리에서 중복해 말하지 않는다(관리자 지시 원문 "기존 실적 고지 줄과
+ * 중복되면 고지 줄 쪽을 정리").
  */
 function staticSourceNotes() {
   return el('div', { class: 'depletion-static-notes' }, [
-    el('p', { class: 'depletion-static-note type-caption' }, [
-      `${DEPLETION_ACTUAL_FUND_NOTE_PREFIX}(${ACTUAL_FUND_BALANCE.asOf} ${Math.round(ACTUAL_FUND_BALANCE.trillionKrw).toLocaleString('ko-KR')}조원, ${ACTUAL_FUND_BALANCE.source.split(' · ')[0]}).`,
-    ]),
     el('p', { class: 'depletion-static-note type-caption' }, [DEPLETION_RECIPIENTS_CURVE_NOTE]),
   ]);
 }
@@ -259,6 +276,19 @@ function buildDepletionChart(result) {
     ]),
   );
 
+  // [2026-08-24, 소유자 지시 2번] 궤적 시작점(2026)에 시작 적립금 라벨을
+  // 단다 — **전망 재현 출발값**(`INITIAL_FUND_TRILLION_KRW`, 1,458조)만
+  // 쓴다. 실적(`ACTUAL_FUND_BALANCE`, 1,670.7조 — 「현재 기금」 카드가
+  // 따로 보인다)과 절대 섞지 않는다(D84 출처 분리 — 궤적 자체가 전망
+  // 재현 모델이므로 그 값·그 출처로만 라벨을 단다).
+  const [startX, startY] = points[0];
+  const startLabelNode = svgEl('g', { class: 'depletion-chart-start' }, [
+    svgEl('circle', { class: 'depletion-chart-start-point', cx: startX.toFixed(1), cy: startY.toFixed(1), r: 4 }),
+    svgEl('text', { class: 'depletion-chart-start-label', x: (startX + 8).toFixed(1), y: (startY - 8).toFixed(1), 'text-anchor': 'start' }, [
+      `${DEPLETION_CHART_START_LABEL_PREFIX} ${formatTrillion(INITIAL_FUND_TRILLION_KRW)}${DEPLETION_CHART_START_LABEL_SUFFIX}`,
+    ]),
+  ]);
+
   const markers = [];
   if (depletionYear != null && depletionYear <= lastYear) {
     const x = xOf(depletionYear);
@@ -295,6 +325,7 @@ function buildDepletionChart(result) {
       ...markers,
       ...pointNodes,
       ...xTickNodes,
+      startLabelNode,
     ],
   );
 }
@@ -303,17 +334,37 @@ function buildDepletionChart(result) {
 // 마운트
 // ---------------------------------------------------------------------------
 
+/** 아이콘 하나만 남는 저장/공유 버튼 — 계산기2가 이미 쓰는 범용 CSS
+ * 클래스(`.save-share-icon-btn`·`.save-share-icon`)를 그대로 재사용한다
+ * (`ui/result-panel.js`의 `saveShareIconButton`과 같은 모양, 이 탭
+ * 전용으로 다시 짤 이유가 없다 — 소유자 지시 원문 "첫 탭 관행 그대로"). */
+function depletionIconButton({ extraClass, dataUri, ariaLabel, onclick }) {
+  return el(
+    'button',
+    { type: 'button', class: `btn btn-secondary save-share-icon-btn ${extraClass}`, 'aria-label': ariaLabel, onclick },
+    [el('span', { class: 'save-share-icon', 'aria-hidden': 'true', style: `mask-image:url(${dataUri});-webkit-mask-image:url(${dataUri});width:22px;height:22px;` })],
+  );
+}
+
 /**
  * @param {HTMLElement} container
- * @param {{ onBridgeToCalc2: () => void }} options
+ * @param {{ onBridgeToCalc2: () => void, initialValues?: Record<string, number> }} options
  */
-export function mountDepletionPanel(container, { onBridgeToCalc2 } = {}) {
+export function mountDepletionPanel(container, { onBridgeToCalc2, initialValues } = {}) {
   const values = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
+  if (initialValues) {
+    for (const p of DEPLETION_SLIDER_PARAMS) {
+      if (typeof initialValues[p.id] === 'number' && Number.isFinite(initialValues[p.id])) values[p.id] = initialValues[p.id];
+    }
+  }
   const cardsSlot = el('div', { class: 'depletion-cards' });
   const validationSlot = el('div', { class: 'depletion-validation-slot' });
   const chartSlot = el('div', { class: 'depletion-chart-wrap' });
   const assumptionNotesSlot = el('div', { class: 'depletion-assumption-notes-slot' });
-  let advancedOpen = false;
+  // [소유자 지시 5번] 공유 링크로 복원된 값이 고급 설정 안에 있으면(예:
+  // 임금상승률을 바꾼 링크) 그 값이 어디서 왔는지 보이도록 처음부터
+  // 펼쳐 둔다 — "열면 복원"이 눈에 보이는 복원이어야 뜻이 있다.
+  let advancedOpen = ADVANCED_PARAMS.some((p) => values[p.id] !== p.default);
 
   function rerenderComputed() {
     const result = runDepletionSimulation(values);
@@ -321,12 +372,19 @@ export function mountDepletionPanel(container, { onBridgeToCalc2 } = {}) {
       cardsSlot,
       el('div', { class: 'depletion-cards' }, [
         outcomeCard(DEPLETION_CARD_DEPLETION_LABEL, result.depletionYear ? `${result.depletionYear}년` : '소진 없음'),
-        outcomeCard(DEPLETION_CARD_DEFICIT_LABEL, result.deficitYear ? `${result.deficitYear}년` : '없음'),
+        // [소유자 지시 4번] 「현재 기금」 카드 — 값은 모델 계산치가 아니라
+        // 실적(ACTUAL_FUND_BALANCE)이다. 카드 자신이 작은 캡션으로 출처를
+        // 단다 — 다른 곳(핵심 가정 출처)과 섞이지 않는다.
+        outcomeCard(
+          DEPLETION_CARD_CURRENT_FUND_LABEL,
+          formatTrillion(ACTUAL_FUND_BALANCE.trillionKrw),
+          `${ACTUAL_FUND_BALANCE.asOf} · ${ACTUAL_FUND_BALANCE.source}`,
+        ),
         outcomeCard(DEPLETION_CARD_MAX_FUND_LABEL, formatTrillion(result.maxFundTrillionKrw)),
       ]),
     );
     patch(validationSlot, el('div', { class: 'depletion-validation-slot' }, [validationLine(result.checkpoint2030)]));
-    patch(chartSlot, el('div', { class: 'depletion-chart-wrap' }, [buildDepletionChart(result)]));
+    patch(chartSlot, el('div', { class: 'depletion-chart-wrap' }, [buildDepletionChart(result), chartActionsRow(), shareNote]));
     patch(assumptionNotesSlot, el('div', { class: 'depletion-assumption-notes-slot' }, [assumptionBoundaryNotes(values)]));
   }
 
@@ -335,13 +393,46 @@ export function mountDepletionPanel(container, { onBridgeToCalc2 } = {}) {
     rerenderComputed();
   }
 
-  const advancedSlot = el('div', { class: 'depletion-sliders depletion-sliders-advanced', hidden: true }, ADVANCED_PARAMS.map((p) => sliderRow(p, values[p.id], onSliderInput)));
+  // [소유자 지시 5번] 이미지 저장 — 요약 시트(카드+궤적+핵심 가정+출처)
+  // 를 하나의 SVG로 조립해 PNG로 내려받는다(`depletion/summary-image.js`,
+  // 계산기2와 같은 의존성 0 관행).
+  const imageOnClick = async () => {
+    try {
+      const result = runDepletionSimulation(values);
+      const dataUrl = await exportDepletionSummaryPng(result, values);
+      downloadDataUrl(dataUrl, '연금고갈-시뮬레이션-요약.png');
+    } catch {
+      shareNote.textContent = IMAGE_EXPORT_BLOCKED_NOTE;
+    }
+  };
+  // [소유자 지시 5번] 공유 — 슬라이더 값을 URL 프래그먼트에 실어(쿼리
+  // 금지, `depletion/share-link.js`) 클립보드에 복사한다. D74 관행 그대로
+  // "이 링크에는 입력하신 값이 들어 있습니다"를 반드시 먼저 보인다.
+  const shareOnClick = async () => {
+    const url = buildDepletionShareUrl(values);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
+      await navigator.clipboard.writeText(url);
+      shareNote.textContent = SHARE_LINK_COPIED_NOTE;
+    } catch {
+      shareNote.textContent = `${SHARE_LINK_COPY_BLOCKED_NOTE} ${url}`;
+    }
+  };
+  const shareNote = el('p', { class: 'type-caption depletion-share-note' }, ['']);
+  function chartActionsRow() {
+    return el('div', { class: 'depletion-chart-actions' }, [
+      depletionIconButton({ extraClass: 'depletion-image-btn', dataUri: SAVE_SHARE_IMAGE_ICON_DATA_URI, ariaLabel: IMAGE_EXPORT_LABEL, onclick: imageOnClick }),
+      depletionIconButton({ extraClass: 'depletion-share-btn', dataUri: SAVE_SHARE_SHARE_ICON_DATA_URI, ariaLabel: SHARE_LINK_LABEL, onclick: shareOnClick }),
+    ]);
+  }
+
+  const advancedSlot = el('div', { class: 'depletion-sliders depletion-sliders-advanced', hidden: !advancedOpen }, ADVANCED_PARAMS.map((p) => sliderRow(p, values[p.id], onSliderInput)));
   const advancedToggle = el(
     'button',
     {
       type: 'button',
-      class: 'btn btn-secondary depletion-advanced-toggle',
-      'aria-expanded': 'false',
+      class: 'btn depletion-advanced-toggle',
+      'aria-expanded': String(advancedOpen),
       onclick: () => {
         advancedOpen = !advancedOpen;
         advancedSlot.hidden = !advancedOpen;
@@ -349,7 +440,7 @@ export function mountDepletionPanel(container, { onBridgeToCalc2 } = {}) {
         advancedToggle.textContent = advancedOpen ? DEPLETION_ADVANCED_TOGGLE_CLOSE_LABEL : DEPLETION_ADVANCED_TOGGLE_OPEN_LABEL;
       },
     },
-    [DEPLETION_ADVANCED_TOGGLE_OPEN_LABEL],
+    [advancedOpen ? DEPLETION_ADVANCED_TOGGLE_CLOSE_LABEL : DEPLETION_ADVANCED_TOGGLE_OPEN_LABEL],
   );
 
   const section = el('section', { class: 'depletion-panel' }, [

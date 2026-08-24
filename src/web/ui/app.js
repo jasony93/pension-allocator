@@ -63,8 +63,10 @@ import { maybeShowCalc2ExampleModal } from './calc2-example-modal.js';
 import { renderTabBar } from './tab-bar.js';
 import { mountDepletionPanel } from './depletion-panel.js';
 import { SHARE_LINK_INVALID_NOTE, SHARE_LINK_PARTIAL_NOTE } from '../copy.js';
+import { DEPLETION_SHARE_INVALID_NOTE } from '../depletion-copy.js';
 import { createStore, initialForm } from '../state/store.js';
 import { readShareFragmentFromLocation } from '../state/share-link.js';
+import { readDepletionShareFragmentFromLocation } from '../depletion/share-link.js';
 import { readTabIdFromLocation, writeActiveTabToLocation, DEFAULT_TAB_ID } from '../state/tab-fragment.js';
 import { deriveAnnuityStartedFromBoundaries } from '../state/annuity-start-derivation.js';
 import { COMPACT_MEDIA_QUERY, WIDE_DONUT_MEDIA_QUERY, runDonutEntrance, applyDonutSliceInlineLabels, watchDonutThemeChange, prefersReducedMotion } from './charts.js';
@@ -109,6 +111,15 @@ const CALC2_UNSUPPORTED_SHARE_FIELDS = [
 function sharedFormHasCalc2UnsupportedValues(form) {
   const base = initialForm();
   return CALC2_UNSUPPORTED_SHARE_FIELDS.some((field) => JSON.stringify(form[field]) !== JSON.stringify(base[field]));
+}
+
+/** [2026-08-24, 소유자 지시 5번] 「연금고갈 시뮬레이션」 탭 공유 링크가
+ * 깨졌을 때 — 위 배너와 같은 자리·같은 패턴, 슬라이더 어휘("조작")로만
+ * 문구가 다르다(D74 관행 일관 유지 원문). */
+function depletionSharedFragmentInvalidNotice() {
+  return el('div', { class: 'inline-alert inline-alert-warning shared-fragment-notice', role: 'status' }, [
+    el('p', { class: 'type-body-strong' }, [DEPLETION_SHARE_INVALID_NOTE]),
+  ]);
 }
 
 /** [2026-08-23, D84 판정 1] 위 배너와 같은 자리·같은 패턴 — 문구만 다르다. */
@@ -304,12 +315,24 @@ export function mountApp(root, { engineClient, analytics }) {
 
   layout.append(header, mainGroup, footer);
   mount(root, layout);
+  // [2026-08-24, 소유자 지시 5번] 이 탭의 공유 링크(`dep1.` 접두,
+  // `depletion/share-link.js`)를 **탭 패널을 마운트하기 전에** 미리
+  // 읽는다 — `mountDepletionPanel`이 슬라이더를 그 값으로 초기화하려면
+  // 마운트 시점에 값을 넘겨야 한다(계산기2처럼 마운트 뒤 store로 다시
+  // 채우는 경로가 이 탭엔 없다, 머리말 — store를 안 쓴다). 탭 id
+  // 프래그먼트(`#calc2`·`#pension-depletion`)와 계산기2 공유 링크(`v2.`)
+  // 어느 쪽도 `dep1.`로 시작할 수 없으므로 이 읽기가 그 둘을 건드리지
+  // 않는다(`isDepletionShareFragment`).
+  const depletionShareResult = readDepletionShareFragmentFromLocation();
   // [2026-08-23, D84 판정 2b] 다리 — 시뮬레이션 결과 아래 링크를 누르면
   // 절세계좌 계산기(계산기2, 지금 유일한 계산 탭) 탭으로 전환한다.
   // `setActiveTab`은 아래에서 함수 선언으로 정의되어 호이스팅되므로 이
   // 자리에서 참조해도 안전하다(실제 호출은 사용자가 링크를 누른 뒤에만
   // 일어난다).
-  mountDepletionPanel(depletionSlot, { onBridgeToCalc2: () => setActiveTab('calc2') });
+  mountDepletionPanel(depletionSlot, {
+    onBridgeToCalc2: () => setActiveTab('calc2'),
+    initialValues: depletionShareResult?.ok ? depletionShareResult.values : undefined,
+  });
 
   /**
    * 활성 탭을 바꾼다. **DOM을 지우지 않는다** — `tab-panel-hidden` 클래스
@@ -392,6 +415,12 @@ export function mountApp(root, { engineClient, analytics }) {
   const tabIdFromUrl = readTabIdFromLocation();
   if (tabIdFromUrl) {
     activeTabId = tabIdFromUrl;
+  } else if (depletionShareResult) {
+    // [2026-08-24, 소유자 지시 5번] 이 탭의 공유 링크로 열렸다 — 값은
+    // 이미 위에서 `mountDepletionPanel`에 `initialValues`로 넘겼으니
+    // 여기서는 탭을 여는 것과(성공 시) 실패를 알리는 것만 한다.
+    activeTabId = 'pension-depletion';
+    if (!depletionShareResult.ok) mainGroup.before(depletionSharedFragmentInvalidNotice());
   } else {
     const sharedFragment = readShareFragmentFromLocation();
     if (sharedFragment) {

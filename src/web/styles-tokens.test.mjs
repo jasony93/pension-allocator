@@ -259,7 +259,17 @@ function walk(dir, out = []) {
 // — "예외를 늘리되 드리프트를 놓치지 않는다"는 이 파일의 원래 취지를
 // 그대로 지킨다. **색 계산 함수(`hsl`·`oklch`·`color-mix` 등)는 이 파일도
 // 여전히 금지다** — 예외는 "리터럴 hex 값"에만 있다.
-const COLOR_LITERAL_EXEMPT_FILES = new Set(['ui/summary-image.js']);
+// [2026-08-24, 소유자 지시 5번] **둘째 예외 — `depletion/summary-image.js`.**
+// 같은 이유(이 상수 바로 위 주석)로 「연금고갈 시뮬레이션」 탭의 이미지
+// 저장도 독립 SVG 문서를 조립한다 — `Image.src`에 넣을 문서는 이 페이지의
+// `:root`와 연결되지 않으므로 리터럴 hex가 필요하다. 색 상수 객체 이름이
+// 파일마다 다르므로(계산기2 쪽은 `SUMMARY_EXPORT_COLORS`, 이 탭은
+// `DEPLETION_SUMMARY_COLORS`) 파일 → 객체 이름 맵으로 바꿨다 — 아래 두 번째
+// 검사가 각 파일의 실제 상수 이름으로 찾는다.
+const COLOR_LITERAL_EXEMPT_FILES = new Map([
+  ['ui/summary-image.js', 'SUMMARY_EXPORT_COLORS'],
+  ['depletion/summary-image.js', 'DEPLETION_SUMMARY_COLORS'],
+]);
 
 test('JS가 색을 계산하지 않는다', () => {
   // design-system 5.20절: 압출 측면 색은 **전용 토큰**이고 "구현은 산식을 다시
@@ -284,19 +294,19 @@ test('JS가 색을 계산하지 않는다', () => {
   assert.deepEqual(offenders, [], `UI 코드가 색을 직접 정하거나 계산합니다:\n${offenders.join('\n')}`);
 });
 
-test('색 리터럴 예외 파일은 정확히 SUMMARY_EXPORT_COLORS 상수 하나만 hex를 담는다 — 예외가 조용히 번지지 않는다', () => {
+test('색 리터럴 예외 파일은 정확히 제 색 상수 객체 하나만 hex를 담는다 — 예외가 조용히 번지지 않는다', () => {
   // 예외 목록에 파일을 올리는 것과 "그 파일 안에서 아무 색이나 마음대로
   // 써도 된다"는 다른 것이다. 이 검사는 예외 파일 안에서도 hex 리터럴이
-  // `SUMMARY_EXPORT_COLORS` 객체 리터럴 **안에서만** 나타나는지를 확인한다 —
-  // 객체 밖(예: 어떤 함수 안에 즉흥적으로 `'#ff0000'`을 쓰는 것)은 여전히
-  // 막는다.
-  for (const rel of COLOR_LITERAL_EXEMPT_FILES) {
+  // 그 파일의 색 상수 객체 리터럴(`COLOR_LITERAL_EXEMPT_FILES`가 파일마다
+  // 정한 이름) **안에서만** 나타나는지를 확인한다 — 객체 밖(예: 어떤 함수
+  // 안에 즉흥적으로 `'#ff0000'`을 쓰는 것)은 여전히 막는다.
+  for (const [rel, objectName] of COLOR_LITERAL_EXEMPT_FILES) {
     const text = readFileSync(path.join(here, rel), 'utf8');
-    const objectMatch = /export const SUMMARY_EXPORT_COLORS = \{[\s\S]*?\n\};/.exec(text);
-    assert.ok(objectMatch, `${rel}에서 SUMMARY_EXPORT_COLORS 선언을 찾지 못했습니다`);
+    const objectMatch = new RegExp(`export const ${objectName} = \\{[\\s\\S]*?\\n\\};`).exec(text);
+    assert.ok(objectMatch, `${rel}에서 ${objectName} 선언을 찾지 못했습니다`);
     const withoutObject = text.slice(0, objectMatch.index) + text.slice(objectMatch.index + objectMatch[0].length);
     const stray = withoutObject.match(/['"`]#[0-9a-fA-F]{3,8}['"`]/g) ?? [];
-    assert.deepEqual(stray, [], `${rel}의 SUMMARY_EXPORT_COLORS 밖에 hex 리터럴이 있습니다: ${stray.join(', ')}`);
+    assert.deepEqual(stray, [], `${rel}의 ${objectName} 밖에 hex 리터럴이 있습니다: ${stray.join(', ')}`);
   }
 });
 

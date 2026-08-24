@@ -1,7 +1,11 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
-import { STATUTORY_RATE_CEILING_PERCENT } from '../depletion/constants.js';
+import { STATUTORY_RATE_CEILING_PERCENT, DEPLETION_SLIDER_PARAMS } from '../depletion/constants.js';
+import { encodeDepletionShareFragment } from '../depletion/share-link.js';
 
 /**
  * 「연금고갈 시뮬레이션」 탭(D84 판정 2·3) — 실제 렌더 실측.
@@ -15,6 +19,19 @@ import { STATUTORY_RATE_CEILING_PERCENT } from '../depletion/constants.js';
  * 경고 배너가 뜨는가, (6) 첫 탭(calc2)으로 가는 다리 링크가 실제로 탭을
  * 전환하는가.
  */
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const webRoot = path.resolve(here, '..');
+const CSS = readFileSync(path.join(webRoot, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** `:root`의 `--accent-warm`을 `rgb(r, g, b)` 문자열로 읽는다 —
+ * `getComputedStyle`이 돌려주는 형식과 그대로 비교하기 위해서다. */
+function accentWarmRgb() {
+  const rootBlock = /(?:^|\n)\s*:root\s*\{([\s\S]*?)\n\}/.exec(CSS);
+  const m = /--accent-warm\s*:\s*rgb\((\d+,\s*\d+,\s*\d+)\)/.exec(rootBlock[1]);
+  assert.ok(m, 'styles.css :root에서 --accent-warm을 읽지 못했다');
+  return `rgb(${m[1].replace(/\s+/g, ' ')})`;
+}
 
 let app;
 
@@ -226,6 +243,218 @@ test('D84 판정 3 — 외부 CDN(Chart.js 등)에 네트워크 요청이 0건�
     return urls.filter((u) => { try { return new URL(u).origin !== location.origin; } catch { return false; } });
   })()`);
   assert.deepEqual(externalTags, [], `외부 CDN을 가리키는 <script>/<link> 태그가 있다: ${JSON.stringify(externalTags)}`);
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-24, 관리자 지시 — 소유자 지시 5항목] 실측
+// ---------------------------------------------------------------------------
+
+/**
+ * [소유자 지시 1번, 판별력 증명 대상 A] 탭 전체가 가운데 정렬되고, 차트가
+ * 가용 폭을 실제로 쓴다. 이전에는 `.app-main{flex-direction:row}`(calc2의
+ * 2단 배치용 규칙)가 이 탭의 단일 자식 레이아웃에도 새어 들어와 왼쪽으로
+ * 쏠렸다 — 좌표를 직접 재서(짐작이 아니라) 컨테이너 중심과 카드/차트 중심이
+ * 실제로 일치하는지, 차트 폭이 카드 열 폭과 같은지(=가용 폭을 쓰는지) 잰다.
+ */
+test('중앙 정렬 — 레이아웃 중심과 카드·차트 중심이 일치하고, 차트가 카드 열과 같은 폭까지 넓게 그려진다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await sleep(150);
+  const m = await page.evaluate(`(() => {
+    const layout = document.querySelector('.app-layout') || document.querySelector('.app-main');
+    const panel = document.querySelector('.depletion-panel');
+    const cards = document.querySelector('.depletion-cards');
+    const chart = document.querySelector('.depletion-chart');
+    const lr = layout.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    const cr = cards.getBoundingClientRect();
+    const chr = chart.getBoundingClientRect();
+    return {
+      layoutCenter: lr.left + lr.width / 2,
+      panelCenter: pr.left + pr.width / 2,
+      cardsWidth: cr.width,
+      chartWidth: chr.width,
+      panelWidth: pr.width,
+    };
+  })()`);
+  assert.ok(
+    Math.abs(m.layoutCenter - m.panelCenter) < 2,
+    `레이아웃 중심(${m.layoutCenter})과 패널 중심(${m.panelCenter})이 어긋난다 — 왼쪽으로 쏠렸을 위험`,
+  );
+  assert.ok(m.panelWidth > 900, `패널 폭이 좁다(${m.panelWidth}px) — 가용 폭을 못 쓰고 있다`);
+  assert.ok(
+    Math.abs(m.chartWidth - m.cardsWidth) < 2,
+    `차트 폭(${m.chartWidth})이 카드 열 폭(${m.cardsWidth})과 다르다 — 오른쪽이 비어 있을 위험`,
+  );
+});
+
+/**
+ * [소유자 지시 2번] 궤적 시작점(2026)에 시작 적립금 라벨이 실제로 그려진다.
+ * **D84 출처 분리** — 여기 쓰는 값은 전망 재현 출발값(1,458조)이지 실적
+ * (1,670.7조, 「현재 기금」 카드 값)이 아니다. 라벨 텍스트 자체를 읽어
+ * 두 값이 섞이지 않았는지 확인한다.
+ */
+test('차트 시작점(2026)에 「적립금 1,458조원(전망 기준)」 라벨이 실제로 보이고, 실적값과 섞이지 않는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const label = document.querySelector('.depletion-chart-start-label');
+    const point = document.querySelector('.depletion-chart-start-point');
+    return { text: label ? label.textContent : null, hasPoint: !!point };
+  })()`);
+  assert.ok(m.hasPoint, '시작점 표식(원)이 없다');
+  assert.equal(m.text, '적립금 1,458조원(전망 기준)', `시작점 라벨 텍스트가 다르다: "${m.text}"`);
+  assert.ok(!m.text.includes('1,671'), '시작점 라벨에 실적값(1,671조)이 섞였다 — D84 출처 분리 위반');
+});
+
+/**
+ * [소유자 지시 3번, 판별력 증명 대상 B] 「주황 확산」 — 차트 선·영역·
+ * 슬라이더·카드 테두리가 실제로 `--accent-warm` 색이다. 라이트·다크 둘 다
+ * 잰다(다크에서 색이 하드코딩된 다른 값으로 남아 있을 위험을 잡기 위해).
+ */
+test('주황 확산 — 차트 선·영역·카드 테두리가 라이트·다크 모두 --accent-warm 색이다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const expected = accentWarmRgb();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(`document.documentElement.setAttribute('data-theme', '${theme}')`);
+    await sleep(120);
+    const m = await page.evaluate(`(() => {
+      const line = getComputedStyle(document.querySelector('.depletion-chart-line'));
+      const card = getComputedStyle(document.querySelector('.depletion-card'));
+      return { stroke: line.stroke, cardBorder: card.borderColor };
+    })()`);
+    assert.equal(m.stroke, expected, `${theme} 테마에서 차트 선 색이 --accent-warm(${expected})이 아니다: ${m.stroke}`);
+    assert.equal(m.cardBorder, expected, `${theme} 테마에서 카드 테두리가 --accent-warm(${expected})이 아니다: ${m.cardBorder}`);
+  }
+  await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+});
+
+/**
+ * [소유자 지시 3번] 「추가 정보 기입」 버튼 — 문구가 정확히 그대로이고,
+ * 가로 폭이 글자만 감싼다(패널 전체 폭을 차지하지 않는다). 폭 자체를
+ * 절대 픽셀로 못 박지 않고 패널 폭 대비 비율로 재 — 폰트 렌더링 차이에
+ * 흔들리지 않게 한다.
+ */
+test('「추가 정보 기입」 버튼 — 문구가 상태에 맞게 정확하고, 폭이 패널 전체 폭이 아니라 글자만 감싼다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  // 앞선 시험("고급 설정을 펼치면...")이 이미 토글을 펼쳐 뒀을 수 있다 —
+  // 순서에 기대지 않고, 먼저 접힌 상태로 되돌려 "기입" 문구부터 확인한다.
+  const expanded = await page.evaluate(`document.querySelector('.depletion-advanced-toggle').getAttribute('aria-expanded') === 'true'`);
+  if (expanded) {
+    await page.clickElement(`document.querySelector('.depletion-advanced-toggle')`);
+    await sleep(120);
+  }
+  const closed = await page.evaluate(`(() => {
+    const toggle = document.querySelector('.depletion-advanced-toggle');
+    const panel = document.querySelector('.depletion-panel');
+    const tr = toggle.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    return { text: toggle.textContent.trim(), toggleWidth: tr.width, panelWidth: pr.width };
+  })()`);
+  assert.equal(closed.text, '추가 정보 기입', `접힌 상태 버튼 문구가 다르다: "${closed.text}"`);
+  assert.ok(
+    closed.toggleWidth < closed.panelWidth * 0.5,
+    `버튼 폭(${closed.toggleWidth})이 패널 폭(${closed.panelWidth})의 절반을 넘는다 — 여전히 전체 폭을 차지하고 있을 위험`,
+  );
+  // 다시 펼쳐 "접기" 문구도 확인한다 — 상태별 문구가 둘 다 정확해야 한다.
+  await page.clickElement(`document.querySelector('.depletion-advanced-toggle')`);
+  await sleep(120);
+  const openText = await page.evaluate(`document.querySelector('.depletion-advanced-toggle').textContent.trim()`);
+  assert.equal(openText, '추가 정보 접기', `펼친 상태 버튼 문구가 다르다: "${openText}"`);
+});
+
+/**
+ * [소유자 지시 4번] 카드 교체 — 「수지 적자 전환」 카드가 완전히 사라지고,
+ * 「현재 기금」 카드가 실적값(2026년 4월 말, 1,670.7조 → 반올림 1,671조원)과
+ * 출처 캡션(기금운용본부)을 함께 보인다.
+ */
+test('카드 교체 — 「수지 적자 전환」 카드가 없고, 「현재 기금」 카드가 실적값+출처로 있다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const cards = [...document.querySelectorAll('.depletion-card')];
+    const current = cards.find((c) => c.textContent.includes('현재 기금'));
+    return {
+      hasDeficitCard: document.body.textContent.includes('수지 적자 전환'),
+      currentFundText: current ? current.textContent : null,
+      hasSourceCaption: !!current?.querySelector('.depletion-card-source'),
+    };
+  })()`);
+  assert.equal(m.hasDeficitCard, false, '「수지 적자 전환」 카드/문구가 여전히 남아 있다');
+  assert.ok(m.currentFundText, '「현재 기금」 카드를 찾지 못했다');
+  assert.ok(m.currentFundText.includes('1,671조원'), `「현재 기금」 카드 값이 실적(1,671조원)이 아니다: "${m.currentFundText}"`);
+  assert.ok(m.currentFundText.includes('기금운용본부'), `「현재 기금」 카드에 출처(기금운용본부)가 없다: "${m.currentFundText}"`);
+  assert.ok(m.hasSourceCaption, '「현재 기금」 카드에 출처 캡션 요소가 없다');
+});
+
+/**
+ * [소유자 지시 5번 — 이미지 저장] PNG가 실제로 열리는 파일이다. 계산기2와
+ * 같은 방식(`summary-export.browser.mjs`)으로 base64를 Node에서 직접
+ * 디코드해 PNG 시그니처(8바이트)·IHDR의 width/height를 잰다 — 다운로드
+ * 앵커 클릭을 인터셉트하는 대신, 같은 모듈(`exportDepletionSummaryPng`)을
+ * 페이지 안에서 직접 호출해 그 결과 data URL을 실측한다.
+ */
+function readPngHeader(dataUrl) {
+  const prefix = 'data:image/png;base64,';
+  assert.ok(dataUrl.startsWith(prefix), `PNG data URL 접두어가 아닙니다: ${dataUrl.slice(0, 40)}`);
+  const buf = Buffer.from(dataUrl.slice(prefix.length), 'base64');
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (let i = 0; i < signature.length; i++) {
+    assert.equal(buf[i], signature[i], `PNG 시그니처가 어긋납니다 (byte ${i})`);
+  }
+  return { byteLength: buf.length, width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+const DEPLETION_PNG_FIXTURE = `(async () => {
+  const { runDepletionSimulation } = await import('./depletion/simulate.js');
+  const { exportDepletionSummaryPng } = await import('./depletion/summary-image.js');
+  const { DEPLETION_SLIDER_PARAMS } = await import('./depletion/constants.js');
+  const values = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
+  const result = runDepletionSimulation(values);
+  return exportDepletionSummaryPng(result, values);
+})()`;
+
+test('이미지 저장(요약 시트) — PNG가 실제로 열리는 파일이다(시그니처·크기 확인)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
+  const dataUrl = await page.evaluate(DEPLETION_PNG_FIXTURE);
+  const header = readPngHeader(dataUrl);
+  assert.ok(header.width > 0 && header.height > 0, `PNG 크기가 0입니다: ${JSON.stringify(header)}`);
+  assert.ok(header.byteLength > 1000, `PNG가 너무 작습니다(${header.byteLength}바이트) — 빈 이미지일 위험`);
+});
+
+/**
+ * [소유자 지시 5번 — 공유] 슬라이더 값이 URL **프래그먼트**에 실리고,
+ * 그 프래그먼트로 열면 실제로 복원된다. `encodeDepletionShareFragment`로
+ * 직접 인코드한 URL을 새 탭으로 열어(D74 관행과 같은 방식,
+ * `share-link.browser.mjs` 참고) 슬라이더 값이 그대로 되비치는지 잰다.
+ */
+test('공유 프래그먼트 왕복 — dep1. 프래그먼트로 열면 슬라이더 값이 그대로 복원된다', { skip: skipWithoutChrome }, async () => {
+  const rorParam = DEPLETION_SLIDER_PARAMS.find((p) => p.id === 'ror');
+  const wageParam = DEPLETION_SLIDER_PARAMS.find((p) => p.id === 'wage');
+  const values = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
+  values.ror = rorParam.min; // 코어 슬라이더 값을 기본값과 다르게.
+  values.wage = wageParam.default + 1; // 고급 슬라이더도 기본값과 다르게 — 자동 펼침까지 확인.
+  const fragment = encodeDepletionShareFragment(values);
+  assert.ok(fragment.startsWith('dep1.'), 'dep1. 접두가 아니다');
+
+  const app2 = await openApp({ url: `/src/web/index.html#${fragment}` });
+  try {
+    await app2.page.waitFor(`!!document.querySelector('.depletion-panel')`, { timeoutMs: 8000 });
+    await sleep(300);
+    const state = await app2.page.evaluate(`(() => ({
+      ror: document.getElementById('depletion-slider-ror')?.value,
+      wage: document.getElementById('depletion-slider-wage')?.value,
+      advancedHidden: document.querySelector('.depletion-sliders-advanced')?.hidden,
+      hash: location.hash,
+      search: location.search,
+    }))()`);
+    assert.equal(Number(state.ror), values.ror, `공유 링크로 열었는데 ror 슬라이더 값이 복원되지 않았다: ${state.ror}`);
+    assert.equal(Number(state.wage), values.wage, `공유 링크로 열었는데 wage 슬라이더 값이 복원되지 않았다: ${state.wage}`);
+    assert.equal(state.advancedHidden, false, '고급 슬라이더 값이 실렸는데 고급 설정이 접힌 채로 남아 있다');
+    assert.equal(state.search, '', '공유 프래그먼트로 열었는데 쿼리 문자열이 생겼다 — 프래그먼트 원칙 위반');
+    assert.ok(state.hash.includes('dep1.'), 'URL이 dep1. 프래그먼트를 유지하지 않는다');
+  } finally {
+    await app2.close();
+  }
 });
 
 /**
