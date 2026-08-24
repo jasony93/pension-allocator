@@ -56,6 +56,44 @@ test('탭 렌더 — 카드 3장·SVG 차트·핵심 가정 슬라이더가 실�
   assert.ok(m.coreSliderCount >= 1, '핵심 가정 슬라이더를 하나도 찾지 못했다');
 });
 
+/**
+ * [2026-08-24, 관리자 지시 — 번들 실측 회귀] y축 눈금 6개(0·1·2·3·4·5천조)가
+ * 값도 라벨도 둘 다 균등해야 한다. **값 간격만 재면 옛 결함을 못 잡는다** —
+ * 옛 코드도 값 자체(0·1,250·2,500·3,750·5,000)는 균등했다, 문제는 그 값을
+ * 1,000으로 반올림한 **라벨**이 2,500 → "3"으로 반올림돼 "2"를 건너뛴
+ * 것이었다(0·1·3·4·5). 그래서 이 시험은 눈금 개수와 함께, 텍스트 라벨을
+ * 숫자로 다시 파싱해 그 사이 간격이 전부 같은지(라벨 자신의 균등성)를
+ * 잰다 — 값 간격만 재는 시험은 이 결함에 판별력이 없다.
+ */
+test('y축 눈금이 6개(0~5천조)이고, 값과 라벨 둘 다 균등 간격이다 — 반올림으로 라벨이 건너뛰지 않는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const svg = document.querySelector('.depletion-chart');
+    const gridLines = [...svg.querySelectorAll('.depletion-chart-grid')];
+    const axisLabels = [...svg.querySelectorAll('.depletion-chart-axis-label')].filter((el) => /천조$/.test(el.textContent));
+    return {
+      gridCount: gridLines.length,
+      gridYs: gridLines.map((el) => parseFloat(el.getAttribute('y1'))),
+      labelTexts: axisLabels.map((el) => el.textContent),
+      labelNumbers: axisLabels.map((el) => Number(el.textContent.replace('천조', ''))),
+    };
+  })()`);
+  assert.equal(m.gridCount, 6, `y축 눈금이 6개가 아니다: ${m.gridCount}개 (${JSON.stringify(m.labelTexts)})`);
+  // 화면 y좌표(위→아래) 간격이 균등한지 — 값 자체의 균등성.
+  const yGaps = m.gridYs.slice(1).map((y, i) => y - m.gridYs[i]);
+  for (const gap of yGaps) {
+    assert.ok(Math.abs(gap - yGaps[0]) < 0.5, `y축 눈금 화면 간격이 균등하지 않다: ${JSON.stringify(yGaps)}`);
+  }
+  // 라벨 숫자(0·1·2·3·4·5) 자체의 간격이 균등한지 — 반올림으로 건너뛰거나
+  // 겹치는 라벨이 있으면 여기서 잡힌다(옛 결함: 0·1·3·4·5, 간격 1·2·1·1).
+  const sorted = [...m.labelNumbers].sort((a, b) => a - b);
+  assert.equal(new Set(sorted).size, sorted.length, `라벨 숫자에 중복이 있다(반올림 겹침): ${sorted.join(',')}`);
+  const labelGaps = sorted.slice(1).map((v, i) => v - sorted[i]);
+  for (const gap of labelGaps) {
+    assert.equal(gap, labelGaps[0], `라벨 숫자 간격이 균등하지 않다(반올림 건너뜀): ${sorted.join(',')}`);
+  }
+});
+
 test('빈 자리표시자·오류 상태 없이 로드와 동시에 계산된 값이 바로 선다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const m = await page.evaluate(`(() => {

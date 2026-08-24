@@ -163,22 +163,51 @@ const CHART_PAD_RIGHT = 16;
 const CHART_PAD_TOP = 16;
 const CHART_PAD_BOTTOM = 30;
 
-function niceMaxScale(rawMax) {
-  if (rawMax <= 0) return 100;
-  const magnitude = 10 ** Math.floor(Math.log10(rawMax));
-  const steps = [1, 2, 2.5, 5, 10];
+/**
+ * [2026-08-24, 관리자 지시 — 번들 실측 회귀] y축 눈금 간격이 실제로는
+ * 균등(1250조씩)한데 **라벨이 불균등해 보이던** 결함의 원인 — 옛
+ * `niceMaxScale`은 "축의 최댓값"만 1,2,2.5,5,10 배수 중에서 골랐고, 그
+ * 최댓값을 **4등분**(0·0.25·0.5·0.75·1)해 눈금을 냈다. 최댓값이 5,000(조)
+ * 로 골리면 눈금값은 0·1,250·2,500·3,750·5,000이 되고, 화면 라벨은 그 값을
+ * 1,000으로 나눠 반올림한다 — 2,500 ÷ 1,000 = 2.5는 **반올림하면 3**이 되어
+ * "2천조" 라벨이 통째로 건너뛰어졌다(0·1·3·4·5). 값 자체의 간격은 고른데
+ * 표시 라벨이 홀수 자리를 건너뛰어 "1→3" 구간만 두 배로 벌어져 보인 것이다.
+ *
+ * **고친 방법 — "최댓값을 고르고 4등분"이 아니라 "눈금 간격(step)을 먼저
+ * 고르고, 그 step을 그대로 쌓아 최댓값을 낸다".** 다만 이것만으로는
+ * 부족하다 — step 후보를 1·2·5·10배수로 순진하게 고르면 좁은 축(예: 수익률
+ * 슬라이더 최솟값 시나리오, 최대 적립금 약 1,970조)에서 step=500(조)이
+ * 나올 수 있고, 500과 1,000 두 눈금이 **같은 "1천조" 라벨로 반올림돼
+ * 겹친다** — 처음 결함과 증상은 다르지만 뿌리(라벨의 반올림 단위 1,000조와
+ * 축 간격 단위가 어긋난다)는 같다. 그래서 step 후보를 **1,000조 단위
+ * 자체에서** 고른다(`LABEL_UNIT_TRILLION_KRW`) — step이 항상 1,000조의
+ * 정수배로만 떨어지므로, 어떤 시나리오(슬라이더 극값 포함)에서도 눈금값을
+ * 1,000으로 나눈 라벨이 반올림 손실 없이 정수로 딱 떨어진다.
+ */
+const AXIS_TICK_INTERVAL_COUNT = 5;
+/** y축 라벨이 표시하는 최소 단위 — "천조"(1,000조원). `formatTrillion`이
+ * 아니라 이 파일의 y축 라벨 자체가 `Math.round(value / 1000)`로 이 단위로
+ * 반올림한다(아래 `yTickNodes`) — 축 간격도 반드시 이 단위의 정수배여야
+ * 라벨이 겹치거나 건너뛰지 않는다. */
+const LABEL_UNIT_TRILLION_KRW = 1000;
+
+function niceAxisStep(rawMax, targetIntervalCount = AXIS_TICK_INTERVAL_COUNT) {
+  const rawStepInUnits = Math.max(rawMax / LABEL_UNIT_TRILLION_KRW / targetIntervalCount, 1);
+  const magnitude = 10 ** Math.floor(Math.log10(rawStepInUnits));
+  const steps = [1, 2, 5, 10];
   for (const step of steps) {
     const candidate = step * magnitude;
-    if (candidate >= rawMax) return candidate;
+    if (candidate >= rawStepInUnits) return candidate * LABEL_UNIT_TRILLION_KRW;
   }
-  return 10 * magnitude;
+  return 10 * magnitude * LABEL_UNIT_TRILLION_KRW;
 }
 
 function buildDepletionChart(result) {
   const { years, fundsTrillionKrw, depletionYear, deficitYear } = result;
   const firstYear = years[0];
   const lastYear = years[years.length - 1];
-  const maxScale = niceMaxScale(Math.max(...fundsTrillionKrw) * 1.05);
+  const axisStep = niceAxisStep(Math.max(...fundsTrillionKrw) * 1.05);
+  const maxScale = axisStep * AXIS_TICK_INTERVAL_COUNT;
   const innerWidth = CHART_VIEW_WIDTH - CHART_PAD_LEFT - CHART_PAD_RIGHT;
   const innerHeight = CHART_VIEW_HEIGHT - CHART_PAD_TOP - CHART_PAD_BOTTOM;
   const xOf = (year) => CHART_PAD_LEFT + (lastYear === firstYear ? 0 : ((year - firstYear) / (lastYear - firstYear)) * innerWidth);
@@ -189,8 +218,9 @@ function buildDepletionChart(result) {
   const lineD = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const areaD = `${lineD} L${points[points.length - 1][0].toFixed(1)},${baselineY.toFixed(1)} L${points[0][0].toFixed(1)},${baselineY.toFixed(1)} Z`;
 
-  // y축 눈금 — 0부터 maxScale까지 4등분.
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxScale);
+  // y축 눈금 — 0부터 maxScale까지 axisStep(항상 1,000조의 정수배)을 그대로
+  // 쌓는다. 4등분 나눗셈이 아니라서 반올림 라벨이 절대 건너뛰지 않는다.
+  const yTicks = Array.from({ length: AXIS_TICK_INTERVAL_COUNT + 1 }, (_, i) => i * axisStep);
   const yTickNodes = yTicks.flatMap((value) => {
     const y = yOf(value);
     return [
