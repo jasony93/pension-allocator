@@ -295,36 +295,50 @@ test('중앙 정렬 — 레이아웃 중심과 카드·차트 중심이 일치�
 });
 
 /**
- * [소유자 지시 2번 → 2026-08-25 소유자 지시 1번으로 문구·위치 정정]
- * 궤적 시작점(2026)에 시작 적립금 라벨이 실제로 그려진다. **D84 출처
- * 분리** — 여기 쓰는 값은 전망 재현 출발값(1,458조)이지 실적(1,670.7조,
- * 「현재 기금」 카드 값)이 아니다. 라벨 텍스트 자체를 읽어 두 값이 섞이지
- * 않았는지 확인한다. **[소유자 지시 1번] 위치까지 잰다** — 라벨이 플롯
- * 영역(궤적이 실제로 그려지는 y좌표 범위) 밖, y축 위쪽 여백에 있어야
- * 한다는 것을 라벨의 y좌표와 궤적 선(`d` 속성의 최소 y)을 직접 비교해
- * 확인한다(짐작이 아니라 실측).
+ * [2026-08-25, 소유자 지시(12항목) 7번, D85] 궤적 시작점(2026)에 시작
+ * 적립금 라벨이 실제로 그려진다. **D85로 값이 뒤집혔다** — 이제 실적
+ * (1,670.7조 → 「현재 기금」 카드와 같은 1,671조)에서 온다, 전망 재현
+ * 값(1,458조)이 아니다. **위치도 바뀌었다** — y축 위쪽 고정 여백이 아니라
+ * "첫 데이터 좌표의 왼쪽"이다. 라벨의 x좌표가 시작점의 x좌표보다 작다는
+ * 것(왼쪽에 있다는 것)을 직접 잰다.
  */
-test('차트 시작점(2026)에 「현 적립금 1,458조원」 라벨이 y축 위쪽에 보이고, 실적값과 섞이지 않는다', { skip: skipWithoutChrome }, async () => {
+test('차트 시작점(2026)에 「현 적립금 1,671조원」 라벨이 첫 데이터 좌표의 왼쪽에 보이고, 전망값과 섞이지 않는다(D85)', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const m = await page.evaluate(`(() => {
     const label = document.querySelector('.depletion-chart-start-label');
     const point = document.querySelector('.depletion-chart-start-point');
-    const line = document.querySelector('.depletion-chart-line');
-    const lineYs = [...line.getAttribute('d').matchAll(/[ML]([\\d.]+),([\\d.]+)/g)].map((mm) => Number(mm[2]));
     return {
       text: label ? label.textContent : null,
       hasPoint: !!point,
-      labelY: label ? Number(label.getAttribute('y')) : null,
-      minLineY: Math.min(...lineYs),
+      labelX: label ? Number(label.getAttribute('x')) : null,
+      pointX: point ? Number(point.getAttribute('cx')) : null,
+      anchor: label ? label.getAttribute('text-anchor') : null,
     };
   })()`);
   assert.ok(m.hasPoint, '시작점 표식(원)이 없다');
-  assert.equal(m.text, '현 적립금 1,458조원', `시작점 라벨 텍스트가 다르다: "${m.text}"`);
-  assert.ok(!m.text.includes('1,671'), '시작점 라벨에 실적값(1,671조)이 섞였다 — D84 출처 분리 위반');
-  assert.ok(
-    m.labelY < m.minLineY,
-    `라벨(y=${m.labelY})이 궤적 선의 최고점(y=${m.minLineY})보다 아래에 있다 — y축 위쪽 여백을 벗어나 궤적과 겹칠 수 있다`,
-  );
+  assert.equal(m.text, '현 적립금 1,671조원', `시작점 라벨 텍스트가 다르다: "${m.text}"`);
+  assert.ok(!m.text.includes('1,458'), '시작점 라벨에 전망 재현 출발값(1,458조)이 섞였다 — D85 위반');
+  assert.ok(m.labelX < m.pointX, `라벨 x좌표(${m.labelX})가 시작점 x좌표(${m.pointX})보다 왼쪽에 있지 않다`);
+  assert.equal(m.anchor, 'end', '라벨이 오른쪽으로 뻗지 않고 왼쪽으로 뻗도록 text-anchor가 end여야 한다');
+});
+
+/**
+ * [2026-08-25, 소유자 지시(12항목) 7번, D85] 카드·그래프 시작점이 같은
+ * 숫자다 — 「현재 기금」 카드 값과 궤적의 첫 데이터 y값(적립금)이 실제로
+ * 일치하는지 잰다(카드는 실적을 그대로 보이고, 궤적은 그 실적에서
+ * 계산을 한 해 더 돌린 값이 아니라 **입력값 자체**가 카드와 같다는
+ * 것 — `runDepletionSimulation`이 그 입력을 그대로 받는지 실측).
+ */
+test('카드·그래프 시작값이 한 숫자다 — 「현재 기금」 카드와 시뮬레이션 출발 입력이 실적(1,671조)으로 일치한다(D85)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const cards = [...document.querySelectorAll('.depletion-card')];
+    const current = cards.find((c) => c.textContent.includes('현재 기금'));
+    const label = document.querySelector('.depletion-chart-start-label');
+    return { cardText: current ? current.textContent : null, labelText: label ? label.textContent : null };
+  })()`);
+  assert.ok(m.cardText?.includes('1,671조원'), `「현재 기금」 카드 값이 1,671조원이 아니다: "${m.cardText}"`);
+  assert.ok(m.labelText?.includes('1,671조원'), `시작점 라벨이 1,671조원이 아니다: "${m.labelText}"`);
 });
 
 /**
@@ -665,7 +679,7 @@ test('탭 전용 팝업 — 왼쪽 카피·오른쪽 상하 2영역·영역별 �
       hasChartPreview: !!top?.querySelector('.depletion-chart'),
       hasChartButton: top?.querySelector('.depletion-popup-chart-button')?.textContent ?? null,
       hasBottom: !!bottom,
-      hasExampleRow: !!bottom?.querySelector('.example-persona-info'),
+      hasExampleRow: !!bottom?.querySelector('.depletion-popup-example-row'),
       hasBridgeButton: bottom?.querySelector('.depletion-popup-bridge-button')?.textContent ?? null,
       hasDismiss: !!document.querySelector('.depletion-intro-modal-dismiss'),
       hasClose: !!document.querySelector('.depletion-intro-modal-close'),
@@ -816,4 +830,248 @@ test('[번들 실측 마감] 두 팝업 다 — 모달 안에 가로 스크롤�
   assert.equal(dep.scrollWidth, dep.clientWidth, `시뮬레이션 탭 팝업 모달에 가로 스크롤이 생겼다(scrollWidth=${dep.scrollWidth}, clientWidth=${dep.clientWidth})`);
   assert.ok(dep.cardRight <= dep.modalRight + 1, `예시 카드(세액공제액) 오른쪽 끝(${dep.cardRight})이 모달 오른쪽 끝(${dep.modalRight})을 넘는다`);
   assert.equal(dep.valueText, '1,485,000원', `세액공제액 값이 잘렸다: "${dep.valueText}"`);
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-25, 관리자 지시 — 소유자 지시 12항목] 실측
+// ---------------------------------------------------------------------------
+
+/** [소유자 지시 1번] 화해 문구(2064 vs 이 시뮬레이터 결과를 잇던 한 줄)가
+ * 팝업 어디에도 없다. */
+test('[소유자 지시 1번] 팝업에 화해 문구(2064 vs 이 시뮬레이터)가 없다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-body'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const text = await page.evaluate(`document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.depletion-popup-body').textContent`);
+  assert.ok(!text.includes('그보다 늦게 나옵니다'), '화해 문구가 여전히 팝업에 남아 있다');
+  assert.ok(!/2064/.test(text), '팝업 본문에 2064년 언급이 여전히 남아 있다(소유자 지시 6번과 겹치는 회귀 방지)');
+});
+
+/** [소유자 지시 2번] 본문 세 문장 폰트가 실제로 커졌다 — 새 clamp 하한
+ * (1.125rem=18px)이 옛 clamp 상한(1.0625rem=17px)보다 크므로, 측정값이
+ * 18px 이상이면 이미 커졌다는 증거다. */
+test('[소유자 지시 2번] 팝업 본문 세 문장의 글자 크기가 옛 상한(17px)보다 커졌다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-body-copy'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const fontPx = await page.evaluate(`(() => {
+    const p = document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.depletion-popup-body-copy p');
+    return parseFloat(getComputedStyle(p).fontSize);
+  })()`);
+  assert.ok(fontPx >= 18, `본문 글자 크기(${fontPx}px)가 옛 상한(17px)보다 커지지 않았다`);
+});
+
+/** [소유자 지시 3번] 팝업 내용 전부가 1440×900에서 스크롤 없이 보인다 —
+ * 모달 자신과 스크롤 컨테이너(`.depletion-intro-modal-host`) 둘 다
+ * `scrollHeight === clientHeight`(넘치는 콘텐츠가 없다)를 잰다. */
+test('[소유자 지시 3번] 팝업 내용 전부가 1440×900에서 스크롤 없이 보인다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-bridge-button'); })()`,
+    { timeoutMs: 8000 },
+  );
+  await sleep(500);
+  const m = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const host = document.querySelector('.depletion-intro-modal-host');
+    return {
+      modalScrollHeight: modal.scrollHeight, modalClientHeight: modal.clientHeight,
+      hostScrollHeight: host.scrollHeight, hostClientHeight: host.clientHeight,
+    };
+  })()`);
+  assert.ok(m.modalScrollHeight <= m.modalClientHeight + 1, `모달 자신에 세로 스크롤이 생겼다(scrollHeight=${m.modalScrollHeight}, clientHeight=${m.modalClientHeight})`);
+  assert.ok(m.hostScrollHeight <= m.hostClientHeight + 1, `팝업 내용 영역에 세로 스크롤이 생겼다(scrollHeight=${m.hostScrollHeight}, clientHeight=${m.hostClientHeight})`);
+});
+
+/** [소유자 지시 4번] 「김철수씨」 문구·아이콘이 없고, 기본정보 4줄과
+ * 도넛이 같은 행에, 세액공제액 카드가 그 아래에 있다. */
+test('[소유자 지시 4번] 예시 프로필 — 「김철수씨」·아이콘 없이, 4줄+도넛이 같은 행, 세액공제 카드가 그 아래', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-example-row'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const m = await page.evaluate(`(() => {
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const card = root.querySelector('.depletion-popup-example-card');
+    const row = card.querySelector('.depletion-popup-example-row');
+    const lines = row.querySelector('.depletion-popup-example-lines');
+    const donut = row.querySelector('.example-persona-donut-col');
+    const amount = card.querySelector('.example-persona-amount');
+    const children = [...card.children];
+    return {
+      cardText: card.textContent,
+      hasIconImg: !!card.querySelector('img'),
+      linesInRow: !!lines && !!donut && lines.parentElement === row && donut.parentElement === row,
+      rowIndex: children.indexOf(row),
+      amountIndex: children.indexOf(amount),
+      lineCount: lines ? lines.querySelectorAll('.example-persona-line').length : 0,
+    };
+  })()`);
+  assert.ok(!m.cardText.includes('김철수씨'), `「김철수씨」 문구가 여전히 남아 있다: "${m.cardText}"`);
+  assert.equal(m.hasIconImg, false, '아이콘 이미지가 여전히 남아 있다');
+  assert.ok(m.linesInRow, '기본정보 4줄과 도넛이 같은 행 안에 있지 않다');
+  assert.equal(m.lineCount, 4, `기본정보 줄이 4개가 아니다: ${m.lineCount}`);
+  assert.ok(m.rowIndex < m.amountIndex, '세액공제액 카드가 정보+도넛 행보다 위(또는 같은 자리)에 있다 — 아래에 있어야 한다');
+});
+
+/** [소유자 지시 5번] 두 버튼(「연금고갈 시뮬레이션」·「ISA/연금저축/IRP
+ * 배분하기」) 다 주황 배경이고, 실제 마우스 hover(CDP `mouseMoved`)에
+ * 반응한다(밝기 필터가 걸린다). */
+test('[소유자 지시 5번] 팝업 버튼 둘 다 주황 배경이고 hover에 반응한다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-bridge-button'); })()`,
+    { timeoutMs: 8000 },
+  );
+  for (const cls of ['depletion-popup-chart-button', 'depletion-popup-bridge-button']) {
+    const before = await page.evaluate(`(() => {
+      const btn = document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.${cls}');
+      const r = btn.getBoundingClientRect();
+      const cs = getComputedStyle(btn);
+      return { bg: cs.backgroundColor, filter: cs.filter, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+    assert.equal(before.bg, 'rgb(230, 115, 0)', `.${cls} 배경이 주황(rgb(230, 115, 0))이 아니다: ${before.bg}`);
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: before.x, y: before.y });
+    await sleep(150);
+    const hoverFilter = await page.evaluate(`getComputedStyle(document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.${cls}')).filter`);
+    assert.notEqual(hoverFilter, before.filter, `.${cls}가 hover에도 filter가 바뀌지 않았다(반응 없음)`);
+  }
+});
+
+/** [소유자 지시 6번] 문구 수정 확인 + 출처 줄에서 2064 언급이 정리됐다. */
+test('[소유자 지시 6번] 본문 문구가 수정됐고, 출처 줄에 2064 언급이 없다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-source'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const m = await page.evaluate(`(() => {
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    return {
+      bodyText: root.querySelector('.depletion-popup-body-copy').textContent,
+      sourceText: root.querySelector('.depletion-popup-source').textContent,
+    };
+  })()`);
+  assert.ok(m.bodyText.includes('기금 소진이 미뤄졌을 뿐입니다'), `수정된 첫 문장을 찾지 못했다: "${m.bodyText}"`);
+  assert.ok(!m.bodyText.includes('기금 소진은 2064년으로'), '옛 문장(2064년 포함)이 여전히 남아 있다');
+  assert.ok(m.bodyText.includes('국민연금은 기본이지'), `수정된 둘째 문장을 찾지 못했다: "${m.bodyText}"`);
+  assert.ok(!m.bodyText.includes('국민연금은 바닥이지'), '옛 문장(바닥이지)이 여전히 남아 있다');
+  assert.ok(!/2064/.test(m.sourceText), `출처 줄에 2064 언급이 남아 있다: "${m.sourceText}"`);
+});
+
+/** [소유자 지시 8번] 최대 적립금 시기의 세로 점선(옛 "수지 적자 전환"
+ * 점선)이 없다 — 소진 점선은 그대로 있다. */
+test('[소유자 지시 8번] 최대 적립금 시기의 세로 점선이 없다(소진 점선은 유지)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => ({
+    hasDeficitMarker: !!document.querySelector('.depletion-chart-marker-deficit'),
+    hasDepletionMarker: !!document.querySelector('.depletion-chart-marker-depletion'),
+  }))()`);
+  assert.equal(m.hasDeficitMarker, false, '최대 적립금(수지 적자) 점선이 여전히 있다');
+  assert.ok(m.hasDepletionMarker, '소진 점선이 없다 — 유지돼야 한다');
+});
+
+/** [소유자 지시 9번] 카드 제목이 더 크고 굵다 — 옛값(13px/기본 굵기)보다
+ * 커야 한다. */
+test('[소유자 지시 9번] 카드 제목(기금 소진·현재 기금·최대 적립금) 글자가 더 크고 굵다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const label = document.querySelector('.depletion-card-label');
+    const cs = getComputedStyle(label);
+    return { fontSize: parseFloat(cs.fontSize), fontWeight: Number(cs.fontWeight) };
+  })()`);
+  assert.ok(m.fontSize > 13, `카드 제목 글자 크기(${m.fontSize}px)가 옛값(13px)보다 커지지 않았다`);
+  assert.ok(m.fontWeight >= 700, `카드 제목 글자 굵기(${m.fontWeight})가 700 이상이 아니다`);
+});
+
+/**
+ * [소유자 지시 10·11번] 막대 위 점 + 그 점을 잇는 선(연 단위가 아니라
+ * 막대 단위), 막대 hover 시 확대 + 툴팁, 막대 아래 연도 라벨이 막대
+ * 위치와 일치한다.
+ *
+ * **정렬 판정 기준 — "라벨의 데이터 좌표(x)가 그 막대의 폭 안에 있는가".**
+ * 막대 중심의 정확한 픽셀 일치를 요구하지 않는다 — 소유자 지시 12번의
+ * "첫 막대 오프셋" 처방(y축 경계를 지키기 위해 막대 폭을 한쪽으로만
+ * 넓힌다) 때문에 양 끝 막대는 기하적으로 중심이 데이터 좌표와 정확히
+ * 일치할 수 없다(폭이 있는 막대를 y축 바로 위의 점에 대칭으로 그리면
+ * 절반이 반드시 y축 밖으로 나간다 — 피할 수 없다). 라벨이 막대의 폭
+ * 범위 안에 있으면 "그 막대 아래"라는 실질을 충분히 만족한다.
+ */
+test('[소유자 지시 10·11번] 막대마다 점 하나(선으로 연결)·연도 라벨이 막대 위치와 일치·hover 확대+툴팁', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const before = await page.evaluate(`(() => {
+    const bars = [...document.querySelectorAll('.depletion-chart-bar')];
+    const points = [...document.querySelectorAll('.depletion-chart-point')];
+    const xLabels = [...document.querySelectorAll('.depletion-chart-axis-label')].filter((el) => !/천조$/.test(el.textContent));
+    return {
+      barCount: bars.length,
+      pointCount: points.length,
+      hasLine: !!document.querySelector('.depletion-chart-line'),
+      xLabelCount: xLabels.length,
+      barBoxes: bars.map((b) => ({ left: parseFloat(b.getAttribute('x')), right: parseFloat(b.getAttribute('x')) + parseFloat(b.getAttribute('width')) })),
+      xLabelXs: xLabels.map((el) => Math.round(parseFloat(el.getAttribute('x')))),
+      firstBarTitle: bars[0]?.querySelector('title')?.textContent ?? null,
+      firstBarTransform: getComputedStyle(bars[0]).transform,
+    };
+  })()`);
+  assert.equal(before.pointCount, before.barCount, `점 개수(${before.pointCount})가 막대 개수(${before.barCount})와 다르다 — 막대마다 점 하나가 아니다`);
+  assert.ok(before.hasLine, '점을 잇는 선이 없다');
+  assert.equal(before.xLabelCount, before.barCount, `x축 연도 라벨 개수(${before.xLabelCount})가 막대 개수(${before.barCount})와 다르다`);
+  for (let i = 0; i < before.barBoxes.length; i++) {
+    const { left, right } = before.barBoxes[i];
+    assert.ok(
+      before.xLabelXs[i] >= left - 1 && before.xLabelXs[i] <= right + 1,
+      `${i}번째 막대(${left}~${right})의 폭 밖에 그 연도 라벨(x=${before.xLabelXs[i]})이 있다`,
+    );
+  }
+  assert.ok(before.firstBarTitle && /년: /.test(before.firstBarTitle), `막대 툴팁(연도·적립금)이 없다: "${before.firstBarTitle}"`);
+
+  // hover 시 확대 — CDP로 실제 마우스를 첫 막대 위로 옮긴다.
+  const barRect = await page.evaluate(`(() => {
+    const r = document.querySelector('.depletion-chart-bar').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: barRect.x, y: barRect.y });
+  await sleep(200);
+  const afterTransform = await page.evaluate(`getComputedStyle(document.querySelector('.depletion-chart-bar')).transform`);
+  assert.notEqual(afterTransform, before.firstBarTransform, '막대에 마우스를 올려도 확대(transform)가 걸리지 않았다');
+});
+
+/**
+ * [소유자 지시 12번, 판별력 증명 대상] 첫 막대가 y축 왼쪽으로 번지지
+ * 않는다 — 첫 막대의 왼쪽 끝 x좌표가 y축 그리드선의 x좌표 이상이어야
+ * 한다.
+ */
+test('[소유자 지시 12번] 첫 막대 왼쪽 끝이 y축(그리드 시작 x좌표) 안쪽에 있다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const grid = document.querySelector('.depletion-chart-grid');
+    const firstBar = document.querySelector('.depletion-chart-bar');
+    return { axisX: parseFloat(grid.getAttribute('x1')), firstBarLeft: parseFloat(firstBar.getAttribute('x')) };
+  })()`);
+  assert.ok(m.firstBarLeft >= m.axisX - 0.5, `첫 막대 왼쪽 끝(${m.firstBarLeft})이 y축 x좌표(${m.axisX})보다 왼쪽으로 번졌다`);
 });

@@ -40,6 +40,9 @@ import {
   DEPLETION_AGE_ASSUMPTION_NOTE,
   DEPLETION_CHART_START_LABEL_PREFIX,
   DEPLETION_CHART_START_LABEL_SUFFIX,
+  DEPLETION_VALIDATION_LINE_PREFIX,
+  DEPLETION_VALIDATION_LINE_MID,
+  DEPLETION_VALIDATION_LINE_SUFFIX,
 } from '../depletion-copy.js';
 import {
   IMAGE_EXPORT_LABEL,
@@ -104,32 +107,23 @@ function outcomeCard(label, valueText, sourceText) {
 }
 
 /**
- * 2030년 검증 줄 — 모델이 낸 2030년 값과 대조 전망치를 나란히 보인다
- * (D84 판정 4). 대조 값은 `depletion/constants.js`의 `OFFICIAL_2030_CHECK`
- * 하나에서만 온다 — 이 파일이 숫자를 다시 쓰지 않는다.
- *
- * [2026-08-24, tax-rules-report.md 33절 관리자 판정] **"공식"이라는 뭉뚱그린
- * 라벨을 쓰지 않는다.** 이 대조 앵커의 출처는 국민연금연구원 중기재정전망
- * (2026~2030)이지 제5차 재정추계가 아니다 — 핵심 가정(수익률·임금 등)의
- * 출처인 제5차와 한 화면에서 섞이지 않도록 출처를 문장으로 명시한다.
+ * [2026-08-25, 소유자 지시(12항목) 7번, D85] **한 줄로 고쳐 쓴다.** 옛
+ * 버전은 모델의 2030년 값(보험료수입·급여지출·적립금)을
+ * `OFFICIAL_2030_CHECK`와 나란히 대조했다 — 그 대조는 **전망 기준
+ * (1,458조 출발)일 때만 뜻이 있다**(제5차·중기전망 문서 자체가 전망
+ * 출발을 전제한다). 화면이 이제 실적 출발로 계산하므로(아래
+ * `rerenderComputed`) 그 상세 대조를 화면에 그대로 유지하면 실적 출발
+ * 궤적을 전망 대조값과 비교하는 것처럼 오해를 살 수 있다 — 그래서
+ * **화면은 한 줄**(모델 자체의 정확성 증명 + 이 화면의 실제 출발값, 두
+ * 사실을 갈라 말한다)로 줄이고, 상세 대조(전망 기준 1,458조 출발 →
+ * 2030 오차 ≤1.5%)는 `simulate.test.mjs`가 회귀 lock으로 보존한다(D85
+ * 원문 "전망 기준 검증은 단위시험으로 보존"). 이 함수는 더는
+ * `checkpoint2030`을 받지 않는다 — 슬라이더 값과 무관한 상시 문장이다.
  */
-function validationLine(checkpoint2030) {
-  if (!checkpoint2030) return el('div', { class: 'depletion-validation' }, ['2030년 검증 — 시뮬레이션이 그 해를 지나지 않았습니다.']);
+function validationLine() {
   return el('div', { class: 'depletion-validation' }, [
-    el('span', { class: 'depletion-validation-heading' }, ['2030년 검증']),
-    ' · 보험료수입 ',
-    `${checkpoint2030.incomeTrillionKrw.toFixed(1)}조`,
-    ' ',
-    el('span', { class: 'depletion-validation-official' }, [`(전망 ${OFFICIAL_2030_CHECK.incomeTrillionKrw}조)`]),
-    ' · 급여지출 ',
-    `${checkpoint2030.outgoTrillionKrw.toFixed(1)}조`,
-    ' ',
-    el('span', { class: 'depletion-validation-official' }, [`(전망 ${OFFICIAL_2030_CHECK.outgoTrillionKrw}조)`]),
-    ' · 적립금 ',
-    formatTrillion(checkpoint2030.fundTrillionKrw),
-    ' ',
-    el('span', { class: 'depletion-validation-official' }, [`(전망 ${OFFICIAL_2030_CHECK.fundTrillionKrw.toLocaleString('ko-KR')}조)`]),
-    el('div', { class: 'depletion-validation-source type-caption' }, [`대조 출처 — ${OFFICIAL_2030_CHECK.source}`]),
+    `${DEPLETION_VALIDATION_LINE_PREFIX}${formatTrillion(INITIAL_FUND_TRILLION_KRW)}${DEPLETION_VALIDATION_LINE_MID}${formatTrillion(ACTUAL_FUND_BALANCE.trillionKrw)}${DEPLETION_VALIDATION_LINE_SUFFIX}`,
+    el('div', { class: 'depletion-validation-source type-caption' }, [`전망 기준 대조 출처 — ${OFFICIAL_2030_CHECK.source} · 실적 출처 — ${ACTUAL_FUND_BALANCE.source}`]),
   ]);
 }
 
@@ -173,14 +167,13 @@ function assumptionBoundaryNotes(values) {
 
 const CHART_VIEW_WIDTH = 640;
 const CHART_VIEW_HEIGHT = 260;
-const CHART_PAD_LEFT = 56;
+// [2026-08-25, 소유자 지시(12항목) 7번] 시작 라벨이 이제 "y축 위쪽
+// 고정 여백"이 아니라 "첫 데이터 좌표의 왼쪽"에 선다 — 그만큼 왼쪽 여백이
+// 넓어야 텍스트가 잘리지 않는다(56→150). y축 위쪽 여백은 더 이상 라벨
+// 전용 공간이 필요 없으므로 원래 값(16)으로 되돌린다.
+const CHART_PAD_LEFT = 150;
 const CHART_PAD_RIGHT = 16;
-// [2026-08-25, 소유자 지시 1번] 16→34 — 시작점 라벨을 궤적(플롯 영역)
-// 밖, y축 위쪽 여백에 놓을 자리를 만든다. 라벨을 실제 데이터 y좌표가
-// 아니라 이 고정 여백 안(플롯 영역 시작선보다 위)에 두면, 슬라이더 값이
-// 바뀌어 궤적 모양이 달라져도 라벨이 선·영역과 절대 겹치지 않는다(플롯은
-// `CHART_PAD_TOP` 아래에서만 그려진다 — 아래 `yOf`).
-const CHART_PAD_TOP = 34;
+const CHART_PAD_TOP = 16;
 const CHART_PAD_BOTTOM = 30;
 
 /**
@@ -243,22 +236,55 @@ const CHART_BAR_GAP_PX = 2;
  */
 const CHART_BAR_YEAR_STEP = 5;
 
-function buildDepletionChartBars({ years, fundsTrillionKrw, xOf, yOf, baselineY }) {
-  const barIndices = years
-    .map((year, i) => ({ year, i }))
-    .filter(({ year, i }) => year % CHART_BAR_YEAR_STEP === 0 || i === 0 || i === years.length - 1);
+/** [2026-08-25, 소유자 지시(10항목) — 해당 연도가 막대로 그려지는가.
+ * 막대·막대 위 점·그 점을 잇는 선·x축 연도 라벨(소유자 지시 10·11번)이
+ * 전부 이 판정 하나를 공유한다 — 넷 중 하나만 따로 계산하면 서로 어긋난
+ * 자리에 그려질 위험이 있다(단일 데이터 원천 원칙). */
+function isDepletionBarYear(year, index, lastIndex) {
+  return year % CHART_BAR_YEAR_STEP === 0 || index === 0 || index === lastIndex;
+}
+
+/**
+ * [2026-08-25, 소유자 지시(12항목) 12번] **첫 막대가 y축 왼쪽으로 번지는
+ * 결함.** 히스토그램 슬롯 경계를 "이웃 막대와의 중간점"으로 재는 방식은
+ * 양 끝(첫째·마지막 막대)에 이웃이 한쪽밖에 없어, 반대쪽 경계를 "이웃까지
+ * 거리만큼 대칭으로 미러링"해서 냈다 — 첫 막대의 왼쪽 경계가 `x −
+ * (다음 막대까지 거리)`가 되어, x가 이미 플롯 왼쪽 끝(`CHART_PAD_LEFT`,
+ * y축 자리)인 첫 해에는 이 미러링이 y축보다 왼쪽(플롯 밖, y축 라벨
+ * 자리)까지 밀고 나간다(실측 확인). **원인은 클리핑 부재가 아니라 슬롯
+ * 계산 자체가 플롯 경계를 모르는 것** — 그래서 처방도 클리핑(자르기)이
+ * 아니라 슬롯 경계를 플롯 경계로 못 박는 clamp다: 왼쪽 경계는 절대
+ * `CHART_PAD_LEFT`보다 왼쪽으로, 오른쪽 경계는 절대 플롯 오른쪽 끝보다
+ * 오른쪽으로 나갈 수 없다. */
+function buildDepletionChartBars({ barIndices, fundsTrillionKrw, xOf, yOf, baselineY }) {
+  const plotLeft = CHART_PAD_LEFT;
+  const plotRight = CHART_VIEW_WIDTH - CHART_PAD_RIGHT;
   return barIndices.map(({ year, i }, order) => {
     const x = xOf(year);
     // 히스토그램 슬롯 — 이웃 막대와의 중간점을 경계로 삼는다(막대 간격이
     // 불균일해도 — 시작·끝 연도가 5년 배수가 아닐 수 있다 — 겹치거나
-    // 비지 않는다).
+    // 비지 않는다). `prevX`·`nextX`는 항상 `x`(막대 자신의 데이터 좌표)를
+    // 기준으로 대칭이다 — 안쪽 막대는 이웃과의 중간점이 정의상 그렇고,
+    // 양 끝 막대는 반대쪽 경계를 `x` 기준으로 미러링해서 낸다(`2x −
+    // 이웃`) — 그래서 아래 `halfWidth`도 `x`를 중심으로 대칭이다.
     const prevX = order === 0 ? x - (barIndices[1] ? xOf(barIndices[1].year) - x : innerBarFallback(xOf, year)) : (x + xOf(barIndices[order - 1].year)) / 2;
     const nextX =
       order === barIndices.length - 1
         ? x + (barIndices[order - 1] ? x - xOf(barIndices[order - 1].year) : innerBarFallback(xOf, year))
         : (x + xOf(barIndices[order + 1].year)) / 2;
-    const left = prevX + CHART_BAR_GAP_PX / 2;
-    const right = nextX - CHART_BAR_GAP_PX / 2;
+    // [2026-08-25, 소유자 지시(12항목) 12번] **첫 막대가 y축 왼쪽으로
+    // 번지는 결함 — 관리자 지시 원문의 처방("첫 막대 오프셋") 그대로
+    // 적용한다.** 첫 해의 데이터 좌표 `x`는 정의상 y축 자리(`plotLeft`)와
+    // 정확히 같다 — 그 좌표를 중심으로 폭이 있는 막대를 그리면 절반은
+    // 반드시 y축 왼쪽(플롯 밖)으로 나간다(기하적으로 피할 수 없다,
+    // 대칭을 유지한 채로는 왼쪽 경계를 지킬 수 없다). 그래서 대칭 중심
+    // 정렬 대신 **각 경계를 플롯 영역 안으로 독립적으로 clamp**한다 — 첫
+    // 막대는 왼쪽 경계가 `plotLeft`에서 시작해 오른쪽으로만 넓어지고
+    // (오프셋), 마지막 막대는 반대로 오른쪽 경계가 `plotRight`에서
+    // 멈춘다. 안쪽 막대는 이웃과의 대칭 슬롯이 이미 플롯 안에 들어오므로
+    // 이 clamp가 걸리지 않는다(값이 그대로 나온다).
+    const left = Math.max(plotLeft, prevX + CHART_BAR_GAP_PX / 2);
+    const right = Math.min(plotRight, nextX - CHART_BAR_GAP_PX / 2);
     const width = Math.max(1, right - left);
     const value = fundsTrillionKrw[i];
     const y = yOf(value);
@@ -280,7 +306,7 @@ function innerBarFallback(xOf, year) {
 }
 
 function buildDepletionChart(result) {
-  const { years, fundsTrillionKrw, depletionYear, deficitYear } = result;
+  const { years, fundsTrillionKrw, depletionYear } = result;
   const firstYear = years[0];
   const lastYear = years[years.length - 1];
   const axisStep = niceAxisStep(Math.max(...fundsTrillionKrw) * 1.05);
@@ -291,10 +317,16 @@ function buildDepletionChart(result) {
   const yOf = (value) => CHART_PAD_TOP + (1 - value / maxScale) * innerHeight;
   const baselineY = yOf(0);
 
-  const points = years.map((year, i) => [xOf(year), yOf(fundsTrillionKrw[i])]);
-  const lineD = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const areaD = `${lineD} L${points[points.length - 1][0].toFixed(1)},${baselineY.toFixed(1)} L${points[0][0].toFixed(1)},${baselineY.toFixed(1)} Z`;
-  const barNodes = buildDepletionChartBars({ years, fundsTrillionKrw, xOf, yOf, baselineY });
+  // [2026-08-25, 소유자 지시(12항목) 10·11번] 막대·점·선·x축 연도 라벨이
+  // 전부 이 하나의 연도 집합(5년 단위 + 시작·끝)을 공유한다 — "연 단위
+  // 선 대신 막대 꼭짓점 연결"(관리자 지시 원문)이 뜻하는 바가 바로 이것:
+  // 선·점을 매년이 아니라 막대가 실제로 서는 해에만 찍는다.
+  const barIndices = years.map((year, i) => ({ year, i })).filter(({ year, i }) => isDepletionBarYear(year, i, years.length - 1));
+
+  const vertexPoints = barIndices.map(({ year, i }) => [xOf(year), yOf(fundsTrillionKrw[i])]);
+  const lineD = vertexPoints.map(([x, y], idx) => `${idx === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const areaD = `${lineD} L${vertexPoints[vertexPoints.length - 1][0].toFixed(1)},${baselineY.toFixed(1)} L${vertexPoints[0][0].toFixed(1)},${baselineY.toFixed(1)} Z`;
+  const barNodes = buildDepletionChartBars({ barIndices, fundsTrillionKrw, xOf, yOf, baselineY });
 
   // y축 눈금 — 0부터 maxScale까지 axisStep(항상 1,000조의 정수배)을 그대로
   // 쌓는다. 4등분 나눗셈이 아니라서 반올림 라벨이 절대 건너뛰지 않는다.
@@ -312,51 +344,49 @@ function buildDepletionChart(result) {
     ];
   });
 
-  // x축 눈금 — 최대 8개, 균등 간격(정수 연도로 반올림).
-  const xTickCount = Math.min(8, years.length);
-  const xTickNodes = [];
-  for (let i = 0; i < xTickCount; i++) {
-    const year = Math.round(firstYear + ((lastYear - firstYear) * i) / Math.max(1, xTickCount - 1));
-    const x = xOf(year);
-    xTickNodes.push(
-      svgEl('text', { class: 'depletion-chart-axis-label', x: x.toFixed(1), y: CHART_VIEW_HEIGHT - CHART_PAD_BOTTOM + 18, 'text-anchor': 'middle' }, [
-        String(year),
-      ]),
-    );
-  }
-
-  // 데이터 점 — hover 시 <title>(네이티브 툴팁)만 낸다. 전부 그리면
-  // 촘촘해 보이므로 3년 간격으로만 그린다(선 자체는 전부 그린다 — 눈금이
-  // 성긴 것과 궤적이 성긴 것은 다르다).
-  const hoverPoints = points
-    .map((p, i) => ({ p, year: years[i], fund: fundsTrillionKrw[i] }))
-    .filter((_, i) => i % 3 === 0 || i === points.length - 1);
-  const pointNodes = hoverPoints.map(({ p, year, fund }) =>
-    svgEl('circle', { class: 'depletion-chart-point', cx: p[0].toFixed(1), cy: p[1].toFixed(1), r: 7 }, [
-      svgEl('title', {}, [`${year}년: ${formatTrillion(fund)}`]),
+  // [2026-08-25, 소유자 지시(12항목) 11번] x축 연도 라벨 — 막대 위치와
+  // 정확히 같은 자리(각 막대 아래)에, `barIndices`(위)를 그대로 쓴다.
+  // 옛 "최대 8개, 균등 간격" 독립 로직은 막대 자리와 어긋날 수 있어 뺐다.
+  const xTickNodes = barIndices.map(({ year }) =>
+    svgEl('text', { class: 'depletion-chart-axis-label', x: xOf(year).toFixed(1), y: CHART_VIEW_HEIGHT - CHART_PAD_BOTTOM + 18, 'text-anchor': 'middle' }, [
+      String(year),
     ]),
   );
 
-  // [2026-08-24, 소유자 지시 2번 → 2026-08-25, 소유자 지시 1번으로 문구·
-  // 위치 정정] 궤적 시작점(2026)에 시작 적립금 라벨을 단다 — **전망 재현
-  // 출발값**(`INITIAL_FUND_TRILLION_KRW`, 1,458조)만 쓴다. 실적
-  // (`ACTUAL_FUND_BALANCE`, 1,670.7조 — 「현재 기금」 카드가 따로
-  // 보인다)과 절대 섞지 않는다(D84 출처 분리 — 궤적 자체가 전망 재현
-  // 모델이므로 그 값·그 출처로만 라벨을 단다).
+  // [2026-08-25, 소유자 지시(12항목) 10번] 데이터 점 — 막대 하나마다
+  // 하나씩(=막대 꼭짓점), 매년이 아니다. hover 시 <title>(네이티브
+  // 툴팁, 막대와 같은 관행)만 낸다.
+  const pointNodes = barIndices.map(({ year, i }, order) => {
+    const [x, y] = vertexPoints[order];
+    return svgEl('circle', { class: 'depletion-chart-point', cx: x.toFixed(1), cy: y.toFixed(1), r: 5 }, [
+      svgEl('title', {}, [`${year}년: ${formatTrillion(fundsTrillionKrw[i])}`]),
+    ]);
+  });
+
+  // [2026-08-25, 소유자 지시(12항목) 7번] **D85 적용** — 화면의 궤적은
+  // 이제 실적(`ACTUAL_FUND_BALANCE`, 1,670.7조)에서 출발한다(카드·그래프
+  // 시작점·라벨이 한 숫자 — `mountDepletionPanel`의 `rerenderComputed`가
+  // `initialFundTrillionKrw: ACTUAL_FUND_BALANCE.trillionKrw`를 넘긴다,
+  // 아래). 전망 재현 출발값(1,458조) 자체의 정확성 증명은 화면에서 빠지고
+  // 단위시험(`simulate.test.mjs`)으로 내려간다(D85 원문).
   //
-  // **[소유자 지시 1번] 표식(점)은 실제 데이터 위치에, 문구(라벨)는 y축
-  // 위쪽 고정 여백으로 분리한다.** 점을 실제 시작점에 남겨 "궤적이 여기서
-  // 시작한다"는 사실은 그대로 보이되, 글자는 궤적 모양과 무관한 고정
-  // 자리(플롯 영역 시작선 `CHART_PAD_TOP`보다 위)에 둬 어떤 슬라이더
-  // 조합에서도 선·영역과 겹칠 수 없게 한다.
-  const [startX, startY] = points[0];
+  // **위치도 바뀐다 — y축 위쪽 고정 여백이 아니라 "첫 데이터 좌표의
+  // 왼쪽"이다**(소유자 지시 원문). 점은 실제 시작점에, 글자는 그 점의
+  // 왼쪽(`text-anchor: end`)에 붙는다 — `CHART_PAD_LEFT`를 넓혀(150) 그
+  // 글자가 y축 왼쪽 여백 안에 들어가게 했다(위 상수 선언 참고).
+  const [startX, startY] = vertexPoints[0];
   const startLabelNode = svgEl('g', { class: 'depletion-chart-start' }, [
     svgEl('circle', { class: 'depletion-chart-start-point', cx: startX.toFixed(1), cy: startY.toFixed(1), r: 4 }),
-    svgEl('text', { class: 'depletion-chart-start-label', x: CHART_PAD_LEFT.toFixed(1), y: '14', 'text-anchor': 'start' }, [
-      `${DEPLETION_CHART_START_LABEL_PREFIX} ${formatTrillion(INITIAL_FUND_TRILLION_KRW)}${DEPLETION_CHART_START_LABEL_SUFFIX}`,
+    svgEl('text', { class: 'depletion-chart-start-label', x: (startX - 10).toFixed(1), y: (startY + 4).toFixed(1), 'text-anchor': 'end' }, [
+      `${DEPLETION_CHART_START_LABEL_PREFIX} ${formatTrillion(ACTUAL_FUND_BALANCE.trillionKrw)}${DEPLETION_CHART_START_LABEL_SUFFIX}`,
     ]),
   ]);
 
+  // [2026-08-25, 소유자 지시(12항목) 8번] **최대 적립금 시기의 세로 점선을
+  // 뺀다** — 소진 점선(아래)만 남긴다. 옛 "수지 적자 전환" 점선
+  // (`depletion-chart-marker-deficit`)이 시각적으로 최대 적립금 시점과
+  // 가까워 그렇게 보였다 — 통째로 지운다(`deficitYear` 자체는
+  // `runDepletionSimulation`이 여전히 계산하지만 이 차트는 더는 안 쓴다).
   const markers = [];
   if (depletionYear != null && depletionYear <= lastYear) {
     const x = xOf(depletionYear);
@@ -366,14 +396,6 @@ function buildDepletionChart(result) {
         svgEl('text', { x: x.toFixed(1), y: CHART_PAD_TOP + 12, 'text-anchor': depletionYear > (firstYear + lastYear) / 2 ? 'end' : 'start', dx: depletionYear > (firstYear + lastYear) / 2 ? -4 : 4 }, [
           `소진 ${depletionYear}년`,
         ]),
-      ]),
-    );
-  }
-  if (deficitYear != null && deficitYear <= lastYear && deficitYear !== depletionYear) {
-    const x = xOf(deficitYear);
-    markers.push(
-      svgEl('g', { class: 'depletion-chart-marker depletion-chart-marker-deficit' }, [
-        svgEl('line', { x1: x.toFixed(1), x2: x.toFixed(1), y1: CHART_PAD_TOP, y2: CHART_VIEW_HEIGHT - CHART_PAD_BOTTOM }),
       ]),
     );
   }
@@ -414,7 +436,9 @@ function buildDepletionChart(result) {
  */
 export function depletionChartAndSlidersPreview() {
   const defaults = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
-  const result = runDepletionSimulation(defaults);
+  // [2026-08-25, D85] 축소 미리보기도 본판과 같은 출발값(실적)을 쓴다 —
+  // 팝업의 그림이 본판과 다른 궤적을 보이면 안 된다.
+  const result = runDepletionSimulation({ ...defaults, initialFundTrillionKrw: ACTUAL_FUND_BALANCE.trillionKrw });
   const chart = buildDepletionChart(result);
   const sliderRows = CORE_PARAMS.map((p) =>
     el('div', { class: 'depletion-slider-row depletion-preview-slider-row' }, [
@@ -479,7 +503,13 @@ export function mountDepletionPanel(container, { initialValues } = {}) {
   let advancedOpen = ADVANCED_PARAMS.some((p) => values[p.id] !== p.default);
 
   function rerenderComputed() {
-    const result = runDepletionSimulation(values);
+    // [2026-08-25, 소유자 지시(12항목) 7번, D85] 화면 계산은 이제 실적
+    // (`ACTUAL_FUND_BALANCE.trillionKrw`, 1,670.7조)에서 출발한다 —
+    // 「현재 기금」 카드가 보이는 값과 정확히 같은 숫자를 시뮬레이션
+    // 입력으로도 넘겨, 카드·그래프 시작점·시작 라벨이 한 숫자가 되게
+    // 한다(D85 원문). 전망 재현(1,458조 출발)은 `simulate.test.mjs`에서만
+    // 계속 돈다 — 화면 경로는 이 한 곳만 실적으로 바뀐다.
+    const result = runDepletionSimulation({ ...values, initialFundTrillionKrw: ACTUAL_FUND_BALANCE.trillionKrw });
     patch(
       cardsSlot,
       el('div', { class: 'depletion-cards' }, [
@@ -495,7 +525,7 @@ export function mountDepletionPanel(container, { initialValues } = {}) {
         outcomeCard(DEPLETION_CARD_MAX_FUND_LABEL, formatTrillion(result.maxFundTrillionKrw)),
       ]),
     );
-    patch(validationSlot, el('div', { class: 'depletion-validation-slot' }, [validationLine(result.checkpoint2030)]));
+    patch(validationSlot, el('div', { class: 'depletion-validation-slot' }, [validationLine()]));
     patch(chartSlot, el('div', { class: 'depletion-chart-wrap' }, [buildDepletionChart(result), chartActionsRow(), shareNote]));
     patch(assumptionNotesSlot, el('div', { class: 'depletion-assumption-notes-slot' }, [assumptionBoundaryNotes(values)]));
   }
@@ -510,7 +540,8 @@ export function mountDepletionPanel(container, { initialValues } = {}) {
   // 계산기2와 같은 의존성 0 관행).
   const imageOnClick = async () => {
     try {
-      const result = runDepletionSimulation(values);
+      // [2026-08-25, D85] 저장 이미지도 화면과 같은 출발값(실적)을 쓴다.
+      const result = runDepletionSimulation({ ...values, initialFundTrillionKrw: ACTUAL_FUND_BALANCE.trillionKrw });
       const dataUrl = await exportDepletionSummaryPng(result, values);
       downloadDataUrl(dataUrl, '연금고갈-시뮬레이션-요약.png');
     } catch {

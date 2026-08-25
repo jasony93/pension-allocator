@@ -2987,7 +2987,9 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   background: var(--surface-raised); border: 1px solid var(--accent-warm);
   border-radius: var(--radius-m); padding: var(--space-4);
 }
-.depletion-card-label { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-1); }
+/* [2026-08-25, 소유자 지시(12항목) 9번] 카드 제목(기금 소진·현재 기금·
+   최대 적립금)을 더 크고 굵게 — 13px/기본 굵기 → 16px/700. */
+.depletion-card-label { font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: var(--space-1); }
 .depletion-card-value { font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
 /* [2026-08-24, 소유자 지시 4번] 「현재 기금」 카드의 작은 출처 캡션. */
 .depletion-card-source { margin-top: 2px; font-size: 11.5px; color: var(--text-muted); }
@@ -3030,10 +3032,23 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 /* [2026-08-25, 소유자 지시 10번] 복합 차트 — 막대(연도별 적립금, 5년
    단위). 영역(area, 0.12)보다는 진하고 선(line, 불투명 1.0)보다는 옅게
    — 막대가 바탕, 선이 그 위 신호가 되게 한다. */
-.depletion-chart-bar { fill: var(--accent-warm); opacity: 0.35; }
+/* [2026-08-25, 소유자 지시(12항목) 10번] 막대 hover 시 확대 + 기존
+   `<title>` 툴팁(연도·적립금, `ui/depletion-panel.js`가 이미 낸다) — 이
+   저장소의 "hover 시 확대" 관행은 새로 만들지 않는다, `transform-box:
+   fill-box`로 SVG `<rect>` 자신의 경계 상자를 기준 삼아 중심에서 부드럽게
+   커진다. */
+.depletion-chart-bar {
+  fill: var(--accent-warm); opacity: 0.35;
+  transform-box: fill-box; transform-origin: center; transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.depletion-chart-bar:hover, .depletion-chart-bar:focus-visible { opacity: 0.55; transform: scale(1.08); }
 .depletion-chart-line { stroke: var(--accent-warm); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.depletion-chart-point { fill: transparent; stroke: none; cursor: default; }
-.depletion-chart-point:hover, .depletion-chart-point:focus-visible { fill: var(--accent-warm); opacity: 0.3; }
+/* [2026-08-25, 소유자 지시(12항목) 10번] 점이 이제 "막대 하나당 하나"로
+   줄어(옛 매년 점이 아니다) 항상 보이는 표식이 된다 — 옛 "hover 시에만
+   보이는 옅은 하이라이트"(연 단위 시절, 점이 너무 많아 늘 보이면 붐볐다)
+   대신 상시 표시로 바꾼다. */
+.depletion-chart-point { fill: var(--accent-warm); stroke: var(--surface-raised); stroke-width: 1.5; cursor: default; }
+.depletion-chart-point:hover, .depletion-chart-point:focus-visible { opacity: 0.8; }
 .depletion-chart-marker line { stroke-width: 1.5; stroke-dasharray: 4 3; }
 .depletion-chart-marker text { font-size: 11px; font-weight: 600; }
 .depletion-chart-marker-depletion line { stroke: var(--state-error); }
@@ -3144,22 +3159,21 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   display: flex; flex-direction: column; gap: 0.875rem;
   opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.48s;
 }
-.depletion-popup-body-copy p { margin: 0; font-size: clamp(0.9375rem, 0.9rem + 0.2vw, 1.0625rem); font-weight: 500; line-height: 1.65; color: var(--text-secondary); }
+/* [2026-08-25, 소유자 지시(12항목) 2번] 본문 세 문장(기금 소진…/국민연금은…
+   /나머지는…) 폰트 +20% — 옛 clamp(0.9375rem,0.9rem+0.2vw,1.0625rem)의
+   세 성분을 그대로 ×1.2. */
+.depletion-popup-body-copy p { margin: 0; font-size: clamp(1.125rem, 1.08rem + 0.24vw, 1.275rem); font-weight: 500; line-height: 1.65; color: var(--text-secondary); }
 .depletion-popup-body-copy p strong { color: var(--text-primary); font-weight: 700; }
 .depletion-popup-account { color: var(--accent-warm); font-weight: 800; }
-/* [관리자 지시 — 카피 검증 3번] 2064 vs 이 시뮬레이터 결과 흡수 문장 —
-   본문보다 한 단계 옅게, 출처보다는 진하게(설명 문장이지 인용이 아니다). */
-.depletion-popup-note {
-  margin: 0; font-size: 0.8125rem; font-weight: 500; line-height: 1.6; color: var(--text-secondary);
-  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.58s;
-}
+/* [2026-08-25, 소유자 지시(12항목) 1번] 화해 문구(`.depletion-popup-note`)를
+   지웠다 — 옛 규칙은 어디서도 안 쓰인다, 죽은 CSS를 남기지 않는다. */
 .depletion-popup-source {
   display: flex; flex-direction: column; gap: 2px;
-  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.68s;
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.58s;
 }
 .depletion-popup-source-line { margin: 0; font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) {
-  .depletion-popup-question-line, .depletion-popup-answer, .depletion-popup-body-copy, .depletion-popup-note, .depletion-popup-source {
+  .depletion-popup-question-line, .depletion-popup-answer, .depletion-popup-body-copy, .depletion-popup-source {
     animation: none; opacity: 1; transform: none;
   }
 }
@@ -3171,34 +3185,32 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-subtle);
 }
 .depletion-popup-right-bottom { border-bottom: none; padding-bottom: 0; }
-.depletion-popup-chart-button, .depletion-popup-bridge-button { align-self: center; }
-
-/* [2026-08-25, 관리자 지시 — 번들 실측(1440×900) 마감] 김철수씨 예시 행
-   (`.example-persona-row`, `example-showcase.js`)은 원래 넓은 3열 고정
-   그리드(297px+171px+180px+간격 두 개=734.4px, 위 `.example-persona-row`
-   본 규칙)로 설계됐다 — 첫 탭·계산기2 예시 팝업(945px 폭 모달)에는 맞지만,
-   이 팝업의 오른쪽 열(`.depletion-popup-right`, `min-width: 300px`)은 그
-   절반 정도(약 360~460px)뿐이라 그대로 재사용하면 카드가 모달 폭을 넘어
-   가로 스크롤이 생기고 세액공제액 값이 잘렸다(실측 — "1,"만 보임).
-   **요소·간격을 줄이는 대신 1열로 쌓는 쪽을 택한다** — 이미 이 컴포넌트가
-   모바일 뷰포트에서 쓰는 바로 그 처방(아래 `@media (max-width: ...)`의
-   `.example-persona-row` 규칙)을 좁은 팝업 열에도 그대로 적용한다(글자
-   크기는 건드리지 않는다 — 가독성이 오히려 그대로 유지된다). `min-width: 0`
-   사슬은 이미 이 컴포넌트의 모든 단계(행 자신·정보·도넛·절세액 열)에
-   박혀 있다(`.example-persona-row`·`.example-persona-info`·
-   `.example-persona-donut-col`·`.example-persona-amount` 본 규칙) — 이
-   스코프에서 새로 낼 필요가 없다. `width: 100%`만 더해 그 사슬이 실제로
-   이 좁은 부모 폭까지 전달되게 한다(그리드 항목 자신은 `align-items:
-   center`인 부모 안에서 기본이 "내용 크기"라 이게 없으면 좁아지지 않는다). */
-.depletion-popup-right-bottom .example-persona-row {
-  width: 100%; max-width: 100%;
-  grid-template-columns: 1fr; justify-items: center; text-align: center; row-gap: var(--space-3);
+/* [2026-08-25, 소유자 지시(12항목) 5번] 두 버튼 다 주황 배경 + hover 반응
+   — `.depletion-advanced-toggle`(본판, styles.css 3080행 부근)와 같은
+   조합을 그대로 쓴다(대비 등급도 이미 실측된 그 조합). */
+.depletion-popup-chart-button, .depletion-popup-bridge-button {
+  align-self: center;
+  background: var(--accent-warm); border: none; color: #fff; font-weight: 700;
 }
-.depletion-popup-right-bottom .example-persona-info { flex-direction: column; align-items: center; }
-.depletion-popup-right-bottom .example-persona-lines { align-items: center; }
-.depletion-popup-right-bottom .example-persona-line { white-space: normal; }
-.depletion-popup-right-bottom .example-persona-amount { width: auto; max-width: 100%; }
-.depletion-popup-right-bottom .example-persona-amount .amount-card { width: fit-content; max-width: 100%; }
+.depletion-popup-chart-button:hover, .depletion-popup-bridge-button:hover { filter: brightness(0.92); }
+
+/* [2026-08-25, 소유자 지시(12항목) 4번] 예시 프로필 — 「김철수씨」 문구·
+   아이콘 없이, 기본정보 4줄 + 도넛을 **같은 행**에, 세액공제액 카드를
+   **그 아래**에 놓는다. `examplePersonaCells`가 낸 `donutCol`·`amountCol`
+   (`example-persona-donut-col`·`example-persona-amount`, 본 규칙은
+   styles.css 위쪽에 이미 있다)을 그대로 재사용하고, 이 스코프에서는
+   배치(그리드/행)만 새로 짠다 — 계산기2 예시 팝업의 카드보다도 좁은
+   이 팝업 오른쪽 열(`min-width: 300px`)에 맞춰 처음부터 좁은 폭 전제로
+   짠다(이전 회차처럼 넓은 3열 그리드를 좁혀 쓰지 않는다). */
+.depletion-popup-example-card {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+}
+.depletion-popup-example-row { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: var(--space-3); min-width: 0; }
+.depletion-popup-example-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); min-width: 0; }
+.depletion-popup-example-lines .example-persona-line { white-space: normal; }
+.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 120px; max-width: 100%; }
+.depletion-popup-example-card .example-persona-amount { width: auto; max-width: 100%; }
+.depletion-popup-example-card .example-persona-amount .amount-card { width: fit-content; max-width: 100%; }
 
 /* 정적 축소 렌더 — 실제 슬라이더는 눌러도 안 움직인다(비활성). 차트는
    기존 `.depletion-chart`(width:100%) 그대로, 이 팝업 폭에 맞춰 자동으로

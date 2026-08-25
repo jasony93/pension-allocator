@@ -24,7 +24,6 @@
 import { rasterizeSvgToPngDataUrl, svgMarkupToDataUri, downloadDataUrl } from '../ui/summary-image.js';
 import {
   DEPLETION_SLIDER_PARAMS,
-  INITIAL_FUND_TRILLION_KRW,
   ACTUAL_FUND_BALANCE,
   OFFICIAL_2030_CHECK,
 } from './constants.js';
@@ -115,12 +114,16 @@ function chartMarkup(result, top, height) {
   rows.push(`<path d="${areaD}" fill="${DEPLETION_SUMMARY_COLORS.accentWarm}" opacity="0.12" />`);
   rows.push(`<path d="${lineD}" fill="none" stroke="${DEPLETION_SUMMARY_COLORS.accentWarm}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />`);
 
-  // 시작점 라벨 — [소유자 지시 2번] 전망 재현 출발값(INITIAL_FUND_TRILLION_KRW),
-  // 실적(ACTUAL_FUND_BALANCE)과 절대 섞지 않는다.
+  // [2026-08-25, 소유자 지시(12항목) 7번, D85] 시작점 라벨 — 실적
+  // (ACTUAL_FUND_BALANCE)에서 온다. 화면(`ui/depletion-panel.js`)이 이제
+  // 실적 출발로 계산하므로, 이 요약 이미지도 「현재 기금」 카드(위,
+  // ACTUAL_FUND_BALANCE.trillionKrw)와 같은 숫자를 시작점 라벨에 쓴다 —
+  // 둘이 어긋나면 이 한 장의 이미지 안에서 카드와 그래프가 서로 다른
+  // 숫자를 말하게 된다.
   const [startX, startY] = points[0];
   rows.push(`<circle cx="${startX.toFixed(1)}" cy="${startY.toFixed(1)}" r="4" fill="${DEPLETION_SUMMARY_COLORS.accentWarm}" />`);
   rows.push(
-    depletionSvgText(startX + 10, startY - 10, `${DEPLETION_CHART_START_LABEL_PREFIX} ${depletionFormatTrillionSummary(INITIAL_FUND_TRILLION_KRW)}${DEPLETION_CHART_START_LABEL_SUFFIX}`, {
+    depletionSvgText(startX + 10, startY - 10, `${DEPLETION_CHART_START_LABEL_PREFIX} ${depletionFormatTrillionSummary(ACTUAL_FUND_BALANCE.trillionKrw)}${DEPLETION_CHART_START_LABEL_SUFFIX}`, {
       size: 13,
       weight: 700,
       color: DEPLETION_SUMMARY_COLORS.textPrimary,

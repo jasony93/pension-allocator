@@ -68,25 +68,21 @@ test('카드 값 셋(기금 소진·현재 기금·최대 적립금)이 실제�
 });
 
 /**
- * [소유자 지시 2번, D84 출처 분리] 시작점 라벨은 전망 재현 출발값
- * (INITIAL_FUND_TRILLION_KRW=1,458조)만 쓴다 — 실적(1,670.7조)과
- * 섞이면 안 된다.
+ * [2026-08-25, 소유자 지시(12항목) 7번, D85] 시작점 라벨은 이제 실적
+ * (ACTUAL_FUND_BALANCE=1,671조)에서 온다 — 「현재 기금」 카드와 같은
+ * 숫자다(D85 "카드·그래프 시작점·라벨이 한 숫자"). 전망 재현 출발값
+ * (1,458조)은 더는 이 라벨에 나오지 않는다(그 값의 정확성 증명은
+ * `simulate.test.mjs`로 내려갔다).
  */
-test('시작점 라벨 — 전망 재현 출발값(1,458조원)만 쓰고 실적과 섞지 않는다', () => {
-  const result = runDepletionSimulation(DEFAULTS);
+test('시작점 라벨 — 실적(1,671조원)에서 오고, 「현재 기금」 카드와 같은 숫자다(D85)', () => {
+  const result = runDepletionSimulation({ ...DEFAULTS, initialFundTrillionKrw: ACTUAL_FUND_BALANCE.trillionKrw });
   const svg = buildDepletionSummarySvgMarkup(result, DEFAULTS);
-  // [2026-08-25, 소유자 지시 1번] 문구가 "적립금 …(전망 기준)"에서 "현
-  // 적립금 …"으로 바뀌었다 — 사전(`depletion-copy.js`)에서 조립해 이 시험이
-  // 문구 자신의 진실을 두 번 들고 있지 않게 한다(사전이 바뀌면 이 시험도
-  // 따라 바뀐다).
-  const forecastText = `${DEPLETION_CHART_START_LABEL_PREFIX} ${Math.round(INITIAL_FUND_TRILLION_KRW).toLocaleString('ko-KR')}조원${DEPLETION_CHART_START_LABEL_SUFFIX}`;
-  assert.ok(svg.includes(forecastText), `시작점 라벨을 찾지 못했다: ${forecastText}`);
-  // [2026-08-25] 실적값(1,671조원) 자체는 요약 시트의 「현재 기금」 값으로
-  // 다른 자리에 정당하게 나온다(카드 값) — 그래서 "실적값이 시트 어디에도
-  // 없어야 한다"가 아니라 **시작점 라벨 접두사와 실적값이 나란히 붙어
-  // 나오면 안 된다**(둘이 섞였다는 뜻)만 잰다.
-  const mixedText = `${DEPLETION_CHART_START_LABEL_PREFIX} ${Math.round(ACTUAL_FUND_BALANCE.trillionKrw).toLocaleString('ko-KR')}조원`;
-  assert.ok(!svg.includes(mixedText), '시작점 라벨에 실적값이 섞였다');
+  const actualText = `${DEPLETION_CHART_START_LABEL_PREFIX} ${Math.round(ACTUAL_FUND_BALANCE.trillionKrw).toLocaleString('ko-KR')}조원${DEPLETION_CHART_START_LABEL_SUFFIX}`;
+  assert.ok(svg.includes(actualText), `시작점 라벨을 찾지 못했다: ${actualText}`);
+  // 전망 재현 출발값(1,458조)이 시작점 라벨 접두사와 나란히 나오면 안
+  // 된다(D85로 뒤집힌 방향 — 옛 값이 되살아나면 여기서 잡힌다).
+  const forecastMixedText = `${DEPLETION_CHART_START_LABEL_PREFIX} ${Math.round(INITIAL_FUND_TRILLION_KRW).toLocaleString('ko-KR')}조원`;
+  assert.ok(!svg.includes(forecastMixedText), '시작점 라벨에 전망 재현 출발값(1,458조)이 섞였다 — D85 위반');
 });
 
 test('핵심 가정 — 코어 슬라이더는 기본값이어도 항상 나온다', () => {

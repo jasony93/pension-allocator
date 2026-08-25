@@ -28,7 +28,7 @@
 import { el } from './dom.js';
 import { openModal } from './modal.js';
 import {
-  examplePersonaRow,
+  examplePersonaCells,
   computeExampleScenario,
   exampleInputLineTexts,
   EXAMPLE_PERSONA_NAME,
@@ -37,7 +37,6 @@ import {
 } from './example-showcase.js';
 import { applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { depletionChartAndSlidersPreview } from './depletion-panel.js';
-import { MAN_ICON_DATA_URI, MAN_ICON_INTRINSIC_WIDTH, MAN_ICON_INTRINSIC_HEIGHT } from '../assets/man-icon.js';
 import {
   DEPLETION_POPUP_QUESTION_LINES,
   DEPLETION_POPUP_ANSWER_PREFIX,
@@ -52,7 +51,6 @@ import {
   DEPLETION_POPUP_ACCOUNT_2,
   DEPLETION_POPUP_ACCOUNT_3,
   DEPLETION_POPUP_BODY_TAIL_SUFFIX,
-  DEPLETION_POPUP_RECONCILIATION_NOTE,
   DEPLETION_POPUP_SOURCE_GUARANTEE,
   DEPLETION_POPUP_SOURCE_PROJECTION,
   DEPLETION_POPUP_CHART_BUTTON_LABEL,
@@ -137,16 +135,16 @@ function depletionPopupCopy() {
       DEPLETION_POPUP_BODY_TAIL_SUFFIX,
     ]),
   ]);
-  // [관리자 지시 — 카피 검증 3번, 신설] 2064(정부 추계) vs 이 시뮬레이터의
-  // 소진 연도를 잇는 한 줄 — 없으면 사용자가 둘 중 하나를 오류로 읽는다.
-  const reconciliation = el('p', { class: 'depletion-popup-note' }, [DEPLETION_POPUP_RECONCILIATION_NOTE]);
-  // [관리자 지시 — 카피 검증 1번] 출처 두 줄 — 지급보장 문장과 2064년
+  // [2026-08-25, 소유자 지시(12항목) 1번] **화해 문구를 지웠다** — 2064
+  // vs 이 시뮬레이터의 소진 연도를 잇던 한 줄(`DEPLETION_POPUP_RECONCILIATION_NOTE`)
+  // 은 사전에서도 완전히 삭제했다(`depletion-copy.js`).
+  // [관리자 지시 — 카피 검증 1번] 출처 두 줄 — 지급보장 문장과 소진 전망
   // 문장은 서로 다른 문서에서 왔다. 하나로 뭉치지 않는다.
   const source = el('div', { class: 'depletion-popup-source' }, [
     el('p', { class: 'depletion-popup-source-line' }, [DEPLETION_POPUP_SOURCE_GUARANTEE]),
     el('p', { class: 'depletion-popup-source-line' }, [DEPLETION_POPUP_SOURCE_PROJECTION]),
   ]);
-  return el('div', { class: 'depletion-popup-copy' }, [question, answer, bodyCopy, reconciliation, source]);
+  return el('div', { class: 'depletion-popup-copy' }, [question, answer, bodyCopy, source]);
 }
 
 /** 오른쪽 상단 — 정적 축소 렌더 + 버튼("연금고갈 시뮬레이션", 팝업만 닫는다
@@ -158,22 +156,39 @@ function depletionPopupChartArea({ onClose }) {
   return el('div', { class: 'depletion-popup-right-top' }, [depletionChartAndSlidersPreview(), button]);
 }
 
-/** 오른쪽 하단 — 김철수씨 예시 행 + 버튼("ISA/연금저축/IRP 배분하기", 팝업을
- * 닫고 첫 탭(계산기2)으로 넘어간다). */
+/**
+ * [2026-08-25, 소유자 지시(12항목) 4번] 오른쪽 하단 — 예시 프로필 +
+ * 버튼("ISA/연금저축/IRP 배분하기", 팝업을 닫고 첫 탭(계산기2)으로
+ * 넘어간다). **「김철수씨」 문구와 아이콘 이미지를 뺀다** — 이름·아이콘
+ * 열(`iconCol`)째 렌더하지 않는다. **기본정보 4줄과 도넛을 같은 행에,
+ * 세액공제액 카드를 그 아래에** 놓는다 — `examplePersonaRow`(첫 탭 전용
+ * 가로 3열)를 통째로 쓰던 지난 회차 대신, `examplePersonaCells`가 낸
+ * 도넛·절세액 셀은 그대로 재사용하고(같은 계산, 같은 컴포넌트), 이름·
+ * 아이콘이 섞인 `infoCol`만 빼고 이 파일이 직접 "4줄만" 열을 짠다 —
+ * 계산은 한 곳(`examplePersonaCells`)에서만, 이 파일은 배치만 새로 짠다.
+ */
 function depletionPopupExampleArea({ persona1, onBridge }) {
-  const row = examplePersonaRow({
+  const { donutCol, amountCol } = examplePersonaCells({
     name: EXAMPLE_PERSONA_NAME,
-    iconDataUri: MAN_ICON_DATA_URI,
-    iconWidth: MAN_ICON_INTRINSIC_WIDTH,
-    iconHeight: MAN_ICON_INTRINSIC_HEIGHT,
+    iconDataUri: '',
+    iconWidth: 0,
+    iconHeight: 0,
     lines: exampleInputLineTexts(),
     scenario: persona1.scenario,
     plan: persona1.plan,
   });
+  // 이름·아이콘 없는 정보 열 — 기본정보 4줄만.
+  const linesCol = el(
+    'div',
+    { class: 'depletion-popup-example-lines' },
+    exampleInputLineTexts().map((line) => el('p', { class: 'example-persona-line' }, [line])),
+  );
+  const topRow = el('div', { class: 'depletion-popup-example-row' }, [linesCol, donutCol]);
+  const card = el('div', { class: 'depletion-popup-example-card' }, [topRow, amountCol]);
   const button = el('button', { type: 'button', class: 'btn btn-secondary depletion-popup-bridge-button', onclick: onBridge }, [
     DEPLETION_POPUP_BRIDGE_BUTTON_LABEL,
   ]);
-  return el('div', { class: 'depletion-popup-right-bottom' }, [row, button]);
+  return el('div', { class: 'depletion-popup-right-bottom' }, [card, button]);
 }
 
 /**
