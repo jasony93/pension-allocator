@@ -181,7 +181,7 @@ export function sliceAngles(segments, { minDeg = MIN_SLICE_DEG } = {}) {
  * 도형"이 아니다, design-system 5.20절). 어느 뷰포트에서 켜지는지는
  * `preferredDonutSizeMode`가 정한다.
  */
-export const DONUT_OUTER_DIAMETER = { labelled: 260, labelledWide: 320, legend: 200 };
+export const DONUT_OUTER_DIAMETER = { labelled: 260, labelledWide: 320, legend: 200, legendCompact: 200 };
 
 /**
  * 라벨 블록이 들어갈 좌우 여백을 반지름(R)으로부터 낸다.
@@ -247,6 +247,32 @@ const LABEL_VPAD = 26;
  * 규칙 옆 주석).
  */
 const LEGEND_PAD = 85;
+/**
+ * [2026-08-25, 관리자 재지적 — 소유자 지시(6항목) 2번] `legendCompact` 전용
+ * 여백 — 팝업 예시 도넛(148px CSS ÷ 370 뷰박스=배율 0.4)이 계산기2 결과
+ * 도넛(배율 0.6967)과 같은 배율이 아니라서, `SLICE_LABEL_NAME_FONT_PX`를
+ * 그대로 먹여도 최종 화면 픽셀이 다르다(위 `REFERENCE_RENDER_SCALE` 주석
+ * — 진짜 원인 설명). 그 배율 차이를 라벨 글자 크기 보정(뷰박스 단위
+ * 18→약 31.35)으로 상쇄하기로 했는데, `LEGEND_PAD`(85)는 18px 기준으로
+ * 맞춘 여백이라 31px대 글자는 못 들어간다 — 실측(1차 시도, 85 그대로):
+ * 가장 넓은 라벨("연금저축")만 여백 부족으로 다시 축소 폴백을 타 10px로
+ * 되돌아갔다(짧은 "IRP"·"ISA"는 17px로 성공) — 소유자가 지적한 "축소
+ * 로직이 다시 먹는" 바로 그 패턴이 여백을 계산기2와 공유하는 한 되풀이
+ * 된다.
+ *
+ * **그래서 팝업 전용 도넛 모드(`legendCompact`)를 새로 만들어 계산기2
+ * (`legend`)와 뷰박스를 분리했다** — 계산기2의 `LEGEND_PAD`(85)·CSS
+ * 폭(257.77px)은 이 변경으로 전혀 흔들리지 않는다(다른 상수, 다른 호출부
+ * — `result-panel.js`는 여전히 `legend`만 쓴다). 이 상수(150)는 85에
+ * 보정 배율(REFERENCE_RENDER_SCALE÷0.4≈1.742)을 곱한 근사치(85×1.742≈148)
+ * 에서 시작해 실측으로 다졌다 — "연금저축"이 축소 없이 목표 글자 크기
+ * (뷰박스 31.35px, 렌더 17px) 그대로 고리·카드 경계를 벗어나는지 브라우저로
+ * 확인했다(`donut-label-overlap.browser.mjs`). 뷰박스가 커지는 만큼
+ * 링(도넛 그림) 렌더 크기가 줄지 않도록 `styles.css`의 팝업 도넛 CSS 폭도
+ * "링 보존" 공식(이전 회차와 같은 유도)으로 함께 키웠다 — 소유자 지시
+ * "도넛 그림 크기 자체는 지금대로"를 지킨다.
+ */
+const LEGEND_PAD_COMPACT = 150;
 const LABEL_LINE_GAP = 56; // 세 줄짜리 라벨 블록의 최소 세로 간격
 /**
  * 라벨의 y는 **첫 줄의 기준선**이고 아래로 두 줄이 더 붙는다. 이 값을 계산에
@@ -262,15 +288,21 @@ export const LABEL_BLOCK_BELOW = 42;
  * 상수를 따로 베껴 두고 있어서, 지름을 바꾸면 테스트는 옛 상자를 검사했다.
  */
 export function donutGeometry(labelMode = 'labelled') {
-  // D48 — 세 모드. `legend`가 아니면 전부 "라벨을 옆에 그린다"는 뜻이고,
-  // `labelled`/`labelledWide`는 지름만 다르다. 알 수 없는 값은 `labelled`로
-  // 떨어진다(예전과 같은 안전한 기본값).
-  const mode = labelMode === 'legend' || labelMode === 'labelledWide' ? labelMode : 'labelled';
-  const isLegend = mode === 'legend';
+  // D48 — 세 모드였다가, [2026-08-25, 관리자 재지적] `legendCompact`가
+  // 넷째로 늘었다 — `legend`와 지름은 같지만(도넛 그림 자체 크기는 그대로,
+  // 소유자 지시 "공간 제약") 여백(`LEGEND_PAD_COMPACT`)이 훨씬 넓다.
+  // 이유는 아래 `LEGEND_PAD_COMPACT` 주석 참고. `legend`가 아니면 전부
+  // "라벨을 옆에 그린다"는 뜻이고, `labelled`/`labelledWide`는 지름만
+  // 다르다. 알 수 없는 값은 `labelled`로 떨어진다(예전과 같은 안전한
+  // 기본값).
+  const mode =
+    labelMode === 'legend' || labelMode === 'legendCompact' || labelMode === 'labelledWide' ? labelMode : 'labelled';
+  const isLegend = mode === 'legend' || mode === 'legendCompact';
   const diameter = DONUT_OUTER_DIAMETER[mode];
   const R = diameter / 2;
-  const pad = isLegend ? LEGEND_PAD : LABEL_VPAD;
-  const gutter = isLegend ? LEGEND_PAD : labelGutterFor(R);
+  const legendPad = mode === 'legendCompact' ? LEGEND_PAD_COMPACT : LEGEND_PAD;
+  const pad = isLegend ? legendPad : LABEL_VPAD;
+  const gutter = isLegend ? legendPad : labelGutterFor(R);
   const depth = R * EXTRUDE_RATIO;
   const width = diameter + gutter * 2;
   const height = diameter + depth + pad * 2;
@@ -447,9 +479,11 @@ export function donutChart({
 }) {
   const geom = donutGeometry(labelMode);
   const { R, rInner, depth, width, height, cx, cy } = geom;
-  // `legend`만 라벨을 아래 리스트로 내린다 — `labelled`·`labelledWide`는
-  // 둘 다 라벨을 옆에 그린다(지름만 다르다).
-  const drawLabels = geom.mode !== 'legend';
+  // `legend`류(`legend`·`legendCompact`, 2026-08-25 추가)만 라벨을 이 함수
+  // 안에서 직접 그리지 않는다(대신 마운트 뒤 `applyDonutSliceInlineLabels`가
+  // 조각 위/밖에 후처리로 그린다) — `labelled`·`labelledWide`는 둘 다 이
+  // 함수 안에서 옆에 지시선 라벨을 그린다(지름만 다르다).
+  const drawLabels = geom.mode !== 'legend' && geom.mode !== 'legendCompact';
 
   const segments = allocationSegments({ allocations, unallocatedAnnualKrw, excludedAccounts });
   const total = segments.reduce((s, seg) => s + seg.amount, 0);
@@ -851,6 +885,55 @@ const SLICE_LABEL_NAME_FONT_PX = 18;
 // 아니다. 정상 경로는 위 기본 크기(18px)에서 끝나야 하고, 위 실측대로
 // 이제 실제로 그렇게 끝난다(축소 폴백 자체가 안 걸린다).
 const SLICE_LABEL_MIN_FONT_PX = 10.8;
+
+// [2026-08-25, 관리자 재지적 — 소유자 지시(6항목) 2번, 실측 회귀] 위
+// `SLICE_LABEL_NAME_FONT_PX`(18, **뷰박스 단위**)를 모든 legend 모드
+// 도넛에 똑같이 먹이면 결과가 다르다 — **CSS 렌더 폭이 뷰박스보다 얼마나
+// 작게 줄었는지(scale = 렌더 CSS px ÷ 뷰박스 단위)에 따라 최종 화면
+// 픽셀이 갈린다.** 실측(`getBoundingClientRect`, 2026-08-25):
+// 계산기2 결과 도넛(CSS 257.77px÷뷰박스 370=scale 0.6967)의 이름
+// 라벨은 실제 17px로 렌더되는데, 팝업 예시 도넛(CSS 148px÷370=scale
+// 0.4, 공간 제약으로 도넛 자체를 더 키울 수 없다)은 **같은 18(뷰박스
+// 단위) 글자가 실제로는 10px로만 렌더된다** — CSS 속성(`getComputedStyle`
+// .fontSize)은 두 곳 다 "18px"라고 답해 이 차이를 감춘다(둘 다 인라인
+// style이 "18px"이기 때문 — 그 선언이 SVG 사용자좌표계 값이라는 것,
+// `viewBox`가 최종 CSS 폭에 맞춰 통째로 축소·확대된다는 것을 모르면
+// 못 잡는다). **소유자가 세 회차째 "안 고쳐진다"고 지적한 진짜 원인이
+// 이것이다** — 지난 회차들의 "라벨 +N%"는 전부 이 뷰박스 단위 상수만
+// 고쳤을 뿐, 그 상수가 컨테이너마다 다른 배율로 다시 축소된다는 사실을
+// 놓쳤다.
+//
+// **고침 — 렌더 배율의 역수로 보정한다(관리자 지시 그대로).** 계산기2
+// 결과 도넛의 현재 배율(0.6967)을 "이미 정상"이라고 확인된 기준으로
+// 삼아 `REFERENCE_RENDER_SCALE`로 고정하고, 그 자신을 포함해 모든
+// legend 도넛에 `fontPx = SLICE_LABEL_NAME_FONT_PX × (REFERENCE_RENDER_SCALE
+// ÷ 이 svg의 실측 scale)`을 적용한다. 계산기2 자신은 배율이 이미 기준과
+// 같아 보정 계수가 1이라 결과가 전혀 안 바뀐다(회귀 없음, 아래 실측이
+// 확인한다). 팝업(배율 0.4)은 보정 계수가 0.6967/0.4≈1.74가 되어
+// 18×1.74≈31.4(뷰박스 단위)로 커지고, 그 결과 실제 렌더 폭은 계산기2와
+// 같은 물리 픽셀 수준(≈12.5px, 렌더 높이 기준 ≈17px)에 맞춰진다 — 도넛
+// 그림 크기 자체(148px)는 그대로 두고 글자만 그 축소를 상쇄한다.
+//
+// `REFERENCE_RENDER_SCALE`은 계산기2 결과 도넛의 CSS 폭(257.77px,
+// `styles.css`)을 legend 뷰박스 폭(370, `donutGeometry('legend').width`)
+// 으로 나눈 값이다 — 계산기2 CSS 폭이 바뀌면 이 상수도 같이 갱신해야
+// 한다(`donut-label-overlap.browser.mjs`의 렌더 높이 실측 시험이 어긋나면
+// 알려준다).
+const REFERENCE_RENDER_SCALE = 257.77 / 370;
+/** 이 svg가 실제로 화면에 렌더된 CSS 폭 ÷ 자신의 viewBox 폭 — "뷰박스
+ * 단위 1개가 최종 화면에서 몇 물리 픽셀인가"를 잰다. svg가 숨어 있거나
+ * (`display:none`) 아직 레이아웃 전이면 폭이 0이라 이 비율을 낼 수 없다
+ * — 그때는 `null`을 내 호출부가 보정 없이(계수 1) 옛 동작으로 안전하게
+ * 물러나게 한다(숨은 동안의 오판은 `applyDonutSliceInlineLabels`의
+ * `ResizeObserver`가 실제로 보이는 순간 다시 불러 바로잡는다, 위 D83
+ * 판정 1 주석 참고). */
+function measuredSvgRenderScale(svg) {
+  const vb = svg.viewBox?.baseVal;
+  if (!vb || !(vb.width > 0)) return null;
+  const cssWidth = svg.getBoundingClientRect().width;
+  if (!(cssWidth > 0)) return null;
+  return cssWidth / vb.width;
+}
 const SLICE_LABEL_FIT_MARGIN = 0.92; // 조각 안 여유 8% — 테두리에 글자가 닿지 않게
 const SLICE_LABEL_OUTSIDE_GAP = 16; // 리더선 폴백 — 고리(rOuter) 밖으로 이만큼(뷰박스 단위) 뺀다
 // [2026-08-23, D82 소유자 지시 5번 — 계산기2 결과 도넛 한정] 지시선을 없애고
@@ -921,7 +1004,10 @@ const SLICE_LABEL_LINE_GAP_EM = 1.25; // 이름 줄과 비율 줄 사이 간격(
  */
 export function applyDonutSliceInlineLabels(root, { forceOutside = false, hideLeader = false } = {}) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
-  const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"]')];
+  // [2026-08-25] `legendCompact`(팝업 전용, 위 `LEGEND_PAD_COMPACT` 주석)도
+  // legend류다 — 두 속성값 다 잡는다. `:is()`는 이 저장소가 이미 다른
+  // 곳(`.field-control:has(...)`)에서 쓰는 최신 CSS 선택자 관행과 같은 결이다.
+  const svgs = [...root.querySelectorAll('.chart-donut[data-label-mode="legend"], .chart-donut[data-label-mode="legendCompact"]')];
   for (const svg of svgs) applyDonutSliceInlineLabelsToSvg(svg, forceOutside, hideLeader);
   // [2026-08-23, D83 판정 1] **숨은 도넛 보정 — 진짜 원인을 실측으로 찾았다.**
   // `getBBox()`는 SVG 명세상 그 원소(또는 조상)가 `display:none`이면 폭·높이
@@ -975,6 +1061,20 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
   const ry = Number(svg.dataset.ry);
   if (![cx, rOuter, rInner, ry].every(Number.isFinite)) return;
 
+  // [2026-08-25, 관리자 재지적] 이 svg 자신의 실측 렌더 배율로 글자 크기를
+  // 보정한다 — 위 `REFERENCE_RENDER_SCALE`/`measuredSvgRenderScale` 주석
+  // 참고. 배율을 못 재면(숨은 상태 등) 계수 1(보정 없음, 옛 동작)로
+  // 물러난다.
+  const renderScale = measuredSvgRenderScale(svg);
+  const labelScaleCompensation = renderScale && renderScale > 0 ? REFERENCE_RENDER_SCALE / renderScale : 1;
+  const compensatedNameFontPx = SLICE_LABEL_NAME_FONT_PX * labelScaleCompensation;
+  const compensatedMinFontPx = SLICE_LABEL_MIN_FONT_PX * labelScaleCompensation;
+  // 비율(%) 줄은 이름 줄보다 늘 2px(뷰박스 단위, 옛 기준) 작았다 — 절대값
+  // 대신 그 비(16/18)를 지켜 보정 배율과 무관하게 같은 관계를 유지한다.
+  // 계수가 1이면(계산기2 자신) `18 × (16/18) = 16`으로 옛 값과 정확히
+  // 같다 — 회귀 없음.
+  const pctLineFontRatio = (SLICE_LABEL_NAME_FONT_PX - 2) / SLICE_LABEL_NAME_FONT_PX;
+
   const tops = [...svg.querySelectorAll('path.chart-donut-slice[role="img"]')];
 
   // 이전 호출(리사이즈·테마 전환 재호출)이 남긴 그룹을 지우고 새로 그린다 —
@@ -1010,7 +1110,7 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
     const insideColor = bestTextColorOn(getComputedStyle(top).fill);
     const [px, py] = polar(cx, cy, rLabel, rLabel * ry, mid);
 
-    let fontPx = SLICE_LABEL_NAME_FONT_PX;
+    let fontPx = compensatedNameFontPx;
     const buildText = () =>
       svgEl(
         'text',
@@ -1024,7 +1124,7 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
           svgEl('tspan', { class: 'donut-slice-label-name', x: px, dy: '-0.55em', style: `font-size:${fontPx}px` }, [name]),
           svgEl(
             'tspan',
-            { class: 'donut-slice-label-pct', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(SLICE_LABEL_MIN_FONT_PX, fontPx - 2)}px` },
+            { class: 'donut-slice-label-pct', x: px, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(compensatedMinFontPx, fontPx * pctLineFontRatio)}px` },
             [pctText],
           ),
         ],
@@ -1049,8 +1149,12 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
     // 들어갈 때만 밖으로 밀리는 조건부 동작이 아니라 예시의 항상-켜짐
     // 규칙이다.
     if (!forceOutside) {
-      while (!fitsInsideSlice() && fontPx > SLICE_LABEL_MIN_FONT_PX) {
-        fontPx -= 1;
+      // 감소 폭도 보정 계수를 탄다 — "뷰박스 단위 1"이 이 svg에서 최종
+      // 몇 물리 픽셀인지가 배율마다 다르므로, 배율이 작은(더 축소된) svg
+      // 에서 "1 물리 픽셀만큼" 줄이려면 뷰박스 단위로는 더 크게 줄여야
+      // 한다(보정과 반대 방향이면 단계가 무의미해진다).
+      while (!fitsInsideSlice() && fontPx > compensatedMinFontPx) {
+        fontPx -= labelScaleCompensation;
         const next = buildText();
         group.replaceChild(next, text);
         text = next;
@@ -1098,7 +1202,11 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
     // `fitsInsideSlice`)과 같은 방식으로 글자 크기를 줄여 다시 시도한다.
     // 바닥 크기에서도 못 맞추면 마지막으로 찾은 자리를 그대로 쓴다(예전
     // 동작 — 안 보이는 것보다 낫다).
-    fontShrink: for (let outFontPx = SLICE_LABEL_NAME_FONT_PX; outFontPx >= SLICE_LABEL_MIN_FONT_PX; outFontPx -= 1) {
+    fontShrink: for (
+      let outFontPx = compensatedNameFontPx;
+      outFontPx >= compensatedMinFontPx;
+      outFontPx -= labelScaleCompensation
+    ) {
       let gap = hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP;
       for (let attempt = 0; attempt < SLICE_LABEL_OVERLAP_MAX_ATTEMPTS; attempt++) {
         const outerRadius = rOuter + gap;
@@ -1110,7 +1218,7 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
             svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${outFontPx}px` }, [name]),
             svgEl(
               'tspan',
-              { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(SLICE_LABEL_MIN_FONT_PX, outFontPx - 2)}px` },
+              { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(compensatedMinFontPx, outFontPx * pctLineFontRatio)}px` },
               [pctText],
             ),
           ],

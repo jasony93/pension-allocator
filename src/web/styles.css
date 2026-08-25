@@ -3033,10 +3033,16 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    높이 상한(720px)을 넘었다(실측 — 스크롤 컨테이너가 14px 넘쳤다).
    1440×900에서 여전히 스크롤 없이 다 보이도록 상한을 넉넉히 올린다
    (720→760px, 90vh→92vh — 900px 뷰포트의 92vh=828px 안에 여전히
-   든다). */
+   든다).
+   [2026-08-25, 관리자 재지적 — 소유자 지시(6항목) ②, 판별력 실측 보정]
+   라벨을 렌더 배율의 역수로 보정하며(`legendCompact`, `charts.js`)
+   예시 도넛 자신의 뷰박스 여백도 커져(85→150) 도넛 상자 높이가
+   203.19px(CSS)로 늘었다 — 그 결과 팝업 내용(`.depletion-intro-modal-host`)
+   이 다시 26px 넘쳤다(실측 — `scrollHeight` 682 vs `clientHeight` 656).
+   상한을 다시 올린다(760→800px, 여전히 900px 뷰포트의 92vh=828px 안). */
 .modal:has(.depletion-intro-modal-host) {
   max-width: min(980px, 95vw);
-  max-height: min(760px, 92vh);
+  max-height: min(800px, 92vh);
   overflow: hidden;
 }
 .modal:has(.depletion-intro-modal-host) .depletion-intro-modal-host {
@@ -3133,11 +3139,26 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .depletion-popup-example-row { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: var(--space-3); min-width: 0; }
 .depletion-popup-example-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); min-width: 0; }
 .depletion-popup-example-lines .example-persona-line { white-space: normal; }
-/* [2026-08-25, 관리자 지시 — 소유자 지시 6항목 2번] **고리(도넛) 자체가
-   +10%다** — `.calc2-result-slot .chart-donut` 옆 주석과 같은 이유로
-   단순 ×1.1이 아니라 뷰박스 확대(330→370, `charts.js`의 `LEGEND_PAD`)를
-   보정한 값이다: 120×1.1×(370/330)=148.0. */
-.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 148px; max-width: 100%; }
+/* [2026-08-25, 관리자 지시 — 소유자 지시 6항목 2번, 1차 시도] **고리(도넛)
+   자체가 +10%다** — 뷰박스 확대(330→370, `charts.js`의 `LEGEND_PAD`)를
+   보정한 값: 120×1.1×(370/330)=148.0.
+   [2026-08-25, 관리자 재지적 — 판별력 실측으로 진짜 원인 확인] 148px는
+   뷰박스(370) 대비 배율이 0.4(=148/370)로, 계산기2 결과 도넛(배율
+   0.6967)보다 훨씬 작다 — 같은 뷰박스 단위 글자 크기(18px)를 먹여도
+   최종 화면 렌더가 10px밖에 안 됐다(계산기2는 17px, `getBoundingClientRect`
+   실측). 라벨을 배율의 역수로 보정해(뷰박스 단위 18→약 31.35) 렌더를
+   맞추려 하니, 148px 배율의 도넛으로는 그 글자가 들어갈 여백이 부족해
+   축소 폴백이 다시 걸렸다(`charts.js`의 `LEGEND_PAD_COMPACT` 주석) —
+   그래서 이 도넛만 전용 뷰박스(`legendCompact`, 여백 150)로 분리했다.
+   **고리 자체의 렌더 크기(80px = 148×200/370)는 이번에도 그대로 지킨다**
+   (소유자 지시 "도넛 그림 크기 자체는 지금대로") — 여백만 커진 새 뷰박스
+   (200+150×2=500)에서 그 80px를 다시 내려면 80×(500/200)=200px가
+   필요하다(같은 "링 보존" 유도식, `.calc2-result-slot .chart-donut` 옆
+   주석과 같은 방식) — 그 결과 최종 배율은 200/500=0.4로 **이전과 정확히
+   같다**(여백을 얼마나 넓히든 이 링 보존 공식은 배율을 안 바꾼다 — 셈은
+   `charts.js`의 `LEGEND_PAD_COMPACT` 주석에 있다). CSS 폭만 148→200으로
+   커지고 고리 자체의 화면 크기는 그대로다. */
+.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 200px; max-width: 100%; }
 .depletion-popup-example-card .example-persona-amount { width: auto; max-width: 100%; }
 .depletion-popup-example-card .example-persona-amount .amount-card { width: fit-content; max-width: 100%; }
 

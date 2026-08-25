@@ -53,8 +53,27 @@ const overlapCheck = (rootExpr) => `(() => {
       // [2026-08-23, 소유자 지시 1·2번(신규 회차)] 이름 줄 글자 크기 —
       // "라벨 폰트 하한을 같이 점검하라"는 지시대로 뒤에서 최저치를 잰다.
       const nameEl = el.querySelector('.donut-slice-label-name');
+      // [2026-08-25, 관리자 재지적] getComputedStyle().fontSize는 SVG
+      // 사용자좌표계(viewBox 단위)의 선언값을 그대로 돌려준다 — svg
+      // 전체가 viewBox에서 CSS 폭으로 얼마나 축소·확대됐는지는 반영하지
+      // 않는다. 그래서 팝업(배율 0.4)처럼 크게 축소된 svg에서는 이 값이
+      // "18px"라고 답해도 화면에 실제로 찍히는 픽셀은 훨씬 작다(실측 —
+      // 10px). getBoundingClientRect()는 반대로 그 축소·확대를 통과한
+      // 뒤의 실제 화면 픽셀이라 이 차이를 드러낸다 — 이 시험의 판정은
+      // 아래 nameRenderHeightPx(실측 렌더 높이)가 기준이고,
+      // nameFontPx(CSS 선언값)는 보조 참고치로만 남긴다.
       const nameFontPx = nameEl ? parseFloat(getComputedStyle(nameEl).fontSize) : null;
-      return { text: el.textContent, overlaps, clipped, nameFontPx, box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, ring, svgBox: { left: svgBox.left, right: svgBox.right, top: svgBox.top, bottom: svgBox.bottom } };
+      const nameRenderHeightPx = nameEl ? nameEl.getBoundingClientRect().height : null;
+      return {
+        text: el.textContent,
+        overlaps,
+        clipped,
+        nameFontPx,
+        nameRenderHeightPx,
+        box: { left: b.left, right: b.right, top: b.top, bottom: b.bottom },
+        ring,
+        svgBox: { left: svgBox.left, right: svgBox.right, top: svgBox.top, bottom: svgBox.bottom },
+      };
     });
     const leaderCount = svg.querySelectorAll('.donut-slice-label-leader, .donut-leader').length;
     return { hasRing: true, labelCount: labels.length, labels, leaderCount };
@@ -95,6 +114,27 @@ function assertFontFloor(result, where, minPx = 16.2 /* 18 × 0.9 */) {
   }
 }
 
+/**
+ * [2026-08-25, 관리자 재지적 — 소유자 지시(6항목) 2번, 렌더 크기 기준으로
+ * 전환] **진짜 판정 기준.** `assertFontFloor`(위)는 CSS 선언값(`font-size`)
+ * 만 재서 svg의 viewBox→CSS 렌더 축소를 못 본다 — 실측으로 잡힌 진짜
+ * 결함이 정확히 이 사각지대였다(팝업 도넛: CSS 선언 18px인데 실제 렌더
+ * 10px). `getBoundingClientRect().height`는 그 축소를 통과한 뒤의 실제
+ * 화면 픽셀이라 이 결함을 드러낸다. 팝업·계산기2 결과 두 곳 모두 여기서
+ * 같은 기준(≥16px)으로 잰다 — "계산기 결과 도넛과 같은 수준"이 소유자
+ * 지시의 요구다.
+ */
+function assertRenderHeightFloor(result, where, minPx = 16) {
+  for (const donut of result.donuts) {
+    for (const label of donut.labels) {
+      assert.ok(
+        label.nameRenderHeightPx == null || label.nameRenderHeightPx >= minPx,
+        `${where} — 라벨 "${label.text}" 이름 글자의 실제 렌더 높이(${label.nameRenderHeightPx}px, getBoundingClientRect)가 목표(${minPx}px) 밑이다 — CSS 선언 글자 크기(${label.nameFontPx}px)는 이 축소를 못 본다`,
+      );
+    }
+  }
+}
+
 let app;
 
 before(async () => {
@@ -113,7 +153,8 @@ test('D86 — 시뮬레이터 팝업 예시 도넛 라벨이 고리와 겹치지
   await sleep(200);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.depletion-intro-modal-host')?.shadowRoot`));
   assertNoOverlap(result, '시뮬레이터 팝업');
-  assertFontFloor(result, '시뮬레이터 팝업');
+  assertFontFloor(result, '시뮬레이터 팝업'); // CSS 선언값 — 보조 참고치.
+  assertRenderHeightFloor(result, '시뮬레이터 팝업'); // 실제 렌더 높이 — 진짜 판정 기준.
   // [2026-08-23, 소유자 지시 1번] 지시선(리더선) 제거.
   for (const donut of result.donuts) {
     assert.equal(donut.leaderCount, 0, `팝업 도넛에 지시선이 남아 있다: ${donut.leaderCount}개`);
@@ -137,23 +178,14 @@ test('D83 판정 1 — 계산기2 결과 도넛 라벨이 고리와 겹치지 �
   await sleep(300);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-result-slot')`));
   assertNoOverlap(result, '계산기2 결과');
-  assertFontFloor(result, '계산기2 결과');
-  // [D86 소유자 지시 6항목 ②, 판별력 증명] `assertFontFloor`는 바닥값만
-  // 지킨다(축소 폴백이 크게 타지 않았는지) — "라벨이 정확히 +20% 커졌다"는
-  // 별도로 등호에 가깝게 잠가야, 예전에 실제로 났던 회귀(옛값 16.5px에서
-  // 축소 폴백 없이 멈춘 상태, 여전히 바닥값 16.2px는 넘겨 `assertFontFloor`
-  // 만으로는 못 걸렀다)를 이 시험이 직접 잡는다. 실측 — `SLICE_LABEL_
-  // NAME_FONT_PX`를 16.5로 되돌리면 이 라벨은 18px이 아니라 16.5px로
-  // 렌더된다(직접 측정 확인) — 아래 등식이 그 차이를 잡는다.
-  for (const donut of result.donuts) {
-    for (const label of donut.labels) {
-      if (label.nameFontPx == null) continue;
-      assert.ok(
-        Math.abs(label.nameFontPx - 18) <= 0.5,
-        `계산기2 결과 — 라벨 "${label.text}" 이름 글자(${label.nameFontPx}px)가 D86 기대값(18px)과 다르다`,
-      );
-    }
-  }
+  assertFontFloor(result, '계산기2 결과'); // CSS 선언값 — 보조 참고치.
+  // [D86 소유자 지시 6항목 ②, 판별력 증명 — 렌더 크기 기준으로 전환]
+  // 관리자가 재지적한 대로 CSS 선언값(`nameFontPx`) 등호 단언은 svg의
+  // viewBox→CSS 렌더 축소를 못 본다(계산기2 자신은 우연히 두 값이 거의
+  // 같이 움직이지만, 팝업에서는 완전히 갈렸다 — 실측). 판정 기준을
+  // 실제 렌더 높이(`getBoundingClientRect`, ≥16px)로 통일한다 — 팝업
+  // 시험(위)과 같은 함수·같은 기준.
+  assertRenderHeightFloor(result, '계산기2 결과');
 });
 
 test('D83 판정 1 — 계산기2 결과 도넛(모바일 375px)도 라벨이 고리와 겹치지 않는다', { skip: skipWithoutChrome }, async () => {
@@ -168,5 +200,11 @@ test('D83 판정 1 — 계산기2 결과 도넛(모바일 375px)도 라벨이 �
   await sleep(400);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-result-slot .chart-area')`));
   assertNoOverlap(result, '계산기2 결과(모바일)');
+  // [2026-08-25, 관리자 재지적] 모바일에서는 `.chart-donut`의 `max-width:
+  // 100%`가 실제 CSS 폭(따라서 배율)을 데스크톱과 다르게 만들 수 있다 —
+  // 이 보정은 매번 그 svg 자신의 실측 배율을 다시 재므로(`charts.js`의
+  // `measuredSvgRenderScale`) 폭이 얼마든 자동으로 다시 맞는지 여기서도
+  // 함께 확인한다.
+  assertRenderHeightFloor(result, '계산기2 결과(모바일)');
   await page.send('Emulation.clearDeviceMetricsOverride');
 });

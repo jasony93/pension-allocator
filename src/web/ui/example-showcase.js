@@ -550,7 +550,16 @@ export function examplePersonaCells({ name, iconDataUri, iconWidth, iconHeight, 
     // 도넛+표(정보 열)+절세액이 한 행을 나눠 쓴다 — 결과 패널 넓은 도넛
     // (labelledWide, 684px 상자)을 쓰면 행이 카드 폭을 넘는다(같은 이유로
     // 최근 역산기 결과 도넛도 legend로 고정했다, `contribution-amount-bar.js`).
-    labelMode: 'legend',
+    // [2026-08-25, 관리자 재지적 — 소유자 지시(6항목) 2번] `legend`가 아니라
+    // `legendCompact` — 이 함수의 유일한 현재 소비자(시뮬레이터 팝업,
+    // `depletion-intro-modal.js`)는 계산기2 결과 도넛(`legend`, CSS
+    // 257.77px)보다 훨씬 좁은 CSS 폭(148px→200px, 아래)으로 그려져 배율이
+    // 달라진다 — 같은 `legend` 뷰박스를 쓰면 라벨 확대 여백이 모자라
+    // 축소 폴백이 다시 걸린다(`charts.js`의 `LEGEND_PAD_COMPACT` 주석,
+    // 진짜 원인 설명). 계산기2 자신은 이 파일을 쓰지 않는다
+    // (`result-panel.js`가 따로 `legend`를 부른다) — 이 변경으로 흔들리지
+    // 않는다.
+    labelMode: 'legendCompact',
     // [2026-08-20, 관리자 지시] 중앙 값도 만원 단위("150만원") — 숫자 전체
     // 표기 금지.
     centerValueFormat: 'manwon',

@@ -295,7 +295,13 @@ test('a single full-ring slice still gets a label with a leader', () => {
 test('the donut is drawn at the outer diameter the design fixed, on both layouts', () => {
   assert.equal(donutGeometry('labelled').diameter, 260, 'screens.md 5.2절 데스크톱 외경');
   assert.equal(donutGeometry('legend').diameter, 200, 'screens.md 5.7절 모바일 외경');
-  assert.deepEqual(DONUT_OUTER_DIAMETER, { labelled: 260, labelledWide: 320, legend: 200 });
+  // [2026-08-25, 관리자 재지적] `legendCompact`(팝업 전용, 렌더 배율 보정을
+  // 위해 legend와 뷰박스만 분리한 넷째 모드, `charts.js`의
+  // `LEGEND_PAD_COMPACT` 주석)가 늘었다 — 도넛 그림 자체 크기(지름)는
+  // `legend`와 같다(소유자 지시 "도넛 그림 크기 자체는 지금대로"), 여백만
+  // 다르다.
+  assert.equal(donutGeometry('legendCompact').diameter, 200, '팝업 전용 legendCompact도 도넛 그림 자체 지름은 legend와 같아야 한다');
+  assert.deepEqual(DONUT_OUTER_DIAMETER, { labelled: 260, labelledWide: 320, legend: 200, legendCompact: 200 });
 });
 
 test('the R=130 gutter formula still lands exactly on the documented constant 176 — no silent drift', () => {
