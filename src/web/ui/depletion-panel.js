@@ -347,11 +347,33 @@ function buildDepletionChart(result) {
   // [2026-08-25, 소유자 지시(12항목) 11번] x축 연도 라벨 — 막대 위치와
   // 정확히 같은 자리(각 막대 아래)에, `barIndices`(위)를 그대로 쓴다.
   // 옛 "최대 8개, 균등 간격" 독립 로직은 막대 자리와 어긋날 수 있어 뺐다.
-  const xTickNodes = barIndices.map(({ year }) =>
-    svgEl('text', { class: 'depletion-chart-axis-label', x: xOf(year).toFixed(1), y: CHART_VIEW_HEIGHT - CHART_PAD_BOTTOM + 18, 'text-anchor': 'middle' }, [
-      String(year),
-    ]),
-  );
+  //
+  // [2026-08-25, 관리자 지시 — 잔마감] **꼬리 구간 라벨 겹침.** 마지막
+  // 막대(시뮬레이션 종료 연도, `YEARS_TO_DRAW_AFTER_DEPLETION`만큼 소진
+  // 뒤에 더 그린 값)는 항상 강제로 포함되는데, 바로 앞 5년 단위 막대와
+  // 겨우 1~2년 차이일 수 있다(예: 소진연도 자체가 5의 배수면 그 막대와
+  // "소진+2년" 막대가 2년 차이) — 그 좁은 간격이 라벨 폭(4자리 연도)보다
+  // 좁아 겹쳐 보인다. **오른쪽(마지막)에서 왼쪽으로 훑으며, 이미 채택한
+  // 라벨과 최소 간격보다 가까우면 그 라벨을 생략한다** — 마지막 라벨이
+  // 항상 우선(관리자 지시 원문)이므로 오른쪽에서 시작해 왼쪽으로 밀어낸다.
+  const X_LABEL_MIN_GAP = 30; // "YYYY"(4자리) 11px 글자폭 + 여백 실측 근사.
+  const xTickKeep = new Array(barIndices.length).fill(true);
+  let lastKeptLabelX = null;
+  for (let i = barIndices.length - 1; i >= 0; i--) {
+    const x = xOf(barIndices[i].year);
+    if (lastKeptLabelX === null || lastKeptLabelX - x >= X_LABEL_MIN_GAP) {
+      lastKeptLabelX = x;
+    } else {
+      xTickKeep[i] = false;
+    }
+  }
+  const xTickNodes = barIndices
+    .filter((_, i) => xTickKeep[i])
+    .map(({ year }) =>
+      svgEl('text', { class: 'depletion-chart-axis-label', x: xOf(year).toFixed(1), y: CHART_VIEW_HEIGHT - CHART_PAD_BOTTOM + 18, 'text-anchor': 'middle' }, [
+        String(year),
+      ]),
+    );
 
   // [2026-08-25, 소유자 지시(12항목) 10번] 데이터 점 — 막대 하나마다
   // 하나씩(=막대 꼭짓점), 매년이 아니다. hover 시 <title>(네이티브

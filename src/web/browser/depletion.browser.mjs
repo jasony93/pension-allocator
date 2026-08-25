@@ -1040,13 +1040,17 @@ test('[소유자 지시 10·11번] 막대마다 점 하나(선으로 연결)·�
   })()`);
   assert.equal(before.pointCount, before.barCount, `점 개수(${before.pointCount})가 막대 개수(${before.barCount})와 다르다 — 막대마다 점 하나가 아니다`);
   assert.ok(before.hasLine, '점을 잇는 선이 없다');
-  assert.equal(before.xLabelCount, before.barCount, `x축 연도 라벨 개수(${before.xLabelCount})가 막대 개수(${before.barCount})와 다르다`);
-  for (let i = 0; i < before.barBoxes.length; i++) {
-    const { left, right } = before.barBoxes[i];
-    assert.ok(
-      before.xLabelXs[i] >= left - 1 && before.xLabelXs[i] <= right + 1,
-      `${i}번째 막대(${left}~${right})의 폭 밖에 그 연도 라벨(x=${before.xLabelXs[i]})이 있다`,
-    );
+  // [2026-08-25, 관리자 지시 — 잔마감] 라벨 개수가 막대 개수보다 **적을
+  // 수 있다** — 꼬리 구간에서 라벨이 겹치면 하나를 생략한다(아래 별도
+  // 시험이 그 생략 자체를 확인한다). 여기서는 "라벨이 하나도 안 남는
+  // 사고"만 막고(0이면 안 된다), 각 라벨이 어떤 막대의 폭 범위 안에는
+  // 있는지(어느 인덱스든)만 잰다 — 생략으로 인덱스가 어긋날 수 있어
+  // 더는 같은 i끼리 비교하지 않는다.
+  assert.ok(before.xLabelCount > 0, 'x축 연도 라벨이 하나도 없다');
+  assert.ok(before.xLabelCount <= before.barCount, `x축 연도 라벨 개수(${before.xLabelCount})가 막대 개수(${before.barCount})보다 많다 — 생략 로직이 라벨을 늘릴 리 없다`);
+  for (const labelX of before.xLabelXs) {
+    const withinSomeBar = before.barBoxes.some(({ left, right }) => labelX >= left - 1 && labelX <= right + 1);
+    assert.ok(withinSomeBar, `연도 라벨(x=${labelX})이 어느 막대의 폭 범위 안에도 있지 않다`);
   }
   assert.ok(before.firstBarTitle && /년: /.test(before.firstBarTitle), `막대 툴팁(연도·적립금)이 없다: "${before.firstBarTitle}"`);
 
@@ -1059,6 +1063,43 @@ test('[소유자 지시 10·11번] 막대마다 점 하나(선으로 연결)·�
   await sleep(200);
   const afterTransform = await page.evaluate(`getComputedStyle(document.querySelector('.depletion-chart-bar')).transform`);
   assert.notEqual(afterTransform, before.firstBarTransform, '막대에 마우스를 올려도 확대(transform)가 걸리지 않았다');
+});
+
+/**
+ * [2026-08-25, 관리자 지시 — 잔마감, 판별력 증명 대상] 꼬리 구간(소진
+ * 이후로 강제 포함되는 마지막 막대와 그 앞 5년 단위 막대가 몇 년 안
+ * 붙는 경우)에서 x축 연도 라벨 둘이 실제로 겹쳐 보이던 결함 — **실제
+ * 렌더된 라벨의 경계 사각형(`getBBox`)끼리 교집합이 있는지** 모든 인접
+ * 쌍에 대해 직접 잰다(짐작이 아니라 실측 — 텍스트 폭은 폰트·문자에 따라
+ * 달라 좌표 차이만으로는 겹침을 단정할 수 없다). **마지막 라벨(관리자
+ * 지시 원문 "마지막 라벨 우선")은 항상 남아 있어야 한다.**
+ */
+test('[관리자 지시 — 잔마감] x축 연도 라벨이 서로 겹치지 않는다(경계 사각형 교차 검사), 마지막 라벨은 항상 남는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const bars = [...document.querySelectorAll('.depletion-chart-bar')];
+    const lastBarTitle = bars[bars.length - 1]?.querySelector('title')?.textContent ?? '';
+    const lastYearMatch = /^(\\d+)년/.exec(lastBarTitle);
+    const lastYear = lastYearMatch ? lastYearMatch[1] : null;
+    const labels = [...document.querySelectorAll('.depletion-chart-axis-label')].filter((el) => !/천조$/.test(el.textContent));
+    const boxes = labels
+      .map((el) => {
+        const b = el.getBBox();
+        return { text: el.textContent, left: b.x, right: b.x + b.width };
+      })
+      .sort((a, b) => a.left - b.left);
+    return { lastYear, texts: labels.map((el) => el.textContent), boxes };
+  })()`);
+  assert.ok(m.lastYear, '마지막 막대의 툴팁에서 연도를 읽지 못했다(전제 조건 실패)');
+  assert.ok(m.texts.includes(m.lastYear), `마지막 연도(${m.lastYear}) 라벨이 생략됐다 — 마지막 라벨은 항상 남아야 한다`);
+  for (let i = 1; i < m.boxes.length; i++) {
+    const prev = m.boxes[i - 1];
+    const cur = m.boxes[i];
+    assert.ok(
+      prev.right <= cur.left,
+      `x축 라벨 "${prev.text}"(${prev.left.toFixed(1)}~${prev.right.toFixed(1)})와 "${cur.text}"(${cur.left.toFixed(1)}~${cur.right.toFixed(1)})의 경계 사각형이 겹친다`,
+    );
+  }
 });
 
 /**
