@@ -25,9 +25,16 @@ import { DEPLETION_TAB_LABEL } from '../depletion-copy.js';
 // `#calc2` 공유 링크가 계속 같은 패널을 연다). 새로 「연금고갈 시뮬레이션」
 // 탭(내부 id `pension-depletion`)을 둘째 자리에 연다 — 공적 기금 시나리오
 // 교육 도구이지 개인 세액 계산이 아니다(D84 판정 2).
+// [2026-08-25, D86] **표시 순서가 뒤집힌다 — 연금고갈 시뮬레이션이 첫
+// 자리.** 소유자 지시: 랜딩이 시뮬레이터가 된다("고갈 시뮬레이터로
+// 들어와 절세 계산으로 넘어간다"). **내부 `id`·문자열은 그대로**(D86 원문
+// "내부 탭 id·프래그먼트 유지") — 이 배열의 **순서만** 바뀐다, `id` 값
+// 자체는 한 글자도 안 바뀌었으므로 기존 공유 링크(`#calc2`)는 계속 같은
+// 패널을 연다. 기본 활성 탭·로고 랜딩은 `state/tab-fragment.js`의
+// `DEFAULT_TAB_ID`·`ui/app.js`의 `goToFirstLanding`이 각각 진다.
 export const TABS = [
-  { id: 'calc2', label: SERVICE_NAME },
   { id: 'pension-depletion', label: DEPLETION_TAB_LABEL },
+  { id: 'calc2', label: SERVICE_NAME },
 ];
 
 /**

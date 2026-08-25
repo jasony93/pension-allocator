@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 단일 페이지 스크롤 · 컨테이너 확대 (2026-08-12, D48) — 실제 렌더 실측.
@@ -21,10 +21,12 @@ before(async () => {
   app = await openApp();
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
-  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
-  // 선다(D79 판정 2).
-  await dismissCalc2ExampleModalIfOpen(page);
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이라 명시 필드 채움이 더는
+  // 필요 없다 — 로드와 동시에 프리필로 결과가 선다(D79 판정 2).
+  // [2026-08-25, D86] 다만 기본 랜딩 탭이 다시 시뮬레이터로 바뀌어 그
+  // 프리필·결과가 그려지려면 이 탭으로 직접 전환해야 한다.
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
   await sleep(300);
 }, { skip: skipWithoutChrome });
@@ -215,7 +217,9 @@ test('산문 텍스트 블록이 --prose-max-width(640px)를 넘지 않는다 �
  * (좁은 데스크톱에서 labelled 모드 지름 260 → 넓은 데스크톱에서
  * labelledWide 모드 지름 320으로 뷰포트에 맞춰 커지는 로직)을 겨눴다 —
  * 그 로직 자체가 첫 탭 전용이었다(D79 판정 2 — 계산기2 도넛은 뷰포트와
- * 무관하게 209px 고정, `styles.css`의 `.calc2-result-slot .chart-donut`).
+ * 무관하게 고정 폭, `styles.css`의 `.calc2-result-slot .chart-donut` —
+ * 그 고정폭 자체는 D86으로 257.77px로 다시 바뀌었지만 "뷰포트 무관 고정"
+ * 이라는 사실은 그대로다).
  * "넓어지면 커진다"는 더는 calc2에 해당하지 않으므로 그 절반은 뺀다 —
  * "도넛이 AccountBenefitStrip(전체 폭)보다 좁다"는 위계만, 도넛이 고정
  * 크기인 지금도 여전히 지켜야 할 사실이라 남긴다.

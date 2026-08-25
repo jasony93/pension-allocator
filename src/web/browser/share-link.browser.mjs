@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 import { encodeShareFragment, encodeShareFragmentV1 } from '../state/share-link.js';
 import { initialForm } from '../state/store.js';
 
@@ -26,10 +26,12 @@ after(async () => {
 test('D74 — 「내 결과 공유하기」를 누르면 「이 링크에는 입력하신 값이 들어 있습니다」가 반드시 함께 보인다', { skip: skipWithoutChrome }, async () => {
   const app = await openTracked();
   const { page } = app;
-  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
-  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
-  // 선다(D79 판정 2).
-  await dismissCalc2ExampleModalIfOpen(page);
+  // [2026-08-24, D84, 2026-08-25 D86으로 랜딩이 바뀌며 갱신] calc2가
+  // 유일한 계산 탭이다 — 그 탭을 **열면** 프리필로 결과가 선다(D79 판정
+  // 2). D86으로 기본 랜딩이 시뮬레이터가 되며, calc2 결과를 보려면 이제
+  // 명시 전환이 필요하다.
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(400);
 
@@ -51,7 +53,8 @@ test('D74 — 「내 결과 공유하기」를 누르면 「이 링크에는 입
 test('D74 — 공유 URL은 프래그먼트(#)에 실린다. 네트워크 쿼리로 나갈 방법이 없다(location.search가 비어 있다)', { skip: skipWithoutChrome }, async () => {
   const app = await openTracked();
   const { page } = app;
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(400);
   await page.clickElement(`[...document.querySelectorAll('.calc2-result-slot .save-share button')].find((b) => b.getAttribute('aria-label') === '내 결과 공유하기')`);

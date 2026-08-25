@@ -59,7 +59,6 @@ import { el, mount, patch, significantCount, indexAfterSignificant } from './dom
 import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { renderCalc2InputPanel } from './calc2-input-panel.js';
 import { buildCalc2PrefillForm } from './calc2-prefill.js';
-import { maybeShowCalc2ExampleModal } from './calc2-example-modal.js';
 import { maybeShowDepletionIntroModal } from './depletion-intro-modal.js';
 import { renderTabBar } from './tab-bar.js';
 import { mountDepletionPanel } from './depletion-panel.js';
@@ -363,11 +362,13 @@ export function mountApp(root, { engineClient, analytics }) {
   // URL 프래그먼트로 곧장 진입, 이제는 기본 랜딩까지)에서 같은 일일 규칙을
   // 타야 한다 — 경로마다 따로 부르면 부르는 것을 잊은 경로 하나가 조용히
   // 어긋난다. 한 곳에 모은다.
+  // [2026-08-25, D86] **계산기2 예시 팝업을 지웠다** — 시뮬레이터 팝업
+  // (`activateDepletionExtras`, 아래)이 유일한 일일 인사가 된다(D86 원문
+  // "그 팝업의 오른쪽 하단이 이미 김철수씨 예시와 다리를 진다"). 프리필
+  // 자체(김철수씨 값 채우기)는 팝업과 별개로 그대로 남는다 — 이 탭을 열면
+  // 결과가 바로 서 있어야 한다는 약속(D79 판정 2)은 안 바뀌었다.
   function activateCalc2Extras() {
     ensureCalc2Prefilled();
-    // 「오늘 하루 보지 않음」으로 오늘 이미 닫았으면 `maybeShowCalc2ExampleModal`
-    // 자신이 조용히 아무것도 하지 않는다(`ui/calc2-example-modal.js`).
-    maybeShowCalc2ExampleModal({ engineClient });
   }
 
   // [2026-08-25, 소유자 지시 9번] 이 탭 전용 팝업 — 계산기2 예시 팝업과
@@ -397,10 +398,11 @@ export function mountApp(root, { engineClient, analytics }) {
    * 탭 전환과 별개의 약속이다.
    */
   function goToFirstLanding() {
-    // [2026-08-21, D81] 「첫 탭」이 이제 `calc2`다 — 소유자가 계산기2를
-    // 첫 자리로 옮겼다. 내부 id가 바뀐 것이지 "로고를 누르면 첫 자리로"라는
-    // 약속 자체는 그대로다.
-    setActiveTab('calc2');
+    // [2026-08-21, D81] 「첫 탭」이 `calc2`였다 — 소유자가 계산기2를 첫
+    // 자리로 옮겼었다. [2026-08-25, D86] **다시 뒤집힌다** — 「연금고갈
+    // 시뮬레이션」이 랜딩이 된다(소유자 지시). 내부 id가 바뀐 것이지
+    // "로고를 누르면 첫 자리로"라는 약속 자체는 그대로다.
+    setActiveTab('pension-depletion');
     window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   }
 

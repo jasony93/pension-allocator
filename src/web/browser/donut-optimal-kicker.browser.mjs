@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 import { CALC2_DONUT_OPTIMAL_KICKER_LABEL } from '../calc2-copy.js';
 
 /**
@@ -35,11 +35,13 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
-  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
-  // 선다(D79 판정 2), 이 컴포넌트(`.donut-optimal-kicker` 등, 공유
-  // 컴포넌트)도 함께 곧장 그려진다.
-  await dismissCalc2ExampleModalIfOpen(app.page);
+  // [2026-08-24, D84] calc2 로드와 동시에 프리필로 결과가 선다(D79 판정 2),
+  // 이 컴포넌트(`.donut-optimal-kicker` 등, 공유 컴포넌트)도 함께 곧장
+  // 그려진다.
+  // [D86] 다만 기본 랜딩 탭이 이제 시뮬레이터라 calc2 콘텐츠가 그려지려면
+  // 먼저 그 탭으로 직접 전환해야 한다(이전엔 기본 탭이 calc2라 필요 없었다).
+  await dismissDepletionIntroModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calc2')`);
   await app.page.waitFor(`!!document.querySelector('.donut-optimal-kicker')`);
   await sleep(400);
 }, { skip: skipWithoutChrome });

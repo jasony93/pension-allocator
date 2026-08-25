@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 import { AMOUNT_CARD_LABEL_CREDIT_ONLY, AMOUNT_CARD_LABEL_COMPOSITE, AMOUNT_CARD_LABEL_DELTA } from '../copy.js';
 
 /**
@@ -24,9 +24,12 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   const { page } = app;
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  // [2026-08-25, D86] 기본 랜딩 탭이 다시 시뮬레이터로 바뀌어 calc2
+  // 프리필·결과가 그려지려면 이 탭으로 직접 전환해야 한다.
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   // [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 이제
-  // calc2가 유일한 계산 탭이자 기본 활성 탭이다 — 탭 전환도, ISA 상세
+  // calc2가 유일한 계산 탭이다 — ISA 상세
   // 입력(계좌 존재·누적액·정산기간·소득 성격)도 더는 필요 없다. calc2
   // 프리필(`ui/calc2-prefill.js`, D83 소유자 지시 9번)이 이미
   // `isaReturnEnabled: true, isaReturnRatePercent: '5'`를 채우고,

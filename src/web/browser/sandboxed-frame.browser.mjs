@@ -21,15 +21,18 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   frame = await attachSandboxedFrame(app.page);
-  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
-  // 탭 전환이 더는 필요 없다.
-  // **예시 팝업은 여기서 따로 치울 필요가 없다** — 이 iframe은
-  // `allow-same-origin`이 없는 불투명 출처라 `localStorage` 접근 자체가
-  // SecurityError를 던진다(위 첫 시험이 그 사실 자체를 못박는다). 모달을
-  // 띄우는 코드(`safeLocalStorage()`)가 그 예외를 이미 삼키고 `null`을
-  // 돌려주므로, 이 환경에서는 애초에 모달이 뜨지 않는다 —
-  // `dismissCalc2ExampleModalIfOpen`을 불렀다가는 그 함수 자신의
-  // `localStorage.setItem` 호출이 여기서 대신 던져 이 훅을 깬다.
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이라 탭 전환이 더는 필요
+  // 없다. [2026-08-25, D86] 기본 활성 탭은 이제 `pension-depletion`이지만
+  // — 둘 다 처음부터 동시에 마운트되므로(screens.md 2.1.2절 (3)) 아래
+  // `calc2BirthDate` 존재 확인은 그대로 유효하다.
+  // **탭 전용 팝업(시뮬레이터, 기본 랜딩)도 여기서 따로 치울 필요가
+  // 없다** — 이 iframe은 `allow-same-origin`이 없는 불투명 출처라
+  // `localStorage` 접근 자체가 SecurityError를 던진다(위 첫 시험이 그
+  // 사실 자체를 못박는다). 모달을 띄우는 코드(`depletionSafeLocalStorage()`)
+  // 가 그 예외를 이미 삼키고 `null`을 돌려주므로, 이 환경에서는 애초에
+  // 모달이 뜨지 않는다 — `dismissDepletionIntroModalIfOpen`을 불렀다가는
+  // 그 함수 자신의 `localStorage.setItem` 호출이 여기서 대신 던져 이
+  // 훅을 깬다.
 }, { skip: skipWithoutChrome });
 
 after(async () => {

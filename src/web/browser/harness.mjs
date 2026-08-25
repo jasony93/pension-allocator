@@ -403,36 +403,27 @@ export async function attachSandboxedFrame(page, { path: framePath = '/src/web/i
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * [2026-08-21, D81] 계산기2가 기본 탭이 되면서, 예시 팝업("계산기2 예시 인사")이
- * **명시적 탭 클릭 없이 순전한 새 페이지 로드만으로도** 뜰 수 있게 됐다
- * (`ui/app.js`의 초기 로드 분기 — D81 원문 "첫 방문 로드 포함"). 이 모달은
- * 뷰포트 전체를 덮는 스크림(`.modal-scrim`, position: fixed; inset: 0)을
- * 쓰므로, 팝업 자체를 검사하지 않는 다른 시험이 좌표 기반 클릭
- * (`page.clickElement`)을 이어가면 그 클릭이 스크림에서 끝나 원래 누르려던
- * 요소(탭 버튼 등)를 놓친다(실측 — 탭 전환이 조용히 무효가 됐다). `openApp()`
- * 직후 이 함수로 미리 치워 둔다 — localStorage에 오늘 날짜를 적어 **앞으로의**
- * 자동 재등장을 막고, 이미 열려 있을 수 있는 모달은 좌표가 아니라 DOM으로
- * (스크림에 가릴 일이 없다) 직접 닫는다. 팝업 자체를 검사하는 시험은 이
- * 함수를 부르지 않거나, 부른 뒤 스스로 `localStorage.clear()`로 되돌린다.
- */
-export async function dismissCalc2ExampleModalIfOpen(page) {
-  await page.evaluate(`localStorage.setItem('calc2ExampleModalDismissedDate', (() => {
-    const n = new Date();
-    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
-  })())`);
-  await page.evaluate(`(() => {
-    const closeBtn = document.querySelector('.calc2-example-modal-close');
-    if (closeBtn) closeBtn.click();
-  })()`);
-}
+// [2026-08-25, D86] **계산기2 예시 팝업을 지웠다** — `ui/calc2-example-modal.js`
+// 자체가 더는 없다(D86 근거, "시뮬레이터 팝업이 유일한 인사가 된다"). 옛
+// `dismissCalc2ExampleModalIfOpen`은 대상이 사라져 완전히 지운다(호출부
+// ~15개 파일도 함께 정리했다) — 남겨 두면 "무엇을 향한 방어인지" 알 수
+// 없는 죽은 함수가 된다.
 
 /**
- * [2026-08-25, 소유자 지시 9번] 「연금고갈 시뮬레이션」 탭 전용 팝업 —
- * 계산기2 예시 팝업과 같은 이유(위 함수 머리말)로 같은 대비가 필요하다.
- * **별도 키**(`depletionIntroModalDismissedDate`, 계산기2와 독립)를 쓴다 —
- * 이 함수가 계산기2 쪽 키를 건드리면 두 팝업의 "독립 억제"를 검사하는
- * 시험 자신이 그 독립성을 깨게 된다.
+ * [2026-08-25, 소유자 지시 9번, D86으로 기본 랜딩까지 확장] 「연금고갈
+ * 시뮬레이션」 탭 전용 팝업 — **D86으로 이 탭이 기본 랜딩이 되며, 이제
+ * 이 팝업이 명시적 탭 클릭 없이 순전한 새 페이지 로드만으로도 뜬다**
+ * (`ui/app.js`의 `DEFAULT_TAB_ID` — 옛 계산기2 예시 팝업이 그랬던 것과
+ * 같은 자리를 이어받았다). 이 모달은 뷰포트 전체를 덮는 스크림
+ * (`.modal-scrim`, position: fixed; inset: 0)을 쓰므로, 팝업 자체를
+ * 검사하지 않는 다른 시험이 좌표 기반 클릭(`page.clickElement`)을
+ * 이어가면 그 클릭이 스크림에서 끝나 원래 누르려던 요소를 놓친다.
+ * `openApp()` 직후 이 함수로 미리 치워 둔다 — localStorage에 오늘 날짜를
+ * 적어 **앞으로의** 자동 재등장을 막고, 이미 열려 있을 수 있는 모달은
+ * 좌표가 아니라 DOM으로 직접 닫는다. 팝업 자체를 검사하는 시험은 이
+ * 함수를 부르지 않거나, 부른 뒤 스스로 `localStorage.clear()`로 되돌린다.
+ * **별도 키**(`depletionIntroModalDismissedDate`)를 쓴다 — 계산기2 쪽
+ * 팝업이 없어졌으니 이제 이 키 하나만 신경 쓰면 된다.
  */
 export async function dismissDepletionIntroModalIfOpen(page) {
   await page.evaluate(`localStorage.setItem('depletionIntroModalDismissedDate', (() => {

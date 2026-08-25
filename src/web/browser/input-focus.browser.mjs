@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 입력 칸 클릭이 한 번에 먹지 않던 결함의 실측.
@@ -27,9 +27,12 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
-  // 탭 전환이 더는 필요 없다.
-  await dismissCalc2ExampleModalIfOpen(app.page);
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이다.
+  // [2026-08-25, D86] 기본 랜딩 탭이 다시 시뮬레이터로 바뀌었다 — calc2
+  // 필드가 실제로 보이고 클릭·포커스를 받으려면 이 탭으로 먼저 전환해야
+  // 한다(숨은 탭 패널 안에서는 클릭·포커스가 조용히 실패한다).
+  await dismissDepletionIntroModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calc2')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {

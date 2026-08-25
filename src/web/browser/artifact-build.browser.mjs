@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 배포 아티팩트(`dist/index.html`)의 실측 — `scripts/build.mjs`가 도는 것만으로는
@@ -35,7 +35,10 @@ before(async () => {
   // 뜰 수 있어 먼저 치운다. [2026-08-24, D84] 「절세계좌 계산기2(근거판)」
   // (`tab-calculator`)가 지워지고 calc2가 유일한 계산 탭이자 기본 활성
   // 탭이라, 이제 명시로 다른 탭을 켤 필요가 없다 — calc2가 이미 활성이다.
-  await dismissCalc2ExampleModalIfOpen(app.page);
+  // [2026-08-25, D86] 랜딩이 다시 바뀌어 이제 기본 활성 탭은 시뮬레이터다
+  // — calc2 프리필·결과 렌더가 그려지려면 이 탭으로 직접 전환해야 한다.
+  await dismissDepletionIntroModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calc2')`);
 }, { skip: skipWithoutChrome });
 
 after(async () => {

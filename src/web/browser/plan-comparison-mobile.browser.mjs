@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 배분안이 넷일 때의 비교 UI·표를 좁은 화면에서 실측한다 (계약 5.0.0 · D26,
@@ -35,7 +35,10 @@ before(async () => {
   app = await openApp();
   const { page } = app;
   await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  // [2026-08-25, D86] 기본 랜딩 탭이 다시 시뮬레이터로 바뀌었다 — calc2
+  // 콘텐츠가 그려지려면 이 탭으로 먼저 전환해야 한다.
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!${CALC_SCOPE}.querySelector('.stackbar')`, { timeoutMs: 8000 });
   await sleep(300);
   await page.evaluate(`(() => {

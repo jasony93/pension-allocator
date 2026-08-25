@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 도넛의 **실제 기하** 실측 — 회귀 재발 방지.
@@ -86,7 +86,10 @@ before(async () => {
   // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
   // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
   // 선다(D79 판정 2).
-  await dismissCalc2ExampleModalIfOpen(app.page);
+  await dismissDepletionIntroModalIfOpen(app.page);
+  // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 결과를 보려면 먼저
+  // 탭을 직접 눌러야 한다(이전엔 기본 탭이 calc2라 필요 없었다).
+  await app.page.clickElement(`document.getElementById('tab-calc2')`);
   await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
 }, { skip: skipWithoutChrome });
 
@@ -137,7 +140,10 @@ test('`requestAnimationFrame`이 없어도 도넛은 즉시 최종 모양이다'
     source: `window.requestAnimationFrame = undefined;`,
   });
   await page.goto(`${origin}/src/web/index.html`);
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 결과를 보려면 먼저
+  // 탭을 직접 눌러야 한다(이전엔 기본 탭이 calc2라 필요 없었다).
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   // [2026-08-18, D74] **단순 존재 확인에서 실제 bbox 확인으로 좁혔다.** 옛
   // 검사는 `.chart-donut`이 DOM에 존재하는 순간 곧바로(추가 대기 없이)
   // 재는 것으로 "장식(rAF) 없이도 내용은 그 자리에 있다"를 확인했다 —
@@ -172,7 +178,10 @@ test('prefers-reduced-motion이면 진입 표시 없이 바로 최종 모양이�
   await page.goto(`${origin}/src/web/index.html`);
   // [2026-08-24, D84] calc2가 로드와 동시에 프리필로 결과를 낸다(D79
   // 판정 2) — 명시 탭 전환·필드 채움이 더는 필요 없다.
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 결과를 보려면 먼저
+  // 탭을 직접 눌러야 한다(이전엔 기본 탭이 calc2라 필요 없었다).
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
   const m = await page.evaluate(`(() => {
     const svg = document.querySelector('.calc2-result-slot .chart-donut');
@@ -189,7 +198,10 @@ test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도
   await page.goto(`${origin}/src/web/index.html`);
   // [2026-08-24, D84] calc2가 로드와 동시에 프리필로 결과를 낸다(D79
   // 판정 2) — 명시 탭 전환·필드 채움이 더는 필요 없다.
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 결과를 보려면 먼저
+  // 탭을 직접 눌러야 한다(이전엔 기본 탭이 calc2라 필요 없었다).
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
   // 진입(240ms) 도중에 값을 한 번 더 바꿔 디바운스 재계산을 건다 — 재렌더가
   // rAF 체인을 끊는 경로를 실측으로 때린다.
@@ -227,7 +239,10 @@ test('진입 애니메이션 도중 값이 다시 계산돼 끊겨도 최종 도
  * 모드, 범례+조각 안 라벨 둘 다). **SVG의 내부 label-mode 자체는 더는
  * 뷰포트로 갈리지 않는다** — calc2는 `preferredDonutSizeMode()`의 반응형
  * 계산을 타지 않고 D79/D83 판정으로 **뷰포트와 무관하게 언제나 legend
- * 모드**로 고정된 209px 도넛을 그린다(실측 확인 — 1440px에서도
+ * 모드**로 고정된 도넛을 그린다(폭 자체는 D86으로 257.77px로 다시 바뀌었다,
+ * `charts.js`/`styles.css` 주석 참고 — 이 자리가 재는 것은 폭이 아니라
+ * label-mode 고정과 범례 표시 규칙이라 값은 안 잠근다). 실측 확인 —
+ * 1440px에서도
  * `data-label-mode`가 "legend", `.donut-labels`도 없다). 조각 안 라벨은
  * 그래서 두 뷰포트 모두 항상 보인다. **다만 `.donut-legend` 목록 자체의
  * CSS 표시 규칙(`styles.css`의 767px 미디어쿼리)은 그대로 남아 있다** —
@@ -244,7 +259,10 @@ for (const [label, width, expectLegendVisible] of [
     const { page, origin } = app;
     await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 768 });
     await page.goto(`${origin}/src/web/index.html`);
-    await dismissCalc2ExampleModalIfOpen(page);
+    await dismissDepletionIntroModalIfOpen(page);
+    // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 결과를 보려면 먼저
+    // 탭을 직접 눌러야 한다(이전엔 기본 탭이 calc2라 필요 없었다).
+    await page.clickElement(`document.getElementById('tab-calc2')`);
     await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut')`, { timeoutMs: 8000 });
     await sleep(400);
     // [2026-08-18, D74] `.chart-area`로 범위를 좁힌다 — `.calc2-result-slot`

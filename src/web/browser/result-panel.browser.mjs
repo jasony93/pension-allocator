@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 결과 패널의 실측 — 클릭이 삼켜지던 자리와, 노드를 고쳐 쓰는 렌더가 내용을
@@ -32,10 +32,12 @@ let app;
 before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
-  // [2026-08-24, D84] calc2가 유일한 계산 탭이자 기본 활성 탭이라 명시
-  // 탭 전환·필드 채움이 더는 필요 없다 — 로드와 동시에 프리필로 결과가
-  // 선다(D79 판정 2).
-  await dismissCalc2ExampleModalIfOpen(app.page);
+  // [2026-08-24, D84] calc2가 유일한 계산 탭이라 명시 필드 채움이 더는
+  // 필요 없다 — 로드와 동시에 프리필로 결과가 선다(D79 판정 2).
+  // [2026-08-25, D86] 다만 기본 랜딩 탭이 다시 시뮬레이터로 바뀌어 그
+  // 프리필·결과가 그려지려면 이 탭으로 직접 전환해야 한다.
+  await dismissDepletionIntroModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calc2')`);
   await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .save-share button')`, { timeoutMs: 8000 });
   await sleep(600);
 }, { skip: skipWithoutChrome });

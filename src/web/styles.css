@@ -1792,7 +1792,15 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    알고리즘이 보장한다 — CSS 전용 관행(`width`만 주고 `height`는 SVG
    자체 비율을 따르게 둔다, `.example-persona-donut-col .chart-donut`
    참고)은 그대로. */
-.calc2-result-slot .chart-donut { width: 209px; max-width: 100%; overflow: visible; }
+/* [2026-08-25, 관리자 지시 — 소유자 지시 6항목 2번] **도넛(고리) 자체가
+   +10%다 — CSS 폭 그대로 ×1.1이 아니다.** 라벨 여백(`charts.js`의
+   `LEGEND_PAD`)을 65→85로 넓히며 뷰박스 폭 자체가 330→370으로 커졌다 —
+   CSS 폭을 옛값의 ×1.1(229.9px)로만 두면 고리가 차지하는 비율이 줄어
+   **보이는 고리 자체는 오히려 작아진다**(실측으로 잡은 함정 — 반드시
+   "고리 렌더 px"를 기준으로 다시 셈해야 한다). 고리 렌더 px
+   = CSS폭×(200/뷰박스폭)이 정확히 옛값의 ×1.1이 되도록 역산한 값이
+   209×1.1×(370/330)=257.77. */
+.calc2-result-slot .chart-donut { width: 257.77px; max-width: 100%; overflow: visible; }
 
 /* [2026-08-23, D82 소유자 지시 7번] 결과란 세로 간격을 일관된 배수(×0.75,
    "과감하지 않게")로 줄인다 — 이미 계산기2 전용으로 조정된 자리
@@ -2527,131 +2535,13 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--space-3); }
 
-/* [신규 회차, 계산기2 한정] 예시 팝업 — 김철수씨 한 행 + 히어로 카피는
-   `.modal`의 옛 480px 상한에 들어가지 않는다(카드 자체가 그 폭보다 넓다).
-   `openModal`(ui/modal.js)이 클래스를 인자로 받지 않으므로, 안(body)에
-   실제로 들어온 내용으로 이 모달만 넓힌다 — `:has()`는 이미 이 파일
-   다른 곳(`.field-control:has(...)`)에서 쓰는 관행이다.
-   [번들 실측 마감 회차] **버튼이 스크롤 없이 항상 보여야 한다** — 모달
-   자신의 높이를 제한하고(`max-height`), 모달 자신은 더 이상 스크롤하지
-   않는다(`overflow: hidden` — 옛 `.modal` 기본값 `overflow-y: auto`를
-   이 변형에서만 끈다). 내용(`.calc2-example-modal-host`)만 안에서
-   스크롤하고, `.modal-actions`(버튼 줄)는 플렉스 자식으로 남아 항상 맨
-   아래 제자리를 지킨다 — `.modal`이 이미 `display: flex; flex-direction:
-   column`이므로(기본 규칙) 이 변형은 자식들의 flex 크기만 다시 준다. */
-.modal:has(.calc2-example-modal-host) {
-  /* [2026-08-23, D83 소유자 지시 2번] 900×1.05=945 — 도넛 라벨이 링과 겹치지
-     않으려면(판정 1) 더 바깥으로 밀려날 수 있는데, 그 여유 공간을 준다. */
-  max-width: min(945px, 95vw);
-  max-height: min(700px, 90vh);
-  overflow: hidden;
-}
-.modal:has(.calc2-example-modal-host) .calc2-example-modal-host {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
-}
-.modal:has(.calc2-example-modal-host) .modal-actions { flex: 0 0 auto; }
-/* [2026-08-23, D82 소유자 지시 1번 — 다시 가로 배치로] "오른쪽이 비어
-   보인다"는 지적으로 세로 쌓기(번들 실측 마감 회차)를 접고 카피(왼쪽) |
-   예시 카드(오른쪽)로 되돌아간다. "카피가 먼저" 원칙(5항목 회차)은 왼쪽이
-   읽기 순서로 먼저이므로 여전히 지킨다.
-   **카드는 줄지 않는다(`flex: 0 0 auto`)** — 실측으로 잡은 결함: 카드에
-   `flex-shrink`를 허용하면(카피와 나란히 공간을 다투며) 도넛 열(`1fr`)이
-   찌그러져 150.48px를 기대한 도넛이 82px로 눌렸다. 카드는 항상 제 내용
-   폭(도넛+정보+여백) 그대로 서고, **카피가 남는 공간만 쓴다**
-   (`.example-hero-copy`의 기존 `min-width: 320px`도 함께 지운다 — 그
-   하한이 카드를 밀어내는 쪽으로 작용했었다). */
-.calc2-example-modal-body { display: flex; flex-direction: row; gap: var(--space-5); align-items: flex-start; }
-/* [2026-08-21, D81, 2026-08-23 D82로 근거 갱신] `.example-hero-copy`의
-   `margin-left: 64px`(관리자 지시(3차) 1번)는 원본 첫 탭 페이지의 가로
-   배치 간격 값이고, 이 모달은 `gap`(위)으로 카피-카드 간격을 별도로
-   통제한다 — 그 64px가 그대로 남으면 간격이 이중으로 겹친다. 이
-   스코프에서만 0으로 되돌린다. */
-.calc2-example-modal-body .example-hero-copy { margin-left: 0; flex: 1 1 auto; min-width: 0; }
-.calc2-example-modal-body .calc2-example-card { flex: 0 0 auto; }
-/* [2026-08-23, D82 소유자 지시 1번] 예시 카드 — 정보 좌상단·도넛 우상단·
-   절세액 하단(전체 폭). 주황 테두리 + 더 연한 주황 바탕(새 토큰
-   `--accent-warm-subtle`, styles.css 위쪽 3단 구조)으로 "한 장의 카드"
-   처럼 보이게 한다. */
-.calc2-example-card {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: "info donut" "amount amount";
-  align-items: start;
-  row-gap: var(--space-3);
-  /* [2026-08-23, D83 소유자 지시 2번, 소유자 지시 1번(신규 회차)로 재확대]
-     정보 열과 도넛 열 사이 가로 간격 — 12px→24px(D83)→32px(신규 회차).
-     라벨 글자가 커지고(+10%) 도넛 렌더 폭도 커지면서 라벨이 고정 상자
-     가장자리(정보 열 쪽)에 더 가깝게 붙는다 — 폴백으로 라벨을 다시
-     줄이지 않고("금지" 지시) 이 간격을 늘려 여유를 준다. */
-  column-gap: var(--space-6);
-  border: 2px solid var(--accent-warm);
-  background: var(--accent-warm-subtle);
-  border-radius: var(--radius-l);
-  padding: var(--space-4);
-}
-.calc2-example-card .example-persona-info {
-  grid-area: info;
-  /* [2026-08-23, D83 소유자 지시 1번] "지금보다 한 행쯤 아래로" — 정보
-     열의 첫 줄(직업)이 도넛보다 한 행(줄 높이) 아래에서 시작한다. 아래
-     −10% 적용 뒤 실제 한 줄 높이(12.4659px × line-height 1.35)로 잰
-     값이다. */
-  margin-top: 16.83px;
-}
-.calc2-example-card .example-persona-donut-col { grid-area: donut; justify-self: end; }
-/* [2026-08-23, D83 소유자 지시 3번] 세액공제액 영역 — 전폭(그리드 두 열
-   합산) 대신 글자에 맞는 크기로. `justify-self: start`만으로는 부모
-   `.example-persona-amount`의 옛 `width: 100%`(styles.css 위쪽, 첫 탭과
-   공유하는 기본값)를 이기지 못해 `width: auto`로 그 값을 이 스코프에서
-   되돌린다. `.amount-card` 자신도 일반 블록이라 기본이 "남는 폭을
-   채운다"이므로 `width: fit-content`로 내용 폭만 쓰게 한다. */
-/* [2026-08-23, 소유자 지시 2번으로 정렬 변경] 「이 배분으로 계산된
-   세액공제액」 카드를 예시 영역 하단 가운데로 — `justify-self: start`
-   (D83 소유자 지시 3번, 크기만의 문제였다)를 `center`로 바꾼다. 그리드
-   행 자체("amount amount", 전체 폭을 쓰는 자리)는 그대로 두고 그 안의
-   정렬만 바꾼다. */
-.calc2-example-card .example-persona-amount { grid-area: amount; width: auto; justify-self: center; }
-.calc2-example-card .example-persona-amount .amount-card { width: fit-content; }
-/* [2026-08-23, D82 소유자 지시 1번] **내용 전체 −5%.** 도넛은 `width`
-   전용 스케일(예시 2케이스 축소, D79 판정 4가 세운 같은 관행) —
-   158.4×0.95=150.48px. SVG는 `viewBox` 좌표계라 이 하나로 도넛 중앙
-   라벨·값과 조각 위 이름+비율 라벨(JS가 그리는 인라인 `font-size`
-   포함)까지 전부 비례로 함께 줄어든다(이 파일 위 `.example-persona-donut-col`
-   주석 — "CSS 렌더 폭만 키워도 안의 조각·라벨 글자가 함께 비례로
-   커진다"의 역방향). 도넛 밖(HTML 텍스트) 나머지 셋은 SVG가 아니라서
-   비례 스케일이 안 통한다 — 각 요소의 확정 절댓값에 같은 배수(×0.95)를
-   직접 적용한다. */
-/* [2026-08-23, 소유자 지시 1번(신규 회차)] 150.48×1.1=165.528 — 라벨 글자
-   자체를 키운(`charts.js`의 `SLICE_LABEL_NAME_FONT_PX`) 만큼 렌더 폭도
-   같이 키운다. SVG는 viewBox 좌표계라 폭만 키우면 링·여백·라벨이 전부
-   비례로 함께 커진다(줄이는 폴백에 기대지 않고 "공간을 늘려 해결"). */
-.calc2-example-card .example-persona-donut-col .chart-donut { width: 165.528px; max-width: 100%; overflow: visible; }
-/* [2026-08-23, D83 소유자 지시 1번] 아이콘·기본 정보(이름표·정보 줄)만
-   추가 −10%(도넛·절세액은 그대로) — D82의 ×0.95에 이어 ×0.9, 누적
-   ×0.855. 13.851×0.9=12.4659, 9.61875×0.9=8.656875. */
-.calc2-example-card .example-persona-line { font-size: 12.4659px; }
-.calc2-example-card .example-persona-name { font-size: 8.656875px; }
-.calc2-example-card .example-persona-amount .amount-card-label { font-size: 10.0035px; } /* 10.53 × 0.95 (D82) — 이 회차는 손대지 않는다 */
-.calc2-example-card .example-persona-amount .amount-card-value { font-size: 20.007px; } /* 21.06 × 0.95 (D82) — 이 회차는 손대지 않는다 */
-/* 아이콘 높이는 위 두 글자 크기(정보 줄·이름표)에서 유도되는 계산식이다
-   (`.example-persona-icon` 주석 참고) — 같은 식에 이번 회차 값(추가
-   −10%)을 그대로 넣는다(상자를 별도 배수로 다시 줄이지 않는다, 그
-   계산식이 이미 "글자"이기 때문이라는 원래 판단 그대로). */
-.calc2-example-card .example-persona-icon {
-  height: calc(12.4659px * 1.35 * 4 + var(--space-1) * 3 - var(--space-1) - 8.656875px * 1.4);
-}
-/* 오른쪽 하단 — 「오늘 하루 보지 않음」을 주황 계열로 눈에 띄게(소유자 지시),
-   일반 닫기(X)는 옆의 수수한 아이콘 버튼. */
-.calc2-example-modal-close {
-  width: 40px; height: 40px; border-radius: var(--radius-m);
-  border: 1px solid var(--border-strong); background: transparent; color: var(--text-secondary);
-  font-size: 20px; line-height: 1; cursor: pointer;
-}
-.calc2-example-modal-close:hover { background: var(--surface-sunken); }
-.calc2-example-modal-dismiss {
-  border: none; border-radius: var(--radius-m); background: var(--accent-warm); color: #fff;
-  padding: 0 var(--space-4); height: 40px; font-weight: 700; cursor: pointer;
-}
-.calc2-example-modal-dismiss:hover { filter: brightness(0.92); }
+/* [2026-08-25, D86] 계산기2 예시 팝업(`ui/calc2-example-modal.js`)이 통째로
+   삭제되며, 이 자리에 있던 그 팝업 전용 규칙 전부(`.modal:has(.calc2-
+   example-modal-host)`·`.calc2-example-modal-body`·`.calc2-example-card`
+   와 그 자손들·`.calc2-example-modal-close`·`-dismiss`)를 함께 지운다 —
+   소유자 지시 6항목 ⑥, gate-decisions.md D86. 시뮬레이터 팝업
+   (`.depletion-intro-modal-host`, 아래 3153행 부근)이 이제 앱의 유일한
+   일일 팝업이라 이 규칙들을 겨눌 대상 자체가 DOM 어디에도 없다. */
 
 /* `[4-H]` PDF 내보내기(`ui/print.js`) — 2026-08-10, 캔버스로 새로 그리던
    공유 이미지를 걷어내고 브라우저 인쇄로 바꾸며 옛 `.share-*` 규칙(모달 미리보기
@@ -3022,6 +2912,22 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 }
 .depletion-chart-wrap { width: 100%; margin-bottom: var(--space-2); position: relative; }
 .depletion-chart { display: block; width: 100%; height: auto; }
+/* [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 5번] 막대 hover 커스텀
+   말풍선 — 네이티브 `<title>` 대신(`ui/depletion-panel.js`). 흰 배경 +
+   주황 테두리, **더 크게**(옛 네이티브 툴팁보다 뚜렷하도록 14px/굵게).
+   `position: fixed` — 좌표를 `getBoundingClientRect()`(뷰포트 기준)로
+   직접 재 쓰므로 고정 위치가 그대로 맞는다. `--surface-raised`는
+   라이트에서 흰색 그 자체다(styles.css :root) — 다크에서는 같은 토큰이
+   다크 표면색으로 자동 전환된다(소유자 지시 원문 "다크에서는 표면
+   토큰"). */
+.depletion-bar-tooltip {
+  position: fixed; z-index: 20; pointer-events: none;
+  transform: translate(-50%, calc(-100% - 8px));
+  background: var(--surface-raised); border: 2px solid var(--accent-warm); border-radius: var(--radius-m);
+  padding: 8px 12px; font-size: 14px; font-weight: 700; color: var(--text-primary);
+  box-shadow: var(--shadow-2); white-space: nowrap;
+}
+.depletion-bar-tooltip[hidden] { display: none; }
 .depletion-chart-grid { stroke: var(--border-subtle); stroke-width: 1; }
 .depletion-chart-axis-label { fill: var(--text-muted); font-size: 11px; }
 /* [2026-08-24, 소유자 지시 3번] 「주황 확산」 — 선·아래 영역 채움을
@@ -3086,9 +2992,11 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 }
 /* [2026-08-24, 소유자 지시 3번] 「추가 정보 기입」 — 주황 바탕, 가로 폭은
    글자만 감싼다(옛 `width: 100%`를 뗀다 — `<button>`은 기본이 내용
-   크기다, `.btn`도 폭을 강제하지 않는다). 배경+흰 글자는 이미
-   `.calc2-example-modal-dismiss`(styles.css 2650행 부근)가 쓰는 같은
-   조합 — 새 대비 등급이 아니다. */
+   크기다, `.btn`도 폭을 강제하지 않는다). 배경+흰 글자는 이미 다른
+   주황 버튼(`--accent-warm` 배경 + `#fff` 글자)이 여러 곳에서 쓰던 같은
+   조합 — 새 대비 등급이 아니다. [2026-08-25, D86] 예전 이 자리가 대며
+   가리키던 `.calc2-example-modal-dismiss`는 그 팝업 자체가 삭제되며
+   함께 지워졌다. */
 /* [2026-08-25, 소유자 지시 7번] 「추가 정보 기입」 버튼을 행 가운데로 —
    `align-self: flex-start`(왼쪽 붙임)를 `center`로 바꾼다. 폭 자체는
    그대로 글자만 감싼다(위 주석 — `width` 규칙이 없다, 바뀌지 않는다). */
@@ -3116,13 +3024,19 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 
 /* ---------------------------------------------------------------------------
    [2026-08-25, 소유자 지시 9번] 시뮬레이션 탭 전용 팝업 — 계산기2 예시
-   팝업(`.calc2-example-modal-host` 규칙, 위)과 같은 구조를 그대로 따른다.
-   `:has()`로 이 팝업이 뜬 `.modal`만 넓히고, 버튼 줄이 스크롤 없이 항상
-   보이게 한다(같은 이유 — 위 `.calc2-example-modal-host` 주석 참고).
+   팝업(옛 `.calc2-example-modal-host` 규칙, D86으로 삭제됨)이 쓰던 것과
+   같은 구조를 그대로 따른다. `:has()`로 이 팝업이 뜬 `.modal`만 넓히고,
+   버튼 줄이 스크롤 없이 항상 보이게 한다.
 --------------------------------------------------------------------------- */
+/* [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 1~3번] 카피 +20%·행간
+   +10%, 도넛 +10%, 미니 그래프 라벨 +50%가 누적되며 팝업 내용이 옛
+   높이 상한(720px)을 넘었다(실측 — 스크롤 컨테이너가 14px 넘쳤다).
+   1440×900에서 여전히 스크롤 없이 다 보이도록 상한을 넉넉히 올린다
+   (720→760px, 90vh→92vh — 900px 뷰포트의 92vh=828px 안에 여전히
+   든다). */
 .modal:has(.depletion-intro-modal-host) {
   max-width: min(980px, 95vw);
-  max-height: min(720px, 90vh);
+  max-height: min(760px, 92vh);
   overflow: hidden;
 }
 .modal:has(.depletion-intro-modal-host) .depletion-intro-modal-host {
@@ -3137,9 +3051,14 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    기존 토큰으로 바뀌었다(Pretendard CDN도 걷어냈다 — `font-family` 선언
    자체가 없다, 이 앱의 기본 글꼴 스택을 그대로 물려받는다). */
 .depletion-popup-copy { flex: 1 1 320px; min-width: 280px; display: flex; flex-direction: column; gap: var(--space-4); }
+/* [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 1번] 팝업 카피 문구
+   전체 +20%, 행간(line-height) +10% — 옛 clamp 세 성분·line-height를
+   그대로 각각 ×1.2·×1.1. (질문·답·본문 세 문장·출처 줄 전부 대상 —
+   본문은 이미 지난 회차에 +20%가 됐던 값을 여기서 다시 ×1.2 한다,
+   소유자가 "전체" +20%를 이번에 새로 지시했으므로 누적한다.) */
 .depletion-popup-question {
   margin: 0; font-weight: 800; letter-spacing: -0.02em;
-  font-size: clamp(1.5rem, 1.15rem + 1.6vw, 2.125rem); line-height: 1.32; color: var(--text-primary);
+  font-size: clamp(1.8rem, 1.38rem + 1.92vw, 2.55rem); line-height: 1.452; color: var(--text-primary);
 }
 .depletion-popup-question-line {
   display: block; opacity: 0; animation: example-hero-fade-up 0.6s ease forwards;
@@ -3148,7 +3067,7 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .depletion-popup-question-line:nth-child(2) { animation-delay: 0.16s; }
 .depletion-popup-answer {
   margin: 0; font-weight: 800; letter-spacing: -0.02em;
-  font-size: clamp(1.25rem, 1.02rem + 1vw, 1.6875rem); line-height: 1.42; color: var(--text-primary);
+  font-size: clamp(1.5rem, 1.224rem + 1.2vw, 2.025rem); line-height: 1.562; color: var(--text-primary);
   opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.32s;
 }
 .depletion-popup-mark {
@@ -3161,8 +3080,12 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 }
 /* [2026-08-25, 소유자 지시(12항목) 2번] 본문 세 문장(기금 소진…/국민연금은…
    /나머지는…) 폰트 +20% — 옛 clamp(0.9375rem,0.9rem+0.2vw,1.0625rem)의
-   세 성분을 그대로 ×1.2. */
-.depletion-popup-body-copy p { margin: 0; font-size: clamp(1.125rem, 1.08rem + 0.24vw, 1.275rem); font-weight: 500; line-height: 1.65; color: var(--text-secondary); }
+   세 성분을 그대로 ×1.2.
+   [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 1번] "카피 문구 전체
+   +20%, 행간 +10%" — 위에서 이미 +20%였던 값(1.125/1.08/1.275rem)을 다시
+   ×1.2 하고(누적, 이 저장소의 성공 배수 누적 관행 — 예: 계산기2 예시
+   카드 글자 ×0.95 이어 ×0.9 누적), line-height도 1.65×1.1=1.815로 올린다. */
+.depletion-popup-body-copy p { margin: 0; font-size: clamp(1.35rem, 1.296rem + 0.288vw, 1.53rem); font-weight: 500; line-height: 1.815; color: var(--text-secondary); }
 .depletion-popup-body-copy p strong { color: var(--text-primary); font-weight: 700; }
 .depletion-popup-account { color: var(--accent-warm); font-weight: 800; }
 /* [2026-08-25, 소유자 지시(12항목) 1번] 화해 문구(`.depletion-popup-note`)를
@@ -3171,7 +3094,9 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
   display: flex; flex-direction: column; gap: 2px;
   opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.58s;
 }
-.depletion-popup-source-line { margin: 0; font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); }
+/* [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 1번] +20%, 행간 +10%
+   (옛 줄간격이 없어 기본값 1을 기준으로 올린다). */
+.depletion-popup-source-line { margin: 0; font-size: 0.975rem; font-weight: 500; line-height: 1.1; color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) {
   .depletion-popup-question-line, .depletion-popup-answer, .depletion-popup-body-copy, .depletion-popup-source {
     animation: none; opacity: 1; transform: none;
@@ -3208,7 +3133,11 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .depletion-popup-example-row { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: var(--space-3); min-width: 0; }
 .depletion-popup-example-lines { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); min-width: 0; }
 .depletion-popup-example-lines .example-persona-line { white-space: normal; }
-.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 120px; max-width: 100%; }
+/* [2026-08-25, 관리자 지시 — 소유자 지시 6항목 2번] **고리(도넛) 자체가
+   +10%다** — `.calc2-result-slot .chart-donut` 옆 주석과 같은 이유로
+   단순 ×1.1이 아니라 뷰박스 확대(330→370, `charts.js`의 `LEGEND_PAD`)를
+   보정한 값이다: 120×1.1×(370/330)=148.0. */
+.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 148px; max-width: 100%; }
 .depletion-popup-example-card .example-persona-amount { width: auto; max-width: 100%; }
 .depletion-popup-example-card .example-persona-amount .amount-card { width: fit-content; max-width: 100%; }
 
@@ -3219,21 +3148,35 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .depletion-preview-sliders { display: flex; flex-direction: column; gap: 2px; }
 .depletion-preview-slider-row { opacity: 0.75; }
 .depletion-preview-slider-row .depletion-slider-input { cursor: default; }
+/* [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 3번] 팝업 미니 그래프의
+   「현 적립금 …」·「소진 …년」 라벨 +50% — 본판 차트(`ui/depletion-panel.js`의
+   `buildDepletionChart`)는 이 팝업의 정적 축소판과 같은 함수를 재사용하므로
+   (`depletionChartAndSlidersPreview`), 본판까지 함께 커지지 않도록
+   `.depletion-preview` 스코프로만 덮어쓴다. 11px×1.5=16.5px(소진 라벨),
+   11.5px×1.5=17.25px(현 적립금 라벨). */
+.depletion-preview .depletion-chart-marker text { font-size: 16.5px; }
+.depletion-preview .depletion-chart-start-label { font-size: 17.25px; }
 
-/* 닫기(X)·「오늘 하루 보지 않음」 — 계산기2 예시 팝업과 같은 모양
-   (`.calc2-example-modal-close`·`-dismiss`, 위 2644행 부근)을 그대로
-   복제한다(대비 등급도 이미 실측된 그 조합 그대로). */
+/* 닫기(X) — 옛 계산기2 예시 팝업(D86으로 삭제됨)이 쓰던 것과 같은 수수한
+   아이콘 버튼 모양을 그대로 복제한다. 「오늘 하루 보지 않음」은 그 옛
+   팝업과 달리(그쪽은 주황이었다) 소유자 지시(6항목) 4번으로 회색이다
+   (아래 별도 주석). */
 .depletion-intro-modal-close {
   width: 40px; height: 40px; border-radius: var(--radius-m);
   border: 1px solid var(--border-strong); background: transparent; color: var(--text-secondary);
   font-size: 20px; line-height: 1; cursor: pointer;
 }
 .depletion-intro-modal-close:hover { background: var(--surface-sunken); }
+/* [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 4번] 주황 해제 — 회색으로.
+   `.btn-secondary`(styles.css 1854행)와 같은 중립 조합(테두리+본문 글자
+   색)에, 클릭 대상임을 여전히 알 수 있게 옅은 채움(`--surface-sunken`)만
+   더한다. */
 .depletion-intro-modal-dismiss {
-  border: none; border-radius: var(--radius-m); background: var(--accent-warm); color: #fff;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-m);
+  background: var(--surface-sunken); color: var(--text-primary);
   padding: 0 var(--space-4); height: 40px; font-weight: 700; cursor: pointer;
 }
-.depletion-intro-modal-dismiss:hover { filter: brightness(0.92); }
+.depletion-intro-modal-dismiss:hover { background: var(--border-subtle); }
 
 @media (max-width: 700px) {
   .depletion-popup-body { flex-direction: column; }

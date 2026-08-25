@@ -29,7 +29,10 @@ const LEGACY_TAB_ID_REDIRECTS = { calculator: 'calc2', 'pension-reverse': 'calc2
 // 활성 탭이 바뀐다. **내부 id·프래그먼트 문자열은 그대로**(`TAB_IDS` 위)다 —
 // 옛 공유 링크(`#calculator`)가 계속 같은 패널을 연다. 바뀌는 것은 이
 // 상수(초기 화면)와 표시 순서·라벨(`ui/tab-bar.js`)뿐이다.
-export const DEFAULT_TAB_ID = 'calc2';
+// [2026-08-25, D86] **랜딩이 시뮬레이터가 된다.** 소유자 지시 — 기본
+// 활성 탭이 `pension-depletion`으로 다시 바뀐다. `TAB_IDS`(위) 자체는
+// 손대지 않는다 — `#calc2` 공유 링크는 여전히 같은 계산 탭을 그대로 연다.
+export const DEFAULT_TAB_ID = 'pension-depletion';
 
 /** `hash`(선행 `#` 없이)가 탭 id 프래그먼트인가(옛 id의 리다이렉트 대상 포함). */
 export function isTabIdFragment(hash) {

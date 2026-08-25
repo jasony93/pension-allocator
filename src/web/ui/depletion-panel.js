@@ -289,11 +289,21 @@ function buildDepletionChartBars({ barIndices, fundsTrillionKrw, xOf, yOf, basel
     const value = fundsTrillionKrw[i];
     const y = yOf(value);
     const height = Math.max(0, baselineY - y);
-    return svgEl(
-      'rect',
-      { class: 'depletion-chart-bar', x: left.toFixed(1), y: y.toFixed(1), width: width.toFixed(1), height: height.toFixed(1) },
-      [svgEl('title', {}, [`${year}년: ${formatTrillion(value)}`])],
-    );
+    // [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 5번] **네이티브
+    // `<title>` 대신 커스텀 말풍선** — 이 rect는 이제 `<title>` 없이
+    // `aria-label`만 진다(같은 텍스트, 스크린리더 대체 경로). 시각적
+    // 툴팁은 `depletionBarTooltip`(아래)이 hover 이벤트로 띄운다.
+    return svgEl('rect', {
+      class: 'depletion-chart-bar',
+      x: left.toFixed(1),
+      y: y.toFixed(1),
+      width: width.toFixed(1),
+      height: height.toFixed(1),
+      tabindex: '0',
+      'aria-label': `${year}년: ${formatTrillion(value)}`,
+      'data-year': year,
+      'data-fund': formatTrillion(value),
+    });
   });
 }
 
@@ -447,6 +457,47 @@ function buildDepletionChart(result) {
 }
 
 /**
+ * [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 5번] 본판 막대 hover
+ * 툴팁 — 네이티브 `<title>`을 걷어내고(위 `buildDepletionChartBars`) 이
+ * 커스텀 말풍선으로 바꾼다. **막대 위 고정**(마우스를 따라다니는 대신,
+ * 소유자 지시 원문 "마우스 따라다니거나 막대 위 고정" 중 후자를 택했다
+ * — 좌표를 매 `mousemove`마다 다시 잴 필요가 없어 더 단순하고 결정적
+ * 이다). 흰 배경 + 주황 테두리, 다크에서는 표면 토큰(`--surface-raised`
+ * — 라이트에서 이 토큰 자체가 흰색이라 별도 리터럴 없이 한 규칙으로
+ * 두 요구를 함께 만족한다, `styles.css`).
+ */
+function depletionBarTooltip() {
+  return el('div', { class: 'depletion-bar-tooltip', hidden: true, 'aria-hidden': 'true' }, ['']);
+}
+
+/**
+ * 막대마다 hover(마우스)·focus(키보드) 이벤트를 걸어 `tooltip`을 그 막대
+ * 위에 띄운다. `chartSlot`이 `patch`로 실제 DOM에 붙은 **뒤에** 불러야
+ * `getBoundingClientRect()`가 뜻이 있다(0×0을 재는 D83 판정 1의 교훈과
+ * 같은 종류의 함정 — "숨어 있거나 아직 안 붙은 요소"를 재면 항상 틀린
+ * 값이 나온다).
+ */
+function wireDepletionBarTooltips(chartSlot, tooltip) {
+  const bars = [...chartSlot.querySelectorAll('.depletion-chart-bar')];
+  for (const bar of bars) {
+    const show = () => {
+      const rect = bar.getBoundingClientRect();
+      tooltip.textContent = bar.getAttribute('aria-label');
+      tooltip.hidden = false;
+      tooltip.style.left = `${rect.left + rect.width / 2}px`;
+      tooltip.style.top = `${rect.top}px`;
+    };
+    const hide = () => {
+      tooltip.hidden = true;
+    };
+    bar.addEventListener('mouseenter', show);
+    bar.addEventListener('mouseleave', hide);
+    bar.addEventListener('focus', show);
+    bar.addEventListener('blur', hide);
+  }
+}
+
+/**
  * [2026-08-25, 소유자 지시 9번] 시뮬레이션 탭 팝업의 오른쪽 상단 —
  * "시뮬레이션 그래프 + 기본 슬라이더의 디자인 구성만"(관리자 지시 원문).
  * **정적 축소 렌더다 — 실제 조작이 안 된다.** 기본값 하나로 한 번만
@@ -548,7 +599,12 @@ export function mountDepletionPanel(container, { initialValues } = {}) {
       ]),
     );
     patch(validationSlot, el('div', { class: 'depletion-validation-slot' }, [validationLine()]));
-    patch(chartSlot, el('div', { class: 'depletion-chart-wrap' }, [buildDepletionChart(result), chartActionsRow(), shareNote]));
+    const tooltipNode = depletionBarTooltip();
+    patch(chartSlot, el('div', { class: 'depletion-chart-wrap' }, [buildDepletionChart(result), tooltipNode, chartActionsRow(), shareNote]));
+    // [소유자 지시(6항목) 5번] `patch`가 방금 `chartSlot`을 실제 DOM에
+    // 새로 붙였다 — 그 뒤에야 막대의 `getBoundingClientRect()`가 뜻이
+    // 있으므로, 배선도 그 다음에 한다.
+    wireDepletionBarTooltips(chartSlot, tooltipNode);
     patch(assumptionNotesSlot, el('div', { class: 'depletion-assumption-notes-slot' }, [assumptionBoundaryNotes(values)]));
   }
 

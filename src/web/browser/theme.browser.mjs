@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 다크 모드의 **실측** — design-system 8절.
@@ -145,10 +145,14 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   // [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(첫 탭)이 지워져 calc2가
-  // 유일한 계산 탭이자 기본 활성 탭이다 — `.calc2-result-slot`/
-  // `.assumption-block`이 로드와 동시에(프리필로) 보이므로 명시 탭 전환이
-  // 더는 필요 없다.
-  await dismissCalc2ExampleModalIfOpen(app.page);
+  // 유일한 계산 탭이다.
+  // [2026-08-25, D86] **기본 활성 탭이 시뮬레이터로 바뀌었다** — calc2
+  // 프리필(D79 판정 2 "결과가 바로 서 있다")은 이제 이 탭을 **연** 뒤에만
+  // 일어난다(`ui/app.js`의 `activateCalc2Extras`가 `activeTabId==='calc2'`
+  // 일 때만 불린다). 시뮬레이터 팝업을 먼저 치우고, calc2 탭으로 명시
+  // 전환해야 `.calc2-result-slot`이 채워진다.
+  await dismissDepletionIntroModalIfOpen(app.page);
+  await app.page.clickElement(`document.getElementById('tab-calc2')`);
   await app.page.waitFor(`!!document.querySelector('.calc2-result-slot .result-panel-inner')`, { timeoutMs: 8000 });
 }, { skip: skipWithoutChrome });
 
@@ -291,12 +295,15 @@ test('D60(관리자 판정, 소유자 지시) — 성격·자격 배너가 두 �
 
   // [2026-08-24, D84] 원래 여기서 "입력 부족 상태"(첫 진입, 아무것도
   // 채우지 않은 상태)를 먼저 쟀다 — 그 상태 자체가 첫 탭(calculator,
-  // 지워진 근거판) 고유였다. calc2는 로드와 동시에 예시 값으로
-  // 프리필돼(D79 판정 2) 결과가 바로 서므로 "입력 부족" 상태 자체가 이
-  // 탭에는 없다 — 그 절반은 뺀다. 결과 상태만 잰다.
+  // 지워진 근거판) 고유였다. calc2는 그 탭을 열면 예시 값으로 프리필돼
+  // (D79 판정 2) 결과가 바로 서므로 "입력 부족" 상태 자체가 이 탭에는
+  // 없다 — 그 절반은 뺀다. 결과 상태만 잰다.
+  // [2026-08-25, D86] 기본 랜딩이 시뮬레이터로 바뀌어, calc2 프리필을
+  // 보려면 그 탭을 명시로 열어야 한다.
   await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.amount-card')`, { timeoutMs: 8000 });
   await sleep(300);
   for (const theme of ['light', 'dark']) {
@@ -505,13 +512,14 @@ test('사용자가 누르기 전에는 저장이 일어나지 않고, 누르면 
   await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
   await page.waitFor(`!!document.querySelector('.theme-control-trigger')`);
-  // [2026-08-21, D81] 방금 localStorage를 지웠으니 새로고침 즉시 예시
-  // 팝업이 뜰 수 있다(계산기2가 기본 탭이다) — 이 시험은 "사용자가 아무것도
-  // 누르지 않으면 localStorage가 비어 있다"를 재는 것이 핵심이라, 저장을
-  // 남기는 `dismissCalc2ExampleModalIfOpen`(「오늘 하루 보지 않음」과 같은
-  // 저장 경로)을 쓰면 안 된다 — 저장을 남기지 않는 일반 닫기(X)만 DOM으로
-  // 직접 누른다(있으면).
-  await page.evaluate(`(() => { const b = document.querySelector('.calc2-example-modal-close'); if (b) b.click(); })()`);
+  // [2026-08-21, D81, 2026-08-25 D86로 대상 갱신] 방금 localStorage를
+  // 지웠으니 새로고침 즉시 시뮬레이터 탭 전용 팝업이 뜰 수 있다(D86로
+  // 그 탭이 기본 랜딩이 됐다 — 계산기2 예시 팝업 자체는 D86으로 지워졌다).
+  // 이 시험은 "사용자가 아무것도 누르지 않으면 localStorage가 비어 있다"를
+  // 재는 것이 핵심이라, 저장을 남기는 `dismissDepletionIntroModalIfOpen`
+  // (「오늘 하루 보지 않음」과 같은 저장 경로)을 쓰면 안 된다 — 저장을
+  // 남기지 않는 일반 닫기(X)만 DOM으로 직접 누른다(있으면).
+  await page.evaluate(`(() => { const b = document.querySelector('.depletion-intro-modal-close'); if (b) b.click(); })()`);
   // 첫 방문자 — 화면을 띄우고 여기저기 눌러도 키가 없다.
   assert.equal(await page.evaluate(`localStorage.getItem('theme')`), null, '첫 방문자에게 저장이 일어났습니다');
   assert.equal(await page.evaluate(`localStorage.length`), 0);
@@ -606,10 +614,12 @@ test('모바일 폭에서도 ThemeControl이 로고·탭·과세연도 표기를
 test('테마를 바꿔도 도넛이 다시 그려지지 않는다 — 값이 바뀐 것이 아니므로 조각은 그 자리에 있다', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
-  // [2026-08-21, D81] 바로 앞 시험이 localStorage를 지워 뒀다 — 이 새로고침
-  // 도 예시 팝업을 다시 열 수 있다(스크림이 아래 `.theme-control-trigger`
-  // 클릭을 가릴 수 있다). 먼저 치운다.
-  await dismissCalc2ExampleModalIfOpen(page);
+  // [2026-08-21, D81, 2026-08-25 D86] 바로 앞 시험이 localStorage를 지워
+  // 뒀다 — 이 새로고침도 시뮬레이터 탭 팝업을 다시 열 수 있다(스크림이
+  // 아래 클릭들을 가릴 수 있다). 먼저 치우고, calc2 결과를 보려면 그
+  // 탭으로 명시 전환한다(D86로 기본 랜딩이 시뮬레이터가 됐다).
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 6000 });
   // 입력 칸에서 초점을 빼고 화면이 완전히 멎기를 기다린다 — 남은 재계산이 있으면
   // 그것이 그린 변화를 테마 탓으로 읽게 된다.
@@ -747,9 +757,15 @@ test('관리자 지시(5차) 3번 — 로고와 탭 사이 간격이 옛값(16px
   const { page } = app;
   await emulate(page, { scheme: 'light' });
   await page.evaluate(`document.documentElement.removeAttribute('data-theme')`);
+  // [D86] `.app-tab-active`로 재면 이 앱의 상태(어느 탭이 활성인지 — 이
+  // 파일 앞쪽 시험들이 이미 탭을 계산기2로 옮겨 뒀을 수 있다)에 따라
+  // "첫 탭"이 아닌 다른 탭을 잴 위험이 있다(실측 회귀 — 탭 순서가
+  // [연금고갈 시뮬레이션, 계산기2]로 바뀌며 실제로 210px이 나왔다). 이
+  // 시험의 의도는 언제나 "로고~첫 탭" 간격이므로 활성 여부와 무관하게
+  // DOM 순서상 첫 `.app-tab`을 직접 고른다.
   const gap = await page.evaluate(`(() => {
     const logo = document.querySelector('.app-logo-light');
-    const tab = document.querySelector('.app-tab-active');
+    const tab = document.querySelector('.app-tab');
     const logoRect = logo.getBoundingClientRect();
     const tabRect = tab.getBoundingClientRect();
     return tabRect.left - logoRect.right;
@@ -786,19 +802,20 @@ test('관리자 지시(5차) 3번 — 탭 글자 크기가 옛값(15px)의 1.2�
 
 // [2026-08-24, D84] 원래 이 상수는 첫 탭 예시(`.example-showcase-slot`)
 // 와 역산기 탭 예시(`.reverse-example-showcase-slot`)를 함께 쟀다 — 둘 다
-// 그 탭들과 함께 지워졌다. 남은 유일한 예시는 calc2의 예시 모달
-// (`.calc2-example-modal-host` shadow root 안의 `.calc2-example-card`,
-// `ui/calc2-example-modal.js`) — 그 카드로 "예시 카드 테두리/그림자가
-// 대표 색이다"라는 같은 요구를 잇는다. 입력·결과 패널도 이제 calc2
-// 하나뿐이라 개수 기대값을 3(세 탭)에서 1로 내린다.
+// 그 탭들과 함께 지워졌다. 그 뒤 남은 유일한 예시였던 calc2의 예시 모달
+// (`.calc2-example-modal-host` 안의 `.calc2-example-card`,
+// `ui/calc2-example-modal.js`)로 "예시 카드 테두리가 대표 색이다"라는
+// 요구를 이었었다. [2026-08-25, D86] 그 모달 자체가 삭제됐다 — 남은
+// 시뮬레이터 팝업의 예시 카드(`.depletion-popup-example-card`)는 애초에
+// 다른 설계(테두리·그림자 없는 얇은 레이아웃 컨테이너, `styles.css` 실측
+// 확인)라 같은 브랜드색 요구의 적용 대상이었던 적이 없다 — 억지로 새
+// 기대값을 만들지 않는다. 예시 카드 검사는 빼고, 입력·결과 패널(계속
+// 존재)만 잰다. 개수 기대값은 calc2 하나라 1을 유지한다.
 const READ_BRAND_COLOR = `(() => {
-  const exampleHost = document.querySelector('.calc2-example-modal-host');
-  const exampleCard = exampleHost?.shadowRoot?.querySelector('.calc2-example-card') ?? null;
   const inputPanels = [...document.querySelectorAll('.input-panel')];
   const resultPanels = [...document.querySelectorAll('.result-panel-inner')];
   const groupIcons = [...document.querySelectorAll('.input-group-title .section-icon')];
   return {
-    exampleBorder: exampleCard ? getComputedStyle(exampleCard).borderTopColor : null,
     inputPanelBorders: inputPanels.map((el) => getComputedStyle(el).borderTopColor),
     inputPanelCount: inputPanels.length,
     resultPanelBorders: resultPanels.map((el) => getComputedStyle(el).borderTopColor),
@@ -810,17 +827,19 @@ const READ_BRAND_COLOR = `(() => {
 
 const ACCENT_WARM_RGB = 'rgb(230, 115, 0)';
 
-test('관리자 지시(3차) 2번 — 카드(예시·입력·결과) 테두리가 대표 색이다 — 라이트·다크', { skip: skipWithoutChrome }, async () => {
+test('관리자 지시(3차) 2번 — 카드(입력·결과) 테두리가 대표 색이다 — 라이트·다크', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
-  // 예시 모달을 강제로 다시 연다 — 「오늘 하루 보지 않음」 저장을 지운다.
   await page.evaluate(`localStorage.clear()`);
   await page.goto(`${origin}/src/web/index.html`);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
-  await page.waitFor(`!!document.querySelector('.calc2-example-modal-host')?.shadowRoot?.querySelector('.calc2-example-card')`, { timeoutMs: 8000 });
+  // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 입력·결과 패널을
+  // 보려면 먼저 그 탭으로 직접 전환해야 한다.
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.querySelector('.result-panel-inner')`, { timeoutMs: 8000 });
   await sleep(150);
 
   const light = await page.evaluate(READ_BRAND_COLOR);
-  assert.equal(light.exampleBorder, ACCENT_WARM_RGB, `라이트 — 예시 카드 테두리가 대표 색이 아니다: ${light.exampleBorder}`);
   assert.equal(light.inputPanelCount, 1, `입력 패널이 1개(calc2 하나)가 아니다: ${light.inputPanelCount}`);
   for (const [i, c] of light.inputPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `라이트 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
@@ -833,7 +852,6 @@ test('관리자 지시(3차) 2번 — 카드(예시·입력·결과) 테두리�
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'dark')`);
   await sleep(150);
   const dark = await page.evaluate(READ_BRAND_COLOR);
-  assert.equal(dark.exampleBorder, ACCENT_WARM_RGB, `다크 — 예시 카드 테두리가 대표 색이 아니다: ${dark.exampleBorder}`);
   for (const [i, c] of dark.inputPanelBorders.entries()) {
     assert.equal(c, ACCENT_WARM_RGB, `다크 — ${i}번 입력 패널 테두리가 대표 색이 아니다: ${c}`);
   }
@@ -852,17 +870,20 @@ test('관리자 지시(3차) 2번 — 카드(예시·입력·결과) 테두리�
  * 충분하다). 역산기 탭 카드도 같은 클래스를 공유하므로 함께 확인한다.
  */
 // [2026-08-24, D84] 첫 탭 예시·역산기 탭 예시가 지워져 카드 그림자 절반은
-// calc2 예시 모달(`.calc2-example-modal-host`) 카드로 옮기려 했으나,
-// 실측해 보니 `.calc2-example-card`(`styles.css`, D82 소유자 지시 1번
-// 이후 신설)는 애초에 `box-shadow`를 진 적이 없다 — 주황 테두리
-// (`border: 2px solid var(--accent-warm)`)와 연한 주황 바탕만으로 "대표
-// 색" 요구를 채우는 다른 설계다(이 카드는 관리자 지시(4차) 3번 이후에
-// 생겨 그 지시의 적용 대상이었던 적이 없다). 그래서 예시 카드 그림자
-// 검사는 빼고, 입력·결과 패널(계속 존재, 그림자 규칙도 그대로)만 잰다.
+// calc2 예시 모달 카드로 옮기려 했으나, 실측해 보니
+// `.calc2-example-card`(`styles.css`, D82 소유자 지시 1번 이후 신설)는
+// 애초에 `box-shadow`를 진 적이 없다 — 주황 테두리(`border: 2px solid
+// var(--accent-warm)`)와 연한 주황 바탕만으로 "대표 색" 요구를 채우는
+// 다른 설계다(이 카드는 관리자 지시(4차) 3번 이후에 생겨 그 지시의 적용
+// 대상이었던 적이 없다). 그래서 예시 카드 그림자 검사는 빼고, 입력·결과
+// 패널(계속 존재, 그림자 규칙도 그대로)만 잰다. [2026-08-25, D86] 그
+// calc2 예시 모달 자체가 이제 지워졌다 — 이 주석은 그 결정의 배경으로만
+// 남긴다.
 test('관리자 지시(4차) 3번 — 입력·결과 패널 그림자가 주황 계열이다 — 라이트·다크', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
-  await dismissCalc2ExampleModalIfOpen(page);
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
   await page.evaluate(`document.documentElement.setAttribute('data-theme', 'light')`);
   await page.waitFor(`!!document.querySelector('.result-panel-inner')`, { timeoutMs: 8000 });
   await sleep(150);

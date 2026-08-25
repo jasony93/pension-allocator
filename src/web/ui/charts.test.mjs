@@ -345,12 +345,17 @@ test('WIDE_DONUT_MEDIA_QUERY matches the breakpoint where the container widening
 // 라벨(`applyDonutSliceInlineLabels`)을 늘 쓰는 모드다(팝업·계산기2
 // 결과·모바일 결과·예시 전부). 그 라벨이 카드 밖으로 잘리지 않고, 폴백으로
 // 줄어들지도 않으려면(신규 회차 지시 — "줄이는 방향 금지") 여백이 더
-// 필요하다(`LEGEND_PAD`=65, `charts.js` 머리말). 상한 자체는 남긴다(150) —
-// 도넛이 라벨 여백에 잡아먹혀 점처럼 작아지는 회귀를 여전히 막는다.
+// 필요하다(`LEGEND_PAD`=65, `charts.js` 머리말).
+// [2026-08-25, 관리자 지시 — 소유자 지시(6항목) 2번로 재조정] 150→200.
+// 라벨 자체를 +20%(16.5→18px)로 키우며 `LEGEND_PAD`도 65→85로 함께
+// 넓혔다(축소 폴백 없이 "연금저축"까지 다 들어가게 하려면 필요했다,
+// `charts.js`의 `LEGEND_PAD` 옆 주석·실측 참고) — 이 회차의 여백(170)이
+// 옛 상한(150)을 정직하게 넘는다. 상한 자체는 여전히 남긴다(200) — 도넛이
+// 라벨 여백에 잡아먹혀 점처럼 작아지는 회귀는 계속 막는다.
 test('the legend layout leaves enough box margin for pushed-out slice labels without letting the donut shrink to a dot', () => {
   const legend = donutGeometry('legend');
   const wasted = legend.width - legend.diameter;
-  assert.ok(wasted <= 150, `여백이 ${wasted}px면 도넛이 그만큼 작아진다 — 상한을 넘었다`);
+  assert.ok(wasted <= 200, `여백이 ${wasted}px면 도넛이 그만큼 작아진다 — 상한을 넘었다`);
 });
 
 test('the labelled box leaves room for the whole label block on both sides', () => {

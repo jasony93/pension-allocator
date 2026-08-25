@@ -5,10 +5,8 @@ import {
   dismissDepletionIntroModalForToday,
   DEPLETION_INTRO_MODAL_STORAGE_KEY,
 } from './depletion-intro-modal.js';
-import { CALC2_EXAMPLE_MODAL_STORAGE_KEY } from './calc2-example-modal.js';
 
-/** 실제 `localStorage` 없이 같은 계약(getItem/setItem)만 흉내 낸다 —
- * `calc2-example-modal.test.mjs`와 같은 패턴. */
+/** 실제 `localStorage` 없이 같은 계약(getItem/setItem)만 흉내 낸다. */
 function fakeStorage(initial = {}) {
   const map = new Map(Object.entries(initial));
   return {
@@ -17,16 +15,11 @@ function fakeStorage(initial = {}) {
   };
 }
 
-test('[소유자 지시 9번] 계산기2 예시 팝업과 별도 저장 키를 쓴다 — 일일 억제가 서로 간섭하지 않는다', () => {
-  assert.notEqual(DEPLETION_INTRO_MODAL_STORAGE_KEY, CALC2_EXAMPLE_MODAL_STORAGE_KEY);
-});
-
-test('계산기2 예시 팝업을 오늘 닫아도 이 탭 팝업은 여전히 뜬다(별도 키 — 독립 억제)', () => {
-  const storage = fakeStorage();
-  const now = new Date('2026-08-25T09:00:00');
-  storage.setItem(CALC2_EXAMPLE_MODAL_STORAGE_KEY, '2026-08-25'); // 계산기2 쪽만 오늘 닫힘.
-  assert.equal(shouldShowDepletionIntroModal(now, storage), true, '계산기2 팝업의 억제가 이 팝업에 새어 들어왔다');
-});
+// [D86] 계산기2 예시 팝업(`ui/calc2-example-modal.js`) 자체가 지워지며,
+// 여기 있던 두 시험("별도 저장 키를 쓴다"·"계산기2 팝업을 닫아도 이 탭
+// 팝업은 뜬다")이 재던 "서로 다른 두 팝업의 독립 억제"라는 전제가 사라졌다
+// — 이제 이 탭이 앱의 유일한 일일 팝업이라 그 전제 자체가 무의미해져 함께
+// 지운다(`CALC2_EXAMPLE_MODAL_STORAGE_KEY`를 내보내던 모듈이 없다).
 
 test('처음 방문(저장된 날짜 없음)에는 팝업을 보여준다', () => {
   const storage = fakeStorage();
