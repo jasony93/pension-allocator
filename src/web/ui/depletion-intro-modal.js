@@ -33,6 +33,7 @@ import {
   exampleInputLineTexts,
   EXAMPLE_PERSONA_NAME,
   attachHostStyles,
+  fitAmountValueToCard,
 } from './example-showcase.js';
 import { applyDonutSliceInlineLabels, watchDonutThemeChange } from './charts.js';
 import { depletionChartAndSlidersPreview } from './depletion-panel.js';
@@ -239,6 +240,14 @@ export async function maybeShowDepletionIntroModal({ engineClient, onBridgeToCal
     ]),
   ]);
   shadowRoot.appendChild(body);
+  // [2026-08-25, 관리자 지시 — 번들 실측(1440×900) 마감] 세액공제액 값
+  // 덩어리(`.amount-value-chunk`, 예: "1,485,000원")는 `white-space: nowrap`
+  // 이다(styles.css) — 이 팝업의 오른쪽 하단 열은 계산기2 예시 팝업의 카드보다
+  // 훨씬 좁은데(약 360~460px), 이 실측 패스 없이는 그 값이 카드 폭을 넘어도
+  // 줄어들지 않고 그대로 잘렸다(실측: "1,"만 보이고 나머지가 카드 밖으로
+  // 넘쳐 모달에 가로 스크롤바가 생겼다). 계산기2 예시 팝업과 첫 탭 예시가
+  // 이미 쓰는 바로 그 실측 패스(`fitAmountValueToCard`)를 여기서도 부른다.
+  fitAmountValueToCard(shadowRoot);
   // [계산기2 예시 팝업과 같은 이유] 도넛 조각 라벨은 별도 후처리 패스로
   // 그려진다(`applyDonutSliceInlineLabels`) — 카드가 좁아 지시선까지 있으면
   // 더 붐빈다, `hideLeader: true`로 뺀다.

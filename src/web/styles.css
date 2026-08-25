@@ -3173,6 +3173,33 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 .depletion-popup-right-bottom { border-bottom: none; padding-bottom: 0; }
 .depletion-popup-chart-button, .depletion-popup-bridge-button { align-self: center; }
 
+/* [2026-08-25, 관리자 지시 — 번들 실측(1440×900) 마감] 김철수씨 예시 행
+   (`.example-persona-row`, `example-showcase.js`)은 원래 넓은 3열 고정
+   그리드(297px+171px+180px+간격 두 개=734.4px, 위 `.example-persona-row`
+   본 규칙)로 설계됐다 — 첫 탭·계산기2 예시 팝업(945px 폭 모달)에는 맞지만,
+   이 팝업의 오른쪽 열(`.depletion-popup-right`, `min-width: 300px`)은 그
+   절반 정도(약 360~460px)뿐이라 그대로 재사용하면 카드가 모달 폭을 넘어
+   가로 스크롤이 생기고 세액공제액 값이 잘렸다(실측 — "1,"만 보임).
+   **요소·간격을 줄이는 대신 1열로 쌓는 쪽을 택한다** — 이미 이 컴포넌트가
+   모바일 뷰포트에서 쓰는 바로 그 처방(아래 `@media (max-width: ...)`의
+   `.example-persona-row` 규칙)을 좁은 팝업 열에도 그대로 적용한다(글자
+   크기는 건드리지 않는다 — 가독성이 오히려 그대로 유지된다). `min-width: 0`
+   사슬은 이미 이 컴포넌트의 모든 단계(행 자신·정보·도넛·절세액 열)에
+   박혀 있다(`.example-persona-row`·`.example-persona-info`·
+   `.example-persona-donut-col`·`.example-persona-amount` 본 규칙) — 이
+   스코프에서 새로 낼 필요가 없다. `width: 100%`만 더해 그 사슬이 실제로
+   이 좁은 부모 폭까지 전달되게 한다(그리드 항목 자신은 `align-items:
+   center`인 부모 안에서 기본이 "내용 크기"라 이게 없으면 좁아지지 않는다). */
+.depletion-popup-right-bottom .example-persona-row {
+  width: 100%; max-width: 100%;
+  grid-template-columns: 1fr; justify-items: center; text-align: center; row-gap: var(--space-3);
+}
+.depletion-popup-right-bottom .example-persona-info { flex-direction: column; align-items: center; }
+.depletion-popup-right-bottom .example-persona-lines { align-items: center; }
+.depletion-popup-right-bottom .example-persona-line { white-space: normal; }
+.depletion-popup-right-bottom .example-persona-amount { width: auto; max-width: 100%; }
+.depletion-popup-right-bottom .example-persona-amount .amount-card { width: fit-content; max-width: 100%; }
+
 /* 정적 축소 렌더 — 실제 슬라이더는 눌러도 안 움직인다(비활성). 차트는
    기존 `.depletion-chart`(width:100%) 그대로, 이 팝업 폭에 맞춰 자동으로
    작아진다 — 별도 축소 배율을 걸지 않는다. */

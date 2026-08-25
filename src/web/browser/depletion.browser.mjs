@@ -756,3 +756,64 @@ test('「오늘 하루 보지 않음」은 이 탭 팝업만 억제한다 — �
   // 같은 값을 공유하게 된다).
   assert.ok(state.calc2DismissedKeySet, '계산기2 쪽 저장 키가 사라졌다 — 두 팝업의 저장이 서로 간섭한다');
 });
+
+/**
+ * [2026-08-25, 관리자 지시 — 번들 실측(1440×900) 마감] 시뮬레이션 탭
+ * 팝업의 오른쪽 하단(김철수씨 예시 행)이 원래 넓은 3열 고정 그리드
+ * (`.example-persona-row`, 734.4px)로 설계돼 있어, 이 팝업의 좁은 오른쪽
+ * 열(약 360~460px)에 그대로 재사용하면 카드가 모달 폭을 넘고 세액공제액
+ * 값이 잘렸다(실측 — "1,"만 보이고 모달에 가로 스크롤바가 생겼다). 좁은
+ * 열에서는 1열로 쌓고(`styles.css`), 값 덩어리는 `fitAmountValueToCard`로
+ * 카드 폭에 맞춰 실측 축소한다(`ui/depletion-intro-modal.js`). **두 팝업
+ * 다** 잰다 — 계산기2 예시 팝업(`.calc2-example-card`)은 이미 문제가 없던
+ * 쪽이지만, "모달 안 가로 스크롤 없음 + 카드 오른쪽 끝이 모달 안"이라는
+ * 같은 조건으로 회귀 방지선을 함께 세운다.
+ */
+test('[번들 실측 마감] 두 팝업 다 — 모달 안에 가로 스크롤이 없고, 예시 카드 오른쪽 끝이 모달 안에 있다(1440×900)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+
+  // 계산기2 예시 팝업 — 기본 랜딩에서 곧장 뜬다.
+  await page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 8000 });
+  await sleep(1200);
+  const calc2 = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const mr = modal.getBoundingClientRect();
+    const card = document.querySelector('.calc2-example-modal-host').shadowRoot.querySelector('.calc2-example-card');
+    const cr = card.getBoundingClientRect();
+    return { scrollWidth: modal.scrollWidth, clientWidth: modal.clientWidth, modalRight: mr.right, cardRight: cr.right };
+  })()`);
+  assert.equal(calc2.scrollWidth, calc2.clientWidth, `계산기2 예시 팝업 모달에 가로 스크롤이 생겼다(scrollWidth=${calc2.scrollWidth}, clientWidth=${calc2.clientWidth})`);
+  assert.ok(calc2.cardRight <= calc2.modalRight + 1, `계산기2 예시 카드 오른쪽 끝(${calc2.cardRight})이 모달 오른쪽 끝(${calc2.modalRight})을 넘는다`);
+  await page.evaluate(`document.querySelector('.calc2-example-modal-close').click()`);
+  await sleep(150);
+
+  // 시뮬레이션 탭 팝업 — 탭을 클릭해 연다.
+  await dismissDepletionIntroModalIfOpen(page); // localStorage에 남을 수 있는 오늘 날짜 흔적을 지운다.
+  await page.evaluate(`localStorage.removeItem('depletionIntroModalDismissedDate')`);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-bridge-button'); })()`,
+    { timeoutMs: 8000 },
+  );
+  await sleep(500);
+  const dep = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const mr = modal.getBoundingClientRect();
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const amountCard = root.querySelector('.example-persona-amount .amount-card');
+    const ar = amountCard.getBoundingClientRect();
+    const valueChunk = amountCard.querySelector('.amount-value-chunk');
+    return {
+      scrollWidth: modal.scrollWidth,
+      clientWidth: modal.clientWidth,
+      modalRight: mr.right,
+      cardRight: ar.right,
+      valueText: valueChunk ? valueChunk.textContent : null,
+    };
+  })()`);
+  assert.equal(dep.scrollWidth, dep.clientWidth, `시뮬레이션 탭 팝업 모달에 가로 스크롤이 생겼다(scrollWidth=${dep.scrollWidth}, clientWidth=${dep.clientWidth})`);
+  assert.ok(dep.cardRight <= dep.modalRight + 1, `예시 카드(세액공제액) 오른쪽 끝(${dep.cardRight})이 모달 오른쪽 끝(${dep.modalRight})을 넘는다`);
+  assert.equal(dep.valueText, '1,485,000원', `세액공제액 값이 잘렸다: "${dep.valueText}"`);
+});
