@@ -760,8 +760,24 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
    12.5px→18.75px(라벨), 15px→22.5px(값).
    [2026-08-20, D79 판정 4] 예시 2케이스 블록 전체 글자 배수(×0.81)를
    이 값에도 적용한다 — 18.75px→15.1875px, 22.5px→18.225px. */
-.example-persona-donut-col .donut-center-label { font-size: 15.1875px; }
-.example-persona-donut-col .donut-center-value { font-size: 18.225px; }
+/* [2026-08-25, 관리자 지시(9항목) 5번] 도넛 중앙 「월 배분 150만원」
+   +20% — **렌더 크기 기준으로 실측**(지난 회차(②) 교훈: CSS 선언값만
+   올리면 그 svg의 viewBox→CSS 축소를 못 볼 수 있다). 이 규칙은 이미
+   `.example-persona-donut-col`(팝업 전용, 그 유일한 현재 소비자) 안으로
+   스코프가 좁혀져 있어 계산기2 결과 도넛 등 다른 배율을 쓰는 도넛과
+   공유되지 않는다 — 그래서 계좌 라벨과 달리 배율 보정식은 필요 없고
+   단순 배수만으로 충분하다. 다만 같은 회차 4번(도넛 CSS 폭 200→220px,
+   ×1.1)이 이 값도 렌더 기준 +10%를 "공짜로" 이미 올려 뒀다(실측 —
+   라벨 8px→9px, 값 10px→11px) — 그 위에 남은 배수(1.2÷1.1=12/11)만
+   더 얹는다: 15.1875×12/11=16.568181...px(라벨),
+   18.225×12/11=19.881818...px(값). 최종 실측(getBoundingClientRect,
+   1440×900, 정수로 반올림된 값) — 라벨 8px→10px(목표는 9.6px, 정수
+   반올림 폭이 커 +25%로 보인다), 값 10px→12px(정확히 +20%). CSS
+   선언값(뷰박스 단위)은 두 글자 다 정확히 ×1.2를 지킨다 — 반올림
+   차이는 라벨 쪽 렌더 픽셀 수가 작아(정수 하나 차이가 곧 10%대
+   퍼센트) 두드러지는 것뿐이다. */
+.example-persona-donut-col .donut-center-label { font-size: 16.568181818181818px; }
+.example-persona-donut-col .donut-center-value { font-size: 19.881818181818182px; }
 
 /* 세액공제액 — 소유자가 축소를 허용했다(두 행이 한 카드 안에 들어가야
    한다, 관리자 지시 2번). 옛 `.example-showcase-amount`(61px 값, 전폭
@@ -3040,9 +3056,21 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    203.19px(CSS)로 늘었다 — 그 결과 팝업 내용(`.depletion-intro-modal-host`)
    이 다시 26px 넘쳤다(실측 — `scrollHeight` 682 vs `clientHeight` 656).
    상한을 다시 올린다(760→800px, 여전히 900px 뷰포트의 92vh=828px 안). */
+/* [2026-08-25, 관리자 지시(9항목) 1번] 「받습니다. 다만 법이 보장하는 건」
+   이 왼쪽 카피 열(434px) 안에서 "건"만 다음 줄로 밀려 두 줄이 됐다(실측
+   — Range.getClientRects()로 그 구절 하나만 잘라 재니 421.09px+31.77px
+   두 줄). 어절 전체가 한 행에 들어가려면 그 열이 넓어져야 한다 — 소유자
+   지시대로 팝업 가로폭 자체를 +10%(980→1078px) 키운다. 두 열
+   (`.depletion-popup-copy`·`.depletion-popup-right`)이 같은 `flex: 1 1 *`
+   비율로 늘어나므로 카피 열도 비례해 넓어진다. */
+/* [2026-08-25, 관리자 지시(9항목) 4·5번] 도넛 CSS 폭(200→220px)·중앙
+   값 글자가 커지며 팝업 내용이 다시 36px 넘쳤다(실측 — `scrollHeight`
+   732 vs `clientHeight` 696). 800px+36px로는 900px 뷰포트의 92vh=828px
+   상한을 넘으므로, 상한 자체를 800→840px·92vh→94vh(900px 뷰포트에서
+   846px)로 함께 올린다 — 여전히 실제 뷰포트(900px) 안에 넉넉히 든다. */
 .modal:has(.depletion-intro-modal-host) {
-  max-width: min(980px, 95vw);
-  max-height: min(800px, 92vh);
+  max-width: min(1150px, 95vw);
+  max-height: min(840px, 94vh);
   overflow: hidden;
 }
 .modal:has(.depletion-intro-modal-host) .depletion-intro-modal-host {
@@ -3050,7 +3078,10 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
 }
 .modal:has(.depletion-intro-modal-host) .modal-actions { flex: 0 0 auto; }
 
-.depletion-popup-body { display: flex; flex-direction: row; gap: var(--space-5); align-items: flex-start; }
+/* [2026-08-25, 관리자 지시(9항목) 2번] 좌측 카피 ↔ 우측 예시 영역 사이
+   간격을 넓힌다 — 옛 `--space-5`(24px)에서 `--space-7`(48px, 디자인
+   토큰 스케일 그대로, 새 절댓값을 만들지 않는다)로. */
+.depletion-popup-body { display: flex; flex-direction: row; gap: var(--space-7); align-items: flex-start; }
 
 /* 왼쪽 — 카피. `popup-copy.html`의 `.popup-copy` 규칙을 우리 토큰으로
    옮긴 것 — 리터럴 hex(`#14181F` 등)는 전부 `--text-primary` 등 이 파일의
@@ -3157,8 +3188,16 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    주석과 같은 방식) — 그 결과 최종 배율은 200/500=0.4로 **이전과 정확히
    같다**(여백을 얼마나 넓히든 이 링 보존 공식은 배율을 안 바꾼다 — 셈은
    `charts.js`의 `LEGEND_PAD_COMPACT` 주석에 있다). CSS 폭만 148→200으로
-   커지고 고리 자체의 화면 크기는 그대로다. */
-.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 200px; max-width: 100%; }
+   커지고 고리 자체의 화면 크기는 그대로다.
+   [2026-08-25, 관리자 지시(9항목) 4번] **팝업 도넛 +10%.** 이번엔 뷰박스
+   (500, `legendCompact`)를 더 키우지 않는다 — 라벨은 이미 이 svg 자신의
+   실측 배율로 보정되므로(`charts.js`의 `REFERENCE_RENDER_SCALE`/
+   `measuredSvgRenderScale`) 뷰박스를 그대로 두고 CSS 폭만 200→220px
+   (×1.1)로 올리면 고리 렌더 크기(80→88px)만 커지고, 라벨은 보정 공식이
+   새 배율(0.44)을 자동으로 다시 재 여전히 같은 목표 렌더 픽셀을 낸다 —
+   여백을 함께 키워야 했던 지난 항목(라벨 확대)과 달리 이번엔 라벨 크기
+   목표가 안 바뀌므로 여백도 그대로 둔다. */
+.depletion-popup-example-row .example-persona-donut-col .chart-donut { width: 220px; max-width: 100%; }
 .depletion-popup-example-card .example-persona-amount { width: auto; max-width: 100%; }
 .depletion-popup-example-card .example-persona-amount .amount-card { width: fit-content; max-width: 100%; }
 

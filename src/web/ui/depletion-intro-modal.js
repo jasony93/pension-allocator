@@ -52,7 +52,6 @@ import {
   DEPLETION_POPUP_ACCOUNT_3,
   DEPLETION_POPUP_BODY_TAIL_SUFFIX,
   DEPLETION_POPUP_SOURCE_GUARANTEE,
-  DEPLETION_POPUP_SOURCE_PROJECTION,
   DEPLETION_POPUP_CHART_BUTTON_LABEL,
   DEPLETION_POPUP_BRIDGE_BUTTON_LABEL,
 } from '../depletion-copy.js';
@@ -140,9 +139,13 @@ function depletionPopupCopy() {
   // 은 사전에서도 완전히 삭제했다(`depletion-copy.js`).
   // [관리자 지시 — 카피 검증 1번] 출처 두 줄 — 지급보장 문장과 소진 전망
   // 문장은 서로 다른 문서에서 왔다. 하나로 뭉치지 않는다.
+  // [2026-08-25, 관리자 지시(9항목) 3번] **소진 전망 출처 줄을 지웠다** —
+  // 「보건복지부, 2025.3 — 기금 소진 전망의 출처」(`DEPLETION_POPUP_
+  // SOURCE_PROJECTION`)는 소유자 지시로 삭제한다. 지급보장 문장의 출처
+  // (국민연금법 제3조의2)는 그대로 남는다 — 위 문단이 "받습니다"라는
+  // 법적 사실을 말하므로 그 근거는 계속 밝혀야 한다.
   const source = el('div', { class: 'depletion-popup-source' }, [
     el('p', { class: 'depletion-popup-source-line' }, [DEPLETION_POPUP_SOURCE_GUARANTEE]),
-    el('p', { class: 'depletion-popup-source-line' }, [DEPLETION_POPUP_SOURCE_PROJECTION]),
   ]);
   return el('div', { class: 'depletion-popup-copy' }, [question, answer, bodyCopy, source]);
 }

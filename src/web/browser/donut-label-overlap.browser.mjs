@@ -161,6 +161,46 @@ test('D86 — 시뮬레이터 팝업 예시 도넛 라벨이 고리와 겹치지
   }
 });
 
+/**
+ * [2026-08-25, 관리자 지시(9항목) 4번, 판별력 증명] **거리 편차 검사.**
+ * 관리자 실측 — 팝업 라벨-고리 거리가 조각마다 달랐다(연금저축 93·
+ * IRP 69·ISA 29, 뷰박스 단위). `charts.js`의 `applyDonutSliceInlineLabelsToSvg`
+ * 를 "공통 간격"(모든 고리 밖 라벨이 하나의 공유 간격만 쓴다) 방식으로
+ * 바꿨다 — 라벨 중심의 반지름 방향 거리(도넛 중심에서 라벨까지 거리 −
+ * 고리 바깥반지름)가 조각마다 완전히 같아야 한다.
+ */
+test('[관리자 지시(9항목) 4번] 팝업 도넛 — 라벨-고리 거리가 조각마다 완전히 같다(공통 간격)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await sleep(200);
+  const distances = await page.evaluate(`(() => {
+    const svg = document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.chart-donut');
+    const rOuter = Number(svg.dataset.rOuter);
+    const cx = Number(svg.dataset.cx);
+    const ry = Number(svg.dataset.ry);
+    return [...svg.querySelectorAll('.donut-slice-label')].map((el) => {
+      const x = Number(el.getAttribute('x'));
+      const y = Number(el.getAttribute('y'));
+      const cy = Number(svg.querySelector('path[role="img"]').dataset.cy);
+      const dx = x - cx;
+      const dy = (y - cy) / ry;
+      const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+      return { text: el.textContent, gapFromRingEdge: distFromCenter - rOuter };
+    });
+  })()`);
+  assert.ok(distances.length >= 2, `라벨이 2개 미만이라 편차를 잴 수 없다: ${JSON.stringify(distances)}`);
+  const gaps = distances.map((d) => d.gapFromRingEdge);
+  const maxGap = Math.max(...gaps);
+  const minGap = Math.min(...gaps);
+  // [2026-08-25, 실측] 옛(공통 간격 적용 전) 값 — 연금저축 93·IRP 69·
+  // ISA 29(뷰박스 단위), 편차 64. 공통 간격 도입 뒤에는 세 라벨 모두
+  // 정확히 85로 잰다(실측 확인) — 부동소수점 오차 허용치만 둔다.
+  assert.ok(
+    maxGap - minGap <= 1,
+    `라벨-고리 거리 편차가 ${(maxGap - minGap).toFixed(2)}(뷰박스 단위)다 — 조각마다 거리가 달라 보인다: ${JSON.stringify(distances)}`,
+  );
+});
+
 // [2026-08-24, D84 정리] 원래 여기 있던 두 검사("첫 탭 예시 두 인물 도넛"·
 // "역산기 예시 도넛")를 지운다 — 「절세계좌 계산기2(근거판)」와 「연금
 // 역산기」 탭이 지워지며 `.example-showcase-slot`·`.reverse-example-

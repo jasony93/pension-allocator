@@ -374,7 +374,21 @@ export function mountApp(root, { engineClient, analytics }) {
   // [2026-08-25, 소유자 지시 9번] 이 탭 전용 팝업 — 계산기2 예시 팝업과
   // 같은 일일 규칙(별도 키)으로, 이 탭이 활성화되는 모든 경로(탭 클릭,
   // 공유 링크로 곧장 진입)에서 같은 곳(이 함수)만 부른다.
+  // [2026-08-25, 관리자 지시(9항목) 8번] **공유 링크(`dep1.`)로 들어오면
+  // 이 팝업을 억제한다 — 일일 억제 키와 무관하게, 오늘 처음이라도 안
+  // 뜬다.** 공유 링크를 연 사람은 이미 누군가 보낸 특정 시나리오를 보러
+  // 온 것이고, 팝업은 "처음 온 사람에게 무엇인지 설명"하는 인사말이다 —
+  // 서로 다른 목적이 부딪힌다(소유자 판단). `depletionShareResult`는
+  // 프래그먼트가 `dep1.`로 시작하면 파싱 성공·실패 어느 쪽이든 `null`이
+  // 아니다(`readDepletionShareFragmentFromLocation`, `depletion/share-
+  // link.js`) — 파싱에 실패해도(손상된 링크) "공유 링크로 왔다"는 사실
+  // 자체는 참이므로 억제 조건은 성공 여부와 무관하게 그 존재만 본다.
+  // 이 값은 마운트 시점에 한 번 읽은 `const`라 이 탭을 나갔다 다시
+  // 들어와도(같은 페이지 안에서) 계속 억제된다 — 계산기2의 공유 폼이
+  // `calc2Prefilled`로 이 페이지 생애주기 내내 덮어쓰이지 않는 것과
+  // 같은 관행이다(위 주석).
   function activateDepletionExtras() {
+    if (depletionShareResult) return;
     maybeShowDepletionIntroModal({ engineClient, onBridgeToCalc2: () => setActiveTab('calc2') });
   }
 

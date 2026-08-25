@@ -1089,6 +1089,18 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
   const rLabel = (rInner + rOuter) / 2; // 고리 반지름 정중앙 — 배지가 없으므로 안쪽으로 치우칠 이유가 없다
   const bandThickness = rOuter - rInner;
 
+  // [2026-08-25, 관리자 재지적 — 소유자 지시(9항목) 4번] "라벨-도넛 거리가
+  // 조각마다 다르다"(실측 — 팝업에서 연금저축 93·IRP 69·ISA 29, 뷰박스
+  // 단위). **원인 — 옛 구조는 라벨마다 따로 간격을 늘려가며 "그 라벨
+  // 자신이 고리·카드 밖을 벗어나는 순간"에 멈췄다** — 라벨 글자 폭이
+  // 계좌마다 다르므로(4음절 "연금저축" vs 3음절 "IRP"/"ISA") 멈추는 지점도
+  // 달랐다. **고침 — 이 svg의 고리 밖 라벨 전부를 한 번에 모아, "전부가
+  // 동시에 만족하는 가장 작은 공통 간격" 하나만 쓴다**(아래 `outsideItems`
+  // 단계). 그 결과 지시선 길이(중심→글자까지 반지름 차)가 조각 각도와
+  // 무관하게 항상 같다 — "IRP 정도의 거리로 통일"이라는 지시를 "IRP가
+  // 우연히 그 거리였다"가 아니라 "그 svg의 모든 라벨이 구조적으로 같은
+  // 거리를 쓴다"로 만족시킨다.
+  const outsideItems = [];
   for (const top of tops) {
     const amount = Number(top.dataset.amount);
     if (!(amount > 0)) continue; // 0원 조각은 애초에 path 자체가 없다 — 방어적으로만 남긴다
@@ -1110,8 +1122,7 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
     const insideColor = bestTextColorOn(getComputedStyle(top).fill);
     const [px, py] = polar(cx, cy, rLabel, rLabel * ry, mid);
 
-    let fontPx = compensatedNameFontPx;
-    const buildText = () =>
+    const buildInsideText = (fontPx) =>
       svgEl(
         'text',
         {
@@ -1130,7 +1141,8 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
         ],
       );
 
-    let text = buildText();
+    let fontPx = compensatedNameFontPx;
+    let text = buildInsideText(fontPx);
     group.appendChild(text);
 
     const fitsInsideSlice = () => {
@@ -1155,91 +1167,105 @@ function applyDonutSliceInlineLabelsToSvg(svg, forceOutside = false, hideLeader 
       // 한다(보정과 반대 방향이면 단계가 무의미해진다).
       while (!fitsInsideSlice() && fontPx > compensatedMinFontPx) {
         fontPx -= labelScaleCompensation;
-        const next = buildText();
+        const next = buildInsideText(fontPx);
         group.replaceChild(next, text);
         text = next;
       }
       if (fitsInsideSlice()) continue;
     }
+    // 안에 못 들어간 라벨(또는 `forceOutside`) — 고리 밖 공통 처리 대상으로
+    // 넘긴다. 임시로 그려 뒀던 "안" 시도 노드는 지운다.
+    text.remove();
+    outsideItems.push({ name, pctText, mid, cy });
+  }
 
-    // 폴백(또는 `forceOutside`) — 고리 밖, 지시선과 함께(`hideLeader`가
-    // 아니면). 배경이 카드 표면이 되므로 대비를 다시 잴 필요 없이 검증된
-    // 토큰(text-primary)을 쓴다.
-    // [D82 소유자 지시 5번] `hideLeader`면 간격을 좁힌다 — 지시선이 없으므로
-    // 라벨과 조각의 관계를 거리로 대신 보여야 한다.
-    // [2026-08-23, D83 판정 1 — 상설 규칙] "도넛 계좌별 라벨은 어떤 화면
-    // 에서도 차트와 겹치지 않는다." 처음 간격(위)만으로는 라벨 텍스트
-    // 사각형이 여전히 고리 사각형에 닿을 수 있다(실측 — 팝업의 연금저축
-    // 33%·ISA 50%가 닿았다) — 중심점 하나만 밀어내는 방식은 텍스트
-    // 자신의 폭·높이를 고려하지 않기 때문이다. **실제로 겹치지 않을
-    // 때까지 간격을 늘려가며 다시 잰다**(최대
-    // `SLICE_LABEL_OVERLAP_MAX_ATTEMPTS`회) — 이 회차부터 이 함수를 쓰는
-    // 모든 도넛(예시·팝업·결과·역산기)이 이 보장을 공짜로 받는다.
-    const ringLeft = cx - rOuter;
-    const ringRight = cx + rOuter;
-    const ringTop = cy - rOuter * ry;
-    const ringBottom = cy + rOuter * ry;
-    const overlapsRing = (box) => box.x < ringRight && box.x + box.width > ringLeft && box.y < ringBottom && box.y + box.height > ringTop;
+  if (outsideItems.length === 0) return;
 
-    // [2026-08-23, 소유자 지시 1번(팝업) — D83 상설 규칙 확장] 고리를
-    // 피해 밀려난 라벨이 카드(svg viewBox) 밖으로 나가면 잘려 보인다
-    // (실측 — 팝업의 "연금저축"이 잘렸다). viewBox 경계 안에 온전히
-    // 들어가는지도 함께 잰다.
-    const vb = svg.viewBox.baseVal;
-    const boxLeft = vb.x;
-    const boxRight = vb.x + vb.width;
-    const boxTop = vb.y;
-    const boxBottom = vb.y + vb.height;
-    const fitsInViewBox = (box) => box.x >= boxLeft && box.x + box.width <= boxRight && box.y >= boxTop && box.y + box.height <= boxBottom;
+  // 고리·카드 경계 판정 — 라벨 하나가 아니라 이 svg의 고리 밖 라벨 전부가
+  // 공유하는 상수다(중심·반지름·viewBox는 svg 하나에 하나뿐이므로).
+  const ringLeft = cx - rOuter;
+  const ringRight = cx + rOuter;
+  const overlapsRing = (box, itemCy) => {
+    const ringTop = itemCy - rOuter * ry;
+    const ringBottom = itemCy + rOuter * ry;
+    return box.x < ringRight && box.x + box.width > ringLeft && box.y < ringBottom && box.y + box.height > ringTop;
+  };
+  // [2026-08-23, 소유자 지시 1번(팝업) — D83 상설 규칙 확장] 고리를 피해
+  // 밀려난 라벨이 카드(svg viewBox) 밖으로 나가면 잘려 보인다(실측 — 팝업의
+  // "연금저축"이 잘렸다). viewBox 경계 안에 온전히 들어가는지도 함께 잰다.
+  const vb = svg.viewBox.baseVal;
+  const boxLeft = vb.x;
+  const boxRight = vb.x + vb.width;
+  const boxTop = vb.y;
+  const boxBottom = vb.y + vb.height;
+  const fitsInViewBox = (box) => box.x >= boxLeft && box.x + box.width <= boxRight && box.y >= boxTop && box.y + box.height <= boxBottom;
 
-    let ox;
-    let oy;
-    let fallback = text;
-    // [2026-08-23, 소유자 지시 1번] **간격만으로는 두 조건(고리 비겹침 +
-    // 카드 안)을 동시에 만족 못할 때가 있다** — 라벨이 그 방향의 남은
-    // 폭보다 넓으면, 고리를 벗어나는 순간 이미 카드 밖이다(간격을 더
-    // 늘려도 더 나갈 뿐 나아지지 않는다). 그때는 조각 안 라벨(위
-    // `fitsInsideSlice`)과 같은 방식으로 글자 크기를 줄여 다시 시도한다.
-    // 바닥 크기에서도 못 맞추면 마지막으로 찾은 자리를 그대로 쓴다(예전
-    // 동작 — 안 보이는 것보다 낫다).
-    fontShrink: for (
-      let outFontPx = compensatedNameFontPx;
-      outFontPx >= compensatedMinFontPx;
-      outFontPx -= labelScaleCompensation
-    ) {
-      let gap = hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP;
+  const buildOutsideText = (item, outFontPx, outerRadius) => {
+    const [ox, oy] = polar(cx, item.cy, outerRadius, outerRadius * ry, item.mid);
+    const node = svgEl(
+      'text',
+      { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
+      [
+        svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${outFontPx}px` }, [item.name]),
+        svgEl(
+          'tspan',
+          { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(compensatedMinFontPx, outFontPx * pctLineFontRatio)}px` },
+          [item.pctText],
+        ),
+      ],
+    );
+    return { node, ox, oy };
+  };
+
+  // [2026-08-25, 소유자 지시(9항목) 4번] **공통 간격 탐색.** 옛 코드는
+  // 라벨 하나를 겹침이 풀릴 때까지 밀어내며 다시 쟀다(그 라벨만의 최소
+  // 간격) — 이제는 "이 svg의 고리 밖 라벨 전부가 겹치지 않는 최소
+  // 공통 간격" 하나를 구한다: 각 라벨을 독립으로(자기 텍스트만으로) 밀어내
+  // 그 라벨의 최소 간격을 구하고, 그 중 **최댓값**을 전부에 적용한다 —
+  // 가장 넓은 라벨(연금저축)이 필요로 하는 간격을 짧은 라벨(IRP·ISA)도
+  // 함께 쓰므로, 결과는 항상 안전(겹침 없음)하면서 동시에 균일하다. 그래도
+  // 카드(viewBox) 밖으로 나가면(폭이 좁은 팝업에서 일어날 수 있다) 전부의
+  // 글자 크기를 함께 줄이고 다시 구한다 — 옛 폴백과 같은 안전망, 다만
+  // "전부 같이" 줄어든다는 점만 다르다(그래야 균일함이 깨지지 않는다).
+  let outFontPx = compensatedNameFontPx;
+  let resolved = null;
+  fontShrink: for (; outFontPx >= compensatedMinFontPx; outFontPx -= labelScaleCompensation) {
+    const baseGap = hideLeader ? SLICE_LABEL_OUTSIDE_GAP_CLOSE : SLICE_LABEL_OUTSIDE_GAP;
+    let sharedGap = baseGap;
+    // 각 라벨의 "최소 비겹침 간격"을 독립으로 구해 그 최댓값을 쓴다.
+    for (const item of outsideItems) {
+      let gap = baseGap;
       for (let attempt = 0; attempt < SLICE_LABEL_OVERLAP_MAX_ATTEMPTS; attempt++) {
-        const outerRadius = rOuter + gap;
-        [ox, oy] = polar(cx, cy, outerRadius, outerRadius * ry, mid);
-        const next = svgEl(
-          'text',
-          { class: 'donut-slice-label', x: ox, y: oy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: 'var(--text-primary)' },
-          [
-            svgEl('tspan', { class: 'donut-slice-label-name', x: ox, dy: '-0.55em', style: `font-size:${outFontPx}px` }, [name]),
-            svgEl(
-              'tspan',
-              { class: 'donut-slice-label-pct', x: ox, dy: `${SLICE_LABEL_LINE_GAP_EM}em`, style: `font-size:${Math.max(compensatedMinFontPx, outFontPx * pctLineFontRatio)}px` },
-              [pctText],
-            ),
-          ],
-        );
-        group.replaceChild(next, fallback);
-        fallback = next;
-        const box = fallback.getBBox();
-        if (!overlapsRing(box)) {
-          if (fitsInViewBox(box)) break fontShrink; // 둘 다 만족 — 끝
-          // 고리는 벗어났지만 카드 밖이다 — 이 글자 크기로는 간격을 더
-          // 늘려도 카드 밖으로 더 나갈 뿐이다. 더 작은 글자로 넘어간다.
-          break;
-        }
+        const { node } = buildOutsideText(item, outFontPx, rOuter + gap);
+        group.appendChild(node);
+        const box = node.getBBox();
+        node.remove();
+        if (!overlapsRing(box, item.cy)) break;
         gap += SLICE_LABEL_OVERLAP_STEP;
       }
+      sharedGap = Math.max(sharedGap, gap);
     }
-    text = fallback;
+    // 공통 간격에서 전부가 실제로 카드(viewBox) 안에 들어가는지 확인한다.
+    const built = outsideItems.map((item) => ({ item, ...buildOutsideText(item, outFontPx, rOuter + sharedGap) }));
+    const allFit = built.every(({ node }) => {
+      group.appendChild(node);
+      const box = node.getBBox();
+      const ok = fitsInViewBox(box);
+      node.remove();
+      return ok;
+    });
+    if (allFit || outFontPx - labelScaleCompensation < compensatedMinFontPx) {
+      resolved = { gap: sharedGap, fontPx: outFontPx, built };
+      break fontShrink;
+    }
+  }
+
+  for (const { item, node, ox, oy } of resolved.built) {
+    group.appendChild(node);
     if (!hideLeader) {
-      const [ex, ey] = polar(cx, cy, rOuter, rOuter * ry, mid);
+      const [ex, ey] = polar(cx, item.cy, rOuter, rOuter * ry, item.mid);
       const leader = svgEl('polyline', { class: 'donut-slice-label-leader', points: `${ex},${ey} ${ox},${oy}`, fill: 'none' });
-      group.insertBefore(leader, text);
+      group.insertBefore(leader, node);
     }
   }
 }

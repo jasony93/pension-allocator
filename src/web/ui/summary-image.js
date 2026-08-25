@@ -157,7 +157,7 @@ function polarFlat(cx, cy, r, angleDeg) {
  * (이 함수가 필요한 이유는 이 파일의 머리말 참고) — 실제 렌더에서 잘리지
  * 않는지는 크롭·`Page.printToPDF` 실측으로 별도 확인한다.
  */
-function estimateTextWidthPx(text, fontPx) {
+export function estimateTextWidthPx(text, fontPx) {
   let width = 0;
   for (const ch of String(text)) {
     // eslint 없이도 명확하도록: 코드포인트가 ASCII 범위(0x00~0xFF)면 좁은 글자.

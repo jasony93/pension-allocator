@@ -40,8 +40,9 @@ function toBase64(relPath) {
 // ---------------------------------------------------------------------------
 // 로고 — 라이트/다크 두 원본, 둘 다 1272×528.
 // ---------------------------------------------------------------------------
-const LOGO_LIGHT_SRC = 'src/design/돈길-로고-가로형-투명.png';
-const LOGO_DARK_SRC = 'src/design/돈길-로고-가로형-다크모드-투명.png';
+// [2026-08-25, 소유자 지시] 로고 교체 — 「절세」 신판(948×396). export 이름은 유지.
+const LOGO_LIGHT_SRC = 'src/design/절세-로고-가로형-투명.png';
+const LOGO_DARK_SRC = 'src/design/절세-로고-가로형-다크모드-투명.png';
 const LOGO_OUT = join(ROOT, 'src/web/assets/logo.js');
 
 const logoLightB64 = toBase64(LOGO_LIGHT_SRC);
@@ -74,8 +75,8 @@ export const LOGO_LIGHT_DATA_URI = 'data:image/png;base64,${logoLightB64}';
 export const LOGO_DARK_DATA_URI = 'data:image/png;base64,${logoDarkB64}';
 
 /** 두 원본의 실제 픽셀 치수(둘 다 같다) — 헤더가 표시 크기를 정할 때 가로세로 비율을 이 값에서 뗀다. */
-export const LOGO_INTRINSIC_WIDTH = 1272;
-export const LOGO_INTRINSIC_HEIGHT = 528;
+export const LOGO_INTRINSIC_WIDTH = 948;
+export const LOGO_INTRINSIC_HEIGHT = 396;
 `;
 
 writeFileSync(LOGO_OUT, logoOut, 'utf8');

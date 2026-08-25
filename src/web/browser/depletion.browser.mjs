@@ -473,9 +473,11 @@ test('공유 프래그먼트 왕복 — dep1. 프래그먼트로 열면 슬라�
   const app2 = await openApp({ url: `/src/web/index.html#${fragment}` });
   try {
     await app2.page.waitFor(`!!document.querySelector('.depletion-panel')`, { timeoutMs: 8000 });
-    // 이 URL은 곧장 이 탭을 활성화하므로 탭 전용 팝업도 함께 뜬다 — 이
-    // 시험은 팝업 자체를 검사하지 않으므로 치워 둔다(위 `before()`와 같은
-    // 이유).
+    // [2026-08-25, 관리자 지시(9항목) 8번으로 뒤집힘] 예전엔 이 URL이 곧장
+    // 이 탭을 활성화하므로 탭 전용 팝업도 함께 떴다(그래서 치워야 했다) —
+    // 이제는 공유 링크(`dep1.`)로 들어오면 그 팝업 자체가 억제된다
+    // (`ui/app.js`의 `activateDepletionExtras`). 아래에서 그 부재를 직접
+    // 확인한다 — 이 호출은 팝업이 있다면 치우는 안전망으로만 남긴다.
     await dismissDepletionIntroModalIfOpen(app2.page);
     await sleep(300);
     const state = await app2.page.evaluate(`(() => ({
@@ -484,14 +486,52 @@ test('공유 프래그먼트 왕복 — dep1. 프래그먼트로 열면 슬라�
       advancedHidden: document.querySelector('.depletion-sliders-advanced')?.hidden,
       hash: location.hash,
       search: location.search,
+      hasPopup: !!document.querySelector('.depletion-intro-modal-host'),
     }))()`);
     assert.equal(Number(state.ror), values.ror, `공유 링크로 열었는데 ror 슬라이더 값이 복원되지 않았다: ${state.ror}`);
     assert.equal(Number(state.wage), values.wage, `공유 링크로 열었는데 wage 슬라이더 값이 복원되지 않았다: ${state.wage}`);
     assert.equal(state.advancedHidden, false, '고급 슬라이더 값이 실렸는데 고급 설정이 접힌 채로 남아 있다');
     assert.equal(state.search, '', '공유 프래그먼트로 열었는데 쿼리 문자열이 생겼다 — 프래그먼트 원칙 위반');
     assert.ok(state.hash.includes('dep1.'), 'URL이 dep1. 프래그먼트를 유지하지 않는다');
+    // [2026-08-25, 관리자 지시(9항목) 8번] 공유 링크로 들어오면 인트로
+    // 팝업이 뜨면 안 된다 — 일일 억제 키와 무관하게.
+    assert.equal(state.hasPopup, false, '공유 링크(dep1.)로 들어왔는데 인트로 팝업이 떴다');
   } finally {
     await app2.close();
+  }
+});
+
+/**
+ * [2026-08-25, 관리자 지시(9항목) 8번, 판별력 증명] **공유 링크 진입 —
+ * 팝업 부재. 일반 진입 — 팝업 존재.** 하나의 시험 안에서 대조한다 —
+ * "억제됐다"만 보면 원래도 안 뜨는 상황(계산 오류 등)과 구분이 안 된다,
+ * "같은 오늘 날짜·같은 빈 localStorage에서 경로만 dep1. 유무로 갈랐을 때
+ * 결과가 갈린다"까지 재야 이 지시가 실제로 걸었는지 알 수 있다.
+ */
+test('[관리자 지시(9항목) 8번] 공유 링크(dep1.)로 들어오면 인트로 팝업이 없고, 같은 날 일반 진입은 뜬다', { skip: skipWithoutChrome }, async () => {
+  const values = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
+  const fragment = encodeDepletionShareFragment(values);
+
+  const shareApp = await openApp({ url: `/src/web/index.html#${fragment}` });
+  try {
+    await shareApp.page.waitFor(`!!document.querySelector('.depletion-panel')`, { timeoutMs: 8000 });
+    await sleep(500);
+    const hasPopupOnShareEntry = await shareApp.page.evaluate(`!!document.querySelector('.depletion-intro-modal-host')`);
+    assert.equal(hasPopupOnShareEntry, false, '공유 링크 진입인데 팝업이 있다');
+  } finally {
+    await shareApp.close();
+  }
+
+  // 같은 프로세스(같은 오늘 날짜, 비어 있는 localStorage인 새 탭) — 프래그먼트
+  // 없이 여는 일반 진입은 여전히 뜬다. 두 경로가 "프래그먼트 유무" 하나만
+  // 다르므로, 이 대조가 갈리면 그 하나가 실제로 원인이라는 뜻이다.
+  const plainApp = await openApp({ url: `/src/web/index.html` });
+  try {
+    await plainApp.page.waitFor(`!!document.querySelector('.modal[role="dialog"]')`, { timeoutMs: 8000 });
+    const hasPopupOnPlainEntry = await plainApp.page.evaluate(`!!document.querySelector('.depletion-intro-modal-host')`);
+    assert.equal(hasPopupOnPlainEntry, true, '일반 진입(프래그먼트 없음)인데 팝업이 없다 — 억제가 과하게 걸렸다');
+  } finally {
+    await plainApp.close();
   }
 });
 
@@ -941,6 +981,52 @@ test('[소유자 지시 6번] 본문 문구가 수정됐고, 출처 줄에 2064 
   assert.ok(m.bodyText.includes('국민연금은 기본이지'), `수정된 둘째 문장을 찾지 못했다: "${m.bodyText}"`);
   assert.ok(!m.bodyText.includes('국민연금은 바닥이지'), '옛 문장(바닥이지)이 여전히 남아 있다');
   assert.ok(!/2064/.test(m.sourceText), `출처 줄에 2064 언급이 남아 있다: "${m.sourceText}"`);
+});
+
+/**
+ * [2026-08-25, 관리자 지시(9항목) 1번] 「받습니다. 다만 법이 보장하는 건」
+ * 이 한 행에 들어가야 한다 — 어절 단위 줄바꿈 검사. `Range.getClientRects()`
+ * 로 그 문구(첫 텍스트 노드, `<br>` 앞)만 잘라 재면 실제 줄 수를 정확히
+ * 안다(`getClientRects()`는 줄바꿈마다 별도 사각형을 낸다).
+ */
+test('[관리자 지시(9항목) 1번] 「받습니다. 다만 법이 보장하는 건」이 한 행에 들어간다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-answer'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const lineCount = await page.evaluate(`(() => {
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const answer = root.querySelector('.depletion-popup-answer');
+    const firstTextNode = answer.childNodes[0];
+    const range = document.createRange();
+    range.selectNodeContents(firstTextNode);
+    return range.getClientRects().length;
+  })()`);
+  assert.equal(lineCount, 1, `"받습니다. 다만 법이 보장하는 건" 구절이 ${lineCount}줄로 잘렸다 — 한 행에 들어가야 한다`);
+});
+
+/**
+ * [2026-08-25, 관리자 지시(9항목) 3번] 「보건복지부, 2025.3 — 기금 소진
+ * 전망의 출처」 줄을 지운다 — 제3조의2 출처 줄(지급보장 문장의 출처)은
+ * 유지한다.
+ */
+test('[관리자 지시(9항목) 3번] 팝업 출처 줄 — 기금 소진 전망 출처는 없고, 지급보장 출처는 남아 있다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-source'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const m = await page.evaluate(`(() => {
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const lines = [...root.querySelectorAll('.depletion-popup-source-line')].map((el) => el.textContent);
+    return lines;
+  })()`);
+  assert.ok(m.some((line) => line.includes('국민연금법 제3조의2')), `지급보장 출처 줄이 없다: ${JSON.stringify(m)}`);
+  assert.ok(!m.some((line) => line.includes('보건복지부')), `기금 소진 전망 출처 줄이 남아 있다: ${JSON.stringify(m)}`);
+  assert.equal(m.length, 1, `출처 줄이 1개가 아니다(하나만 남아야 한다): ${JSON.stringify(m)}`);
 });
 
 /** [소유자 지시 8번] 최대 적립금 시기의 세로 점선(옛 "수지 적자 전환"

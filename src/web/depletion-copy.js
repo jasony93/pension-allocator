@@ -148,11 +148,14 @@ export const DEPLETION_POPUP_BODY_TAIL_SUFFIX = '로 채워야 합니다.';
 // 사전에 남기지 않는다).
 
 /** [관리자 지시 — 카피 검증 1번, 2026-08-25 소유자 지시 6번으로 정리]
- * 출처 두 줄 — 지급보장 문장과 소진 전망 문장은 서로 다른 문서에서 왔다.
- * 하나로 뭉치지 않는다. **2064년 언급을 뺀다** — 본문에서 2064가 빠졌으니
- * (위 `DEPLETION_POPUP_BODY_LINE_1`) 이 줄이 가리키던 대상 자체가 없다. */
+ * 출처 줄 — 지급보장 문장의 근거(국민연금법 제3조의2). **2064년 언급을
+ * 뺀다** — 본문에서 2064가 빠졌으니(위 `DEPLETION_POPUP_BODY_LINE_1`)
+ * 이 줄이 가리키던 대상 자체가 없다.
+ * [2026-08-25, 관리자 지시(9항목) 3번] 옛 `DEPLETION_POPUP_SOURCE_PROJECTION`
+ * (「보건복지부, 2025.3 — 기금 소진 전망의 출처」)은 소유자 지시로 지웠다
+ * — 이 상수를 쓰던 유일한 자리(`ui/depletion-intro-modal.js`)에서도
+ * 함께 뺐다. */
 export const DEPLETION_POPUP_SOURCE_GUARANTEE = '국민연금법 제3조의2 (2026.1.1 시행) — 지급보장 문장의 출처';
-export const DEPLETION_POPUP_SOURCE_PROJECTION = '보건복지부, 2025.3 — 기금 소진 전망의 출처';
 
 // 오른쪽 상단(정적 축소 렌더) 아래 버튼 — 팝업을 닫고 이 탭(이미 활성)에
 // 머문다.
