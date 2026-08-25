@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * [2026-08-23, D84 판정 1·2] **탭 둘을 지운다.** 「절세계좌 계산기2」(내부
@@ -24,6 +24,10 @@ before(async () => {
   // 기본 탭이 calc2라 첫 로드부터 예시 팝업이 뜰 수 있다 — 좌표 기반 탭
   // 클릭이 스크림에 막히지 않도록 미리 치운다.
   await dismissCalc2ExampleModalIfOpen(app.page);
+  // [2026-08-25, 소유자 지시 9번] 이 파일은 시뮬레이션 탭으로도 여러 번
+  // 좌표 기반 클릭을 반복한다 — 그 탭 전용 팝업도 같은 이유로 미리 치운다
+  // (`depletion.browser.mjs`의 `before()`와 같은 조치).
+  await dismissDepletionIntroModalIfOpen(app.page);
 }, { skip: skipWithoutChrome });
 
 after(async () => {

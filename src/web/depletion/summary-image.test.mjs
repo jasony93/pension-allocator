@@ -6,6 +6,7 @@ import path from 'node:path';
 import { buildDepletionSummarySvgMarkup, DEPLETION_SUMMARY_COLORS } from './summary-image.js';
 import { runDepletionSimulation } from './simulate.js';
 import { DEPLETION_SLIDER_PARAMS, INITIAL_FUND_TRILLION_KRW, ACTUAL_FUND_BALANCE } from './constants.js';
+import { DEPLETION_CHART_START_LABEL_PREFIX, DEPLETION_CHART_START_LABEL_SUFFIX } from '../depletion-copy.js';
 
 const DEFAULTS = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
 
@@ -74,10 +75,18 @@ test('카드 값 셋(기금 소진·현재 기금·최대 적립금)이 실제�
 test('시작점 라벨 — 전망 재현 출발값(1,458조원)만 쓰고 실적과 섞지 않는다', () => {
   const result = runDepletionSimulation(DEFAULTS);
   const svg = buildDepletionSummarySvgMarkup(result, DEFAULTS);
-  const forecastText = `적립금 ${Math.round(INITIAL_FUND_TRILLION_KRW).toLocaleString('ko-KR')}조원(전망 기준)`;
+  // [2026-08-25, 소유자 지시 1번] 문구가 "적립금 …(전망 기준)"에서 "현
+  // 적립금 …"으로 바뀌었다 — 사전(`depletion-copy.js`)에서 조립해 이 시험이
+  // 문구 자신의 진실을 두 번 들고 있지 않게 한다(사전이 바뀌면 이 시험도
+  // 따라 바뀐다).
+  const forecastText = `${DEPLETION_CHART_START_LABEL_PREFIX} ${Math.round(INITIAL_FUND_TRILLION_KRW).toLocaleString('ko-KR')}조원${DEPLETION_CHART_START_LABEL_SUFFIX}`;
   assert.ok(svg.includes(forecastText), `시작점 라벨을 찾지 못했다: ${forecastText}`);
-  const actualValueText = `${Math.round(ACTUAL_FUND_BALANCE.trillionKrw).toLocaleString('ko-KR')}조원(전망 기준)`;
-  assert.ok(!svg.includes(actualValueText), '시작점 라벨에 실적값이 섞였다');
+  // [2026-08-25] 실적값(1,671조원) 자체는 요약 시트의 「현재 기금」 값으로
+  // 다른 자리에 정당하게 나온다(카드 값) — 그래서 "실적값이 시트 어디에도
+  // 없어야 한다"가 아니라 **시작점 라벨 접두사와 실적값이 나란히 붙어
+  // 나오면 안 된다**(둘이 섞였다는 뜻)만 잰다.
+  const mixedText = `${DEPLETION_CHART_START_LABEL_PREFIX} ${Math.round(ACTUAL_FUND_BALANCE.trillionKrw).toLocaleString('ko-KR')}조원`;
+  assert.ok(!svg.includes(mixedText), '시작점 라벨에 실적값이 섞였다');
 });
 
 test('핵심 가정 — 코어 슬라이더는 기본값이어도 항상 나온다', () => {

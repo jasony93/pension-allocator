@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 import { STATUTORY_RATE_CEILING_PERCENT, DEPLETION_SLIDER_PARAMS } from '../depletion/constants.js';
 import { encodeDepletionShareFragment } from '../depletion/share-link.js';
 
@@ -39,6 +39,12 @@ before(async () => {
   if (skipWithoutChrome) return;
   app = await openApp();
   await dismissCalc2ExampleModalIfOpen(app.page);
+  // [2026-08-25, 소유자 지시 9번] 이 탭 전용 팝업이 탭 클릭 즉시(비동기
+  // 계산이 끝나기 전부터) 뷰포트 전체를 덮는 스크림을 띄운다 — 팝업 자체를
+  // 검사하지 않는 아래 시험들이 좌표 기반 클릭을 이어가면 그 클릭이
+  // 스크림에서 끝난다(계산기2 예시 팝업과 같은 이유, `harness.mjs` 머리말
+  // 참고). 탭을 클릭하기 **전에** 미리 오늘 날짜를 적어 애초에 안 뜨게 한다.
+  await dismissDepletionIntroModalIfOpen(app.page);
   await app.page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await app.page.waitFor(`!!document.querySelector('.depletion-panel')`, { timeoutMs: 8000 });
   await sleep(300);
@@ -289,21 +295,36 @@ test('중앙 정렬 — 레이아웃 중심과 카드·차트 중심이 일치�
 });
 
 /**
- * [소유자 지시 2번] 궤적 시작점(2026)에 시작 적립금 라벨이 실제로 그려진다.
- * **D84 출처 분리** — 여기 쓰는 값은 전망 재현 출발값(1,458조)이지 실적
- * (1,670.7조, 「현재 기금」 카드 값)이 아니다. 라벨 텍스트 자체를 읽어
- * 두 값이 섞이지 않았는지 확인한다.
+ * [소유자 지시 2번 → 2026-08-25 소유자 지시 1번으로 문구·위치 정정]
+ * 궤적 시작점(2026)에 시작 적립금 라벨이 실제로 그려진다. **D84 출처
+ * 분리** — 여기 쓰는 값은 전망 재현 출발값(1,458조)이지 실적(1,670.7조,
+ * 「현재 기금」 카드 값)이 아니다. 라벨 텍스트 자체를 읽어 두 값이 섞이지
+ * 않았는지 확인한다. **[소유자 지시 1번] 위치까지 잰다** — 라벨이 플롯
+ * 영역(궤적이 실제로 그려지는 y좌표 범위) 밖, y축 위쪽 여백에 있어야
+ * 한다는 것을 라벨의 y좌표와 궤적 선(`d` 속성의 최소 y)을 직접 비교해
+ * 확인한다(짐작이 아니라 실측).
  */
-test('차트 시작점(2026)에 「적립금 1,458조원(전망 기준)」 라벨이 실제로 보이고, 실적값과 섞이지 않는다', { skip: skipWithoutChrome }, async () => {
+test('차트 시작점(2026)에 「현 적립금 1,458조원」 라벨이 y축 위쪽에 보이고, 실적값과 섞이지 않는다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
   const m = await page.evaluate(`(() => {
     const label = document.querySelector('.depletion-chart-start-label');
     const point = document.querySelector('.depletion-chart-start-point');
-    return { text: label ? label.textContent : null, hasPoint: !!point };
+    const line = document.querySelector('.depletion-chart-line');
+    const lineYs = [...line.getAttribute('d').matchAll(/[ML]([\\d.]+),([\\d.]+)/g)].map((mm) => Number(mm[2]));
+    return {
+      text: label ? label.textContent : null,
+      hasPoint: !!point,
+      labelY: label ? Number(label.getAttribute('y')) : null,
+      minLineY: Math.min(...lineYs),
+    };
   })()`);
   assert.ok(m.hasPoint, '시작점 표식(원)이 없다');
-  assert.equal(m.text, '적립금 1,458조원(전망 기준)', `시작점 라벨 텍스트가 다르다: "${m.text}"`);
+  assert.equal(m.text, '현 적립금 1,458조원', `시작점 라벨 텍스트가 다르다: "${m.text}"`);
   assert.ok(!m.text.includes('1,671'), '시작점 라벨에 실적값(1,671조)이 섞였다 — D84 출처 분리 위반');
+  assert.ok(
+    m.labelY < m.minLineY,
+    `라벨(y=${m.labelY})이 궤적 선의 최고점(y=${m.minLineY})보다 아래에 있다 — y축 위쪽 여백을 벗어나 궤적과 겹칠 수 있다`,
+  );
 });
 
 /**
@@ -439,6 +460,10 @@ test('공유 프래그먼트 왕복 — dep1. 프래그먼트로 열면 슬라�
   const app2 = await openApp({ url: `/src/web/index.html#${fragment}` });
   try {
     await app2.page.waitFor(`!!document.querySelector('.depletion-panel')`, { timeoutMs: 8000 });
+    // 이 URL은 곧장 이 탭을 활성화하므로 탭 전용 팝업도 함께 뜬다 — 이
+    // 시험은 팝업 자체를 검사하지 않으므로 치워 둔다(위 `before()`와 같은
+    // 이유).
+    await dismissDepletionIntroModalIfOpen(app2.page);
     await sleep(300);
     const state = await app2.page.evaluate(`(() => ({
       ror: document.getElementById('depletion-slider-ror')?.value,
@@ -458,20 +483,276 @@ test('공유 프래그먼트 왕복 — dep1. 프래그먼트로 열면 슬라�
 });
 
 /**
- * [D84 판정 2b — 다리] 결과 아래 「사적연금 배분으로 대비하기」류 링크를
- * 누르면 실제로 첫 탭(calc2)이 활성화된다. 지시형 문장·개인 금액 계산이
- * 없다는 것은 `depletion-copy.js`의 문구 자체가 정적으로 고정한다(단위
- * 시험 대상) — 여기서는 "링크가 실제로 탭을 전환하는가"만 잰다.
+ * [2026-08-25, 소유자 지시 8번] **다리(문구+버튼)를 뺐다** — 옛
+ * `.depletion-bridge-note`·`.depletion-bridge-link`가 패널 어디에도 없어야
+ * 한다. 이 탭에서 첫 탭으로 넘어가는 길은 이제 탭 전용 팝업(소유자 지시
+ * 9번, 아래 별도 테스트 블록)의 버튼 하나뿐이다.
  */
-test('다리 링크를 누르면 실제로 첫 탭(절세계좌 계산기)으로 전환된다', { skip: skipWithoutChrome }, async () => {
+test('[소유자 지시 8번] 다리(문구+버튼)가 패널 어디에도 없다', { skip: skipWithoutChrome }, async () => {
   const { page } = app;
-  await page.clickElement(`document.querySelector('.depletion-bridge-link')`);
+  const m = await page.evaluate(`(() => {
+    const panel = document.querySelector('.depletion-panel');
+    return {
+      hasBridgeNote: !!panel.querySelector('.depletion-bridge-note'),
+      hasBridgeLink: !!panel.querySelector('.depletion-bridge-link'),
+      hasBridgeBlock: !!panel.querySelector('.depletion-bridge'),
+    };
+  })()`);
+  assert.equal(m.hasBridgeNote, false, '다리 문구가 여전히 남아 있다');
+  assert.equal(m.hasBridgeLink, false, '다리 버튼이 여전히 남아 있다');
+  assert.equal(m.hasBridgeBlock, false, '다리 컨테이너가 여전히 남아 있다');
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-25, 관리자 지시 — 소유자 지시 10항목] 실측
+// ---------------------------------------------------------------------------
+
+/**
+ * [소유자 지시 2~6번] 슬라이더 범위 6종 — `min`/`max` 속성을 실제 렌더된
+ * `<input type="range">`에서 직접 읽는다(고급 설정이 접혀 있어도 DOM
+ * 속성 자체는 그대로다 — `hidden`은 컨테이너의 표시만 끈다). 여섯째로,
+ * 기대수명 슬라이더의 **기준 매핑**(절대값 84세 = 델타 0)이 실제로 기본값
+ * 재현과 일치하는지까지 함께 잰다 — 값만 절대 표시로 바뀌었을 뿐 계산이
+ * 갈리지 않는다는 것을 확인한다.
+ */
+test('슬라이더 범위 6종 — 기금운용수익률 0~20%·가입자증감률 −5~5%·물가상승률 0~5%·기대수명 84~100세·수급개시연령 60~80세, 기대수명 기준(84세=델타 0)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const read = (id) => {
+      const el = document.getElementById(id);
+      return { min: el.min, max: el.max, value: el.value };
+    };
+    return {
+      ror: read('depletion-slider-ror'),
+      sub: read('depletion-slider-sub'),
+      cpi: read('depletion-slider-cpi'),
+      life: read('depletion-slider-life'),
+      age: read('depletion-slider-age'),
+    };
+  })()`);
+  assert.equal(m.ror.min, '0', `기금운용수익률 최솟값이 0이 아니다: ${m.ror.min}`);
+  assert.equal(m.ror.max, '20', `기금운용수익률 최댓값이 20이 아니다: ${m.ror.max}`);
+  assert.equal(m.sub.min, '-5', `가입자 연평균 증감률 최솟값이 −5가 아니다: ${m.sub.min}`);
+  assert.equal(m.sub.max, '5', `가입자 연평균 증감률 최댓값이 5가 아니다: ${m.sub.max}`);
+  assert.equal(m.cpi.min, '0', `물가상승률 최솟값이 0이 아니다: ${m.cpi.min}`);
+  assert.equal(m.cpi.max, '5', `물가상승률 최댓값이 5가 아니다: ${m.cpi.max}`);
+  assert.equal(m.life.min, '84', `기대수명 최솟값이 84가 아니다: ${m.life.min}`);
+  assert.equal(m.life.max, '100', `기대수명 최댓값이 100이 아니다: ${m.life.max}`);
+  // [소유자 지시 6번] 여섯째 — 기준 매핑. 기본값(84세)이 곧 "델타 0"이라
+  // 페이지 로드 직후(기본값 상태)의 「기금 소진」 카드 값이, 옛 방식(증가분
+  // 0년)과 같은 결과를 낸다는 것으로 간접 확인한다(순수 함수 자체의
+  // 회귀 lock은 `simulate.test.mjs`가 이미 진다 — 여기서는 "화면이 실제로
+  // 그 기본값을 슬라이더에 싣고 있는가"만 본다).
+  assert.equal(m.life.value, '84', `기대수명 슬라이더의 기본값이 84(기준)가 아니다: ${m.life.value}`);
+  assert.equal(m.age.min, '60', `수급개시연령 최솟값이 60이 아니다: ${m.age.min}`);
+  assert.equal(m.age.max, '80', `수급개시연령 최댓값이 80이 아니다: ${m.age.max}`);
+});
+
+/**
+ * [소유자 지시 7번, 판별력 증명 대상 A] 「추가 정보 기입」 버튼이 행
+ * 가운데에 온다 — 버튼의 가로 중심과 패널의 가로 중심 좌표를 직접 비교한다
+ * (이전 회차는 왼쪽 정렬이었다, `align-self: flex-start`).
+ */
+test('「추가 정보 기입」 버튼이 패널 가로 중심에 온다(왼쪽 붙임이 아니다)', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const toggle = document.querySelector('.depletion-advanced-toggle');
+    const panel = document.querySelector('.depletion-panel');
+    const tr = toggle.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    return { toggleCenter: tr.left + tr.width / 2, panelCenter: pr.left + pr.width / 2 };
+  })()`);
+  assert.ok(
+    Math.abs(m.toggleCenter - m.panelCenter) < 2,
+    `버튼 중심(${m.toggleCenter})이 패널 중심(${m.panelCenter})과 어긋난다 — 가운데 정렬이 아니다`,
+  );
+});
+
+/**
+ * [소유자 지시 10번] 복합 차트 — 막대(연도별 적립금)와 그 위 점을 잇는
+ * 선이 함께 그려진다. 막대가 실제로 값에 비례한 높이를 갖는지(전부 같은
+ * 높이로 찍히는 장식이 아닌지)까지 잰다.
+ */
+test('복합 차트 — 막대(연도별 적립금)와 선(궤적)·점이 함께 그려진다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  const m = await page.evaluate(`(() => {
+    const bars = [...document.querySelectorAll('.depletion-chart-bar')];
+    const heights = new Set(bars.map((b) => b.getAttribute('height')));
+    return {
+      barCount: bars.length,
+      distinctHeights: heights.size,
+      hasLine: !!document.querySelector('.depletion-chart-line'),
+      pointCount: document.querySelectorAll('.depletion-chart-point').length,
+    };
+  })()`);
+  assert.ok(m.barCount >= 2, `막대가 2개 미만이다: ${m.barCount}`);
+  assert.ok(m.distinctHeights > 1, '막대 높이가 전부 같다 — 값에 비례하지 않는 장식일 위험');
+  assert.ok(m.hasLine, '궤적 선이 없다');
+  assert.ok(m.pointCount >= 2, `궤적 점이 2개 미만이다: ${m.pointCount}`);
+});
+
+/**
+ * [소유자 지시 10번, 판별력 증명 대상 B] 그래프(패널) 가로 폭이 지난
+ * 회차보다 25% 넓어졌고(980px → 1225px), 어떤 데스크톱 폭에서도 화면
+ * 밖으로 넘치지 않는다.
+ */
+test('패널 폭이 25% 확장됐고(980→1225px), 데스크톱 여러 폭에서 화면 밖으로 넘치지 않는다', { skip: skipWithoutChrome }, async () => {
+  const { page } = app;
+  for (const width of [1280, 1440, 1920]) {
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await sleep(120);
+    const m = await page.evaluate(`(() => {
+      const panel = document.querySelector('.depletion-panel');
+      const r = panel.getBoundingClientRect();
+      return { panelWidth: r.width, panelRight: r.right, docScrollWidth: document.documentElement.scrollWidth };
+    })()`);
+    // `.app-main`의 좌우 패딩(`--space-6`×2=64px)과 세로 스크롤바 폭(브라우저
+    // 마다 다르지만 대개 15~17px)을 함께 빼야 실제 사용 가능한 폭이 나온다 —
+    // 1280px처럼 여유가 빠듯한 폭에서는 그 둘을 뺀 값이 1225px에 못 미쳐
+    // max-width가 걸리기 전에 이미 폭이 좁아진다(정상 — 넘침과는 다른 얘기다).
+    // 여유가 충분한 폭(1440·1920)에서만 "정확히 1225px까지 넓어졌는가"를 잰다.
+    if (width >= 1225 + 150) {
+      assert.ok(Math.abs(m.panelWidth - 1225) < 2, `${width}px 뷰포트에서 패널 폭이 1225px가 아니다: ${m.panelWidth}`);
+    }
+    assert.ok(m.panelRight <= width + 1, `${width}px 뷰포트에서 패널 오른쪽 끝(${m.panelRight})이 뷰포트를 넘는다`);
+    assert.ok(m.docScrollWidth <= width + 1, `${width}px 뷰포트에서 문서 가로 스크롤이 생겼다(scrollWidth=${m.docScrollWidth})`);
+  }
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+});
+
+// ---------------------------------------------------------------------------
+// [소유자 지시 9번] 탭 전용 팝업 — 공유 `app`(before()가 미리 억제해 둔다)를
+// 쓰지 않는다. 아래 시험들은 팝업 자체를 검사해야 하므로 각자 새 인스턴스를
+// 연다.
+// ---------------------------------------------------------------------------
+
+const popupApps = [];
+async function openTrackedForPopup() {
+  const a = await openApp();
+  popupApps.push(a);
+  return a;
+}
+after(async () => {
+  await Promise.all(popupApps.map((a) => a.close()));
+});
+
+/**
+ * [소유자 지시 9번] 탭을 처음 열면(오늘 억제 기록이 없으면) 팝업이 뜨고,
+ * 왼쪽 카피·오른쪽 상/하 두 영역·영역별 버튼 하나씩(합 2개) + 상시 버튼
+ * 둘(오늘 하루 보지 않음·X)까지 구조가 그대로 갖춰진다.
+ */
+test('탭 전용 팝업 — 왼쪽 카피·오른쪽 상하 2영역·영역별 버튼 2개·상시 버튼 2개가 실제로 갖춰진다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page); // 계산기2 쪽 팝업만 미리 치운다(이 팝업은 검사 대상이다).
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-body'); })()`,
+    { timeoutMs: 8000 },
+  );
+  const m = await page.evaluate(`(() => {
+    const host = document.querySelector('.depletion-intro-modal-host');
+    const root = host.shadowRoot;
+    const body = root.querySelector('.depletion-popup-body');
+    const copy = body.querySelector('.depletion-popup-copy');
+    const right = body.querySelector('.depletion-popup-right');
+    const top = right?.querySelector('.depletion-popup-right-top');
+    const bottom = right?.querySelector('.depletion-popup-right-bottom');
+    return {
+      hasCopy: !!copy,
+      questionText: copy?.querySelector('.depletion-popup-question')?.textContent ?? null,
+      hasTop: !!top,
+      hasChartPreview: !!top?.querySelector('.depletion-chart'),
+      hasChartButton: top?.querySelector('.depletion-popup-chart-button')?.textContent ?? null,
+      hasBottom: !!bottom,
+      hasExampleRow: !!bottom?.querySelector('.example-persona-info'),
+      hasBridgeButton: bottom?.querySelector('.depletion-popup-bridge-button')?.textContent ?? null,
+      hasDismiss: !!document.querySelector('.depletion-intro-modal-dismiss'),
+      hasClose: !!document.querySelector('.depletion-intro-modal-close'),
+    };
+  })()`);
+  assert.ok(m.hasCopy, '왼쪽 카피 영역이 없다');
+  assert.ok(m.questionText?.includes('국민연금이 고갈되면'), `카피 질문 문구가 다르다: ${m.questionText}`);
+  assert.ok(m.hasTop, '오른쪽 상단 영역이 없다');
+  assert.ok(m.hasChartPreview, '오른쪽 상단에 시뮬레이션 그래프 축소판이 없다');
+  assert.equal(m.hasChartButton, '연금고갈 시뮬레이션', `오른쪽 상단 버튼 문구가 다르다: ${m.hasChartButton}`);
+  assert.ok(m.hasBottom, '오른쪽 하단 영역이 없다');
+  assert.ok(m.hasExampleRow, '오른쪽 하단에 김철수씨 예시 행이 없다');
+  assert.equal(m.hasBridgeButton, 'ISA/연금저축/IRP 배분하기', `오른쪽 하단 버튼 문구가 다르다: ${m.hasBridgeButton}`);
+  assert.ok(m.hasDismiss, '「오늘 하루 보지 않음」 버튼이 없다');
+  assert.ok(m.hasClose, '닫기(X) 버튼이 없다');
+});
+
+/** [소유자 지시 9번] 상단 버튼("연금고갈 시뮬레이션")을 누르면 팝업만
+ * 닫히고 이 탭에 그대로 머문다(이미 활성 탭이므로 전환이 필요 없다). */
+test('팝업 상단 버튼을 누르면 팝업이 닫히고 이 탭에 머문다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-chart-button'); })()`,
+    { timeoutMs: 8000 },
+  );
+  await page.evaluate(`document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.depletion-popup-chart-button').click()`);
   await sleep(200);
   const state = await page.evaluate(`(() => ({
-    calc2Hidden: document.getElementById('tabpanel-calc2').classList.contains('tab-panel-hidden'),
+    modalOpen: !!document.querySelector('.modal-scrim'),
     depletionHidden: document.getElementById('tabpanel-pension-depletion').classList.contains('tab-panel-hidden'),
-    hash: location.hash,
   }))()`);
-  assert.equal(state.calc2Hidden, false, '다리 링크를 눌렀는데 calc2 탭이 여전히 숨어 있다');
-  assert.equal(state.depletionHidden, true, '다리 링크를 눌렀는데 시뮬레이션 탭이 여전히 보인다');
+  assert.equal(state.modalOpen, false, '상단 버튼을 눌렀는데 팝업이 여전히 떠 있다');
+  assert.equal(state.depletionHidden, false, '상단 버튼을 눌렀는데 시뮬레이션 탭이 숨어 있다 — 탭이 바뀌면 안 된다');
+});
+
+/** [소유자 지시 9번] 하단 버튼("ISA/연금저축/IRP 배분하기")을 누르면 팝업이
+ * 닫히고 첫 탭(계산기2)으로 전환된다. */
+test('팝업 하단 버튼을 누르면 팝업이 닫히고 첫 탭(계산기2)으로 전환된다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-bridge-button'); })()`,
+    { timeoutMs: 8000 },
+  );
+  await page.evaluate(`document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.depletion-popup-bridge-button').click()`);
+  await sleep(200);
+  const state = await page.evaluate(`(() => ({
+    modalOpen: !!document.querySelector('.modal-scrim'),
+    calc2Hidden: document.getElementById('tabpanel-calc2').classList.contains('tab-panel-hidden'),
+  }))()`);
+  assert.equal(state.modalOpen, false, '하단 버튼을 눌렀는데 팝업이 여전히 떠 있다');
+  assert.equal(state.calc2Hidden, false, '하단 버튼을 눌렀는데 첫 탭(계산기2)이 활성화되지 않았다');
+});
+
+/** [소유자 지시 9번] 「오늘 하루 보지 않음」 — 이 탭 팝업을 오늘 닫아도
+ * 계산기2 예시 팝업의 억제와는 서로 간섭하지 않는다(별도 키, 독립 동작). */
+test('「오늘 하루 보지 않음」은 이 탭 팝업만 억제한다 — 계산기2 예시 팝업은 그대로 뜬다(독립 동작)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await dismissCalc2ExampleModalIfOpen(page); // calc2 쪽은 이 시험의 관심사가 아니다 — 초기 랜딩 소음만 지운다.
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await page.waitFor(
+    `(() => { const h = document.querySelector('.depletion-intro-modal-host'); return !!h?.shadowRoot?.querySelector('.depletion-popup-body'); })()`,
+    { timeoutMs: 8000 },
+  );
+  await page.evaluate(`document.querySelector('.depletion-intro-modal-dismiss').click()`);
+  await sleep(150);
+  // 다시 첫 탭으로 갔다가 시뮬레이션 탭으로 돌아와도 — 오늘은 다시 뜨지 않는다.
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await sleep(150);
+  await page.clickElement(`document.getElementById('tab-pension-depletion')`);
+  await sleep(300);
+  const state = await page.evaluate(`(() => ({
+    depletionModalOpen: !!document.querySelector('.depletion-intro-modal-host'),
+    calc2DismissedKeySet: !!localStorage.getItem('calc2ExampleModalDismissedDate'),
+    depletionDismissedKeySet: !!localStorage.getItem('depletionIntroModalDismissedDate'),
+  }))()`);
+  assert.equal(state.depletionModalOpen, false, '「오늘 하루 보지 않음」을 눌렀는데 같은 날 다시 떴다');
+  assert.ok(state.depletionDismissedKeySet, '이 탭 팝업의 저장 키가 기록되지 않았다');
+  // [핵심] 계산기2 쪽 키는 이 팝업의 억제와 무관하게 이미 앞서
+  // `dismissCalc2ExampleModalIfOpen`가 채워 둔 상태 그대로다 — 이 팝업을
+  // 닫는 동작이 그 키를 "대신" 채우거나 지우면 안 된다(키가 섞이면 결국
+  // 같은 값을 공유하게 된다).
+  assert.ok(state.calc2DismissedKeySet, '계산기2 쪽 저장 키가 사라졌다 — 두 팝업의 저장이 서로 간섭한다');
 });

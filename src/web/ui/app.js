@@ -60,6 +60,7 @@ import { renderResultPanel, setRerenderHook } from './result-panel.js';
 import { renderCalc2InputPanel } from './calc2-input-panel.js';
 import { buildCalc2PrefillForm } from './calc2-prefill.js';
 import { maybeShowCalc2ExampleModal } from './calc2-example-modal.js';
+import { maybeShowDepletionIntroModal } from './depletion-intro-modal.js';
 import { renderTabBar } from './tab-bar.js';
 import { mountDepletionPanel } from './depletion-panel.js';
 import { SHARE_LINK_INVALID_NOTE, SHARE_LINK_PARTIAL_NOTE } from '../copy.js';
@@ -324,13 +325,11 @@ export function mountApp(root, { engineClient, analytics }) {
   // 어느 쪽도 `dep1.`로 시작할 수 없으므로 이 읽기가 그 둘을 건드리지
   // 않는다(`isDepletionShareFragment`).
   const depletionShareResult = readDepletionShareFragmentFromLocation();
-  // [2026-08-23, D84 판정 2b] 다리 — 시뮬레이션 결과 아래 링크를 누르면
-  // 절세계좌 계산기(계산기2, 지금 유일한 계산 탭) 탭으로 전환한다.
-  // `setActiveTab`은 아래에서 함수 선언으로 정의되어 호이스팅되므로 이
-  // 자리에서 참조해도 안전하다(실제 호출은 사용자가 링크를 누른 뒤에만
-  // 일어난다).
+  // [2026-08-25, 소유자 지시 8번] 다리(문구+버튼)를 뺐다 — `mountDepletionPanel`
+  // 은 더는 `onBridgeToCalc2`를 받지 않는다. 절세계좌 탭으로의 연결은 이
+  // 탭 전용 팝업(`maybeShowDepletionIntroModal`, 아래 `activateDepletionExtras`)
+  // 이 대신 진다.
   mountDepletionPanel(depletionSlot, {
-    onBridgeToCalc2: () => setActiveTab('calc2'),
     initialValues: depletionShareResult?.ok ? depletionShareResult.values : undefined,
   });
 
@@ -371,10 +370,18 @@ export function mountApp(root, { engineClient, analytics }) {
     maybeShowCalc2ExampleModal({ engineClient });
   }
 
+  // [2026-08-25, 소유자 지시 9번] 이 탭 전용 팝업 — 계산기2 예시 팝업과
+  // 같은 일일 규칙(별도 키)으로, 이 탭이 활성화되는 모든 경로(탭 클릭,
+  // 공유 링크로 곧장 진입)에서 같은 곳(이 함수)만 부른다.
+  function activateDepletionExtras() {
+    maybeShowDepletionIntroModal({ engineClient, onBridgeToCalc2: () => setActiveTab('calc2') });
+  }
+
   function setActiveTab(tabId) {
     if (tabId === activeTabId) return;
     activeTabId = tabId;
     if (activeTabId === 'calc2') activateCalc2Extras();
+    if (activeTabId === 'pension-depletion') activateDepletionExtras();
     calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
     depletionPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-depletion');
     writeActiveTabToLocation(activeTabId);
@@ -448,6 +455,10 @@ export function mountApp(root, { engineClient, analytics }) {
   // 아예 없는, 가장 흔한 첫 방문)까지 — 에서 같은 일일 팝업 규칙을 태운다.
   // `activeTabId`가 최종적으로 정해진 뒤(위 두 분기 모두 지난 뒤) 한 번만 본다.
   if (activeTabId === 'calc2') activateCalc2Extras();
+  // [2026-08-25, 소유자 지시 9번] 시뮬레이션 탭도 같은 원칙 — 탭 id
+  // 프래그먼트(`#pension-depletion`)나 이 탭의 공유 링크(`dep1.`)로 곧장
+  // 들어온 경우도 "탭이 활성화되는 경로"이므로 같은 곳에서 한 번만 본다.
+  if (activeTabId === 'pension-depletion') activateDepletionExtras();
   calc2Panel.classList.toggle('tab-panel-hidden', activeTabId !== 'calc2');
   depletionPanel.classList.toggle('tab-panel-hidden', activeTabId !== 'pension-depletion');
   mount(tabsSlot, renderTabBar({ activeTabId, onSelect: setActiveTab }));

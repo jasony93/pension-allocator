@@ -7,6 +7,7 @@ import {
   phaseIn,
   maturationRate,
   contributionRatePercent,
+  recipientsForYear,
 } from './simulate.js';
 import { DEPLETION_SLIDER_PARAMS, OFFICIAL_2030_CHECK, CONTRIBUTION_RATE_BASE_PERCENT } from './constants.js';
 
@@ -107,6 +108,40 @@ test('경계 — 보험료율 최종치가 스케줄 도달치보다 높으면(�
   const later = contributionRatePercent(2060, 22);
   assert.ok(Math.abs(early - CONTRIBUTION_RATE_BASE_PERCENT) < 1e-9, `2025년(기준 연도) 보험료율이 기준값이 아니다: ${early}`);
   assert.equal(later, 22, `충분히 늦은 해는 상한(22%)에서 멈춰야 한다: ${later}`);
+});
+
+// ---------------------------------------------------------------------------
+// [2026-08-25, 소유자 지시 6번] 수급개시연령 범위가 60~80세로 넓어지며
+// dA(= age − 65)가 처음으로 음수 구간(조기 수령)에 들어간다 — 그 구간에서
+// 계수 부호가 실제로 뒤집혀 "맞는 방향"(조기 수령 → 수급자 증가, 1인당
+// 급여는 감소)을 내는지 직접 잰다.
+// ---------------------------------------------------------------------------
+
+test('조기 수령(dA<0)에서는 수급자 수가 기준(65세, dA=0)보다 많은 방향으로 움직인다', () => {
+  // 전이 구간(2030~2042) 안, 절반쯤 진행된 해를 골라 ageProgress가 0도
+  // 1도 아니게 한다 — 부호만이 아니라 "실제로 델타가 반영된다"는 것까지
+  // 함께 잰다.
+  const year = 2036;
+  const baseline = recipientsForYear(year, { ageDeltaYears: 0, lifeDeltaYears: 0, ben: 0 });
+  const early = recipientsForYear(year, { ageDeltaYears: 60 - 65, lifeDeltaYears: 0, ben: 0 }); // 조기 수령(60세)
+  const late = recipientsForYear(year, { ageDeltaYears: 80 - 65, lifeDeltaYears: 0, ben: 0 }); // 늦은 수령(80세)
+  assert.ok(early > baseline, `조기 수령(60세)의 수급자 수(${early})가 기준(${baseline})보다 많아야 한다`);
+  assert.ok(late < baseline, `늦은 수령(80세)의 수급자 수(${late})가 기준(${baseline})보다 적어야 한다`);
+  // 대칭 확인 — 기준에서 5세 이르든 늦든 같은 크기로 반대 방향이어야
+  // (선형 등식이므로) 계수가 구간별로 따로 뒤집히는 결함이 없다는 것까지 잰다.
+  const minus5 = recipientsForYear(year, { ageDeltaYears: -5, lifeDeltaYears: 0, ben: 0 });
+  const plus5 = recipientsForYear(year, { ageDeltaYears: 5, lifeDeltaYears: 0, ben: 0 });
+  assert.ok(Math.abs((minus5 - baseline) - (baseline - plus5)) < 1e-9, '−5세·+5세가 기준에서 대칭으로 움직이지 않는다(선형 등식 위반)');
+});
+
+test('조기 수령이 실제 시뮬레이션에도 반영된다 — 60세 전체 실행이 65세보다 수급자 수(급여지출 경로)를 늘리는 방향으로 소진을 앞당기거나 같다', () => {
+  const baseline65 = runDepletionSimulation({ ...DEFAULTS, age: 65 });
+  const early60 = runDepletionSimulation({ ...DEFAULTS, age: 60 });
+  // 조기 수령은 급여지출을 늘리는 방향(수급자 증가) + 1인당 급여를 줄이는
+  // 방향(OUTGO_PER_AGE_YEAR_DELTA)이 동시에 걸린다 — 둘의 순효과가 반대
+  // 부호일 수 있어 "소진연도가 반드시 당겨진다"고는 단정하지 않는다. 여기서는
+  // 최소한 **결과가 달라진다**(계수가 죽어 있지 않다)는 것만 회귀로 잠근다.
+  assert.notEqual(early60.maxFundTrillionKrw, baseline65.maxFundTrillionKrw, '수급개시연령을 60세로 내려도 결과가 전혀 안 바뀐다 — 배선이 죽어 있을 위험');
 });
 
 // ---------------------------------------------------------------------------

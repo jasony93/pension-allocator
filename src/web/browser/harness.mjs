@@ -428,6 +428,24 @@ export async function dismissCalc2ExampleModalIfOpen(page) {
 }
 
 /**
+ * [2026-08-25, 소유자 지시 9번] 「연금고갈 시뮬레이션」 탭 전용 팝업 —
+ * 계산기2 예시 팝업과 같은 이유(위 함수 머리말)로 같은 대비가 필요하다.
+ * **별도 키**(`depletionIntroModalDismissedDate`, 계산기2와 독립)를 쓴다 —
+ * 이 함수가 계산기2 쪽 키를 건드리면 두 팝업의 "독립 억제"를 검사하는
+ * 시험 자신이 그 독립성을 깨게 된다.
+ */
+export async function dismissDepletionIntroModalIfOpen(page) {
+  await page.evaluate(`localStorage.setItem('depletionIntroModalDismissedDate', (() => {
+    const n = new Date();
+    return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+  })())`);
+  await page.evaluate(`(() => {
+    const closeBtn = document.querySelector('.depletion-intro-modal-close');
+    if (closeBtn) closeBtn.click();
+  })()`);
+}
+
+/**
  * 필수 항목을 채워 결과가 나오는 상태로 만든다(값 대입 — 여기서는 커서가 관심사가
  * 아니다). 금액 입력란은 **만원 단위**다(소유자 지시, 6절) — `calc2CurrentSalary`
  * `6000`은 60,000,000원, `calc2MonthlyCapacity` `50`은 500,000원과 같다. 이 값을

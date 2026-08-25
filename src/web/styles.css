@@ -2965,9 +2965,15 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    차트가 그 넓어진 폭을 그대로 쓴다(차트는 `width:100%`라 컨테이너가
    넓어지면 자동으로 넓어진다, 아래 `.depletion-chart`). */
 .depletion-slot { width: 100%; }
+/* [2026-08-25, 소유자 지시 10번] 980 → 1225(×1.25) — "그래프 가로를
+   현재보다 25% 확장(패널 폭 확대 포함)". 차트 자신은 `width:100%`(아래
+   `.depletion-chart`)라 패널이 넓어지면 자동으로 그만큼 넓어진다 — 별도로
+   SVG `viewBox` 폭을 바꿀 필요가 없다. `.app-layout`(1680px)·좌우 패딩
+   여유가 있어 1225px는 1024px 이상 데스크톱 폭 어디서도 넘치지 않는다
+   (`depletion.browser.mjs`가 여러 폭에서 실측한다). */
 .depletion-panel {
   padding: var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-2);
-  width: 100%; max-width: 980px; margin: 0 auto;
+  width: 100%; max-width: 1225px; margin: 0 auto;
 }
 
 .depletion-cards {
@@ -3021,6 +3027,10 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    rgb(230,115,0)이라(위 `.depletion-card` 주석과 같은 토큰) 별도 다크
    대비 재실측이 필요 없다 — 두 테마가 같은 값을 쓴다. */
 .depletion-chart-area { fill: var(--accent-warm); opacity: 0.12; }
+/* [2026-08-25, 소유자 지시 10번] 복합 차트 — 막대(연도별 적립금, 5년
+   단위). 영역(area, 0.12)보다는 진하고 선(line, 불투명 1.0)보다는 옅게
+   — 막대가 바탕, 선이 그 위 신호가 되게 한다. */
+.depletion-chart-bar { fill: var(--accent-warm); opacity: 0.35; }
 .depletion-chart-line { stroke: var(--accent-warm); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .depletion-chart-point { fill: transparent; stroke: none; cursor: default; }
 .depletion-chart-point:hover, .depletion-chart-point:focus-visible { fill: var(--accent-warm); opacity: 0.3; }
@@ -3064,18 +3074,19 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    크기다, `.btn`도 폭을 강제하지 않는다). 배경+흰 글자는 이미
    `.calc2-example-modal-dismiss`(styles.css 2650행 부근)가 쓰는 같은
    조합 — 새 대비 등급이 아니다. */
+/* [2026-08-25, 소유자 지시 7번] 「추가 정보 기입」 버튼을 행 가운데로 —
+   `align-self: flex-start`(왼쪽 붙임)를 `center`로 바꾼다. 폭 자체는
+   그대로 글자만 감싼다(위 주석 — `width` 규칙이 없다, 바뀌지 않는다). */
 .depletion-advanced-toggle {
-  align-self: flex-start; margin: var(--space-2) 0;
+  align-self: center; margin: var(--space-2) 0;
   background: var(--accent-warm); border: none; color: #fff; font-weight: 700;
 }
 .depletion-advanced-toggle:hover { filter: brightness(0.92); }
 
-.depletion-bridge {
-  margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle);
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
-}
-.depletion-bridge-note { color: var(--text-secondary); margin: 0; }
-.depletion-bridge-link { /* 스타일 없음 — 훅 클래스, `.btn.btn-secondary` 공용 규칙이 실제 모양을 낸다 */ }
+/* [2026-08-25, 소유자 지시 8번] 다리(문구+버튼)를 지웠다 — 옛
+   `.depletion-bridge`·`-note`·`-link` 규칙은 더 이상 어디서도 안 쓰인다,
+   여기서 함께 지운다(죽은 CSS를 남기지 않는다). 절세계좌 탭으로의 연결은
+   이제 이 탭 팝업(`.depletion-popup-*`, 아래)의 버튼이 대신 진다. */
 
 @media (max-width: 767px) {
   .depletion-slider-row { flex-wrap: wrap; }
@@ -3086,4 +3097,105 @@ details[open] > .block-summary > .block-summary-chevron { transform: rotate(90de
    행 배치를 이 탭만 되돌린다 — 위 `.depletion-panel` 주석 참고. */
 @media (min-width: 1024px) {
   #tabpanel-pension-depletion.app-main { flex-direction: column; }
+}
+
+/* ---------------------------------------------------------------------------
+   [2026-08-25, 소유자 지시 9번] 시뮬레이션 탭 전용 팝업 — 계산기2 예시
+   팝업(`.calc2-example-modal-host` 규칙, 위)과 같은 구조를 그대로 따른다.
+   `:has()`로 이 팝업이 뜬 `.modal`만 넓히고, 버튼 줄이 스크롤 없이 항상
+   보이게 한다(같은 이유 — 위 `.calc2-example-modal-host` 주석 참고).
+--------------------------------------------------------------------------- */
+.modal:has(.depletion-intro-modal-host) {
+  max-width: min(980px, 95vw);
+  max-height: min(720px, 90vh);
+  overflow: hidden;
+}
+.modal:has(.depletion-intro-modal-host) .depletion-intro-modal-host {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
+.modal:has(.depletion-intro-modal-host) .modal-actions { flex: 0 0 auto; }
+
+.depletion-popup-body { display: flex; flex-direction: row; gap: var(--space-5); align-items: flex-start; }
+
+/* 왼쪽 — 카피. `popup-copy.html`의 `.popup-copy` 규칙을 우리 토큰으로
+   옮긴 것 — 리터럴 hex(`#14181F` 등)는 전부 `--text-primary` 등 이 파일의
+   기존 토큰으로 바뀌었다(Pretendard CDN도 걷어냈다 — `font-family` 선언
+   자체가 없다, 이 앱의 기본 글꼴 스택을 그대로 물려받는다). */
+.depletion-popup-copy { flex: 1 1 320px; min-width: 280px; display: flex; flex-direction: column; gap: var(--space-4); }
+.depletion-popup-question {
+  margin: 0; font-weight: 800; letter-spacing: -0.02em;
+  font-size: clamp(1.5rem, 1.15rem + 1.6vw, 2.125rem); line-height: 1.32; color: var(--text-primary);
+}
+.depletion-popup-question-line {
+  display: block; opacity: 0; animation: example-hero-fade-up 0.6s ease forwards;
+}
+.depletion-popup-question-line:nth-child(1) { animation-delay: 0.05s; }
+.depletion-popup-question-line:nth-child(2) { animation-delay: 0.16s; }
+.depletion-popup-answer {
+  margin: 0; font-weight: 800; letter-spacing: -0.02em;
+  font-size: clamp(1.25rem, 1.02rem + 1vw, 1.6875rem); line-height: 1.42; color: var(--text-primary);
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.32s;
+}
+.depletion-popup-mark {
+  color: var(--accent-warm); text-decoration: underline; text-decoration-color: var(--accent-warm-underline);
+  text-decoration-thickness: 3px; text-underline-offset: 6px;
+}
+.depletion-popup-body-copy {
+  display: flex; flex-direction: column; gap: 0.875rem;
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.48s;
+}
+.depletion-popup-body-copy p { margin: 0; font-size: clamp(0.9375rem, 0.9rem + 0.2vw, 1.0625rem); font-weight: 500; line-height: 1.65; color: var(--text-secondary); }
+.depletion-popup-body-copy p strong { color: var(--text-primary); font-weight: 700; }
+.depletion-popup-account { color: var(--accent-warm); font-weight: 800; }
+/* [관리자 지시 — 카피 검증 3번] 2064 vs 이 시뮬레이터 결과 흡수 문장 —
+   본문보다 한 단계 옅게, 출처보다는 진하게(설명 문장이지 인용이 아니다). */
+.depletion-popup-note {
+  margin: 0; font-size: 0.8125rem; font-weight: 500; line-height: 1.6; color: var(--text-secondary);
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.58s;
+}
+.depletion-popup-source {
+  display: flex; flex-direction: column; gap: 2px;
+  opacity: 0; animation: example-hero-fade-up 0.6s ease forwards; animation-delay: 0.68s;
+}
+.depletion-popup-source-line { margin: 0; font-size: 0.8125rem; font-weight: 500; color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .depletion-popup-question-line, .depletion-popup-answer, .depletion-popup-body-copy, .depletion-popup-note, .depletion-popup-source {
+    animation: none; opacity: 1; transform: none;
+  }
+}
+
+/* 오른쪽 — 상/하 두 영역. */
+.depletion-popup-right { flex: 1 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: var(--space-4); }
+.depletion-popup-right-top, .depletion-popup-right-bottom {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-subtle);
+}
+.depletion-popup-right-bottom { border-bottom: none; padding-bottom: 0; }
+.depletion-popup-chart-button, .depletion-popup-bridge-button { align-self: center; }
+
+/* 정적 축소 렌더 — 실제 슬라이더는 눌러도 안 움직인다(비활성). 차트는
+   기존 `.depletion-chart`(width:100%) 그대로, 이 팝업 폭에 맞춰 자동으로
+   작아진다 — 별도 축소 배율을 걸지 않는다. */
+.depletion-preview { width: 100%; display: flex; flex-direction: column; gap: var(--space-2); }
+.depletion-preview-sliders { display: flex; flex-direction: column; gap: 2px; }
+.depletion-preview-slider-row { opacity: 0.75; }
+.depletion-preview-slider-row .depletion-slider-input { cursor: default; }
+
+/* 닫기(X)·「오늘 하루 보지 않음」 — 계산기2 예시 팝업과 같은 모양
+   (`.calc2-example-modal-close`·`-dismiss`, 위 2644행 부근)을 그대로
+   복제한다(대비 등급도 이미 실측된 그 조합 그대로). */
+.depletion-intro-modal-close {
+  width: 40px; height: 40px; border-radius: var(--radius-m);
+  border: 1px solid var(--border-strong); background: transparent; color: var(--text-secondary);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.depletion-intro-modal-close:hover { background: var(--surface-sunken); }
+.depletion-intro-modal-dismiss {
+  border: none; border-radius: var(--radius-m); background: var(--accent-warm); color: #fff;
+  padding: 0 var(--space-4); height: 40px; font-weight: 700; cursor: pointer;
+}
+.depletion-intro-modal-dismiss:hover { filter: brightness(0.92); }
+
+@media (max-width: 700px) {
+  .depletion-popup-body { flex-direction: column; }
 }

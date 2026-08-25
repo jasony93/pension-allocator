@@ -20,6 +20,17 @@
 // 슬라이더 정의 — 핵심 가정(core) 셋 + 고급 설정(advanced) 다섯.
 // ---------------------------------------------------------------------------
 
+// [2026-08-25, 소유자 지시 5번] **기대수명 슬라이더의 기준(baseline).**
+// 화면·URL 공유 링크에는 절대 나이(84~100세)를 보이지만, 계산 등식
+// (`simulate.js`)은 그대로 "기준에서의 증가분"(dL)만 받는다 — 등식 자체를
+// 다시 쓰지 않고, 절대값을 이 기준에서 뺀 델타로만 변환한다
+// (`dL = 절대값 − LIFE_EXPECTANCY_BASELINE_YEARS`). **기준값 84세 자체의
+// 출처는 아직 확인 전이다** — TODO(tax-domain): 2026년 한국 기대수명
+// 통계(통계청 생명표 등) 대비 84세가 맞는 자리인지, 확인 전. 기준을 84가
+// 아닌 다른 값으로 바꿔도 계산 결과는 바뀌지 않는다(같은 dL을 내는 절대값
+// 표시만 옮겨 간다) — 그래서 이 상수 하나만 고치면 화면 전체가 갈린다.
+export const LIFE_EXPECTANCY_BASELINE_YEARS = 84;
+
 /**
  * @typedef {object} DepletionSliderParam
  * @property {string} id
@@ -37,8 +48,10 @@
 export const DEPLETION_SLIDER_PARAMS = [
   // [33.8 #19, 33.9] 제5차 재정추계 기본가정 — 기금투자수익률 4.5%(민감도
   // 표에 명시). 초안 4.6%는 근거를 찾지 못해 4.5%로 내렸다(영향은 작다 —
-  // 소진연도 1년 이내).
-  { id: 'ror', group: 'core', label: '기금운용수익률', min: 2, max: 9, step: 0.1, default: 4.5, unit: '%', decimals: 1 },
+  // 소진연도 1년 이내). [2026-08-25, 소유자 지시 2번] 슬라이더 범위를
+  // 0~20%로 넓힌다 — 기본값(4.5%)·법정/추계 근거는 그대로, 조작 가능한
+  // 폭만 넓어진다(TODO(tax-domain): 0~20% 자체의 시나리오적 근거, 확인 전).
+  { id: 'ror', group: 'core', label: '기금운용수익률', min: 0, max: 20, step: 0.1, default: 4.5, unit: '%', decimals: 1 },
   // [33.5 (1), 33.8 #11·#12] 최종 도달치 13%는 법정 스케줄의 끝값(아래
   // `CONTRIBUTION_RATE_*`와 같은 근거). 슬라이더 상한 22%는 제5차 재정추계
   // 「재정목표 달성을 위한 필요보험료율」(17.86~23.73%)이 근거다 — 13%를
@@ -46,26 +59,39 @@ export const DEPLETION_SLIDER_PARAMS = [
   // (`ui/depletion-panel.js`).
   { id: 'rate', group: 'core', label: '보험료율 (최종)', min: 9, max: 22, step: 0.5, default: 13, unit: '%', decimals: 1 },
   // [33.8 #3] 국민연금연구원 중기재정전망 — 2026년 말 2,140만 → 2030년 말
-  // 2,051만(연 −1.05%, 초안 −1.0%와 사실상 일치).
-  { id: 'sub', group: 'core', label: '가입자 연평균 증감률', min: -3, max: 0.5, step: 0.1, default: -1.0, unit: '%', decimals: 1 },
+  // 2,051만(연 −1.05%, 초안 −1.0%와 사실상 일치). [2026-08-25, 소유자
+  // 지시 3번] 슬라이더 범위를 −5%~+5%로 넓힌다 — 기본값·근거는 그대로.
+  { id: 'sub', group: 'core', label: '가입자 연평균 증감률', min: -5, max: 5, step: 0.1, default: -1.0, unit: '%', decimals: 1 },
   // [33.8 #20, 33.9] 제5차 재정추계 기본가정 — 임금상승률 3.7%(민감도 표
   // 「기본가정(3.7%)」). 초안 3.8%는 근거 없어 3.7%로 내렸다.
   { id: 'wage', group: 'advanced', label: '임금상승률', min: 1, max: 6, step: 0.1, default: 3.7, unit: '%', decimals: 1 },
   // [33.8 #15] 제5차 재정추계 기본가정에서 파생 — 명목임금 3.7% − 실질임금
   // 1.7% = 2.0%. 정정 없음(33.9 "물가상승률 기본값 2.0% 유지").
-  { id: 'cpi', group: 'advanced', label: '물가상승률', min: 0.5, max: 4, step: 0.1, default: 2.0, unit: '%', decimals: 1 },
+  // [2026-08-25, 소유자 지시 4번] 슬라이더 범위를 0~5%로 넓힌다.
+  { id: 'cpi', group: 'advanced', label: '물가상승률', min: 0, max: 5, step: 0.1, default: 2.0, unit: '%', decimals: 1 },
   // [33.6 (4), 33.9] **기본값을 3→0으로 내렸다.** 수급자 곡선
   // (`BASE_RECIPIENTS_BREAKPOINTS_10K`)이 이미 통계청 장래인구추계(기대수명
   // 개선 포함)를 깔고 있어, 기본값 3이 살아 있으면 그 효과가 두 번
   // 계상된다(다른 편차 손잡이 `age`·`ben`은 기본값에서 이미 편차 0이다).
   // 이 손잡이는 **공식 추계 대비 추가** 증가를 묻는 시나리오용으로 남긴다.
-  { id: 'life', group: 'advanced', label: '기대수명 증가 (2070년까지)', min: 0, max: 8, step: 0.5, default: 0, unit: '년', decimals: 1 },
+  // [2026-08-25, 소유자 지시 5번] **절대 나이(84~100세)로 표시한다** —
+  // 기본값은 기준값 자신(84세, 델타 0)이다. 계산 등식은 그대로
+  // `LIFE_EXPECTANCY_BASELINE_YEARS`(위)를 뺀 델타를 쓴다(`simulate.js`의
+  // `recipientsForYear`). 라벨은 「기대수명」 하나로 짧아진다(증가분이
+  // 아니라 절대값을 보이므로 "증가" 수식어가 더는 맞지 않는다).
+  { id: 'life', group: 'advanced', label: '기대수명', min: LIFE_EXPECTANCY_BASELINE_YEARS, max: 100, step: 0.5, default: LIFE_EXPECTANCY_BASELINE_YEARS, unit: '세', decimals: 1 },
   // [33.5 (3), 33.8 #13] 65세는 「현행」이 아니라 **최종**(법정 상한)이다 —
   // 「국민연금법」 제61조·법률 제8541호 부칙 제8조(1969년생 이후 65세).
   // 2026년 현재 실제 적용 연령은 63세(1961~64년생)다. 슬라이더 기본값 65는
   // "공식 수급자 곡선으로부터의 편차 0"을 뜻해 계산상 문제는 없다 — 라벨만
   // 정정한다(아래 `depletion-copy.js`).
-  { id: 'age', group: 'advanced', label: '최종 수급개시연령(현행 법정 상한 65세, 1969년생부터 적용)', min: 65, max: 70, step: 1, default: 65, unit: '세', decimals: 0 },
+  // [2026-08-25, 소유자 지시 6번] **범위를 60~80세로 넓힌다.** 65세
+  // 미만(조기 수령 방향)도 이제 슬라이더로 표현할 수 있다 — 이 구간에서는
+  // `age − 65`(dA)가 음수가 되는데, `simulate.js`의 등식은 부호가 그대로
+  // 뒤집혀도 방향이 맞는다(수급자 수는 늘고 1인당 급여는 준다, 단위시험
+  // `simulate.test.mjs` "조기 수령" 참고) — 별도 분기 없이 같은 등식을
+  // 그대로 쓴다.
+  { id: 'age', group: 'advanced', label: '최종 수급개시연령(현행 법정 상한 65세, 1969년생부터 적용)', min: 60, max: 80, step: 1, default: 65, unit: '세', decimals: 0 },
   // 수급자수 보정 범위 자체(±20%)의 산정 근거는 33절이 확인하지 못했다 —
   // TODO(tax-domain): 출처, 확인 전.
   { id: 'ben', group: 'advanced', label: '수급자수 보정', min: -20, max: 20, step: 1, default: 0, unit: '%', decimals: 0 },

@@ -29,8 +29,6 @@ import {
 import { exportDepletionSummaryPng, downloadDataUrl } from '../depletion/summary-image.js';
 import { buildDepletionShareUrl } from '../depletion/share-link.js';
 import {
-  DEPLETION_BRIDGE_NOTE,
-  DEPLETION_BRIDGE_LINK_LABEL,
   DEPLETION_ADVANCED_TOGGLE_OPEN_LABEL,
   DEPLETION_ADVANCED_TOGGLE_CLOSE_LABEL,
   DEPLETION_CARD_DEPLETION_LABEL,
@@ -177,7 +175,12 @@ const CHART_VIEW_WIDTH = 640;
 const CHART_VIEW_HEIGHT = 260;
 const CHART_PAD_LEFT = 56;
 const CHART_PAD_RIGHT = 16;
-const CHART_PAD_TOP = 16;
+// [2026-08-25, 소유자 지시 1번] 16→34 — 시작점 라벨을 궤적(플롯 영역)
+// 밖, y축 위쪽 여백에 놓을 자리를 만든다. 라벨을 실제 데이터 y좌표가
+// 아니라 이 고정 여백 안(플롯 영역 시작선보다 위)에 두면, 슬라이더 값이
+// 바뀌어 궤적 모양이 달라져도 라벨이 선·영역과 절대 겹치지 않는다(플롯은
+// `CHART_PAD_TOP` 아래에서만 그려진다 — 아래 `yOf`).
+const CHART_PAD_TOP = 34;
 const CHART_PAD_BOTTOM = 30;
 
 /**
@@ -219,6 +222,63 @@ function niceAxisStep(rawMax, targetIntervalCount = AXIS_TICK_INTERVAL_COUNT) {
   return 10 * magnitude * LABEL_UNIT_TRILLION_KRW;
 }
 
+// [2026-08-25, 소유자 지시 10번] 막대(연도별 적립금) 간격 — 도넛 조각
+// 사이 간격과 같은 2px 관행을 그대로 쓴다(`ui/charts.js`의
+// `SLICE_GAP_PX = 2`가 이 저장소의 그 관행 자체다 — 여기서 값만 다시
+// 적고, 상수를 새로 만들어 두 곳이 각자 값을 들고 있게 하지 않는다. 이
+// 파일이 `charts.js`를 더 끌어오지 않는 이유는 이 값 하나 때문에 SVG
+// 도넛 모듈 전체를 의존성으로 들이는 것이 과하기 때문이다 — 값 자체는
+// 2px로 고정해 두 곳이 항상 같은 수를 쓴다).
+const CHART_BAR_GAP_PX = 2;
+
+/**
+ * [2026-08-25, 소유자 지시 10번] **막대 밀도 — 연 단위가 아니라 5년
+ * 단위로 솎는다.** 시뮬레이션 구간은 최대 90년 안팎(2026~2115)이라
+ * 연 단위 막대는 폭이 800px대 차트에서 막대 하나당 9px 미만이 되어
+ * 2px 간격을 지키면 막대 자체가 거의 안 남는다(판단 근거). 국민연금
+ * 재정추계 보고서 자신도 5년 단위 표를 쓴다(`OFFICIAL_2030_CHECK` 등
+ * 이 파일이 참고하는 문서들의 관행과도 맞다). **시작·끝 연도는 5의
+ * 배수가 아니어도 항상 포함한다** — 궤적의 시작·끝이 막대에서도 보이게
+ * 한다.
+ */
+const CHART_BAR_YEAR_STEP = 5;
+
+function buildDepletionChartBars({ years, fundsTrillionKrw, xOf, yOf, baselineY }) {
+  const barIndices = years
+    .map((year, i) => ({ year, i }))
+    .filter(({ year, i }) => year % CHART_BAR_YEAR_STEP === 0 || i === 0 || i === years.length - 1);
+  return barIndices.map(({ year, i }, order) => {
+    const x = xOf(year);
+    // 히스토그램 슬롯 — 이웃 막대와의 중간점을 경계로 삼는다(막대 간격이
+    // 불균일해도 — 시작·끝 연도가 5년 배수가 아닐 수 있다 — 겹치거나
+    // 비지 않는다).
+    const prevX = order === 0 ? x - (barIndices[1] ? xOf(barIndices[1].year) - x : innerBarFallback(xOf, year)) : (x + xOf(barIndices[order - 1].year)) / 2;
+    const nextX =
+      order === barIndices.length - 1
+        ? x + (barIndices[order - 1] ? x - xOf(barIndices[order - 1].year) : innerBarFallback(xOf, year))
+        : (x + xOf(barIndices[order + 1].year)) / 2;
+    const left = prevX + CHART_BAR_GAP_PX / 2;
+    const right = nextX - CHART_BAR_GAP_PX / 2;
+    const width = Math.max(1, right - left);
+    const value = fundsTrillionKrw[i];
+    const y = yOf(value);
+    const height = Math.max(0, baselineY - y);
+    return svgEl(
+      'rect',
+      { class: 'depletion-chart-bar', x: left.toFixed(1), y: y.toFixed(1), width: width.toFixed(1), height: height.toFixed(1) },
+      [svgEl('title', {}, [`${year}년: ${formatTrillion(value)}`])],
+    );
+  });
+}
+
+/** 막대가 하나뿐이거나 양 끝인데 이웃이 없을 때의 대체 슬롯 폭(연 5년치
+ * x축 간격을 근사) — 실제로는 시뮬레이션 구간이 최소 수 년이라 이 경로를
+ * 거의 타지 않지만, 경계 시나리오(소진이 시작 직후인 극단값)에서도 폭이
+ * 0이 되지 않게 하는 방어다. */
+function innerBarFallback(xOf, year) {
+  return Math.max(1, xOf(year + CHART_BAR_YEAR_STEP) - xOf(year));
+}
+
 function buildDepletionChart(result) {
   const { years, fundsTrillionKrw, depletionYear, deficitYear } = result;
   const firstYear = years[0];
@@ -234,6 +294,7 @@ function buildDepletionChart(result) {
   const points = years.map((year, i) => [xOf(year), yOf(fundsTrillionKrw[i])]);
   const lineD = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const areaD = `${lineD} L${points[points.length - 1][0].toFixed(1)},${baselineY.toFixed(1)} L${points[0][0].toFixed(1)},${baselineY.toFixed(1)} Z`;
+  const barNodes = buildDepletionChartBars({ years, fundsTrillionKrw, xOf, yOf, baselineY });
 
   // y축 눈금 — 0부터 maxScale까지 axisStep(항상 1,000조의 정수배)을 그대로
   // 쌓는다. 4등분 나눗셈이 아니라서 반올림 라벨이 절대 건너뛰지 않는다.
@@ -276,15 +337,22 @@ function buildDepletionChart(result) {
     ]),
   );
 
-  // [2026-08-24, 소유자 지시 2번] 궤적 시작점(2026)에 시작 적립금 라벨을
-  // 단다 — **전망 재현 출발값**(`INITIAL_FUND_TRILLION_KRW`, 1,458조)만
-  // 쓴다. 실적(`ACTUAL_FUND_BALANCE`, 1,670.7조 — 「현재 기금」 카드가
-  // 따로 보인다)과 절대 섞지 않는다(D84 출처 분리 — 궤적 자체가 전망
-  // 재현 모델이므로 그 값·그 출처로만 라벨을 단다).
+  // [2026-08-24, 소유자 지시 2번 → 2026-08-25, 소유자 지시 1번으로 문구·
+  // 위치 정정] 궤적 시작점(2026)에 시작 적립금 라벨을 단다 — **전망 재현
+  // 출발값**(`INITIAL_FUND_TRILLION_KRW`, 1,458조)만 쓴다. 실적
+  // (`ACTUAL_FUND_BALANCE`, 1,670.7조 — 「현재 기금」 카드가 따로
+  // 보인다)과 절대 섞지 않는다(D84 출처 분리 — 궤적 자체가 전망 재현
+  // 모델이므로 그 값·그 출처로만 라벨을 단다).
+  //
+  // **[소유자 지시 1번] 표식(점)은 실제 데이터 위치에, 문구(라벨)는 y축
+  // 위쪽 고정 여백으로 분리한다.** 점을 실제 시작점에 남겨 "궤적이 여기서
+  // 시작한다"는 사실은 그대로 보이되, 글자는 궤적 모양과 무관한 고정
+  // 자리(플롯 영역 시작선 `CHART_PAD_TOP`보다 위)에 둬 어떤 슬라이더
+  // 조합에서도 선·영역과 겹칠 수 없게 한다.
   const [startX, startY] = points[0];
   const startLabelNode = svgEl('g', { class: 'depletion-chart-start' }, [
     svgEl('circle', { class: 'depletion-chart-start-point', cx: startX.toFixed(1), cy: startY.toFixed(1), r: 4 }),
-    svgEl('text', { class: 'depletion-chart-start-label', x: (startX + 8).toFixed(1), y: (startY - 8).toFixed(1), 'text-anchor': 'start' }, [
+    svgEl('text', { class: 'depletion-chart-start-label', x: CHART_PAD_LEFT.toFixed(1), y: '14', 'text-anchor': 'start' }, [
       `${DEPLETION_CHART_START_LABEL_PREFIX} ${formatTrillion(INITIAL_FUND_TRILLION_KRW)}${DEPLETION_CHART_START_LABEL_SUFFIX}`,
     ]),
   ]);
@@ -321,6 +389,10 @@ function buildDepletionChart(result) {
     [
       ...yTickNodes,
       svgEl('path', { class: 'depletion-chart-area', d: areaD }),
+      // [2026-08-25, 소유자 지시 10번] 복합 차트 — 막대(연도별 적립금, 5년
+      // 단위)를 영역(area) 위, 선(line) 아래에 둔다. "막대 + 그 위 점을
+      // 연결하는 선"(관리자 지시 원문) — 막대가 바탕, 선·점이 그 위 얹힌다.
+      ...barNodes,
       svgEl('path', { class: 'depletion-chart-line', d: lineD, fill: 'none' }),
       ...markers,
       ...pointNodes,
@@ -328,6 +400,40 @@ function buildDepletionChart(result) {
       startLabelNode,
     ],
   );
+}
+
+/**
+ * [2026-08-25, 소유자 지시 9번] 시뮬레이션 탭 팝업의 오른쪽 상단 —
+ * "시뮬레이션 그래프 + 기본 슬라이더의 디자인 구성만"(관리자 지시 원문).
+ * **정적 축소 렌더다 — 실제 조작이 안 된다.** 기본값 하나로 한 번만
+ * 계산해(사용자 입력과 무관, 팝업을 열 때마다 같은 그림) 기존 SVG 차트
+ * (`buildDepletionChart`)를 그대로 재사용한 축소판 + 핵심 가정 슬라이더
+ * 세 줄(비활성 `disabled`, 탭 순서에서 제외)을 함께 낸다. 이 함수가 만드는
+ * `<input>`은 `mountDepletionPanel`의 진짜 슬라이더와 달리 `oninput`
+ * 배선이 아예 없다 — "이렇게 생겼다"만 보여주면 되므로 상태를 갖지 않는다.
+ */
+export function depletionChartAndSlidersPreview() {
+  const defaults = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
+  const result = runDepletionSimulation(defaults);
+  const chart = buildDepletionChart(result);
+  const sliderRows = CORE_PARAMS.map((p) =>
+    el('div', { class: 'depletion-slider-row depletion-preview-slider-row' }, [
+      el('span', { class: 'depletion-slider-label' }, [p.label]),
+      el('input', {
+        type: 'range',
+        class: 'depletion-slider-input',
+        min: String(p.min),
+        max: String(p.max),
+        step: String(p.step),
+        value: String(p.default),
+        disabled: true,
+        tabindex: -1,
+        'aria-hidden': 'true',
+      }),
+      el('span', { class: 'depletion-slider-value' }, [formatSliderValue(p, p.default)]),
+    ]),
+  );
+  return el('div', { class: 'depletion-preview' }, [chart, el('div', { class: 'depletion-sliders depletion-preview-sliders' }, sliderRows)]);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,10 +453,16 @@ function depletionIconButton({ extraClass, dataUri, ariaLabel, onclick }) {
 }
 
 /**
+ * [2026-08-25, 소유자 지시 8번] `onBridgeToCalc2`는 더는 이 함수의
+ * 관심사가 아니다 — 다리(문구+버튼)를 통째로 지웠다(아래). 절세계좌
+ * 탭으로의 연결은 이제 이 탭 전용 팝업(`ui/depletion-intro-modal.js`)이
+ * 진다 — 그 팝업은 `app.js`가 직접 마운트하고 자기만의
+ * `onBridgeToCalc2`를 받는다(이 함수와는 별개 배선).
+ *
  * @param {HTMLElement} container
- * @param {{ onBridgeToCalc2: () => void, initialValues?: Record<string, number> }} options
+ * @param {{ initialValues?: Record<string, number> }} options
  */
-export function mountDepletionPanel(container, { onBridgeToCalc2, initialValues } = {}) {
+export function mountDepletionPanel(container, { initialValues } = {}) {
   const values = Object.fromEntries(DEPLETION_SLIDER_PARAMS.map((p) => [p.id, p.default]));
   if (initialValues) {
     for (const p of DEPLETION_SLIDER_PARAMS) {
@@ -453,22 +565,12 @@ export function mountDepletionPanel(container, { onBridgeToCalc2, initialValues 
     advancedToggle,
     advancedSlot,
     assumptionNotesSlot,
-    // [D84 판정 2b] 다리 — 사실 문장 + 링크. "당신은 얼마를 넣으세요"를
-    // 말하지 않는다, 개인 금액을 계산하지 않는다.
-    el('div', { class: 'depletion-bridge' }, [
-      el('p', { class: 'depletion-bridge-note type-body-s' }, [
-        DEPLETION_BRIDGE_NOTE,
-      ]),
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'btn btn-secondary depletion-bridge-link',
-          onclick: () => onBridgeToCalc2?.(),
-        },
-        [DEPLETION_BRIDGE_LINK_LABEL],
-      ),
-    ]),
+    // [2026-08-25, 소유자 지시 8번] **다리(문구+버튼)를 뺐다** — 절세계좌
+    // 탭으로의 연결은 이제 이 탭 전용 팝업(`ui/depletion-intro-modal.js`,
+    // 소유자 지시 9번)의 하단 버튼이 대신 진다(탭이 활성화될 때 한 번,
+    // `app.js`가 그 팝업을 띄운다). "당신은 얼마를 넣으세요"를 말하지
+    // 않는다는 D84 판정 2 (b)의 원칙은 그 팝업 버튼 문구에도 그대로다
+    // (`DEPLETION_POPUP_BRIDGE_BUTTON_LABEL` — 계좌 이름만 나열한다).
   ]);
 
   rerenderComputed();

@@ -36,6 +36,8 @@ import {
   CONTRIBUTION_RATE_ANNUAL_STEP_PERCENT,
   CONTRIBUTION_RATE_BASE_YEAR,
   OFFICIAL_2030_CHECK,
+  STATUTORY_AGE_CEILING_YEARS,
+  LIFE_EXPECTANCY_BASELINE_YEARS,
 } from './constants.js';
 
 /** 수급자 수 기준 곡선 — 꺾은선 구간 보간(선형). 범위 밖은 양 끝값으로 고정한다. */
@@ -80,6 +82,29 @@ export function maturationRate(year) {
 }
 
 /**
+ * 그 해 수급자 수(만 명) — 수급개시연령·기대수명·수급자수 보정 세 손잡이가
+ * 기준 곡선(`baseRecipients`)에 얹히는 몫을 한 곳에 모은다. `runDepletionSimulation`
+ * 안에 인라인으로 있던 식을 그대로 뗀 것뿐, 등식은 바뀌지 않았다 — **단독
+ * `export`로 여는 이유는 부호 검증**(소유자 지시 6번)이다. `ageDeltaYears`가
+ * 음수(조기 수령, `age < STATUTORY_AGE_CEILING_YEARS`)일 때도 이 식 하나가
+ * 그대로 방향을 뒤집어 맞게 낸다는 것을(수급자 수 증가) `simulate.test.mjs`가
+ * 전체 시뮬레이션을 다시 돌리지 않고 이 함수만 불러 직접 잰다.
+ *
+ * @param {number} year
+ * @param {{ ageDeltaYears: number, lifeDeltaYears: number, ben: number }} deltas
+ */
+export function recipientsForYear(year, { ageDeltaYears, lifeDeltaYears, ben }) {
+  const ageProgress = phaseIn(year, AGE_PHASE_IN_START_YEAR, AGE_PHASE_IN_END_YEAR);
+  const lifeProgress = phaseIn(year, LIFE_PHASE_IN_START_YEAR, LIFE_PHASE_IN_END_YEAR);
+  return (
+    baseRecipients(year) *
+    (1 - RECIPIENTS_PER_AGE_YEAR_DELTA * ageDeltaYears * ageProgress) *
+    (1 + RECIPIENTS_PER_LIFE_YEAR_DELTA * lifeDeltaYears * lifeProgress) *
+    (1 + ben / 100)
+  );
+}
+
+/**
  * 보험료율(%) — `CONTRIBUTION_RATE_BASE_PERCENT`에서 매년
  * `CONTRIBUTION_RATE_ANNUAL_STEP_PERCENT`씩 올라 슬라이더가 정한 최종치
  * (`finalRatePercent`)에서 멈춘다.
@@ -119,8 +144,13 @@ export function runDepletionSimulation(params) {
   const r = params.ror / 100;
   const wg = params.wage / 100;
   const cp = params.cpi / 100;
-  const ageDeltaYears = params.age - 65;
-  const lifeDeltaYears = params.life;
+  // [2026-08-25, 소유자 지시 5·6번] **기준에서의 델타로 변환한다.** 화면
+  // 슬라이더는 이제 절대값(수급개시연령 60~80세, 기대수명 84~100세)을
+  // 보이지만, 아래 등식은 그대로 "기준에서 얼마나 벗어났는가"만 받는다 —
+  // 등식 자체는 이 정정 전과 완전히 같다(기준값에서는 델타가 0이라 옛
+  // 기본값과 결과가 그대로 재현된다, `simulate.test.mjs` regression lock).
+  const ageDeltaYears = params.age - STATUTORY_AGE_CEILING_YEARS;
+  const lifeDeltaYears = params.life - LIFE_EXPECTANCY_BASELINE_YEARS;
 
   let fund = params.initialFundTrillionKrw ?? INITIAL_FUND_TRILLION_KRW;
   let subscribers10k = INITIAL_SUBSCRIBERS_10K;
@@ -136,14 +166,13 @@ export function runDepletionSimulation(params) {
 
   for (let year = SIMULATION_START_YEAR; year <= SIMULATION_END_YEAR; year++) {
     const contributionRate = contributionRatePercent(year, params.rate) / 100;
+    // [2026-08-25] `ageProgress`는 아래 소득·지출 식에도 그대로 쓰인다 —
+    // `lifeProgress`는 `recipientsForYear`가 자기 안에서 다시 구하므로(위
+    // 함수 정의) 여기서는 더 이상 따로 두지 않는다(중복 계산 하나뿐이라
+    // 성능에 영향 없다, 이 루프는 최대 90회 안팎이다).
     const ageProgress = phaseIn(year, AGE_PHASE_IN_START_YEAR, AGE_PHASE_IN_END_YEAR);
-    const lifeProgress = phaseIn(year, LIFE_PHASE_IN_START_YEAR, LIFE_PHASE_IN_END_YEAR);
 
-    const recipients10k =
-      baseRecipients(year) *
-      (1 - RECIPIENTS_PER_AGE_YEAR_DELTA * ageDeltaYears * ageProgress) *
-      (1 + RECIPIENTS_PER_LIFE_YEAR_DELTA * lifeDeltaYears * lifeProgress) *
-      (1 + params.ben / 100);
+    const recipients10k = recipientsForYear(year, { ageDeltaYears, lifeDeltaYears, ben: params.ben });
     const incomeTrillionKrw = subscribers10k * (1 + INCOME_PER_AGE_YEAR_DELTA * ageDeltaYears * ageProgress) * wageBase * 12 * contributionRate * 0.01;
     const outgoTrillionKrw = recipients10k * benefitBase * (1 + OUTGO_PER_AGE_YEAR_DELTA * ageDeltaYears * ageProgress) * 12 * 0.01;
 

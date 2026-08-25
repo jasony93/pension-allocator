@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen } from './harness.mjs';
+import { openApp, skipWithoutChrome, sleep, dismissCalc2ExampleModalIfOpen, dismissDepletionIntroModalIfOpen } from './harness.mjs';
 
 /**
  * 「절세계좌 계산기2」(D79) 실측 — 관리자 지시(신규 회차) 검사 목록:
@@ -51,6 +51,11 @@ test('계산기2 탭으로 전환하면 URL 프래그먼트가 #calc2다', { ski
   // [2026-08-24, D84] 「절세계좌 계산기2(근거판)」(`tab-calculator`)가
   // 지워져 이제 남은 다른 탭은 `tab-pension-depletion` 하나다 — 그쪽으로
   // 비킨다.
+  // [2026-08-25, 소유자 지시 9번] 이 탭도 이제 전용 팝업을 띄운다 — 이 파일의
+  // `localStorage.clear()` 호출들이 계산기2 팝업 재현을 위해 그 키를
+  // 지우는 김에 이 탭의 억제 키도 함께 지워, 뒤이은 좌표 기반 클릭이
+  // 스크림에 막힐 수 있다(실측 회귀 방지). 클릭 직전 매번 다시 치운다.
+  await dismissDepletionIntroModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await sleep(100);
   await page.clickElement(`document.getElementById('tab-calc2')`);
@@ -278,6 +283,11 @@ test('예시 팝업 — 계산기2 탭을 처음 클릭하면 뜨고, 「오늘 
   // 한다(그렇지 않으면 아래 `tab-calc2` 클릭이 이미 활성인 탭이라
   // `setActiveTab`의 이른 반환에 걸려 아무 일도 안 한다). [2026-08-24,
   // D84] 다른 탭이 이제 `tab-pension-depletion` 하나다.
+  // [2026-08-25, 소유자 지시 9번] 이 탭도 이제 전용 팝업을 띄운다 — 이 파일의
+  // `localStorage.clear()` 호출들이 계산기2 팝업 재현을 위해 그 키를
+  // 지우는 김에 이 탭의 억제 키도 함께 지워, 뒤이은 좌표 기반 클릭이
+  // 스크림에 막힐 수 있다(실측 회귀 방지). 클릭 직전 매번 다시 치운다.
+  await dismissDepletionIntroModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await sleep(100);
   await page.evaluate(`localStorage.clear()`);
@@ -306,6 +316,11 @@ test('예시 팝업 — 계산기2 탭을 처음 클릭하면 뜨고, 「오늘 
   assert.ok(afterDismiss.stored, 'localStorage에 오늘 날짜가 저장되지 않았다');
 
   // 다른 탭으로 갔다가 계산기2로 재클릭 — 같은 날이므로 다시 뜨면 안 된다.
+  // [2026-08-25, 소유자 지시 9번] 이 탭도 이제 전용 팝업을 띄운다 — 이 파일의
+  // `localStorage.clear()` 호출들이 계산기2 팝업 재현을 위해 그 키를
+  // 지우는 김에 이 탭의 억제 키도 함께 지워, 뒤이은 좌표 기반 클릭이
+  // 스크림에 막힐 수 있다(실측 회귀 방지). 클릭 직전 매번 다시 치운다.
+  await dismissDepletionIntroModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await sleep(100);
   await page.clickElement(`document.getElementById('tab-calc2')`);
@@ -321,6 +336,11 @@ test('예시 팝업 — 저장된 날짜가 오늘이 아니면(날짜가 바뀌
   // [2026-08-21, D81] 위 시험과 같은 이유로, 클릭이 실제 전환을 일으키도록
   // 먼저 다른 탭으로 비켜 둔다. [2026-08-24, D84] 다른 탭이 이제
   // `tab-pension-depletion` 하나다.
+  // [2026-08-25, 소유자 지시 9번] 이 탭도 이제 전용 팝업을 띄운다 — 이 파일의
+  // `localStorage.clear()` 호출들이 계산기2 팝업 재현을 위해 그 키를
+  // 지우는 김에 이 탭의 억제 키도 함께 지워, 뒤이은 좌표 기반 클릭이
+  // 스크림에 막힐 수 있다(실측 회귀 방지). 클릭 직전 매번 다시 치운다.
+  await dismissDepletionIntroModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await sleep(100);
   // 어제 날짜로 저장해 둔다 — 오늘과 다르므로 억제되면 안 된다.
@@ -579,6 +599,11 @@ test('예시 팝업 재배치(D82) — 카피가 카드 왼쪽에, 카드 안은
   // [2026-08-21, D81] 새로고침이 기본으로 calc2에 내려앉는다 — "탭 클릭으로
   // 팝업을 연다"를 실제로 관측하려면 먼저 다른 탭으로 비켜야 한다(안 그러면
   // 아래 `tab-calc2` 클릭이 이미 활성 탭이라 아무 일도 안 한다).
+  // [2026-08-25, 소유자 지시 9번] 이 탭도 이제 전용 팝업을 띄운다 — 이 파일의
+  // `localStorage.clear()` 호출들이 계산기2 팝업 재현을 위해 그 키를
+  // 지우는 김에 이 탭의 억제 키도 함께 지워, 뒤이은 좌표 기반 클릭이
+  // 스크림에 막힐 수 있다(실측 회귀 방지). 클릭 직전 매번 다시 치운다.
+  await dismissDepletionIntroModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await sleep(100);
   await page.evaluate(`localStorage.clear()`);
@@ -685,6 +710,11 @@ test('D82 소유자 지시 1번 — 예시 카드 내용이 원래 크기의 95%
   // 먼저 치운다(이 함수 자체가 다시 localStorage에 오늘 날짜를 남긴다 —
   // 바로 다음 줄에서 또 지우므로 최종 목적과 어긋나지 않는다).
   await dismissCalc2ExampleModalIfOpen(page);
+  // [2026-08-25, 소유자 지시 9번] 이 탭도 이제 전용 팝업을 띄운다 — 이 파일의
+  // `localStorage.clear()` 호출들이 계산기2 팝업 재현을 위해 그 키를
+  // 지우는 김에 이 탭의 억제 키도 함께 지워, 뒤이은 좌표 기반 클릭이
+  // 스크림에 막힐 수 있다(실측 회귀 방지). 클릭 직전 매번 다시 치운다.
+  await dismissDepletionIntroModalIfOpen(page);
   await page.clickElement(`document.getElementById('tab-pension-depletion')`);
   await sleep(100);
   await page.evaluate(`localStorage.clear()`);
