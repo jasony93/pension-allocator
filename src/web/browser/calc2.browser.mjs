@@ -793,8 +793,14 @@ test('D82 소유자 지시 5번 — 계산기2 결과 도넛에는 지시선이 
  * 키우면서 라벨은 20% 키운다"는 D86 요구를 만족하는 "링 보존" CSS 폭
  * 유도식의 결과다(`ui/charts.js` 주석 참고) — 단순 209×1.1이 아니다, 여백
  * (`LEGEND_PAD`)도 함께 넓어져 그 산수가 더는 성립하지 않는다.
+ * [2026-08-26, 관리자 지시 — PC 반영분 3번] 257.77px는 이제 **PC 전용
+ * 값이 아니라 옛 값**이다 — PC(min-width:768px)에서만 257.77×1.2=309.324px
+ * 로 추가 확대됐다(모바일 무영향, `styles.css`). 이 시험은 뷰포트를
+ * 명시하지 않아 `openApp()`의 기본(데스크톱) 폭을 그대로 쓰므로, PC
+ * 값으로 갱신한다 — 모바일 값(257.77px 그대로)은
+ * `depletion.browser.mjs`의 "[PC 반영분 3번]" 시험이 이미 재확인한다.
  */
-test('D86 소유자 지시 6항목 ② — 계산기2 결과 도넛이 257.77px로 그려진다(링 보존 폭 유도)', { skip: skipWithoutChrome }, async () => {
+test('D86 소유자 지시 6항목 ② — 계산기2 결과 도넛이 309.32px로 그려진다(PC 전용, 링 보존 폭 유도 + 관리자 지시 PC 3번 ×1.2)', { skip: skipWithoutChrome }, async () => {
   const { page, origin } = app;
   await page.goto(`${origin}/src/web/index.html`);
   // [D86] 기본 랜딩이 이제 시뮬레이터 탭이라 계산기2 결과가 그려지려면
@@ -804,7 +810,7 @@ test('D86 소유자 지시 6항목 ② — 계산기2 결과 도넛이 257.77px�
   await page.waitFor(`!!document.getElementById('tabpanel-calc2')?.querySelector('.calc2-result-slot .chart-donut path')`, { timeoutMs: 8000 });
   await sleep(300);
   const width = await page.evaluate(`document.querySelector('.calc2-result-slot .chart-donut').getBoundingClientRect().width`);
-  assert.ok(Math.abs(width - 257.77) <= 1, `계산기2 결과 도넛 렌더 폭(${width}px)이 257.77px가 아니다`);
+  assert.ok(Math.abs(width - 309.324) <= 1, `계산기2 결과 도넛 렌더 폭(${width}px)이 309.32px가 아니다`);
 });
 
 /**

@@ -1029,6 +1029,213 @@ test('[관리자 지시(9항목) 3번] 팝업 출처 줄 — 기금 소진 전�
   assert.equal(m.length, 1, `출처 줄이 1개가 아니다(하나만 남아야 한다): ${JSON.stringify(m)}`);
 });
 
+// ---------------------------------------------------------------------------
+// [2026-08-26, 관리자 지시] 소유자 지시 — PC 반영분(모바일 무영향) 다섯,
+// 모바일 반영분(PC 무영향) 둘. 스코프 분리가 핵심 규율이므로 각 항목을
+// 1440×900(PC)·390×844(모바일) 양쪽에서 재고, 끝에 교차 오염 검사를
+// 따로 둔다.
+// ---------------------------------------------------------------------------
+
+/** 도넛 라벨의 svg 중심 대비 반지름 방향 거리(뷰박스 단위) — 이전 회차의
+ * 거리-편차 시험과 같은 계산. */
+const RING_GAP_EXPR = `(() => {
+  const svg = document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.chart-donut');
+  const rOuter = Number(svg.dataset.rOuter);
+  const cx = Number(svg.dataset.cx);
+  const ry = Number(svg.dataset.ry);
+  const cy = Number(svg.querySelector('path[role="img"]').dataset.cy);
+  return [...svg.querySelectorAll('.donut-slice-label')].map((el) => {
+    const x = Number(el.getAttribute('x'));
+    const y = Number(el.getAttribute('y'));
+    const dx = x - cx;
+    const dy = (y - cy) / ry;
+    return Math.sqrt(dx * dx + dy * dy) - rOuter;
+  });
+})()`;
+
+test('[PC 반영분 1번] 팝업 왼쪽 카피 — 모달 테두리와의 왼쪽 간격이 넓어졌다(1440×900)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.depletion-popup-question')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const gap = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const q = document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.depletion-popup-question');
+    return q.getBoundingClientRect().left - modal.getBoundingClientRect().left;
+  })()`);
+  // 옛값(모달 자신의 padding만, --space-5=24px)보다 커야 한다 — 실측
+  // 40px(24 + 추가 --space-4=16px).
+  assert.ok(gap > 24, `왼쪽 여백(${gap}px)이 옛값(24px)보다 커지지 않았다`);
+});
+
+test('[PC 반영분 2·5번] 팝업 내용 전부 + 하단 버튼이 1440×900에서 스크롤 없이 보인다(확대 적용 후)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await sleep(1500);
+  const m = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const host = document.querySelector('.depletion-intro-modal-host');
+    const dismiss = document.querySelector('.depletion-intro-modal-dismiss');
+    const close = document.querySelector('.depletion-intro-modal-close');
+    const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom }; };
+    return {
+      hostOverflow: host.scrollHeight - host.clientHeight,
+      dismissRect: r(dismiss),
+      closeRect: r(close),
+      viewportH: window.innerHeight,
+    };
+  })()`);
+  assert.ok(m.hostOverflow <= 1, `팝업 내용이 ${m.hostOverflow}px 넘친다(스크롤 필요) — 확대 후 재검증 실패`);
+  for (const [label, rect] of [['「오늘 하루 보지 않음」', m.dismissRect], ['닫기(X)', m.closeRect]]) {
+    assert.ok(rect.bottom <= m.viewportH && rect.top >= 0, `${label} 버튼이 900px 뷰포트 밖에 있다: ${JSON.stringify(rect)}`);
+  }
+});
+
+test('[PC 반영분 3번] 팝업 도넛 추가 +10%(242px)·계산기2 결과 도넛 +20%(309.32px), 라벨 렌더·거리 회귀 없음(1440×900)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const popupWidth = await page.evaluate(`document.querySelector('.depletion-intro-modal-host').shadowRoot.querySelector('.chart-donut').getBoundingClientRect().width`);
+  assert.ok(Math.abs(popupWidth - 242) <= 1, `팝업 도넛 렌더 폭(${popupWidth}px)이 242px(220×1.1)가 아니다`);
+  const gaps = await page.evaluate(RING_GAP_EXPR);
+  const maxGap = Math.max(...gaps);
+  const minGap = Math.min(...gaps);
+  assert.ok(maxGap - minGap <= 1, `팝업 도넛 확대 후 라벨-고리 거리 편차가 재발했다: ${JSON.stringify(gaps)}`);
+
+  await dismissDepletionIntroModalIfOpen(page);
+  await page.clickElement(`document.getElementById('tab-calc2')`);
+  await page.waitFor(`!!document.querySelector('.calc2-result-slot .chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const calc2 = await page.evaluate(`(() => {
+    const svg = document.querySelector('.calc2-result-slot .chart-donut');
+    return {
+      width: svg.getBoundingClientRect().width,
+      nameHeights: [...svg.querySelectorAll('.donut-slice-label-name')].map((el) => el.getBoundingClientRect().height),
+    };
+  })()`);
+  assert.ok(Math.abs(calc2.width - 309.324) <= 1, `계산기2 결과 도넛 렌더 폭(${calc2.width}px)이 309.32px(257.77×1.2)가 아니다`);
+  for (const h of calc2.nameHeights) {
+    assert.ok(Math.abs(h - 17) <= 1.5, `계산기2 라벨 렌더 높이(${h}px)가 옛 기준(17px)에서 벗어났다 — 도넛 확대가 라벨에 새면 안 된다`);
+  }
+});
+
+test('[PC 반영분 4번] 팝업 도넛 중앙 「월 배분」 문구 추가 +20% — 렌더 크기 실측(1440×900)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const m = await page.evaluate(`(() => {
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const label = root.querySelector('.donut-center-label');
+    const value = root.querySelector('.donut-center-value');
+    return { labelH: label.getBoundingClientRect().height, valueH: value.getBoundingClientRect().height };
+  })()`);
+  // 지난 회차 렌더 기준 — 라벨 10px·값 12px. 이번 +20% 추가로 라벨
+  // ≥11px(반올림 여유), 값 ≥13px을 기대한다(정확한 목표는 12/14.4지만
+  // 정수 렌더 반올림 오차를 감안한다).
+  assert.ok(m.labelH >= 11, `중앙 라벨 렌더 높이(${m.labelH}px)가 옛값(10px)보다 뚜렷이 커지지 않았다`);
+  assert.ok(m.valueH >= 13, `중앙 값 렌더 높이(${m.valueH}px)가 옛값(12px)보다 뚜렷이 커지지 않았다`);
+});
+
+test('[모바일 반영분 1번] 팝업 문구(예시 제외) −10%, 위 여백 확보, 가로 −5%(390×844)', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.depletion-popup-question')`, { timeoutMs: 8000 });
+  await sleep(1500);
+  const m = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const question = root.querySelector('.depletion-popup-question');
+    const donut = root.querySelector('.chart-donut');
+    return {
+      modalTop: modal.getBoundingClientRect().top,
+      modalWidth: modal.getBoundingClientRect().width,
+      questionFontSize: parseFloat(getComputedStyle(question).fontSize),
+      donutWidth: donut.getBoundingClientRect().width,
+    };
+  })()`);
+  // 옛(모바일 반영분 적용 전) 실측값 — modalTop 12.67px, modalWidth
+  // 358px, questionFontSize 29.568px.
+  assert.ok(m.modalTop > 30, `팝업 위 여백(${m.modalTop}px)이 옛값(12.67px)보다 뚜렷이 늘지 않았다`);
+  assert.ok(m.modalWidth < 358 * 0.97, `팝업 폭(${m.modalWidth}px)이 −5%만큼 줄지 않았다(옛 358px)`);
+  assert.ok(Math.abs(m.questionFontSize - 29.568 * 0.9) <= 0.5, `문구 글자 크기(${m.questionFontSize}px)가 −10%가 아니다(기대 ${(29.568 * 0.9).toFixed(2)}px)`);
+  // "예시 제외" — 도넛(예시 영역)은 이 항목의 스코프 밖이라 그대로다.
+  assert.ok(m.donutWidth > 0, '예시 도넛이 사라지면 안 된다');
+});
+
+test('[모바일 반영분 2번] 「기금운용본부」 캡션 — 모바일엔 없고 PC엔 있다, 카드 셋 높이가 모바일에서 같다', { skip: skipWithoutChrome }, async () => {
+  const { page, origin } = app;
+  for (const [width, mobile, expectSource] of [[390, true, false], [1440, false, true]]) {
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile });
+    await page.goto(`${origin}/src/web/index.html`);
+    await dismissDepletionIntroModalIfOpen(page);
+    await page.waitFor(`!!document.querySelector('.depletion-card')`, { timeoutMs: 8000 });
+    await sleep(300);
+    const m = await page.evaluate(`(() => {
+      const src = document.querySelector('.depletion-card-source');
+      const cards = [...document.querySelectorAll('.depletion-card')];
+      return {
+        sourceVisible: !!src && getComputedStyle(src).display !== 'none' && src.getBoundingClientRect().height > 0,
+        heights: cards.map((c) => c.getBoundingClientRect().height),
+      };
+    })()`);
+    assert.equal(m.sourceVisible, expectSource, `${width}px — 캡션 표시 상태가 기대(${expectSource})와 다르다`);
+    const maxH = Math.max(...m.heights);
+    const minH = Math.min(...m.heights);
+    assert.ok(maxH - minH <= 1, `${width}px — 카드 셋의 높이가 다르다: ${JSON.stringify(m.heights)}`);
+  }
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+});
+
+/**
+ * [2026-08-26, 관리자 지시, 교차 오염 검사] PC 반영분(도넛·중앙값 확대,
+ * 왼쪽 패딩)이 모바일에 새지 않고, 모바일 반영분(문구 축소·상단 여백·
+ * 폭 축소, 캡션 제거)이 PC에 새지 않는지 — 한 시험 안에서 두 뷰포트를
+ * 직접 대조한다.
+ */
+test('[교차 오염 검사] PC 전용 변경은 모바일에, 모바일 전용 변경은 PC에 새지 않는다', { skip: skipWithoutChrome }, async () => {
+  const a = await openTrackedForPopup();
+  const { page } = a;
+
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await page.waitFor(`!!document.querySelector('.depletion-intro-modal-host')?.shadowRoot?.querySelector('.chart-donut path[role="img"]')`, { timeoutMs: 8000 });
+  await sleep(300);
+  const mobileState = await page.evaluate(`(() => {
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const donut = root.querySelector('.chart-donut');
+    const question = root.querySelector('.depletion-popup-question');
+    return { donutWidth: donut.getBoundingClientRect().width, questionFontSize: parseFloat(getComputedStyle(question).fontSize) };
+  })()`);
+  // PC 전용(도넛 +10%, 220→242px)이 모바일에 새면 안 된다 — 모바일은
+  // 여전히 옛 220px 스코프(이 항목 자체가 PC 전용이므로 모바일 값은
+  // 이 회차 전과 같아야 한다).
+  assert.ok(Math.abs(mobileState.donutWidth - 242) > 5, `PC 전용 도넛 확대(242px)가 모바일(${mobileState.donutWidth}px)에 샜다`);
+
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  const pcState = await page.evaluate(`(() => {
+    const modal = document.querySelector('.modal');
+    const root = document.querySelector('.depletion-intro-modal-host').shadowRoot;
+    const question = root.querySelector('.depletion-popup-question');
+    return { modalWidth: modal.getBoundingClientRect().width, questionFontSize: parseFloat(getComputedStyle(question).fontSize) };
+  })()`);
+  // 모바일 전용(문구 −10%)이 PC에 새면 안 된다 — PC(1440px)는 vw 기반
+  // clamp가 상한(2.55rem=40.8px)에 이미 닿아 있다(실측) — 그 값 그대로여야
+  // 한다. 29.568px는 모바일(390px) 뷰포트에서 이 회차 전 실측값이었다 —
+  // PC와 직접 비교할 값이 아니다(뷰포트별 clamp 값이 다르다).
+  assert.ok(Math.abs(pcState.questionFontSize - 40.8) <= 0.5, `PC 팝업 문구 글자 크기(${pcState.questionFontSize}px)가 clamp 상한(40.8px)에서 벗어났다 — 모바일 전용 축소가 샜을 수 있다`);
+  // 모바일 전용(폭 −5%, width:95%)이 PC의 max-width 기반 폭 계산에
+  // 안 새는지 — PC는 여전히 1150px 상한(95vw보다 좁을 수 있음) 기준이다.
+  assert.ok(pcState.modalWidth > 1000, `모바일 전용 폭 축소가 PC(${pcState.modalWidth}px)에 샌 것으로 보인다`);
+});
+
 /** [소유자 지시 8번] 최대 적립금 시기의 세로 점선(옛 "수지 적자 전환"
  * 점선)이 없다 — 소진 점선은 그대로 있다. */
 test('[소유자 지시 8번] 최대 적립금 시기의 세로 점선이 없다(소진 점선은 유지)', { skip: skipWithoutChrome }, async () => {

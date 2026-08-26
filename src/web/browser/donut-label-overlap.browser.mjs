@@ -218,7 +218,16 @@ test('D83 판정 1 — 계산기2 결과 도넛 라벨이 고리와 겹치지 �
   await sleep(300);
   const result = await page.evaluate(overlapCheck(`document.querySelector('.calc2-result-slot')`));
   assertNoOverlap(result, '계산기2 결과');
-  assertFontFloor(result, '계산기2 결과'); // CSS 선언값 — 보조 참고치.
+  // [2026-08-26, 관리자 지시 — PC 반영분 3번] 계산기2 도넛 CSS 폭이 PC에서
+  // +20%(257.77→309.324px) 커지며 이 svg 자신의 렌더 배율이
+  // `REFERENCE_RENDER_SCALE`(계산기2의 옛 배율, 257.77/370)보다 커졌다 —
+  // 보정 계수(REFERENCE_RENDER_SCALE÷새 배율)가 1보다 작아져 CSS 선언값
+  // (뷰박스 단위)이 18→약 15로 줄어든다(실측 — 물리 렌더 픽셀은 그대로
+  // ~17px, `assertRenderHeightFloor`가 그 사실을 확인한다). 옛 바닥값
+  // (16.2px=18×0.9)은 더는 계산기2에 맞지 않는다 — 새 기준(15×0.9=13.5)
+  // 으로 낮춘다. CSS 선언값은 여전히 보조 참고치일 뿐, 진짜 판정은 아래
+  // 렌더 높이다.
+  assertFontFloor(result, '계산기2 결과', 13.5);
   // [D86 소유자 지시 6항목 ②, 판별력 증명 — 렌더 크기 기준으로 전환]
   // 관리자가 재지적한 대로 CSS 선언값(`nameFontPx`) 등호 단언은 svg의
   // viewBox→CSS 렌더 축소를 못 본다(계산기2 자신은 우연히 두 값이 거의
